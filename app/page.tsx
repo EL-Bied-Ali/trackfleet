@@ -43,10 +43,37 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState("All deliveries");
+  const [showPopover, setShowPopover] = useState(true);
+  const [showTraffic, setShowTraffic] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setTick((value) => value + 1), 3000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    function syncViewFromUrl() {
+      const trackingId = new URLSearchParams(window.location.search).get("tracking");
+      const matchingDelivery = initialDeliveries.find((delivery) => delivery.id === trackingId);
+      if (trackingId && matchingDelivery) {
+        setSelectedId(matchingDelivery.id);
+        setView("customer");
+      } else {
+        setView("dispatch");
+      }
+    }
+
+    syncViewFromUrl();
+    window.addEventListener("popstate", syncViewFromUrl);
+    return () => window.removeEventListener("popstate", syncViewFromUrl);
+  }, []);
+
+  useEffect(() => {
+    function closeModalWithEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setModalOpen(false);
+    }
+    window.addEventListener("keydown", closeModalWithEscape);
+    return () => window.removeEventListener("keydown", closeModalWithEscape);
   }, []);
 
   useEffect(() => {
@@ -61,10 +88,35 @@ export default function Home() {
     return deliveries.filter((delivery) => delivery.status === filter);
   }, [deliveries, filter]);
 
-  function copyTrackingLink() {
-    const link = `${window.location.origin}/?tracking=${selected.id}`;
-    navigator.clipboard?.writeText(link);
-    setToast("Private tracking link copied");
+  async function copyTrackingLink() {
+    const link = new URL(window.location.origin);
+    link.searchParams.set("tracking", selected.id);
+    try {
+      await navigator.clipboard.writeText(link.toString());
+      setToast("Private tracking link copied");
+    } catch {
+      const helper = document.createElement("textarea");
+      helper.value = link.toString();
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      helper.remove();
+      setToast(copied ? "Private tracking link copied" : "Couldn’t copy the link");
+    }
+  }
+
+  function openCustomerView() {
+    const link = new URL(window.location.origin);
+    link.searchParams.set("tracking", selected.id);
+    window.history.pushState({}, "", link);
+    setView("customer");
+  }
+
+  function openDispatchView() {
+    window.history.pushState({}, "", window.location.origin);
+    setView("dispatch");
   }
 
   function createDelivery(event: React.FormEvent<HTMLFormElement>) {
@@ -93,7 +145,7 @@ export default function Home() {
     return (
       <main className="customer-page">
         <header className="customer-header">
-          <a className="brand brand-dark" href="#" onClick={(event) => { event.preventDefault(); setView("dispatch"); }}>
+          <a className="brand brand-dark" href="/" onClick={(event) => { event.preventDefault(); openDispatchView(); }}>
             <span className="brand-mark"><span>↗</span></span>
             <span>TrackFleet</span>
           </a>
@@ -130,7 +182,6 @@ export default function Home() {
                 <span>▰</span>
               </div>
               <div className="map-live"><i /> Live · updated just now</div>
-              <div className="map-controls"><button aria-label="Zoom in">+</button><button aria-label="Zoom out">−</button></div>
             </div>
 
             <aside className="journey-card">
@@ -193,24 +244,24 @@ export default function Home() {
         </div>
 
         <div className="map-panel">
-          <div className="panel-header"><div><h2>Live fleet</h2><p>Vehicle positions update every 30 seconds</p></div><div className="panel-actions"><button><Icon>⌕</Icon>Find vehicle</button><button><Icon>☷</Icon>Map layers</button></div></div>
-          <div className="map fleet-map">
+          <div className="panel-header"><div><h2>Live fleet</h2><p>Vehicle positions update every 30 seconds</p></div><div className="panel-actions"><select aria-label="Find vehicle" value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}><option value="TF-2841">TRK-014</option><option value="TF-2839">TRK-007</option><option value="TF-2837">TRK-019</option><option value="TF-2835">TRK-003</option></select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? "Hide traffic" : "Show traffic"}</button></div></div>
+          <div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>
             <div className="map-grid" />
             <div className="river river-one" /><div className="river river-two" />
             <div className="road road-a" /><div className="road road-b" /><div className="road road-c" /><div className="road road-d" />
             <span className="city city-a">BRUSSELS</span><span className="city city-b">LEUVEN</span><span className="city city-c">MECHELEN</span><span className="city city-d">WAVRE</span>
             {deliveries.slice(0, 4).map((delivery, index) => (
-              <button key={delivery.id} className={`truck-pin pin-${index + 1} ${selectedId === delivery.id ? "selected" : ""}`} onClick={() => setSelectedId(delivery.id)} aria-label={`Select ${delivery.truck}`} style={{ transform: `translate(${index === 0 ? (tick % 4) * 2 : 0}px, ${index === 0 ? -(tick % 3) * 2 : 0}px)` }}>
+              <button key={delivery.id} className={`truck-pin pin-${index + 1} ${selectedId === delivery.id ? "selected" : ""}`} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} aria-label={`Select ${delivery.truck}`} style={{ transform: `translate(${index === 0 ? (tick % 4) * 2 : 0}px, ${index === 0 ? -(tick % 3) * 2 : 0}px)` }}>
                 <span>▰</span><b>{delivery.truck.replace("TRK-0", "")}</b>
               </button>
             ))}
+            {showTraffic && <div className="traffic-layer" aria-label="Traffic conditions"><span>Moderate traffic</span><i /><i /><i /></div>}
             <div className="map-status"><i /> 20 vehicles reporting</div>
-            <div className="map-controls"><button aria-label="Zoom in">+</button><button aria-label="Zoom out">−</button></div>
-            <div className="truck-popover">
-              <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label="Close details">×</button></div>
+            {showPopover && <div className="truck-popover">
+              <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label="Close details" onClick={() => setShowPopover(false)}>×</button></div>
               <dl><div><dt>Status</dt><dd><i />{selected.status}</dd></div><div><dt>Delivery</dt><dd>{selected.id}</dd></div><div><dt>ETA</dt><dd>{selected.eta}</dd></div></dl>
-              <div className="popover-actions"><button onClick={() => setView("customer")}>Open tracking page <span>↗</span></button><button aria-label="More options">•••</button></div>
-            </div>
+              <div className="popover-actions"><button onClick={openCustomerView}>Open tracking page <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>Copy link</button></div>
+            </div>}
           </div>
         </div>
 
@@ -226,7 +277,7 @@ export default function Home() {
       </section>
 
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">NEW SHIPMENT</p><h2 id="new-delivery-title">Create a delivery</h2><span>A private customer tracking link will be generated automatically.</span></div><button onClick={() => setModalOpen(false)} aria-label="Close">×</button></div><form onSubmit={createDelivery}><label>Customer or company<input name="customer" required placeholder="e.g. Atelier Brussels" /></label><label>Delivery destination<input name="destination" required placeholder="City, country" /></label><div className="form-row"><label>Assign truck<select name="truck" defaultValue="TRK-005"><option>TRK-005</option><option>TRK-008</option><option>TRK-012</option><option>TRK-017</option></select></label><label>Expected arrival<input name="eta" required type="time" defaultValue="15:30" /></label></div><label>Customer contact <span>(optional)</span><input name="contact" placeholder="Email or phone number" /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>Cancel</button><button className="primary-button" type="submit">Create delivery <span>→</span></button></div></form></section></div>}
-      {toast && <div className="toast"><span>✓</span>{toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );
 }
