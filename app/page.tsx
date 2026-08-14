@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { localeOptions, translations, type Locale } from "./i18n";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 
@@ -36,6 +37,18 @@ function Icon({ children }: { children: React.ReactNode }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
 }
 
+function LanguageSwitcher({ locale, label, onChange }: { locale: Locale; label: string; onChange: (locale: Locale) => void }) {
+  return (
+    <label className="language-switcher">
+      <span className="language-symbol" aria-hidden="true">◎</span>
+      <span className="sr-only">{label}</span>
+      <select value={locale} onChange={(event) => onChange(event.target.value as Locale)} aria-label={label}>
+        {localeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
 export default function Home() {
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [selectedId, setSelectedId] = useState("TF-2841");
@@ -47,6 +60,8 @@ export default function Home() {
   const [showPopover, setShowPopover] = useState(true);
   const [showTraffic, setShowTraffic] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [locale, setLocale] = useState<Locale>("en");
+  const t = translations[locale];
 
   useEffect(() => {
     const timer = window.setInterval(() => setTick((value) => value + 1), 3000);
@@ -55,7 +70,10 @@ export default function Home() {
 
   useEffect(() => {
     function syncViewFromUrl() {
-      const trackingId = new URLSearchParams(window.location.search).get("tracking");
+      const searchParams = new URLSearchParams(window.location.search);
+      const trackingId = searchParams.get("tracking");
+      const requestedLocale = searchParams.get("lang");
+      if (requestedLocale === "en" || requestedLocale === "fr" || requestedLocale === "nl") setLocale(requestedLocale);
       const matchingDelivery = deliveries.find((delivery) => delivery.id === trackingId);
       if (trackingId && matchingDelivery) {
         setSelectedId(matchingDelivery.id);
@@ -71,6 +89,17 @@ export default function Home() {
   }, [deliveries]);
 
   useEffect(() => {
+    const requestedLocale = new URLSearchParams(window.location.search).get("lang");
+    const savedLocale = window.localStorage.getItem("trackfleet-locale");
+    if (!requestedLocale && (savedLocale === "en" || savedLocale === "fr" || savedLocale === "nl")) setLocale(savedLocale);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("trackfleet-locale", locale);
+    document.documentElement.lang = locale === "nl" ? "nl-BE" : locale;
+  }, [locale]);
+
+  useEffect(() => {
     let active = true;
     fetch("/api/deliveries")
       .then((response) => {
@@ -81,7 +110,7 @@ export default function Home() {
         if (active && data.deliveries.length) setDeliveries(data.deliveries);
       })
       .catch(() => {
-        if (active) setToast("Demo data loaded — cloud sync is reconnecting");
+        if (active) setToast(t.cloudReconnecting);
       });
     return () => { active = false; };
   }, []);
@@ -101,12 +130,7 @@ export default function Home() {
   }, [toast]);
 
   const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0];
-  const customerCopy: Record<DeliveryStatus, { headline: string; subtitle: string; etaNote: string; currentTitle: string; currentDetail: string; finalTitle: string; finalDetail: string }> = {
-    "In transit": { headline: "Your delivery is on the way.", subtitle: `We’ll keep this page updated as your shipment travels to ${selected.destination}.`, etaNote: "Today · On schedule", currentTitle: "In transit", currentDetail: `${selected.progress}% of the journey complete`, finalTitle: "Arriving at destination", finalDetail: `Expected around ${selected.eta}` },
-    Delayed: { headline: "Your delivery is running late.", subtitle: `Traffic has affected the journey to ${selected.destination}. The arrival estimate below is already updated.`, etaNote: "Today · Updated estimate", currentTitle: "Delayed in traffic", currentDetail: "The driver is continuing safely", finalTitle: "Continuing to destination", finalDetail: `Updated arrival around ${selected.eta}` },
-    Loading: { headline: "Your delivery is being prepared.", subtitle: `Your shipment is being loaded before it leaves for ${selected.destination}.`, etaNote: "Today · Preparing", currentTitle: "Loading the vehicle", currentDetail: "Still at the warehouse", finalTitle: "Leaving the warehouse", finalDetail: `Expected arrival around ${selected.eta}` },
-    Delivered: { headline: "Your delivery has arrived.", subtitle: `The shipment was delivered successfully in ${selected.destination}.`, etaNote: "Delivered today", currentTitle: "Delivered", currentDetail: `Arrived at ${selected.eta}`, finalTitle: "Delivery complete", finalDetail: "Thank you for choosing TrackFleet" },
-  };
+  const customerCopy = t.customerStatus[selected.status];
   const visibleDeliveries = useMemo(() => {
     if (filter === "All deliveries") return deliveries;
     return deliveries.filter((delivery) => delivery.status === filter);
@@ -115,20 +139,24 @@ export default function Home() {
   async function copyDeliveryLink(deliveryId: string) {
     const link = new URL(window.location.origin);
     link.searchParams.set("tracking", deliveryId);
-    try {
-      await navigator.clipboard.writeText(link.toString());
-      setToast("Private tracking link copied");
-    } catch {
-      const helper = document.createElement("textarea");
-      helper.value = link.toString();
-      helper.style.position = "fixed";
-      helper.style.opacity = "0";
-      document.body.appendChild(helper);
-      helper.select();
-      const copied = document.execCommand("copy");
-      helper.remove();
-      setToast(copied ? "Private tracking link copied" : "Couldn’t copy the link");
+    link.searchParams.set("lang", locale);
+    const helper = document.createElement("textarea");
+    helper.value = link.toString();
+    helper.style.position = "fixed";
+    helper.style.opacity = "0";
+    document.body.appendChild(helper);
+    helper.select();
+    let copied = document.execCommand("copy");
+    helper.remove();
+    if (!copied) {
+      try {
+        await navigator.clipboard.writeText(link.toString());
+        copied = true;
+      } catch {
+        copied = false;
+      }
     }
+    setToast(copied ? t.linkCopied : t.copyFailed);
   }
 
   async function copyTrackingLink() {
@@ -138,13 +166,23 @@ export default function Home() {
   function openCustomerView() {
     const link = new URL(window.location.origin);
     link.searchParams.set("tracking", selected.id);
+    link.searchParams.set("lang", locale);
     window.history.pushState({}, "", link);
     setView("customer");
   }
 
   function openDispatchView() {
-    window.history.pushState({}, "", window.location.origin);
+    const dashboardUrl = new URL(window.location.origin);
+    dashboardUrl.searchParams.set("lang", locale);
+    window.history.pushState({}, "", dashboardUrl);
     setView("dispatch");
+  }
+
+  function changeLocale(nextLocale: Locale) {
+    setLocale(nextLocale);
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("lang", nextLocale);
+    window.history.replaceState({}, "", nextUrl);
   }
 
   async function createDelivery(event: React.FormEvent<HTMLFormElement>) {
@@ -167,9 +205,9 @@ export default function Home() {
       setSelectedId(data.delivery.id);
       setShowPopover(true);
       setModalOpen(false);
-      setToast(`${data.delivery.id} created — tracking link ready`);
+      setToast(t.created(data.delivery.id));
     } catch {
-      setToast("Couldn’t create the delivery — please try again");
+      setToast(t.createFailed);
     } finally {
       setCreating(false);
     }
@@ -183,20 +221,20 @@ export default function Home() {
             <span className="brand-mark"><span>↗</span></span>
             <span>TrackFleet</span>
           </a>
-          <div className="secure-pill"><span>●</span> Secure tracking link</div>
+          <div className="customer-header-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} /><div className="secure-pill"><span>●</span> {t.secureLink}</div></div>
         </header>
 
         <section className="customer-content">
           <div className="customer-intro">
             <div>
-              <p className="eyebrow">DELIVERY {selected.id}</p>
-              <h1>{customerCopy[selected.status].headline}</h1>
-              <p className="customer-subtitle">{customerCopy[selected.status].subtitle}</p>
+              <p className="eyebrow">{t.deliveryLabel} {selected.id}</p>
+              <h1>{customerCopy.headline}</h1>
+              <p className="customer-subtitle">{customerCopy.subtitle(selected.destination)}</p>
             </div>
             <div className="eta-card">
-              <span>Estimated arrival</span>
+              <span>{t.estimatedArrival}</span>
               <strong>{selected.eta}</strong>
-              <small className={`eta-${selected.status.toLowerCase().replace(" ", "-")}`}>{customerCopy[selected.status].etaNote}</small>
+              <small className={`eta-${selected.status.toLowerCase().replace(" ", "-")}`}>{customerCopy.etaNote}</small>
             </div>
           </div>
 
@@ -215,25 +253,25 @@ export default function Home() {
               <div className="truck-pin hero-pin" style={{ transform: `translate(${(tick % 4) * 3}px, ${-(tick % 4) * 2}px)` }}>
                 <span>▰</span>
               </div>
-              <div className="map-live"><i /> Live · updated just now</div>
+              <div className="map-live"><i /> {t.liveUpdated}</div>
             </div>
 
             <aside className="journey-card">
               <div className="journey-title">
                 <div className="mini-truck">▰</div>
-                <div><strong>{selected.truck}</strong><span>Your delivery vehicle</span></div>
+                <div><strong>{selected.truck}</strong><span>{t.yourVehicle}</span></div>
               </div>
               <div className="timeline">
-                <div className="timeline-step done"><i>✓</i><div><strong>Order prepared</strong><span>Today, 08:42</span></div></div>
-                <div className="timeline-step done"><i>✓</i><div><strong>Left the warehouse</strong><span>Today, 10:16</span></div></div>
-                <div className={`timeline-step active ${selected.status === "Delayed" ? "is-delayed" : ""}`}><i>●</i><div><strong>{customerCopy[selected.status].currentTitle}</strong><span>{customerCopy[selected.status].currentDetail}</span></div></div>
-                <div className={selected.status === "Delivered" ? "timeline-step done" : "timeline-step"}><i>{selected.status === "Delivered" ? "✓" : "◆"}</i><div><strong>{customerCopy[selected.status].finalTitle}</strong><span>{customerCopy[selected.status].finalDetail}</span></div></div>
+                <div className="timeline-step done"><i>✓</i><div><strong>{t.orderPrepared}</strong><span>{t.todayTime("08:42")}</span></div></div>
+                <div className="timeline-step done"><i>✓</i><div><strong>{t.leftWarehouse}</strong><span>{t.todayTime("10:16")}</span></div></div>
+                <div className={`timeline-step active ${selected.status === "Delayed" ? "is-delayed" : ""}`}><i>●</i><div><strong>{customerCopy.currentTitle}</strong><span>{customerCopy.currentDetail(selected.progress, selected.eta)}</span></div></div>
+                <div className={selected.status === "Delivered" ? "timeline-step done" : "timeline-step"}><i>{selected.status === "Delivered" ? "✓" : "◆"}</i><div><strong>{customerCopy.finalTitle}</strong><span>{customerCopy.finalDetail(selected.eta)}</span></div></div>
               </div>
-              <div className="privacy-note"><Icon>⌁</Icon><p><strong>Your privacy matters</strong><span>This link only shows the vehicle carrying your delivery and expires after arrival.</span></p></div>
+              <div className="privacy-note"><Icon>⌁</Icon><p><strong>{t.privacyTitle}</strong><span>{t.privacyBody}</span></p></div>
             </aside>
           </div>
 
-          <div className="customer-footer"><span>Need help with this delivery?</span><strong>Contact the company that sent your tracking link.</strong></div>
+          <div className="customer-footer"><span>{t.needHelp}</span><strong>{t.contactSender}</strong></div>
         </section>
       </main>
     );
@@ -244,41 +282,41 @@ export default function Home() {
       <aside className="sidebar">
         <a className="brand" href="#"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></a>
         <nav aria-label="Main navigation">
-          <button className="nav-item active"><Icon>▦</Icon>Overview</button>
-          <button className="nav-item" disabled title="Available after GPS connection"><Icon>▰</Icon>Fleet <span className="nav-count">20</span></button>
-          <button className="nav-item" disabled title="Available after GPS connection"><Icon>◇</Icon>Deliveries <span className="nav-count">18</span></button>
-          <button className="nav-item" disabled title="Available after GPS connection"><Icon>◉</Icon>Customers</button>
+          <button className="nav-item active"><Icon>▦</Icon>{t.overview}</button>
+          <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">20</span></button>
+          <button className="nav-item" disabled><Icon>◇</Icon>{t.deliveries} <span className="nav-count">18</span></button>
+          <button className="nav-item" disabled><Icon>◉</Icon>{t.customers}</button>
         </nav>
         <div className="sidebar-divider" />
         <nav>
-          <button className="nav-item" disabled><Icon>⚙</Icon>Settings</button>
-          <button className="nav-item" disabled><Icon>?</Icon>Help centre</button>
+          <button className="nav-item" disabled><Icon>⚙</Icon>{t.settings}</button>
+          <button className="nav-item" disabled><Icon>?</Icon>{t.helpCentre}</button>
         </nav>
         <div className="sidebar-spacer" />
         <div className="gps-card">
           <div className="gps-icon">⌖</div>
-          <strong>GPS simulation active</strong>
-          <p>Connect your provider when the device details are ready.</p>
-          <span className="gps-coming">Connection settings unlock when provider details are added</span>
+          <strong>{t.gpsActive}</strong>
+          <p>{t.gpsBody}</p>
+          <span className="gps-coming">{t.gpsLocked}</span>
         </div>
-        <div className="profile"><div className="avatar">CM</div><div><strong>Camille Moreau</strong><span>Dispatcher</span></div></div>
+        <div className="profile"><div className="avatar">CM</div><div><strong>Camille Moreau</strong><span>{t.dispatcher}</span></div></div>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div><h1>Good afternoon, Camille</h1><p>Here’s what’s moving across your fleet today.</p></div>
-          <div className="top-actions"><button className="primary-button" onClick={() => setModalOpen(true)}><span>＋</span>New delivery</button></div>
+          <div><h1>{t.greeting}</h1><p>{t.greetingSub}</p></div>
+          <div className="top-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} /><button className="primary-button" onClick={() => setModalOpen(true)}><span>＋</span>{t.newDelivery}</button></div>
         </header>
 
         <div className="stats-grid">
-          <article className="stat-card"><div className="stat-head"><span>Active deliveries</span><Icon>◇</Icon></div><div><strong>14</strong><em className="up">↗ 12%</em></div><p>Across 12 vehicles</p></article>
-          <article className="stat-card"><div className="stat-head"><span>On-time rate</span><Icon>◷</Icon></div><div><strong>94.2%</strong><em className="up">↗ 2.4%</em></div><p>Last 30 days</p></article>
-          <article className="stat-card"><div className="stat-head"><span>Delayed</span><Icon>△</Icon></div><div><strong>3</strong><em className="warning">Needs attention</em></div><p>2 traffic · 1 loading</p></article>
-          <article className="stat-card"><div className="stat-head"><span>Fleet status</span><Icon>▰</Icon></div><div><strong>17 / 20</strong><em className="neutral">3 at depot</em></div><p>All devices reporting</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>14</strong><em className="up">↗ 12%</em></div><p>{t.acrossVehicles}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>94.2%</strong><em className="up">↗ 2.4%</em></div><p>{t.last30Days}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>3</strong><em className="warning">{t.needsAttention}</em></div><p>{t.delayReasons}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>17 / 20</strong><em className="neutral">{t.atDepot}</em></div><p>{t.allReporting}</p></article>
         </div>
 
         <div className="map-panel">
-          <div className="panel-header"><div><h2>Live fleet</h2><p>Vehicle positions update every 30 seconds</p></div><div className="panel-actions"><select aria-label="Find vehicle" value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? "Hide traffic" : "Show traffic"}</button></div></div>
+          <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? t.hideTraffic : t.showTraffic}</button></div></div>
           <div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>
             <div className="map-grid" />
             <div className="river river-one" /><div className="river river-two" />
@@ -289,28 +327,28 @@ export default function Home() {
                 <span>▰</span><b>{delivery.truck.replace("TRK-0", "")}</b>
               </button>
             ))}
-            {showTraffic && <div className="traffic-layer" aria-label="Traffic conditions"><span>Moderate traffic</span><i /><i /><i /></div>}
-            <div className="map-status"><i /> 20 vehicles reporting</div>
+            {showTraffic && <div className="traffic-layer" aria-label={t.showTraffic}><span>{t.moderateTraffic}</span><i /><i /><i /></div>}
+            <div className="map-status"><i /> {t.vehiclesReporting}</div>
             {showPopover && <div className="truck-popover">
-              <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label="Close details" onClick={() => setShowPopover(false)}>×</button></div>
-              <dl><div><dt>Status</dt><dd><i />{selected.status}</dd></div><div><dt>Delivery</dt><dd>{selected.id}</dd></div><div><dt>ETA</dt><dd>{selected.eta}</dd></div></dl>
-              <div className="popover-actions"><button onClick={openCustomerView}>Open tracking page <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>Copy link</button></div>
+              <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
+              <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.eta}</dd></div></dl>
+              <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
             </div>}
           </div>
         </div>
 
         <div className="deliveries-panel">
-          <div className="panel-header delivery-head"><div><h2>Today’s deliveries</h2><p>{visibleDeliveries.length} shown · {deliveries.filter((delivery) => delivery.status === "Delivered").length} completed</p></div><div className="panel-actions"><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter deliveries"><option>All deliveries</option><option>In transit</option><option>Delayed</option><option>Loading</option><option>Delivered</option></select></div></div>
+          <div className="panel-header delivery-head"><div><h2>{t.todaysDeliveries}</h2><p>{t.shownCompleted(visibleDeliveries.length, deliveries.filter((delivery) => delivery.status === "Delivered").length)}</p></div><div className="panel-actions"><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label={t.filterDeliveries}><option value="All deliveries">{t.allDeliveries}</option><option value="In transit">{t.statuses["In transit"]}</option><option value="Delayed">{t.statuses.Delayed}</option><option value="Loading">{t.statuses.Loading}</option><option value="Delivered">{t.statuses.Delivered}</option></select></div></div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Delivery</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>ETA</th><th>Progress</th><th><span className="sr-only">Actions</span></th></tr></thead>
-              <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{delivery.destination}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.truck}</strong><span>{delivery.driver}</span></td><td><span className={statusClass[delivery.status]}><i />{delivery.status}</span></td><td><strong>{delivery.eta}</strong><span>{delivery.status === "Delayed" ? "Updated" : delivery.status === "Delivered" ? "Arrived" : "Today"}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td><button className="more-button" aria-label={`Copy tracking link for ${delivery.id}`} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
+              <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{t.tableVehicle}</th><th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th><span className="sr-only">{t.tableActions}</span></th></tr></thead>
+              <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{delivery.destination}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.truck}</strong><span>{delivery.driver}</span></td><td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.eta}</strong><span>{delivery.status === "Delayed" ? t.updated : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
             </table>
           </div>
         </div>
       </section>
 
-      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">NEW SHIPMENT</p><h2 id="new-delivery-title">Create a delivery</h2><span>A private customer tracking link will be generated automatically.</span></div><button onClick={() => setModalOpen(false)} aria-label="Close">×</button></div><form onSubmit={createDelivery}><label>Customer or company<input name="customer" required autoFocus placeholder="e.g. Atelier Brussels" /></label><label>Delivery destination<input name="destination" required placeholder="City, country" /></label><div className="form-row"><label>Assign truck<select name="truck" defaultValue="TRK-005"><option>TRK-005</option><option>TRK-008</option><option>TRK-012</option><option>TRK-017</option></select></label><label>Expected arrival<input name="eta" required type="time" defaultValue="15:30" /></label></div><label>Customer contact <span>(optional)</span><input name="contact" placeholder="Email or phone number" /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>Cancel</button><button className="primary-button" type="submit" disabled={creating}>{creating ? "Creating…" : "Create delivery"}<span>→</span></button></div></form></section></div>}
+      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><label>{t.destination}<input name="destination" required placeholder={t.destinationPlaceholder} /></label><div className="form-row"><label>{t.assignTruck}<select name="truck" defaultValue="TRK-005"><option>TRK-005</option><option>TRK-008</option><option>TRK-012</option><option>TRK-017</option></select></label><label>{t.expectedArrival}<input name="eta" required type="time" defaultValue="15:30" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );
