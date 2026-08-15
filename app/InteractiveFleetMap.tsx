@@ -9,6 +9,8 @@ type MapDelivery = {
   destination: string;
   truck: string;
   status: string;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type Props = {
@@ -39,6 +41,7 @@ const vehiclePositions: Record<string, [number, number]> = {
 };
 
 function positionFor(delivery: MapDelivery, index: number): [number, number] {
+  if (typeof delivery.latitude === "number" && typeof delivery.longitude === "number") return [delivery.longitude, delivery.latitude];
   return vehiclePositions[delivery.id] ?? corridor[Math.min(index + 1, corridor.length - 1)];
 }
 

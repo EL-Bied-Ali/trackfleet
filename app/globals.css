@@ -123,6 +123,8 @@ button { color: inherit; }
 .pin-1 { left: 58%; top: 59%; }.pin-2 { left: 43%; top: 42%; }.pin-3 { left: 72%; top: 72%; }.pin-4 { left: 19%; top: 18%; }
 .map-status, .map-live { position: absolute; left: 13px; top: 13px; z-index: 8; display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgba(206,217,210,.8); border-radius: 7px; background: rgba(255,255,255,.92); color: #506158; font-size: 9px; box-shadow: 0 3px 10px rgba(30,55,46,.07); backdrop-filter: blur(5px); }
 .map-status i, .map-live i { width: 6px; height: 6px; border-radius: 50%; background: #20a876; box-shadow: 0 0 0 3px #d9f1e8; }
+.map-status i.fallback { background: #d79a3a; box-shadow: 0 0 0 3px #faecd3; }
+.gps-coming.is-live { color: #126f50; background: #dff3e9; }
 .map-controls { position: absolute; right: 13px; top: 13px; z-index: 8; display: grid; overflow: hidden; border: 1px solid #d5ddd8; border-radius: 7px; box-shadow: 0 2px 7px rgba(40,60,52,.08); }
 .map-controls button { width: 29px; height: 28px; border: 0; background: rgba(255,255,255,.94); color: #42544b; cursor: pointer; }
 .map-controls button + button { border-top: 1px solid #e1e7e3; }
