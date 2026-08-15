@@ -18,6 +18,13 @@ type Delivery = {
   contact?: string;
 };
 
+type MessageEvent = {
+  id: string;
+  deliveryId: string;
+  kind: "tracking" | "arrival";
+  time: string;
+};
+
 const initialDeliveries: Delivery[] = [
   { id: "TF-2841", customer: "Boulangerie Louise", destination: "Ghent, BE", truck: "TRK-014", driver: "Marc D.", status: "In transit", eta: "14:25", progress: 72, color: "#16a272" },
   { id: "TF-2839", customer: "Atelier Noord", destination: "Antwerp, BE", truck: "TRK-007", driver: "Sophie L.", status: "Delayed", eta: "15:10", progress: 54, color: "#f1a43c" },
@@ -61,6 +68,9 @@ export default function Home() {
   const [showTraffic, setShowTraffic] = useState(false);
   const [creating, setCreating] = useState(false);
   const [locale, setLocale] = useState<Locale>("en");
+  const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
+    { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
+  ]);
   const t = translations[locale];
 
   useEffect(() => {
@@ -161,6 +171,35 @@ export default function Home() {
 
   async function copyTrackingLink() {
     await copyDeliveryLink(selected.id);
+  }
+
+  function trackingUrl(deliveryId: string) {
+    const link = new URL(window.location.origin);
+    link.searchParams.set("tracking", deliveryId);
+    link.searchParams.set("lang", locale);
+    return link.toString();
+  }
+
+  function openWhatsAppMessage() {
+    const message = t.whatsAppTrackingMessage(selected.id, selected.destination, trackingUrl(selected.id));
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+    setMessageEvents((events) => [
+      { id: `${selected.id}-tracking-${Date.now()}`, deliveryId: selected.id, kind: "tracking", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+      ...events,
+    ].slice(0, 4));
+    setToast(t.whatsAppOpened);
+  }
+
+  function simulateArrival() {
+    if (selected.status === "Delivered") return;
+    setDeliveries((items) => items.map((delivery) => delivery.id === selected.id
+      ? { ...delivery, status: "Delivered", progress: 100, eta: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }
+      : delivery));
+    setMessageEvents((events) => [
+      { id: `${selected.id}-arrival-${Date.now()}`, deliveryId: selected.id, kind: "arrival", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+      ...events,
+    ].slice(0, 4));
+    setToast(t.arrivalSimulated(selected.id));
   }
 
   function openCustomerView() {
@@ -335,6 +374,21 @@ export default function Home() {
               <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
             </div>}
           </div>
+          <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">
+            <div className="whatsapp-demo-intro">
+              <div className="whatsapp-mark" aria-hidden="true">◔</div>
+              <div><div className="demo-title-line"><h3 id="whatsapp-demo-title">{t.whatsAppDemoTitle}</h3><span>{t.demoMode}</span></div><p>{t.whatsAppDemoBody}</p></div>
+            </div>
+            <div className="message-timeline" aria-label={t.notificationTimeline}>
+              {messageEvents.filter((event) => event.deliveryId === selected.id).length ? messageEvents.filter((event) => event.deliveryId === selected.id).slice(0, 2).map((event) => (
+                <div className="message-event" key={event.id}><i className={event.kind} aria-hidden="true">✓</i><div><strong>{event.kind === "tracking" ? t.trackingMessagePrepared : t.arrivalMessageTriggered}</strong><span>{selected.id} · {event.time}</span></div></div>
+              )) : <div className="message-empty"><i>1</i><span>{t.noMessagesYet}</span></div>}
+            </div>
+            <div className="whatsapp-actions">
+              <button className="whatsapp-button" onClick={openWhatsAppMessage}><span aria-hidden="true">◔</span>{t.sendWithWhatsApp}</button>
+              <button className="arrival-button" onClick={simulateArrival} disabled={selected.status === "Delivered"}><span aria-hidden="true">⌖</span>{selected.status === "Delivered" ? t.arrivalAlreadySent : t.simulateArrival}</button>
+            </div>
+          </section>
         </div>
 
         <div className="deliveries-panel">
