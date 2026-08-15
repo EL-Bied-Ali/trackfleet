@@ -162,8 +162,19 @@ function normalizeFleet(payload: unknown) {
     .map(({ items, depth }) => ({ depth, vehicles: items.map(normalizeVehicle).filter((item): item is SendatrackVehicle => Boolean(item)) }))
     .filter((group) => group.vehicles.length > 0);
   const vehicles = groups.flatMap((group) => group.vehicles);
+  const namedVehicles = vehicles.filter((vehicle) => !/^v\d+$/i.test(vehicle.name));
+  // SENDATRACK's response nests each GPS event below its vehicle. Those event
+  // rows look like extra vehicles named v3, v4, ... and carry the exact same
+  // coordinates as the real plate-number row. Discard only those confirmed
+  // nested duplicates so legitimate vehicles parked together remain visible.
+  const fleetRows = vehicles.filter((vehicle) => {
+    if (!/^v\d+$/i.test(vehicle.name)) return true;
+    return !namedVehicles.some((named) =>
+      Math.abs(named.latitude - vehicle.latitude) < 0.000001
+      && Math.abs(named.longitude - vehicle.longitude) < 0.000001);
+  });
   const newestByVehicle = new Map<string, SendatrackVehicle>();
-  for (const vehicle of vehicles) {
+  for (const vehicle of fleetRows) {
     const vehicleKey = vehicle.name.toLowerCase().replace(/[^a-z0-9]/g, "") || vehicle.id;
     const existing = newestByVehicle.get(vehicleKey);
     if (!existing || vehicle.updatedAt >= existing.updatedAt) newestByVehicle.set(vehicleKey, vehicle);
