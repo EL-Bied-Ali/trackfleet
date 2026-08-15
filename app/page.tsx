@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { localeOptions, translations, type Locale } from "./i18n";
+import InteractiveFleetMap from "./InteractiveFleetMap";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 
@@ -62,7 +63,6 @@ export default function Home() {
   const [view, setView] = useState<"dispatch" | "customer">("dispatch");
   const [modalOpen, setModalOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState("All deliveries");
   const [showPopover, setShowPopover] = useState(true);
   const [showTraffic, setShowTraffic] = useState(false);
@@ -73,11 +73,6 @@ export default function Home() {
     { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
   ]);
   const t = translations[locale];
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setTick((value) => value + 1), 3000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     function syncViewFromUrl() {
@@ -300,20 +295,8 @@ export default function Home() {
           </div>
 
           <div className="customer-grid">
-            <div className={`map customer-map corridor-map ${headingToMorocco ? "to-morocco" : "to-belgium"}`}>
-              <div className="map-grid" />
-              <div className="continent europe-zone" />
-              <div className="continent morocco-zone" />
-              <div className="corridor-route" />
-              <div className="sea-crossing"><span>{t.ferry}</span></div>
-              <span className="corridor-city brussels-city">BRUSSELS</span>
-              <span className="corridor-city madrid-city">MADRID</span>
-              <span className="corridor-city tangier-city">TANGIER</span>
-              <span className="corridor-city casablanca-city">CASABLANCA</span>
-              <div className="destination-pin"><span>◆</span></div>
-              <div className="truck-pin hero-pin" style={{ transform: `translate(${(tick % 4) * 3}px, ${-(tick % 4) * 2}px)` }}>
-                <span>▰</span>
-              </div>
+            <div className="map customer-map">
+              <InteractiveFleetMap deliveries={deliveries} selectedId={selectedId} customerMode label={`${routeDirection} · ${selected.truck}`} />
               <div className="map-live"><i /> {t.liveUpdated}</div>
             </div>
 
@@ -380,16 +363,8 @@ export default function Home() {
 
         <div className="map-panel">
           <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? t.hideTraffic : t.showTraffic}</button></div></div>
-          <div className={`map fleet-map corridor-map ${showTraffic ? "traffic-visible" : ""}`}>
-            <div className="map-grid" />
-            <div className="continent europe-zone" /><div className="continent morocco-zone" />
-            <div className="corridor-route" /><div className="sea-crossing"><span>{t.ferry}</span></div>
-            <span className="corridor-city brussels-city">BRUSSELS</span><span className="corridor-city paris-city">PARIS</span><span className="corridor-city madrid-city">MADRID</span><span className="corridor-city tangier-city">TANGIER</span><span className="corridor-city casablanca-city">CASABLANCA</span>
-            {deliveries.slice(0, 4).map((delivery, index) => (
-              <button key={delivery.id} className={`truck-pin pin-${index + 1} ${selectedId === delivery.id ? "selected" : ""}`} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} aria-label={`Select ${delivery.truck}`} style={{ transform: `translate(${index === 0 ? (tick % 4) * 2 : 0}px, ${index === 0 ? -(tick % 3) * 2 : 0}px)` }}>
-                <span>▰</span><b>{delivery.truck.replace("TRK-0", "")}</b>
-              </button>
-            ))}
+          <div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>
+            <InteractiveFleetMap deliveries={deliveries} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
             {showTraffic && <div className="traffic-layer" aria-label={t.showTraffic}><span>{t.moderateTraffic}</span><i /><i /><i /></div>}
             <div className="map-status"><i /> {t.vehiclesReporting}</div>
             {showPopover && <div className="truck-popover">
