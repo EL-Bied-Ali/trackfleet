@@ -66,6 +66,9 @@ function destinationFor(delivery: MapDelivery): [number, number] {
 export default function InteractiveFleetMap({ deliveries, liveVehicles = [], selectedId, customerMode = false, label, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const destinationMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -95,6 +98,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
         layers: [{ id: "osm", type: "raster", source: "osm" }],
       },
     });
+    mapRef.current = map;
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
@@ -113,7 +117,26 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
       map.fitBounds([[-8.5, 32.7], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
     });
 
-    const shownDeliveries = customerMode ? deliveries.filter((delivery) => delivery.id === selectedId) : deliveries.slice(0, 5);
+    return () => {
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = [];
+      destinationMarkerRef.current?.remove();
+      destinationMarkerRef.current = null;
+      mapRef.current = null;
+      map.remove();
+    };
+  }, [customerMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    destinationMarkerRef.current?.remove();
+    destinationMarkerRef.current = null;
+
+    const selected = deliveries.find((delivery) => delivery.id === selectedId) ?? deliveries[0];
+    const shownDeliveries = customerMode ? deliveries.filter((delivery) => delivery.id === selectedId) : deliveries;
     const markers = shownDeliveries.map((delivery, index) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -141,20 +164,14 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
       }
     }
 
-    let destinationMarker: maplibregl.Marker | undefined;
     if (customerMode && selected) {
       const pin = document.createElement("div");
       pin.className = "maplibre-destination";
       pin.innerHTML = "◆";
       pin.setAttribute("aria-label", selected.destination);
-      destinationMarker = new maplibregl.Marker({ element: pin, anchor: "bottom" }).setLngLat(destinationFor(selected)).addTo(map);
+      destinationMarkerRef.current = new maplibregl.Marker({ element: pin, anchor: "bottom" }).setLngLat(destinationFor(selected)).addTo(map);
     }
-
-    return () => {
-      markers.forEach((marker) => marker.remove());
-      destinationMarker?.remove();
-      map.remove();
-    };
+    markersRef.current = markers;
   }, [customerMode, deliveries, liveVehicles, selectedId]);
 
   return <div ref={containerRef} className="interactive-map-canvas" role="application" aria-label={label} />;

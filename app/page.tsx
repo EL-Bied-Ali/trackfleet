@@ -174,12 +174,13 @@ export default function Home() {
         if (!response.ok) throw new Error("Delivery service unavailable");
         const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState };
         if (!active) return;
-        if (data.deliveries.length) {
+        if (tracking && data.deliveries.length) {
           setDeliveries(data.deliveries);
-          if (tracking) {
-            setSelectedId(data.deliveries[0].id);
-            setPublicTrackingState("ready");
-          }
+          setSelectedId(data.deliveries[0].id);
+          setPublicTrackingState("ready");
+        } else if (!tracking) {
+          setDeliveries(data.deliveries);
+          if (data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === selectedId)) setSelectedId(data.deliveries[0].id);
         }
         if (data.integration) setIntegration(data.integration);
       } catch {
@@ -216,6 +217,9 @@ export default function Home() {
     if (filter === "All deliveries") return deliveries;
     return deliveries.filter((delivery) => delivery.status === filter);
   }, [deliveries, filter]);
+  const mapDeliveries = integration.connected
+    ? deliveries.filter((delivery) => delivery.gpsSource === "sendatrack")
+    : deliveries;
 
   async function copyDeliveryLink(deliveryId: string) {
     const delivery = deliveries.find((item) => item.id === deliveryId);
@@ -434,8 +438,8 @@ export default function Home() {
         <a className="brand" href="#"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></a>
         <nav aria-label="Main navigation">
           <button className="nav-item active"><Icon>▦</Icon>{t.overview}</button>
-          <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">20</span></button>
-          <button className="nav-item" disabled><Icon>◇</Icon>{t.deliveries} <span className="nav-count">18</span></button>
+          <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">{integration.connected ? integration.vehicleCount : 20}</span></button>
+          <button className="nav-item" disabled><Icon>◇</Icon>{t.deliveries} <span className="nav-count">{deliveries.length}</span></button>
           <button className="nav-item" disabled><Icon>◉</Icon>{t.customers}</button>
         </nav>
         <div className="sidebar-divider" />
@@ -460,7 +464,7 @@ export default function Home() {
         </header>
 
         <div className="stats-grid">
-          <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>14</strong><em className="up">↗ 12%</em></div><p>{t.acrossVehicles}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>{deliveries.filter((delivery) => delivery.status !== "Delivered").length}</strong><em className="up">GPS</em></div><p>{t.acrossVehicles}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>94.2%</strong><em className="up">↗ 2.4%</em></div><p>{t.last30Days}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>3</strong><em className="warning">{t.needsAttention}</em></div><p>{t.delayReasons}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} GPS` : "17 / 20"}</strong><em className="neutral">{integration.connected ? t.sendatrack : t.atDepot}</em></div><p>{integration.connected ? t.positionsAutomatic : t.allReporting}</p></article>
@@ -469,16 +473,16 @@ export default function Home() {
         <div className="map-panel">
           <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? t.hideTraffic : t.showTraffic}</button></div></div>
           <div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>
-            <InteractiveFleetMap deliveries={deliveries} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
+            <InteractiveFleetMap deliveries={mapDeliveries} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
             {showTraffic && <div className="traffic-layer" aria-label={t.showTraffic}><span>{t.moderateTraffic}</span><i /><i /><i /></div>}
             <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
-            {showPopover && <div className="truck-popover">
+            {showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
               <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.eta}</dd></div></dl>
               <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
             </div>}
           </div>
-          <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">
+          {deliveries.length > 0 && <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">
             <div className="whatsapp-demo-intro">
               <div className="whatsapp-mark" aria-hidden="true">◔</div>
               <div><div className="demo-title-line"><h3 id="whatsapp-demo-title">{t.whatsAppDemoTitle}</h3><span>{t.demoMode}</span></div><p>{t.whatsAppDemoBody}</p></div>
@@ -492,7 +496,7 @@ export default function Home() {
               <button className="whatsapp-button" onClick={() => void sendWhatsAppMessage("tracking")} disabled={whatsAppBusy !== null}><span aria-hidden="true">◔</span>{whatsAppBusy === "tracking" ? t.whatsAppSending : t.sendWithWhatsApp}</button>
               <button className="arrival-button" onClick={() => void simulateArrival()} disabled={selected.status === "Delivered" || whatsAppBusy !== null}><span aria-hidden="true">⌖</span>{whatsAppBusy === "arrival" ? t.whatsAppSending : selected.status === "Delivered" ? t.arrivalAlreadySent : t.simulateArrival}</button>
             </div>
-          </section>
+          </section>}
         </div>
 
         <div className="deliveries-panel">

@@ -127,9 +127,9 @@ function timestampFrom(...values: unknown[]) {
   return Date.now();
 }
 
-function candidateArrays(value: unknown, depth = 0): unknown[][] {
+function candidateArrays(value: unknown, depth = 0): Array<{ items: unknown[]; depth: number }> {
   if (depth > 4) return [];
-  if (Array.isArray(value)) return [value, ...value.flatMap((item) => candidateArrays(item, depth + 1))];
+  if (Array.isArray(value)) return [{ items: value, depth }, ...value.flatMap((item) => candidateArrays(item, depth + 1))];
   const record = asRecord(value);
   return record ? Object.values(record).flatMap((item) => candidateArrays(item, depth + 1)) : [];
 }
@@ -158,10 +158,11 @@ function normalizeVehicle(value: unknown): SendatrackVehicle | null {
 }
 
 function normalizeFleet(payload: unknown) {
-  const arrays = candidateArrays(payload);
-  const vehicles = arrays.flatMap((items) => items
-    .map(normalizeVehicle)
-    .filter((item): item is SendatrackVehicle => Boolean(item)));
+  const groups = candidateArrays(payload)
+    .map(({ items, depth }) => ({ depth, vehicles: items.map(normalizeVehicle).filter((item): item is SendatrackVehicle => Boolean(item)) }))
+    .filter((group) => group.vehicles.length > 0);
+  const shallowestDepth = Math.min(...groups.map((group) => group.depth));
+  const vehicles = groups.filter((group) => group.depth === shallowestDepth).flatMap((group) => group.vehicles);
   const newestById = new Map<string, SendatrackVehicle>();
   for (const vehicle of vehicles) {
     const existing = newestById.get(vehicle.id);
