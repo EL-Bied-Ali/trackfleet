@@ -23,6 +23,7 @@ type Delivery = {
   speed?: number | null;
   lastPositionAt?: string | null;
   gpsSource?: "sendatrack" | "simulation";
+  trackingToken?: string | null;
 };
 
 type VehicleOption = { id: string; name: string; speed: number; updatedAt: number };
@@ -34,6 +35,8 @@ type MessageEvent = {
   kind: "tracking" | "arrival";
   time: string;
 };
+
+type CompanyIdentity = { account: string; user: string };
 
 const initialDeliveries: Delivery[] = [
   { id: "TF-2841", customer: "Atlas Home", destination: "Casablanca, MA", truck: "TRK-014", driver: "Youssef B.", status: "In transit", eta: "19 Aug · 14:00–18:00", progress: 68, color: "#16a272" },
@@ -66,6 +69,29 @@ function LanguageSwitcher({ locale, label, onChange }: { locale: Locale; label: 
   );
 }
 
+function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Locale; busy: boolean; error: string; onLocale: (locale: Locale) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const copy = {
+    fr: { eyebrow: "ESPACE ENTREPRISE", title: "Connectez votre flotte SENDATRACK", body: "Utilisez les mêmes identifiants que dans l’application SENDATRACK. Votre espace TrackFleet sera reconnu automatiquement.", account: "Compte", user: "Utilisateur", password: "Mot de passe", submit: "Accéder à TrackFleet", loading: "Connexion…", error: "Identifiants incorrects ou service SENDATRACK indisponible.", privacy: "Connexion chiffrée côté TrackFleet · aucune donnée visible par vos clients" },
+    en: { eyebrow: "COMPANY PORTAL", title: "Connect your SENDATRACK fleet", body: "Use the same credentials as in the SENDATRACK app. Your TrackFleet workspace will be recognized automatically.", account: "Account", user: "User", password: "Password", submit: "Open TrackFleet", loading: "Connecting…", error: "Incorrect credentials or SENDATRACK is unavailable.", privacy: "Encrypted by TrackFleet · credentials are never visible to customers" },
+    nl: { eyebrow: "BEDRIJFSPORTAAL", title: "Koppel uw SENDATRACK-wagenpark", body: "Gebruik dezelfde gegevens als in de SENDATRACK-app. Uw TrackFleet-ruimte wordt automatisch herkend.", account: "Account", user: "Gebruiker", password: "Wachtwoord", submit: "TrackFleet openen", loading: "Verbinden…", error: "Onjuiste gegevens of SENDATRACK is niet beschikbaar.", privacy: "Versleuteld door TrackFleet · nooit zichtbaar voor klanten" },
+  }[locale];
+  return <main className="login-page">
+    <header className="login-header"><a className="brand brand-dark" href="/"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></a><LanguageSwitcher locale={locale} label="Language" onChange={onLocale} /></header>
+    <section className="login-layout">
+      <div className="login-story"><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p>{copy.body}</p><div className="login-route"><span>BE</span><i /><b>↗</b><i /><span>MA</span></div><small>Belgique · France · Espagne · Maroc</small></div>
+      <form className="login-card" onSubmit={onSubmit}>
+        <div className="login-provider"><span>⌖</span><div><strong>SENDATRACK</strong><small>GPS fleet connection</small></div></div>
+        <label>{copy.account}<input name="accountID" autoComplete="organization" required placeholder="Compte SENDATRACK" /></label>
+        <label>{copy.user}<input name="user" autoComplete="username" required placeholder="Utilisateur" /></label>
+        <label>{copy.password}<input name="password" type="password" autoComplete="current-password" required placeholder="••••••••" /></label>
+        {error && <p className="login-error" role="alert">{copy.error}</p>}
+        <button className="login-submit" disabled={busy}>{busy ? copy.loading : copy.submit}<span>→</span></button>
+        <p className="login-privacy">⌁ {copy.privacy}</p>
+      </form>
+    </section>
+  </main>;
+}
+
 export default function Home() {
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [selectedId, setSelectedId] = useState("TF-2841");
@@ -78,6 +104,11 @@ export default function Home() {
   const [creating, setCreating] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
   const [locale, setLocale] = useState<Locale>("en");
+  const [authState, setAuthState] = useState<"loading" | "anonymous" | "authenticated">("loading");
+  const [company, setCompany] = useState<CompanyIdentity | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
     { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
@@ -90,9 +121,9 @@ export default function Home() {
       const trackingId = searchParams.get("tracking");
       const requestedLocale = searchParams.get("lang");
       if (requestedLocale === "en" || requestedLocale === "fr" || requestedLocale === "nl") setLocale(requestedLocale);
-      const matchingDelivery = deliveries.find((delivery) => delivery.id === trackingId);
-      if (trackingId && matchingDelivery) {
-        setSelectedId(matchingDelivery.id);
+      const matchingDelivery = deliveries.find((delivery) => delivery.id === trackingId || delivery.trackingToken === trackingId);
+      if (trackingId) {
+        if (matchingDelivery) setSelectedId(matchingDelivery.id);
         setView("customer");
       } else {
         setView("dispatch");
@@ -103,6 +134,23 @@ export default function Home() {
     window.addEventListener("popstate", syncViewFromUrl);
     return () => window.removeEventListener("popstate", syncViewFromUrl);
   }, [deliveries]);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tracking")) {
+      setPublicTrackingState("loading");
+      setAuthState("anonymous");
+      return;
+    }
+    let active = true;
+    void fetch("/api/auth/session", { cache: "no-store" }).then(async (response) => {
+      if (!active) return;
+      if (!response.ok) { setAuthState("anonymous"); return; }
+      const data = await response.json() as { company: CompanyIdentity };
+      setCompany(data.company);
+      setAuthState("authenticated");
+    }).catch(() => { if (active) setAuthState("anonymous"); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const requestedLocale = new URLSearchParams(window.location.search).get("lang");
@@ -119,20 +167,30 @@ export default function Home() {
     let active = true;
     async function refresh(silent = false) {
       try {
-        const response = await fetch("/api/deliveries", { cache: "no-store" });
+        const tracking = new URLSearchParams(window.location.search).get("tracking");
+        if (!tracking && authState !== "authenticated") return;
+        const endpoint = tracking ? `/api/deliveries?tracking=${encodeURIComponent(tracking)}` : "/api/deliveries";
+        const response = await fetch(endpoint, { cache: "no-store" });
         if (!response.ok) throw new Error("Delivery service unavailable");
         const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState };
         if (!active) return;
-        if (data.deliveries.length) setDeliveries(data.deliveries);
+        if (data.deliveries.length) {
+          setDeliveries(data.deliveries);
+          if (tracking) {
+            setSelectedId(data.deliveries[0].id);
+            setPublicTrackingState("ready");
+          }
+        }
         if (data.integration) setIntegration(data.integration);
       } catch {
+        if (new URLSearchParams(window.location.search).get("tracking")) setPublicTrackingState("error");
         if (active && !silent) setToast(t.cloudReconnecting);
       }
     }
     void refresh();
     const timer = window.setInterval(() => void refresh(true), 30_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, []);
+  }, [authState]);
 
   useEffect(() => {
     function closeModalWithEscape(event: KeyboardEvent) {
@@ -160,8 +218,9 @@ export default function Home() {
   }, [deliveries, filter]);
 
   async function copyDeliveryLink(deliveryId: string) {
+    const delivery = deliveries.find((item) => item.id === deliveryId);
     const link = new URL(window.location.origin);
-    link.searchParams.set("tracking", deliveryId);
+    link.searchParams.set("tracking", delivery?.trackingToken || deliveryId);
     link.searchParams.set("lang", locale);
     const helper = document.createElement("textarea");
     helper.value = link.toString();
@@ -187,8 +246,9 @@ export default function Home() {
   }
 
   function trackingUrl(deliveryId: string) {
+    const delivery = deliveries.find((item) => item.id === deliveryId);
     const link = new URL(window.location.origin);
-    link.searchParams.set("tracking", deliveryId);
+    link.searchParams.set("tracking", delivery?.trackingToken || deliveryId);
     link.searchParams.set("lang", locale);
     return link.toString();
   }
@@ -233,7 +293,7 @@ export default function Home() {
 
   function openCustomerView() {
     const link = new URL(window.location.origin);
-    link.searchParams.set("tracking", selected.id);
+    link.searchParams.set("tracking", selected.trackingToken || selected.id);
     link.searchParams.set("lang", locale);
     window.history.pushState({}, "", link);
     setView("customer");
@@ -251,6 +311,30 @@ export default function Home() {
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set("lang", nextLocale);
     window.history.replaceState({}, "", nextUrl);
+  }
+
+  async function login(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginBusy(true);
+    setLoginError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountID: form.get("accountID"), user: form.get("user"), password: form.get("password") }) });
+      if (!response.ok) throw new Error("login_failed");
+      const data = await response.json() as { company: CompanyIdentity };
+      setCompany(data.company);
+      setAuthState("authenticated");
+    } catch {
+      setLoginError("login_failed");
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch("/api/auth/session", { method: "DELETE" });
+    setCompany(null);
+    setAuthState("anonymous");
   }
 
   async function createDelivery(event: React.FormEvent<HTMLFormElement>) {
@@ -283,6 +367,11 @@ export default function Home() {
       setCreating(false);
     }
   }
+
+  if (view === "customer" && publicTrackingState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
+  if (view === "customer" && publicTrackingState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>Lien de suivi introuvable</h1><p>Vérifiez le lien reçu ou contactez l’entreprise qui vous l’a envoyé.</p></section></main>;
+  if (view !== "customer" && authState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
+  if (view !== "customer" && authState === "anonymous") return <LoginScreen locale={locale} busy={loginBusy} error={loginError} onLocale={changeLocale} onSubmit={login} />;
 
   if (view === "customer") {
     return (
@@ -361,7 +450,7 @@ export default function Home() {
           <p>{integration.connected ? t.gpsConnectedBody(integration.vehicleCount) : integration.configured ? t.gpsIssueBody : t.gpsPendingBody}</p>
           <span className={`gps-coming ${integration.connected ? "is-live" : ""}`}>{integration.connected ? t.gpsAutomatic : t.gpsFallback}</span>
         </div>
-        <div className="profile"><div className="avatar">CM</div><div><strong>Camille Moreau</strong><span>{t.dispatcher}</span></div></div>
+        <div className="profile"><div className="avatar">{(company?.user || "TF").slice(0, 2).toUpperCase()}</div><div><strong>{company?.user || "TrackFleet"}</strong><span>{company?.account || t.dispatcher}</span></div><button aria-label="Déconnexion" onClick={() => void logout()}>↪</button></div>
       </aside>
 
       <section className="workspace">

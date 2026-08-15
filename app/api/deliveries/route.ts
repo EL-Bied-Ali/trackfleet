@@ -1,8 +1,9 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "../../../db";
 import { deliveries } from "../../../db/schema";
 import { getSendatrackSnapshot, type SendatrackSnapshot } from "../../lib/sendatrack";
+import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 
 const seedDeliveries = [
   { id: "TF-2841", customer: "Atlas Home", destination: "Casablanca, MA", truck: "TRK-014", driver: "Youssef B.", status: "In transit" as const, eta: "19 Aug · 14:00–18:00", progress: 68, color: "#16a272", contact: "", createdAt: new Date("2026-08-14T08:42:00Z") },
@@ -30,6 +31,8 @@ async function ensureSeedData() {
     speed real,
     last_position_at integer,
     gps_source text DEFAULT 'simulation' NOT NULL,
+    company_id text DEFAULT 'demo' NOT NULL,
+    tracking_token text,
     created_at integer NOT NULL
   )`).run();
   const columns = await env.DB.prepare("PRAGMA table_info(deliveries)").all<{ name: string }>();
@@ -41,8 +44,14 @@ async function ensureSeedData() {
     ["speed", "ALTER TABLE deliveries ADD COLUMN speed real"],
     ["last_position_at", "ALTER TABLE deliveries ADD COLUMN last_position_at integer"],
     ["gps_source", "ALTER TABLE deliveries ADD COLUMN gps_source text DEFAULT 'simulation' NOT NULL"],
+    ["company_id", "ALTER TABLE deliveries ADD COLUMN company_id text DEFAULT 'demo' NOT NULL"],
+    ["tracking_token", "ALTER TABLE deliveries ADD COLUMN tracking_token text"],
   ].filter(([name]) => !existing.has(name));
   if (additions.length) await env.DB.batch(additions.map(([, sql]) => env.DB.prepare(sql)));
+  await env.DB.batch([
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)"),
+    env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)"),
+  ]);
   const db = getDb();
   await db.insert(deliveries).values(seedDeliveries).onConflictDoNothing();
   for (const delivery of seedDeliveries) {
@@ -57,9 +66,9 @@ function key(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-async function applySendatrackSnapshot(snapshot: SendatrackSnapshot) {
+async function applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
   if (!snapshot.connected || !snapshot.vehicles.length) return;
-  const rows = await env.DB.prepare("SELECT id, truck, sendatrack_vehicle_id FROM deliveries WHERE status != 'Delivered'").all<{ id: string; truck: string; sendatrack_vehicle_id: string }>();
+  const rows = await env.DB.prepare("SELECT id, truck, sendatrack_vehicle_id FROM deliveries WHERE company_id = ? AND status != 'Delivered'").bind(companyId).all<{ id: string; truck: string; sendatrack_vehicle_id: string }>();
   const updates = ((rows.results ?? []) as Array<{ id: string; truck: string; sendatrack_vehicle_id: string }>).flatMap((delivery) => {
     const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrack_vehicle_id)
       ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
@@ -77,12 +86,28 @@ function errorResponse(error: unknown) {
   return Response.json({ error: message }, { status: 500 });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = await ensureSeedData();
-    const integration = await getSendatrackSnapshot();
-    await applySendatrackSnapshot(integration);
-    const rows = await db.select().from(deliveries).orderBy(desc(deliveries.createdAt));
+    const tracking = new URL(request.url).searchParams.get("tracking")?.trim();
+    if (tracking) {
+      const row = await env.DB.prepare(`SELECT id, customer, destination, truck, driver, status, eta, progress, color, contact,
+        sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
+        last_position_at AS lastPositionAt, gps_source AS gpsSource, tracking_token AS trackingToken
+        FROM deliveries
+        WHERE tracking_token = ? OR (company_id = 'demo' AND id = ?)
+        LIMIT 1`).bind(tracking, tracking).first();
+      if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
+      return Response.json({ deliveries: [row], publicTracking: true }, { headers: { "cache-control": "no-store" } });
+    }
+
+    const session = await getCompanySession(request);
+    if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
+    const integration = await getSendatrackSnapshot(session.credentials);
+    await applySendatrackSnapshot(integration, session.companyId);
+    const rows = await db.select().from(deliveries)
+      .where(eq(deliveries.companyId, session.companyId))
+      .orderBy(desc(deliveries.createdAt));
     return Response.json({
       deliveries: rows,
       integration: {
@@ -100,6 +125,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getCompanySession(request);
+    if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
     const payload = (await request.json()) as Record<string, unknown>;
     const customer = String(payload.customer ?? "").trim();
     const destination = String(payload.destination ?? "").trim();
@@ -121,6 +148,8 @@ export async function POST(request: Request) {
       eta,
       contact: String(payload.contact ?? "").trim(),
       sendatrackVehicleId,
+      companyId: session.companyId,
+      trackingToken: createTrackingToken(),
       driver: "To be assigned",
       status: "Loading",
       progress: 8,

@@ -7,6 +7,12 @@ type SendatrackEnv = {
   SENDATRACK_API_URL?: string;
 };
 
+export type SendatrackCredentials = {
+  accountID: string;
+  user: string;
+  password: string;
+};
+
 export type SendatrackVehicle = {
   id: string;
   name: string;
@@ -27,9 +33,9 @@ export type SendatrackSnapshot = {
 
 const runtimeEnv = env as unknown as SendatrackEnv;
 const defaultApiUrl = "http://backend2.sendatrack.com/sendatrack/public/api/";
-let cachedToken: { value: string; expiresAt: number } | null = null;
+const cachedTokens = new Map<string, { value: string; expiresAt: number }>();
 
-function credentials() {
+function environmentCredentials(): SendatrackCredentials {
   return {
     accountID: runtimeEnv.SENDATRACK_ACCOUNT_ID?.trim() ?? "",
     user: runtimeEnv.SENDATRACK_USER?.trim() ?? "",
@@ -70,9 +76,14 @@ function findToken(value: unknown, depth = 0): string | null {
   return null;
 }
 
-async function login() {
+function credentialKey(auth: SendatrackCredentials) {
+  return `${auth.accountID.trim().toLowerCase()}\u0000${auth.user.trim().toLowerCase()}`;
+}
+
+async function login(auth: SendatrackCredentials) {
+  const key = credentialKey(auth);
+  const cachedToken = cachedTokens.get(key);
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
-  const auth = credentials();
   if (!auth.accountID || !auth.user || !auth.password) return null;
   const response = await fetch(apiUrl("login"), {
     method: "POST",
@@ -84,7 +95,7 @@ async function login() {
   const payload = await response.json() as unknown;
   const token = findToken(payload);
   if (!token) throw new Error("authentication_failed");
-  cachedToken = { value: token, expiresAt: Date.now() + 45 * 60 * 1000 };
+  cachedTokens.set(key, { value: token, expiresAt: Date.now() + 45 * 60 * 1000 });
   return token;
 }
 
@@ -154,13 +165,13 @@ function normalizeFleet(payload: unknown) {
   return [...new Map(best.map((vehicle) => [vehicle.id, vehicle])).values()];
 }
 
-async function requestFleet(token: string) {
+async function requestFleet(token: string, auth: SendatrackCredentials) {
   const response = await fetch(apiUrl("list?"), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
   });
   if (response.status === 401) {
-    cachedToken = null;
+    cachedTokens.delete(credentialKey(auth));
     throw new Error("authentication_failed");
   }
   if (!response.ok) throw new Error("service_unavailable");
@@ -168,22 +179,23 @@ async function requestFleet(token: string) {
 }
 
 export function isSendatrackConfigured() {
-  const auth = credentials();
+  const auth = environmentCredentials();
   return Boolean(auth.accountID && auth.user && auth.password);
 }
 
-export async function getSendatrackSnapshot(): Promise<SendatrackSnapshot> {
-  if (!isSendatrackConfigured()) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
+export async function getSendatrackSnapshot(providedCredentials?: SendatrackCredentials): Promise<SendatrackSnapshot> {
+  const auth = providedCredentials ?? environmentCredentials();
+  if (!auth.accountID || !auth.user || !auth.password) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
   try {
-    let token = await login();
+    let token = await login(auth);
     if (!token) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
     try {
-      const vehicles = await requestFleet(token);
+      const vehicles = await requestFleet(token, auth);
       return { configured: true, connected: true, vehicles };
     } catch (error) {
       if (error instanceof Error && error.message === "authentication_failed") {
-        token = await login();
-        if (token) return { configured: true, connected: true, vehicles: await requestFleet(token) };
+        token = await login(auth);
+        if (token) return { configured: true, connected: true, vehicles: await requestFleet(token, auth) };
       }
       throw error;
     }

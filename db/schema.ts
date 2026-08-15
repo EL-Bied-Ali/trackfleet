@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const deliveries = sqliteTable("deliveries", {
   id: text("id").primaryKey(),
@@ -17,5 +17,29 @@ export const deliveries = sqliteTable("deliveries", {
   speed: real("speed"),
   lastPositionAt: integer("last_position_at", { mode: "timestamp_ms" }),
   gpsSource: text("gps_source").notNull().default("simulation"),
+  companyId: text("company_id").notNull().default("demo"),
+  trackingToken: text("tracking_token"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("idx_deliveries_company_id").on(table.companyId),
+  uniqueIndex("idx_deliveries_tracking_token").on(table.trackingToken),
+]);
+
+export const companies = sqliteTable("companies", {
+  id: text("id").primaryKey(),
+  accountLabel: text("account_label").notNull(),
+  userLabel: text("user_label").notNull(),
+  credentialsCiphertext: text("credentials_ciphertext").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
+
+export const sessions = sqliteTable("sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  companyId: text("company_id").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("idx_sessions_company_id").on(table.companyId),
+  index("idx_sessions_expires_at").on(table.expiresAt),
+]);

@@ -15,6 +15,13 @@
       "when": 1786824114189,
       "tag": "0001_nappy_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786825411635,
+      "tag": "0002_tranquil_cobalt_man",
+      "breakpoints": true
     }
   ]
 }
