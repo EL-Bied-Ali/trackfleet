@@ -4,11 +4,11 @@ import { getDb } from "../../../db";
 import { deliveries } from "../../../db/schema";
 
 const seedDeliveries = [
-  { id: "TF-2841", customer: "Boulangerie Louise", destination: "Ghent, BE", truck: "TRK-014", driver: "Marc D.", status: "In transit" as const, eta: "14:25", progress: 72, color: "#16a272", contact: "", createdAt: new Date("2026-08-14T08:42:00Z") },
-  { id: "TF-2839", customer: "Atelier Noord", destination: "Antwerp, BE", truck: "TRK-007", driver: "Sophie L.", status: "Delayed" as const, eta: "15:10", progress: 54, color: "#f1a43c", contact: "", createdAt: new Date("2026-08-14T08:35:00Z") },
-  { id: "TF-2837", customer: "Maison du Parc", destination: "Brussels, BE", truck: "TRK-019", driver: "Youssef B.", status: "In transit" as const, eta: "13:50", progress: 88, color: "#4776e6", contact: "", createdAt: new Date("2026-08-14T08:22:00Z") },
-  { id: "TF-2835", customer: "Café Central", destination: "Leuven, BE", truck: "TRK-003", driver: "Nora V.", status: "Loading" as const, eta: "16:30", progress: 12, color: "#916ed7", contact: "", createdAt: new Date("2026-08-14T08:10:00Z") },
-  { id: "TF-2832", customer: "Studio Meuse", destination: "Liège, BE", truck: "TRK-011", driver: "Alex R.", status: "Delivered" as const, eta: "12:18", progress: 100, color: "#6b7280", contact: "", createdAt: new Date("2026-08-14T07:50:00Z") },
+  { id: "TF-2841", customer: "Atlas Home", destination: "Casablanca, MA", truck: "TRK-014", driver: "Youssef B.", status: "In transit" as const, eta: "19 Aug · 14:00–18:00", progress: 68, color: "#16a272", contact: "", createdAt: new Date("2026-08-14T08:42:00Z") },
+  { id: "TF-2839", customer: "Medina Import", destination: "Tangier, MA", truck: "TRK-007", driver: "Sophie L.", status: "Delayed" as const, eta: "20 Aug · 09:00–13:00", progress: 55, color: "#f1a43c", contact: "", createdAt: new Date("2026-08-14T08:35:00Z") },
+  { id: "TF-2837", customer: "Brussels Parts", destination: "Brussels, BE", truck: "TRK-019", driver: "Amine R.", status: "In transit" as const, eta: "18 Aug · 16:00–20:00", progress: 82, color: "#4776e6", contact: "", createdAt: new Date("2026-08-14T08:22:00Z") },
+  { id: "TF-2835", customer: "Rif Logistics", destination: "Antwerp, BE", truck: "TRK-003", driver: "Nora V.", status: "Loading" as const, eta: "21 Aug · 10:00–14:00", progress: 8, color: "#916ed7", contact: "", createdAt: new Date("2026-08-14T08:10:00Z") },
+  { id: "TF-2832", customer: "EuroMaghreb", destination: "Liège, BE", truck: "TRK-011", driver: "Marc D.", status: "Delivered" as const, eta: "17 Aug · 17:32", progress: 100, color: "#6b7280", contact: "", createdAt: new Date("2026-08-14T07:50:00Z") },
 ];
 
 async function ensureSeedData() {
@@ -27,6 +27,11 @@ async function ensureSeedData() {
   )`).run();
   const db = getDb();
   await db.insert(deliveries).values(seedDeliveries).onConflictDoNothing();
+  for (const delivery of seedDeliveries) {
+    await env.DB.prepare("UPDATE deliveries SET customer = ?, destination = ?, truck = ?, driver = ?, status = ?, eta = ?, progress = ?, color = ? WHERE id = ?")
+      .bind(delivery.customer, delivery.destination, delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.progress, delivery.color, delivery.id)
+      .run();
+  }
   return db;
 }
 

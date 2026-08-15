@@ -26,11 +26,11 @@ type MessageEvent = {
 };
 
 const initialDeliveries: Delivery[] = [
-  { id: "TF-2841", customer: "Boulangerie Louise", destination: "Ghent, BE", truck: "TRK-014", driver: "Marc D.", status: "In transit", eta: "14:25", progress: 72, color: "#16a272" },
-  { id: "TF-2839", customer: "Atelier Noord", destination: "Antwerp, BE", truck: "TRK-007", driver: "Sophie L.", status: "Delayed", eta: "15:10", progress: 54, color: "#f1a43c" },
-  { id: "TF-2837", customer: "Maison du Parc", destination: "Brussels, BE", truck: "TRK-019", driver: "Youssef B.", status: "In transit", eta: "13:50", progress: 88, color: "#4776e6" },
-  { id: "TF-2835", customer: "Café Central", destination: "Leuven, BE", truck: "TRK-003", driver: "Nora V.", status: "Loading", eta: "16:30", progress: 12, color: "#916ed7" },
-  { id: "TF-2832", customer: "Studio Meuse", destination: "Liège, BE", truck: "TRK-011", driver: "Alex R.", status: "Delivered", eta: "12:18", progress: 100, color: "#6b7280" },
+  { id: "TF-2841", customer: "Atlas Home", destination: "Casablanca, MA", truck: "TRK-014", driver: "Youssef B.", status: "In transit", eta: "19 Aug · 14:00–18:00", progress: 68, color: "#16a272" },
+  { id: "TF-2839", customer: "Medina Import", destination: "Tangier, MA", truck: "TRK-007", driver: "Sophie L.", status: "Delayed", eta: "20 Aug · 09:00–13:00", progress: 55, color: "#f1a43c" },
+  { id: "TF-2837", customer: "Brussels Parts", destination: "Brussels, BE", truck: "TRK-019", driver: "Amine R.", status: "In transit", eta: "18 Aug · 16:00–20:00", progress: 82, color: "#4776e6" },
+  { id: "TF-2835", customer: "Rif Logistics", destination: "Antwerp, BE", truck: "TRK-003", driver: "Nora V.", status: "Loading", eta: "21 Aug · 10:00–14:00", progress: 8, color: "#916ed7" },
+  { id: "TF-2832", customer: "EuroMaghreb", destination: "Liège, BE", truck: "TRK-011", driver: "Marc D.", status: "Delivered", eta: "17 Aug · 17:32", progress: 100, color: "#6b7280" },
 ];
 
 const statusClass: Record<DeliveryStatus, string> = {
@@ -142,6 +142,10 @@ export default function Home() {
 
   const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0];
   const customerCopy = t.customerStatus[selected.status];
+  const headingToMorocco = selected.destination.endsWith(", MA");
+  const routeDirection = headingToMorocco ? t.belgiumToMorocco : t.moroccoToBelgium;
+  const reachedFerry = selected.progress >= 52;
+  const clearedCustoms = selected.progress >= 72;
   const visibleDeliveries = useMemo(() => {
     if (filter === "All deliveries") return deliveries;
     return deliveries.filter((delivery) => delivery.status === filter);
@@ -286,6 +290,7 @@ export default function Home() {
               <p className="eyebrow">{t.deliveryLabel} {selected.id}</p>
               <h1>{customerCopy.headline}</h1>
               <p className="customer-subtitle">{customerCopy.subtitle(selected.destination)}</p>
+              <div className="route-summary"><span>↗</span><strong>{routeDirection}</strong><small>{t.internationalCorridor}</small></div>
             </div>
             <div className="eta-card">
               <span>{t.estimatedArrival}</span>
@@ -295,16 +300,16 @@ export default function Home() {
           </div>
 
           <div className="customer-grid">
-            <div className="map customer-map">
+            <div className={`map customer-map corridor-map ${headingToMorocco ? "to-morocco" : "to-belgium"}`}>
               <div className="map-grid" />
-              <div className="river river-one" />
-              <div className="road road-a" />
-              <div className="road road-b" />
-              <div className="road road-c" />
-              <span className="city city-a">BRUSSELS</span>
-              <span className="city city-b">LEUVEN</span>
-              <span className="city city-c">MECHELEN</span>
-              <div className="route-line" />
+              <div className="continent europe-zone" />
+              <div className="continent morocco-zone" />
+              <div className="corridor-route" />
+              <div className="sea-crossing"><span>{t.ferry}</span></div>
+              <span className="corridor-city brussels-city">BRUSSELS</span>
+              <span className="corridor-city madrid-city">MADRID</span>
+              <span className="corridor-city tangier-city">TANGIER</span>
+              <span className="corridor-city casablanca-city">CASABLANCA</span>
               <div className="destination-pin"><span>◆</span></div>
               <div className="truck-pin hero-pin" style={{ transform: `translate(${(tick % 4) * 3}px, ${-(tick % 4) * 2}px)` }}>
                 <span>▰</span>
@@ -320,7 +325,9 @@ export default function Home() {
               <div className="timeline">
                 <div className="timeline-step done"><i>✓</i><div><strong>{t.orderPrepared}</strong><span>{t.todayTime("08:42")}</span></div></div>
                 <div className="timeline-step done"><i>✓</i><div><strong>{t.leftWarehouse}</strong><span>{t.todayTime("10:16")}</span></div></div>
-                <div className={`timeline-step active ${selected.status === "Delayed" ? "is-delayed" : ""}`}><i>●</i><div><strong>{customerCopy.currentTitle}</strong><span>{customerCopy.currentDetail(selected.progress, selected.eta)}</span></div></div>
+                <div className={`timeline-step ${reachedFerry ? "done" : "active"}`}><i>{reachedFerry ? "✓" : "●"}</i><div><strong>{t.europeanLeg}</strong><span>{t.europeanLegDetail}</span></div></div>
+                <div className={`timeline-step ${clearedCustoms ? "done" : reachedFerry ? `active ${selected.status === "Delayed" ? "is-delayed" : ""}` : ""}`}><i>{clearedCustoms ? "✓" : reachedFerry ? "●" : "○"}</i><div><strong>{t.ferryAndCustoms}</strong><span>{reachedFerry ? t.ferryDetailActive : t.ferryDetailPending}</span></div></div>
+                {clearedCustoms && selected.status !== "Delivered" && <div className="timeline-step active"><i>●</i><div><strong>{customerCopy.currentTitle}</strong><span>{customerCopy.currentDetail(selected.progress, selected.eta)}</span></div></div>}
                 <div className={selected.status === "Delivered" ? "timeline-step done" : "timeline-step"}><i>{selected.status === "Delivered" ? "✓" : "◆"}</i><div><strong>{customerCopy.finalTitle}</strong><span>{customerCopy.finalDetail(selected.eta)}</span></div></div>
               </div>
               <div className="privacy-note"><Icon>⌁</Icon><p><strong>{t.privacyTitle}</strong><span>{t.privacyBody}</span></p></div>
@@ -373,11 +380,11 @@ export default function Home() {
 
         <div className="map-panel">
           <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? t.hideTraffic : t.showTraffic}</button></div></div>
-          <div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>
+          <div className={`map fleet-map corridor-map ${showTraffic ? "traffic-visible" : ""}`}>
             <div className="map-grid" />
-            <div className="river river-one" /><div className="river river-two" />
-            <div className="road road-a" /><div className="road road-b" /><div className="road road-c" /><div className="road road-d" />
-            <span className="city city-a">BRUSSELS</span><span className="city city-b">LEUVEN</span><span className="city city-c">MECHELEN</span><span className="city city-d">WAVRE</span>
+            <div className="continent europe-zone" /><div className="continent morocco-zone" />
+            <div className="corridor-route" /><div className="sea-crossing"><span>{t.ferry}</span></div>
+            <span className="corridor-city brussels-city">BRUSSELS</span><span className="corridor-city paris-city">PARIS</span><span className="corridor-city madrid-city">MADRID</span><span className="corridor-city tangier-city">TANGIER</span><span className="corridor-city casablanca-city">CASABLANCA</span>
             {deliveries.slice(0, 4).map((delivery, index) => (
               <button key={delivery.id} className={`truck-pin pin-${index + 1} ${selectedId === delivery.id ? "selected" : ""}`} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} aria-label={`Select ${delivery.truck}`} style={{ transform: `translate(${index === 0 ? (tick % 4) * 2 : 0}px, ${index === 0 ? -(tick % 3) * 2 : 0}px)` }}>
                 <span>▰</span><b>{delivery.truck.replace("TRK-0", "")}</b>
