@@ -161,14 +161,14 @@ function normalizeFleet(payload: unknown) {
   const groups = candidateArrays(payload)
     .map(({ items, depth }) => ({ depth, vehicles: items.map(normalizeVehicle).filter((item): item is SendatrackVehicle => Boolean(item)) }))
     .filter((group) => group.vehicles.length > 0);
-  const shallowestDepth = Math.min(...groups.map((group) => group.depth));
-  const vehicles = groups.filter((group) => group.depth === shallowestDepth).flatMap((group) => group.vehicles);
-  const newestById = new Map<string, SendatrackVehicle>();
+  const vehicles = groups.flatMap((group) => group.vehicles);
+  const newestByVehicle = new Map<string, SendatrackVehicle>();
   for (const vehicle of vehicles) {
-    const existing = newestById.get(vehicle.id);
-    if (!existing || vehicle.updatedAt >= existing.updatedAt) newestById.set(vehicle.id, vehicle);
+    const vehicleKey = vehicle.name.toLowerCase().replace(/[^a-z0-9]/g, "") || vehicle.id;
+    const existing = newestByVehicle.get(vehicleKey);
+    if (!existing || vehicle.updatedAt >= existing.updatedAt) newestByVehicle.set(vehicleKey, vehicle);
   }
-  return [...newestById.values()];
+  return [...newestByVehicle.values()];
 }
 
 async function requestFleet(token: string, auth: SendatrackCredentials) {
