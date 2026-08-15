@@ -207,7 +207,10 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0];
+  // A newly connected company can have live GPS vehicles before its first
+  // paper delivery has been entered in TrackFleet. Keep the dashboard usable
+  // while that delivery list is empty instead of dereferencing `undefined`.
+  const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? initialDeliveries[0];
   const customerCopy = t.customerStatus[selected.status];
   const headingToMorocco = selected.destination.endsWith(", MA");
   const routeDirection = headingToMorocco ? t.belgiumToMorocco : t.moroccoToBelgium;
