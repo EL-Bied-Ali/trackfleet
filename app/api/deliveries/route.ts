@@ -115,7 +115,7 @@ export async function GET(request: Request) {
         connected: integration.connected,
         vehicleCount: integration.vehicles.length,
         error: integration.error ?? null,
-        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt })),
+        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude })),
       },
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {

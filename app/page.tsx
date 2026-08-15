@@ -26,7 +26,7 @@ type Delivery = {
   trackingToken?: string | null;
 };
 
-type VehicleOption = { id: string; name: string; speed: number; updatedAt: number };
+type VehicleOption = { id: string; name: string; speed: number; updatedAt: number; latitude: number; longitude: number };
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };
 
 type MessageEvent = {
@@ -469,7 +469,7 @@ export default function Home() {
         <div className="map-panel">
           <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? t.hideTraffic : t.showTraffic}</button></div></div>
           <div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>
-            <InteractiveFleetMap deliveries={deliveries} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
+            <InteractiveFleetMap deliveries={deliveries} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
             {showTraffic && <div className="traffic-layer" aria-label={t.showTraffic}><span>{t.moderateTraffic}</span><i /><i /><i /></div>}
             <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
             {showPopover && <div className="truck-popover">

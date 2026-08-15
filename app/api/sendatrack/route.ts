@@ -14,6 +14,8 @@ export async function GET(request: Request) {
       name: vehicle.name,
       speed: vehicle.speed,
       updatedAt: vehicle.updatedAt,
+      latitude: vehicle.latitude,
+      longitude: vehicle.longitude,
     })),
   }, {
     status: snapshot.configured && !snapshot.connected ? 502 : 200,

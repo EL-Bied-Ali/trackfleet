@@ -11,10 +11,20 @@ type MapDelivery = {
   status: string;
   latitude?: number | null;
   longitude?: number | null;
+  sendatrackVehicleId?: string;
+};
+
+type LiveVehicle = {
+  id: string;
+  name: string;
+  speed: number;
+  latitude: number;
+  longitude: number;
 };
 
 type Props = {
   deliveries: MapDelivery[];
+  liveVehicles?: LiveVehicle[];
   selectedId: string;
   customerMode?: boolean;
   label: string;
@@ -53,7 +63,7 @@ function destinationFor(delivery: MapDelivery): [number, number] {
   return [4.3517, 50.8503];
 }
 
-export default function InteractiveFleetMap({ deliveries, selectedId, customerMode = false, label, onSelect }: Props) {
+export default function InteractiveFleetMap({ deliveries, liveVehicles = [], selectedId, customerMode = false, label, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
 
@@ -114,6 +124,23 @@ export default function InteractiveFleetMap({ deliveries, selectedId, customerMo
       return new maplibregl.Marker({ element: button, anchor: "bottom" }).setLngLat(positionFor(delivery, index)).addTo(map);
     });
 
+    if (!customerMode) {
+      const linkedVehicleIds = new Set(deliveries.flatMap((delivery) => {
+        if (delivery.sendatrackVehicleId) return [delivery.sendatrackVehicleId];
+        const matching = liveVehicles.find((vehicle) => vehicle.name === delivery.truck);
+        return matching ? [matching.id] : [];
+      }));
+      for (const vehicle of liveVehicles) {
+        if (linkedVehicleIds.has(vehicle.id)) continue;
+        const marker = document.createElement("div");
+        marker.className = "maplibre-truck gps-only";
+        marker.setAttribute("role", "img");
+        marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);
+        marker.innerHTML = `<span>▰</span><b>GPS</b><em>${vehicle.name}</em>`;
+        markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom" }).setLngLat([vehicle.longitude, vehicle.latitude]).addTo(map));
+      }
+    }
+
     let destinationMarker: maplibregl.Marker | undefined;
     if (customerMode && selected) {
       const pin = document.createElement("div");
@@ -128,7 +155,7 @@ export default function InteractiveFleetMap({ deliveries, selectedId, customerMo
       destinationMarker?.remove();
       map.remove();
     };
-  }, [customerMode, deliveries, selectedId]);
+  }, [customerMode, deliveries, liveVehicles, selectedId]);
 
   return <div ref={containerRef} className="interactive-map-canvas" role="application" aria-label={label} />;
 }
