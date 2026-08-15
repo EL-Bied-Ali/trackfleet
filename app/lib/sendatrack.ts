@@ -159,10 +159,15 @@ function normalizeVehicle(value: unknown): SendatrackVehicle | null {
 
 function normalizeFleet(payload: unknown) {
   const arrays = candidateArrays(payload);
-  const best = arrays
-    .map((items) => items.map(normalizeVehicle).filter((item): item is SendatrackVehicle => Boolean(item)))
-    .sort((a, b) => b.length - a.length)[0] ?? [];
-  return [...new Map(best.map((vehicle) => [vehicle.id, vehicle])).values()];
+  const vehicles = arrays.flatMap((items) => items
+    .map(normalizeVehicle)
+    .filter((item): item is SendatrackVehicle => Boolean(item)));
+  const newestById = new Map<string, SendatrackVehicle>();
+  for (const vehicle of vehicles) {
+    const existing = newestById.get(vehicle.id);
+    if (!existing || vehicle.updatedAt >= existing.updatedAt) newestById.set(vehicle.id, vehicle);
+  }
+  return [...newestById.values()];
 }
 
 async function requestFleet(token: string, auth: SendatrackCredentials) {
