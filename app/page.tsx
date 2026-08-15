@@ -67,6 +67,7 @@ export default function Home() {
   const [showPopover, setShowPopover] = useState(true);
   const [showTraffic, setShowTraffic] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
   const [locale, setLocale] = useState<Locale>("en");
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
     { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
@@ -180,26 +181,42 @@ export default function Home() {
     return link.toString();
   }
 
-  function openWhatsAppMessage() {
-    const message = t.whatsAppTrackingMessage(selected.id, selected.destination, trackingUrl(selected.id));
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
-    setMessageEvents((events) => [
-      { id: `${selected.id}-tracking-${Date.now()}`, deliveryId: selected.id, kind: "tracking", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
-      ...events,
-    ].slice(0, 4));
-    setToast(t.whatsAppOpened);
+  async function sendWhatsAppMessage(kind: "tracking" | "arrival") {
+    setWhatsAppBusy(kind);
+    try {
+      const response = await fetch("/api/whatsapp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind,
+          deliveryId: selected.id,
+          customer: selected.customer,
+          destination: selected.destination,
+          trackingUrl: trackingUrl(selected.id),
+        }),
+      });
+      if (!response.ok) throw new Error("WhatsApp demo send failed");
+      setMessageEvents((events) => [
+        { id: `${selected.id}-${kind}-${Date.now()}`, deliveryId: selected.id, kind, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+        ...events,
+      ].slice(0, 4));
+      setToast(kind === "tracking" ? t.whatsAppSent : t.arrivalSent(selected.id));
+      return true;
+    } catch {
+      setToast(t.whatsAppFailed);
+      return false;
+    } finally {
+      setWhatsAppBusy(null);
+    }
   }
 
-  function simulateArrival() {
+  async function simulateArrival() {
     if (selected.status === "Delivered") return;
+    const sent = await sendWhatsAppMessage("arrival");
+    if (!sent) return;
     setDeliveries((items) => items.map((delivery) => delivery.id === selected.id
       ? { ...delivery, status: "Delivered", progress: 100, eta: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }
       : delivery));
-    setMessageEvents((events) => [
-      { id: `${selected.id}-arrival-${Date.now()}`, deliveryId: selected.id, kind: "arrival", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
-      ...events,
-    ].slice(0, 4));
-    setToast(t.arrivalSimulated(selected.id));
   }
 
   function openCustomerView() {
@@ -385,8 +402,8 @@ export default function Home() {
               )) : <div className="message-empty"><i>1</i><span>{t.noMessagesYet}</span></div>}
             </div>
             <div className="whatsapp-actions">
-              <button className="whatsapp-button" onClick={openWhatsAppMessage}><span aria-hidden="true">◔</span>{t.sendWithWhatsApp}</button>
-              <button className="arrival-button" onClick={simulateArrival} disabled={selected.status === "Delivered"}><span aria-hidden="true">⌖</span>{selected.status === "Delivered" ? t.arrivalAlreadySent : t.simulateArrival}</button>
+              <button className="whatsapp-button" onClick={() => void sendWhatsAppMessage("tracking")} disabled={whatsAppBusy !== null}><span aria-hidden="true">◔</span>{whatsAppBusy === "tracking" ? t.whatsAppSending : t.sendWithWhatsApp}</button>
+              <button className="arrival-button" onClick={() => void simulateArrival()} disabled={selected.status === "Delivered" || whatsAppBusy !== null}><span aria-hidden="true">⌖</span>{whatsAppBusy === "arrival" ? t.whatsAppSending : selected.status === "Delivered" ? t.arrivalAlreadySent : t.simulateArrival}</button>
             </div>
           </section>
         </div>
