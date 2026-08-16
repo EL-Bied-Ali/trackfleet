@@ -8,6 +8,7 @@ import { processPendingNotifications } from "../../lib/notification-runner";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
+import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -62,6 +63,7 @@ function enrichDelivery<T extends {
     etaConfidence: etaEstimate.confidence,
     etaSource: etaEstimate.source,
     effectiveSpeedKmh: etaEstimate.effectiveSpeedKmh === null ? null : Math.round(etaEstimate.effectiveSpeedKmh),
+    trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt }).toISOString() : null,
   };
 }
 
@@ -120,6 +122,8 @@ export async function GET(request: Request) {
     if (tracking) {
       let row = await store.getPublic(tracking);
       if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
+
+      if (!publicTrackingIsActive(row)) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
 
       const integration = await getSendatrackSnapshot();
       if (integration.connected) {
