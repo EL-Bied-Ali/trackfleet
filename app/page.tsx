@@ -5,7 +5,7 @@ import { localeOptions, translations, type Locale } from "./i18n";
 import InteractiveFleetMap from "./InteractiveFleetMap";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
-type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "ARRIVED" | "GPS_STALE";
+type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
 
 type Delivery = {
   id: string;
@@ -30,6 +30,15 @@ type Delivery = {
   distanceToDestinationKm?: number | null;
   positionAgeMinutes?: number | null;
   gpsFresh?: boolean;
+  plannedArrivalAt?: string | null;
+  estimatedArrivalAt?: string | null;
+  etaDelayMinutes?: number | null;
+  etaConfidence?: "none" | "low" | "medium";
+  etaSource?: "unavailable" | "baseline-model" | "observed-pace";
+  effectiveSpeedKmh?: number | null;
+  destinationLatitude?: number | null;
+  destinationLongitude?: number | null;
+  arrivalRadiusKm?: number;
 };
 
 type DeliveryEventRow = {
@@ -50,6 +59,7 @@ type MessageEvent = {
 };
 
 type CompanyIdentity = { account: string; user: string };
+type KnownSite = { id: string; label: string; address: string; country: "BE" | "MA"; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; geofenceReady: boolean };
 
 const initialDeliveries: Delivery[] = [
   { id: "TF-2841", customer: "Atlas Home", destination: "Casablanca, MA", truck: "TRK-014", driver: "Youssef B.", status: "In transit", eta: "19 Aug · 14:00–18:00", progress: 68, color: "#16a272" },
@@ -124,6 +134,7 @@ export default function Home() {
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
+  const [knownSites, setKnownSites] = useState<KnownSite[]>([]);
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
     { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
   ]);
@@ -165,6 +176,16 @@ export default function Home() {
     }).catch(() => { if (active) setAuthState("anonymous"); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (authState !== "authenticated") return;
+    let active = true;
+    void fetch("/api/sites", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<{ sites: KnownSite[] }> : { sites: [] })
+      .then((data) => { if (active) setKnownSites(data.sites ?? []); })
+      .catch(() => { if (active) setKnownSites([]); });
+    return () => { active = false; };
+  }, [authState]);
 
   useEffect(() => {
     const requestedLocale = new URLSearchParams(window.location.search).get("lang");
@@ -363,12 +384,20 @@ export default function Home() {
     const selectedVehicleId = String(form.get("sendatrackVehicleId") ?? "");
     const liveVehicle = integration.vehicles.find((vehicle) => vehicle.id === selectedVehicleId);
     const truck = liveVehicle?.name ?? selectedVehicleId;
+    const destination = String(form.get("destination") ?? "").trim();
+    const selectedSite = knownSites.find((site) => site.address === destination || site.label === destination);
+    const plannedArrivalInput = String(form.get("plannedArrivalAt") ?? "").trim();
+    const plannedArrivalAt = plannedArrivalInput ? new Date(plannedArrivalInput).toISOString() : "";
     const draftDelivery = {
       customer: String(form.get("customer")),
-      destination: String(form.get("destination")),
+      destination,
+      destinationSiteId: selectedSite?.id ?? "",
+      destinationLatitude: selectedSite?.latitude ?? null,
+      destinationLongitude: selectedSite?.longitude ?? null,
+      arrivalRadiusKm: selectedSite?.arrivalRadiusKm ?? 0.5,
       truck,
       sendatrackVehicleId: liveVehicle?.id ?? "",
-      eta: String(form.get("eta")),
+      plannedArrivalAt,
       contact: String(form.get("contact")),
     };
     setCreating(true);
@@ -411,6 +440,7 @@ export default function Home() {
           PROGRESS_50: "Mi-parcours atteint",
           PROGRESS_75: "75% du trajet effectué",
           NEAR_DESTINATION: "Le camion approche",
+          DELAY_DETECTED: "Retard détecté",
           ARRIVED: "Livraison arrivée",
           GPS_STALE: "Position GPS ancienne",
         } as Record<DeliveryEventType, string>,
@@ -431,6 +461,7 @@ export default function Home() {
           PROGRESS_50: "Halfway point reached",
           PROGRESS_75: "75% of the trip completed",
           NEAR_DESTINATION: "Truck is approaching",
+          DELAY_DETECTED: "Delay detected",
           ARRIVED: "Delivery arrived",
           GPS_STALE: "GPS position is old",
         } as Record<DeliveryEventType, string>,
@@ -451,6 +482,7 @@ export default function Home() {
           PROGRESS_50: "Halverwege bereikt",
           PROGRESS_75: "75% van het traject voltooid",
           NEAR_DESTINATION: "Vrachtwagen nadert",
+          DELAY_DETECTED: "Vertraging gedetecteerd",
           ARRIVED: "Levering aangekomen",
           GPS_STALE: "GPS-positie is verouderd",
         } as Record<DeliveryEventType, string>,
@@ -463,6 +495,16 @@ export default function Home() {
       : selected.gpsFresh
         ? `${copy.fresh} · ${selected.positionAgeMinutes} min`
         : `${selected.positionAgeMinutes} min`;
+    const displayedEta = selected.estimatedArrivalAt
+      ? new Date(selected.estimatedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+      : selected.plannedArrivalAt
+        ? new Date(selected.plannedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+        : selected.eta;
+    const etaNote = selected.etaDelayMinutes != null && selected.etaDelayMinutes >= 60
+      ? `+${Math.round(selected.etaDelayMinutes / 60)} h`
+      : selected.etaConfidence === "medium"
+        ? (locale === "fr" ? "Estimation basée sur le trajet réel" : locale === "nl" ? "Schatting op basis van werkelijk traject" : "Estimate based on observed trip pace")
+        : (locale === "fr" ? "Estimation indicative" : locale === "nl" ? "Indicatieve schatting" : "Indicative estimate");
 
     return (
       <main className="customer-page">
@@ -484,8 +526,8 @@ export default function Home() {
             </div>
             <div className="eta-card">
               <span>{t.estimatedArrival}</span>
-              <strong>{selected.eta}</strong>
-              <small className={`eta-${selected.status.toLowerCase().replace(" ", "-")}`}>{customerCopy.etaNote}</small>
+              <strong>{displayedEta}</strong>
+              <small className={`eta-${selected.etaDelayMinutes != null && selected.etaDelayMinutes >= 60 ? "delayed" : selected.status.toLowerCase().replace(" ", "-")}`}>{etaNote}</small>
             </div>
           </div>
 
@@ -573,7 +615,7 @@ export default function Home() {
             <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
             {showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
-              <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.eta}</dd></div></dl>
+              <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div></dl>
               <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
             </div>}
           </div>
@@ -605,7 +647,7 @@ export default function Home() {
         </div>
       </section>
 
-      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><label>{t.destination}<input name="destination" required placeholder={t.destinationPlaceholder} /></label><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={integration.vehicles[0]?.id ?? "TRK-005"}>{integration.vehicles.length ? integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>) : <><option>TRK-005</option><option>TRK-008</option><option>TRK-012</option><option>TRK-017</option></>}</select></label><label>{t.expectedArrival}<input name="eta" required type="time" defaultValue="15:30" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
+      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><label>{t.destination}<input name="destination" required list="trackfleet-known-sites" placeholder={t.destinationPlaceholder} /><datalist id="trackfleet-known-sites">{knownSites.map((site) => <option key={site.id} value={site.address}>{site.label}</option>)}</datalist></label><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={integration.vehicles[0]?.id ?? "TRK-005"}>{integration.vehicles.length ? integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>) : <><option>TRK-005</option><option>TRK-008</option><option>TRK-012</option><option>TRK-017</option></>}</select></label><label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );
