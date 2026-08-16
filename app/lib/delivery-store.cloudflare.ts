@@ -14,7 +14,8 @@ function key(value: string) { return value.toLowerCase().replace(/[^a-z0-9]/g, "
 type RawDelivery = {
   id: string; customer: string; destination: string;
   destinationLatitude: number | null; destinationLongitude: number | null; arrivalRadiusKm: number | null;
-  truck: string; driver: string; status: DeliveryStatus; eta: string; progress: number; color: string; contact: string;
+  truck: string; driver: string; status: DeliveryStatus; eta: string; plannedArrivalAt: number | null;
+  progress: number; color: string; contact: string;
   sendatrackVehicleId: string; latitude: number | null; longitude: number | null; speed: number | null;
   lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; createdAt: number;
 };
@@ -25,6 +26,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     destinationLatitude: row.destinationLatitude ?? null,
     destinationLongitude: row.destinationLongitude ?? null,
     arrivalRadiusKm: row.arrivalRadiusKm ?? 0.5,
+    plannedArrivalAt: row.plannedArrivalAt ? new Date(row.plannedArrivalAt) : null,
     lastPositionAt: row.lastPositionAt ? new Date(row.lastPositionAt) : null,
     createdAt: new Date(row.createdAt),
   };
@@ -42,6 +44,7 @@ async function ensureDeliveryColumns() {
   if (!columns.has("destination_latitude")) await db().prepare("ALTER TABLE deliveries ADD COLUMN destination_latitude real").run();
   if (!columns.has("destination_longitude")) await db().prepare("ALTER TABLE deliveries ADD COLUMN destination_longitude real").run();
   if (!columns.has("arrival_radius_km")) await db().prepare("ALTER TABLE deliveries ADD COLUMN arrival_radius_km real DEFAULT 0.5 NOT NULL").run();
+  if (!columns.has("planned_arrival_at")) await db().prepare("ALTER TABLE deliveries ADD COLUMN planned_arrival_at integer").run();
 }
 
 async function ensureTable() {
@@ -49,10 +52,10 @@ async function ensureTable() {
   await database.prepare(`CREATE TABLE IF NOT EXISTS deliveries (
     id text PRIMARY KEY NOT NULL, customer text NOT NULL, destination text NOT NULL,
     destination_latitude real, destination_longitude real, arrival_radius_km real DEFAULT 0.5 NOT NULL,
-    truck text NOT NULL, driver text NOT NULL, status text NOT NULL, eta text NOT NULL, progress integer DEFAULT 0 NOT NULL,
-    color text DEFAULT '#916ed7' NOT NULL, contact text DEFAULT '' NOT NULL, sendatrack_vehicle_id text DEFAULT '' NOT NULL,
-    latitude real, longitude real, speed real, last_position_at integer, gps_source text DEFAULT 'simulation' NOT NULL,
-    company_id text DEFAULT 'demo' NOT NULL, tracking_token text, created_at integer NOT NULL
+    truck text NOT NULL, driver text NOT NULL, status text NOT NULL, eta text NOT NULL, planned_arrival_at integer,
+    progress integer DEFAULT 0 NOT NULL, color text DEFAULT '#916ed7' NOT NULL, contact text DEFAULT '' NOT NULL,
+    sendatrack_vehicle_id text DEFAULT '' NOT NULL, latitude real, longitude real, speed real, last_position_at integer,
+    gps_source text DEFAULT 'simulation' NOT NULL, company_id text DEFAULT 'demo' NOT NULL, tracking_token text, created_at integer NOT NULL
   )`).run();
   await ensureDeliveryColumns();
   await database.prepare(`CREATE TABLE IF NOT EXISTS delivery_events (
@@ -72,11 +75,12 @@ async function ensureTable() {
   for (const delivery of seedDeliveries) {
     await database.prepare(`INSERT OR IGNORE INTO deliveries
       (id, customer, destination, destination_latitude, destination_longitude, arrival_radius_km,
-       truck, driver, status, eta, progress, color, contact, sendatrack_vehicle_id,
+       truck, driver, status, eta, planned_arrival_at, progress, color, contact, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
-        delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
+        delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
+        delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
         delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.createdAt.getTime()).run();
   }
@@ -84,7 +88,7 @@ async function ensureTable() {
 
 const selectColumns = `id, customer, destination,
   destination_latitude AS destinationLatitude, destination_longitude AS destinationLongitude, arrival_radius_km AS arrivalRadiusKm,
-  truck, driver, status, eta, progress, color, contact,
+  truck, driver, status, eta, planned_arrival_at AS plannedArrivalAt, progress, color, contact,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
   last_position_at AS lastPositionAt, gps_source AS gpsSource, company_id AS companyId,
   tracking_token AS trackingToken, created_at AS createdAt`;
@@ -177,11 +181,12 @@ export const store: DeliveryStore = {
     const delivery: DeliveryRow = { ...input, id: `TF-${String(Date.now()).slice(-6)}`, createdAt: new Date() };
     await db().prepare(`INSERT INTO deliveries
       (id, customer, destination, destination_latitude, destination_longitude, arrival_radius_km,
-       truck, driver, status, eta, progress, color, contact, sendatrack_vehicle_id,
+       truck, driver, status, eta, planned_arrival_at, progress, color, contact, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
-        delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
+        delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
+        delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
         delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.createdAt.getTime()).run();
     return delivery;
