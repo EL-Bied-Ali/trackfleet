@@ -3,9 +3,10 @@ import { customerFacingEvent, type DeliveryEventType } from "./delivery-events";
 import type { DeliveryRow } from "./delivery-store.types";
 
 function recipientFrom(delivery: DeliveryRow) {
+  // Automatic customer notifications must only use the contact attached to
+  // this delivery. Never fall back to the demo recipient in production logic.
   const contactDigits = delivery.contact.replace(/\D/g, "");
-  if (contactDigits.length >= 8) return contactDigits;
-  return runtimeEnv.WHATSAPP_DEMO_RECIPIENT?.replace(/\D/g, "") ?? "";
+  return contactDigits.length >= 8 ? contactDigits : "";
 }
 
 function eventText(event: DeliveryEventType, delivery: DeliveryRow, trackingUrl: string) {
