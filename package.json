@@ -13,6 +13,7 @@
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "test:sendatrack": "node --experimental-strip-types --test tests/sendatrack-normalize.test.mjs",
     "test:route-progress": "node --experimental-strip-types --test tests/route-progress.test.mjs",
+    "test:delivery-events": "node --experimental-strip-types --test tests/delivery-events.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
