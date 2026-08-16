@@ -1,6 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { isHistoricalNotification, parseAutomationStartAt } from "./notification-policy";
+import { isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
 import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
 
 export async function processPendingNotifications(companyId: string, origin: string) {
@@ -22,7 +22,18 @@ export async function processPendingNotifications(companyId: string, origin: str
     return { pending: pending.length, sent, failed: pending.length, suppressed };
   }
 
-  for (const item of pending) {
+  // If several customer events accumulated for the same delivery while the
+  // provider/scheduler was unavailable, keep the full timeline but send only
+  // the newest useful state. Older pending messages are acknowledged silently.
+  const { actionable, superseded } = splitLatestPendingNotifications(pending);
+  for (const item of superseded) {
+    const claimed = await store.claimNotification(item.delivery.id, item.event.type);
+    if (!claimed) continue;
+    await store.markNotificationSent(item.delivery.id, item.event.type);
+    suppressed += 1;
+  }
+
+  for (const item of actionable) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
 
