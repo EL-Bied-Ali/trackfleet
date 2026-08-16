@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const deliveries = sqliteTable("deliveries", {
   id: text("id").primaryKey(),
@@ -23,6 +23,24 @@ export const deliveries = sqliteTable("deliveries", {
 }, (table) => [
   index("idx_deliveries_company_id").on(table.companyId),
   uniqueIndex("idx_deliveries_tracking_token").on(table.trackingToken),
+]);
+
+export const deliveryEvents = sqliteTable("delivery_events", {
+  deliveryId: text("delivery_id").notNull(),
+  type: text("type", { enum: [
+    "DEPARTED",
+    "PROGRESS_25",
+    "PROGRESS_50",
+    "PROGRESS_75",
+    "NEAR_DESTINATION",
+    "ARRIVED",
+    "GPS_STALE",
+  ] }).notNull(),
+  progress: integer("progress").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.deliveryId, table.type] }),
+  index("idx_delivery_events_delivery_id").on(table.deliveryId),
 ]);
 
 export const companies = sqliteTable("companies", {
