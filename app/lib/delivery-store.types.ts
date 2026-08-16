@@ -1,3 +1,4 @@
+import type { DeliveryEventType } from "./delivery-events";
 import type { SendatrackSnapshot } from "./sendatrack";
 
 export type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -24,6 +25,18 @@ export type DeliveryRow = {
   createdAt: Date;
 };
 
+export type DeliveryEventRow = {
+  deliveryId: string;
+  type: DeliveryEventType;
+  progress: number;
+  createdAt: Date;
+};
+
+export type DeliveryTransition = {
+  delivery: DeliveryRow;
+  events: DeliveryEventType[];
+};
+
 export type CreateDeliveryInput = Omit<DeliveryRow, "id" | "trackingToken" | "createdAt"> & {
   trackingToken: string;
 };
@@ -31,6 +44,8 @@ export type CreateDeliveryInput = Omit<DeliveryRow, "id" | "trackingToken" | "cr
 export interface DeliveryStore {
   getPublic(tracking: string): Promise<DeliveryRow | null>;
   listForCompany(companyId: string): Promise<DeliveryRow[]>;
-  applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string): Promise<void>;
+  applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string): Promise<DeliveryTransition[]>;
+  recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
+  listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   create(input: CreateDeliveryInput): Promise<DeliveryRow>;
 }
