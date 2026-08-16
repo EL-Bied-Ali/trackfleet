@@ -2,6 +2,8 @@ import type { DeliveryRow } from "./delivery-store.types";
 
 const defaults = {
   originSiteId: null,
+  originLatitude: null,
+  originLongitude: null,
   destinationSiteId: null,
   destinationLatitude: null,
   destinationLongitude: null,
