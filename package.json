@@ -22,6 +22,7 @@
     "test:stop-plans": "node --experimental-strip-types --test tests/truck-stop-plan.test.mjs",
     "test:tour": "node --experimental-strip-types --test tests/multistop-tour.test.mjs",
     "test:automation-readiness": "node --experimental-strip-types --test tests/automation-readiness.test.mjs",
+    "test:automation-health": "node --experimental-strip-types --test tests/automation-health.test.mjs",
     "test:eta": "node --experimental-strip-types --test tests/eta-estimator.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
