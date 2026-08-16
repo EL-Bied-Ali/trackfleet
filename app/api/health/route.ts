@@ -5,6 +5,8 @@ export async function GET() {
     ok: true,
     service: "trackfleet",
     sendatrackConfigured: isSendatrackConfigured(),
+    storage: process.env.DATABASE_URL?.trim() ? "postgres" : process.env.CF_PAGES ? "cloudflare-d1" : "memory",
+    persistentStorageConfigured: Boolean(process.env.DATABASE_URL?.trim() || process.env.CF_PAGES),
     timestamp: new Date().toISOString(),
   }, {
     headers: {
