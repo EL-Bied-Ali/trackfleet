@@ -37,6 +37,8 @@ jobs:
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
         run: pnpm run test:known-sites
+      - name: Verify persistent company site store
+        run: pnpm run test:site-store
       - name: Verify truck stop plans
         run: pnpm run test:stop-plans
       - name: Verify ETA estimator
