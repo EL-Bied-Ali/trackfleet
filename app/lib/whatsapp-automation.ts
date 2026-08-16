@@ -30,25 +30,39 @@ function eventText(event: DeliveryEventType, delivery: DeliveryRow, trackingUrl:
   }
 }
 
-export async function sendAutomaticWhatsAppNotification(
+export type AutomaticWhatsAppPayload = {
+  messaging_product: "whatsapp";
+  to: string;
+  type: "template";
+  template: {
+    name: string;
+    language: { code: "en_US" };
+    components: [{
+      type: "body";
+      parameters: [
+        { type: "text"; text: string },
+        { type: "text"; text: string },
+        { type: "text"; text: string },
+      ];
+    }];
+  };
+};
+
+export function buildAutomaticWhatsAppPayload(
   event: DeliveryEventType,
   delivery: DeliveryRow,
   trackingUrl: string,
-) {
-  if (runtimeEnv.WHATSAPP_AUTOMATION_ENABLED !== "true") return { sent: false, reason: "disabled" as const };
-  if (!customerFacingEvent(event)) return { sent: false, reason: "internal_event" as const };
+): { payload: AutomaticWhatsAppPayload | null; reason: "ok" | "internal_event" | "not_configured" } {
+  if (!customerFacingEvent(event)) return { payload: null, reason: "internal_event" };
 
-  const token = runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim();
-  const phoneNumberId = runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const recipient = recipientFrom(delivery);
   const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
   const message = eventText(event, delivery, trackingUrl);
-  if (!token || !phoneNumberId || !templateName || !recipient || !message) return { sent: false, reason: "not_configured" as const };
+  if (!templateName || !recipient || !message) return { payload: null, reason: "not_configured" };
 
-  const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({
+  return {
+    reason: "ok",
+    payload: {
       messaging_product: "whatsapp",
       to: recipient,
       type: "template",
@@ -64,7 +78,28 @@ export async function sendAutomaticWhatsAppNotification(
           ],
         }],
       },
-    }),
+    },
+  };
+}
+
+export async function sendAutomaticWhatsAppNotification(
+  event: DeliveryEventType,
+  delivery: DeliveryRow,
+  trackingUrl: string,
+) {
+  if (runtimeEnv.WHATSAPP_AUTOMATION_ENABLED !== "true") return { sent: false, reason: "disabled" as const };
+
+  const token = runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim();
+  const phoneNumberId = runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim();
+  if (!token || !phoneNumberId) return { sent: false, reason: "not_configured" as const };
+
+  const built = buildAutomaticWhatsAppPayload(event, delivery, trackingUrl);
+  if (!built.payload) return { sent: false, reason: built.reason };
+
+  const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(built.payload),
   });
 
   if (!response.ok) {
