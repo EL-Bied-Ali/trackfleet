@@ -11,9 +11,22 @@ function errorResponse(error: unknown) {
   return Response.json({ error: message }, { status: 500 });
 }
 
-function enrichDelivery<T extends { latitude: number | null; longitude: number | null; destination: string; lastPositionAt: Date | null }>(row: T, baselineProgress = 0) {
+function explicitDestination(row: { destinationLatitude?: number | null; destinationLongitude?: number | null }): [number, number] | null {
+  return typeof row.destinationLatitude === "number" && typeof row.destinationLongitude === "number"
+    ? [row.destinationLongitude, row.destinationLatitude]
+    : null;
+}
+
+function enrichDelivery<T extends {
+  latitude: number | null;
+  longitude: number | null;
+  destination: string;
+  destinationLatitude?: number | null;
+  destinationLongitude?: number | null;
+  lastPositionAt: Date | null;
+}>(row: T, baselineProgress = 0) {
   const absoluteMetrics = typeof row.latitude === "number" && typeof row.longitude === "number"
-    ? calculateRouteMetrics(row.latitude, row.longitude, row.destination)
+    ? calculateRouteMetrics(row.latitude, row.longitude, row.destination, explicitDestination(row))
     : null;
   const metrics = absoluteMetrics ? rebaseRouteMetrics(absoluteMetrics, baselineProgress) : null;
   const positionAgeMinutes = row.lastPositionAt ? Math.max(0, Math.round((Date.now() - row.lastPositionAt.getTime()) / 60_000)) : null;
@@ -29,6 +42,12 @@ function enrichDelivery<T extends { latitude: number | null; longitude: number |
 
 function baselineFromEvents(events: Awaited<ReturnType<typeof store.listEvents>>) {
   return events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0;
+}
+
+function optionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 async function persistTransitionEvents(transitions: DeliveryTransition[]) {
@@ -106,13 +125,35 @@ export async function POST(request: Request) {
       return Response.json({ error: "customer, destination, truck, and a valid ETA are required" }, { status: 400 });
     }
 
+    const destinationLatitude = optionalNumber(payload.destinationLatitude);
+    const destinationLongitude = optionalNumber(payload.destinationLongitude);
+    if ((destinationLatitude === null) !== (destinationLongitude === null)) {
+      return Response.json({ error: "destinationLatitude and destinationLongitude must be provided together" }, { status: 400 });
+    }
+    if (destinationLatitude !== null && (destinationLatitude < -90 || destinationLatitude > 90 || destinationLongitude! < -180 || destinationLongitude! > 180)) {
+      return Response.json({ error: "invalid destination coordinates" }, { status: 400 });
+    }
+    const requestedRadius = optionalNumber(payload.arrivalRadiusKm);
+    const arrivalRadiusKm = requestedRadius === null ? 0.5 : Math.max(0.05, Math.min(10, requestedRadius));
+    const exactDestination: [number, number] | null = destinationLatitude !== null && destinationLongitude !== null
+      ? [destinationLongitude, destinationLatitude]
+      : null;
+
     const snapshot = await getSendatrackSnapshot(session.credentials);
     const liveVehicle = snapshot.vehicles.find((vehicle) => vehicle.id === sendatrackVehicleId)
       ?? snapshot.vehicles.find((vehicle) => vehicle.name === truck);
-    const baselineMetrics = liveVehicle ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination) : null;
+    const baselineMetrics = liveVehicle
+      ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination, exactDestination)
+      : null;
 
     const delivery = await store.create({
-      customer, destination, truck: liveVehicle?.name ?? truck, eta,
+      customer,
+      destination,
+      destinationLatitude,
+      destinationLongitude,
+      arrivalRadiusKm,
+      truck: liveVehicle?.name ?? truck,
+      eta,
       contact: String(payload.contact ?? "").trim(),
       sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
       companyId: session.companyId,
