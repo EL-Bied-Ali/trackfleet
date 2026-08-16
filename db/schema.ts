@@ -11,6 +11,7 @@ export const deliveries = sqliteTable("deliveries", {
   driver: text("driver").notNull(),
   status: text("status", { enum: ["In transit", "Delayed", "Loading", "Delivered"] }).notNull(),
   eta: text("eta").notNull(),
+  plannedArrivalAt: integer("planned_arrival_at", { mode: "timestamp_ms" }),
   progress: integer("progress").notNull().default(0),
   color: text("color").notNull().default("#916ed7"),
   contact: text("contact").notNull().default(""),
