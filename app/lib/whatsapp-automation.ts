@@ -1,12 +1,12 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { normalizeCustomerPhone } from "./customer-contact";
 import { customerFacingEvent, type DeliveryEventType } from "./delivery-events";
 import type { DeliveryRow } from "./delivery-store.types";
 
 function recipientFrom(delivery: DeliveryRow) {
   // Automatic customer notifications must only use the contact attached to
   // this delivery. Never fall back to the demo recipient in production logic.
-  const contactDigits = delivery.contact.replace(/\D/g, "");
-  return contactDigits.length >= 8 ? contactDigits : "";
+  return normalizeCustomerPhone(delivery.contact) ?? "";
 }
 
 function eventText(event: DeliveryEventType, delivery: DeliveryRow, trackingUrl: string) {
