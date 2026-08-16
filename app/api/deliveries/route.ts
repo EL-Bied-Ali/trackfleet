@@ -1,5 +1,5 @@
 import { store } from "trackfleet-delivery-store";
-import type { DeliveryTransition } from "../../lib/delivery-store.types";
+import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
@@ -7,7 +7,7 @@ import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
-import { buildTruckStopPlans } from "../../lib/truck-stop-plan";
+import { buildTruckStopPlans, pendingServiceMinutesBefore } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
@@ -35,6 +35,7 @@ function enrichDelivery<T extends {
 }>(
   row: T,
   events: Awaited<ReturnType<typeof store.listEvents>> = [],
+  futureServiceMinutes = 0,
 ) {
   const baselineProgress = events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0;
   const absoluteMetrics = typeof row.latitude === "number" && typeof row.longitude === "number"
@@ -51,6 +52,7 @@ function enrichDelivery<T extends {
     lastPositionAt: row.lastPositionAt,
     plannedArrivalAt: row.plannedArrivalAt ?? null,
     delivered: row.status === "Delivered",
+    futureServiceMinutes,
   });
 
   return {
@@ -65,6 +67,7 @@ function enrichDelivery<T extends {
     etaConfidence: etaEstimate.confidence,
     etaSource: etaEstimate.source,
     effectiveSpeedKmh: etaEstimate.effectiveSpeedKmh === null ? null : Math.round(etaEstimate.effectiveSpeedKmh),
+    pendingStopServiceMinutes: futureServiceMinutes,
     trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt }).toISOString() : null,
   };
 }
@@ -80,9 +83,9 @@ async function enrichAndDetectDelay<T extends {
   lastPositionAt: Date | null;
   plannedArrivalAt?: Date | null;
   status: string;
-}>(row: T) {
+}>(row: T, futureServiceMinutes = 0) {
   let events = await store.listEvents(row.id);
-  let delivery = enrichDelivery(row, events);
+  let delivery = enrichDelivery(row, events, futureServiceMinutes);
   const delayDetected = shouldDetectDelay({
     eta: {
       estimatedArrivalAt: delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt) : null,
@@ -97,7 +100,7 @@ async function enrichAndDetectDelay<T extends {
 
   if (delayDetected && await store.recordEvent(row.id, "DELAY_DETECTED", row.progress)) {
     events = await store.listEvents(row.id);
-    delivery = enrichDelivery(row, events);
+    delivery = enrichDelivery(row, events, futureServiceMinutes);
   }
 
   return { delivery, events };
@@ -134,7 +137,11 @@ export async function GET(request: Request) {
         row = await store.getPublic(tracking) ?? row;
       }
 
-      const enriched = await enrichAndDetectDelay(row);
+      // We may inspect sibling deliveries to estimate future operational stops,
+      // but they are never returned to the public tracking response.
+      const companyRows = await store.listForCompany(row.companyId);
+      const serviceMinutes = pendingServiceMinutesBefore(row, companyRows);
+      const enriched = await enrichAndDetectDelay(row, serviceMinutes);
       await processPendingNotifications(row.companyId, requestUrl.origin);
       return Response.json({
         deliveries: [enriched.delivery],
@@ -151,7 +158,10 @@ export async function GET(request: Request) {
     await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
     const stopPlans = buildTruckStopPlans(rows);
-    const enrichedRows = await Promise.all(rows.map(async (row) => (await enrichAndDetectDelay(row)).delivery));
+    const enrichedRows = await Promise.all(rows.map(async (row) => {
+      const serviceMinutes = pendingServiceMinutesBefore(row, rows);
+      return (await enrichAndDetectDelay(row, serviceMinutes)).delivery;
+    }));
     await processPendingNotifications(session.companyId, requestUrl.origin);
 
     return Response.json({
@@ -245,7 +255,9 @@ export async function POST(request: Request) {
     });
     if (baselineMetrics) await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
 
-    const enriched = await enrichAndDetectDelay(delivery);
+    const rows = await store.listForCompany(session.companyId);
+    const serviceMinutes = pendingServiceMinutesBefore(delivery, rows);
+    const enriched = await enrichAndDetectDelay(delivery, serviceMinutes);
     return Response.json({ delivery: enriched.delivery }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
