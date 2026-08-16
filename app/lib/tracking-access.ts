@@ -1,3 +1,5 @@
+// Public tracking remains available for a short post-delivery support window,
+// then becomes inaccessible without deleting the underlying delivery history.
 export const TRACKING_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
 export const LEGACY_TRACKING_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
