@@ -1,6 +1,13 @@
 import type { DeliveryRow } from "./delivery-store.types";
 
-const defaults = { destinationLatitude: null, destinationLongitude: null, arrivalRadiusKm: 0.5, plannedArrivalAt: null };
+const defaults = {
+  originSiteId: null,
+  destinationSiteId: null,
+  destinationLatitude: null,
+  destinationLongitude: null,
+  arrivalRadiusKm: 0.5,
+  plannedArrivalAt: null,
+};
 
 export const seedDeliveries: DeliveryRow[] = [
   { id: "TF-2841", customer: "Atlas Home", destination: "Casablanca, MA", ...defaults, truck: "TRK-014", driver: "Youssef B.", status: "In transit", eta: "19 Aug · 14:00–18:00", progress: 68, color: "#16a272", contact: "", sendatrackVehicleId: "", latitude: null, longitude: null, speed: null, lastPositionAt: null, gpsSource: "simulation", companyId: "demo", trackingToken: null, createdAt: new Date("2026-08-14T08:42:00Z") },
