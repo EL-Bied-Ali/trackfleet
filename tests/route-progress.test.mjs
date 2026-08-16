@@ -21,6 +21,24 @@ test("reverses progress for Belgium-bound deliveries", () => {
   assert.equal(end.progress, 100);
 });
 
+test("stops the Morocco route at Tangier instead of continuing to Casablanca", () => {
+  const tangier = calculateRouteMetrics(35.7673, -5.8128, "Tangier, MA");
+  assert.equal(tangier.progress, 100);
+  assert.ok(tangier.distanceToDestinationKm < 0.1);
+
+  const casablanca = calculateRouteMetrics(33.5731, -7.5898, "Tangier, MA");
+  assert.ok(casablanca.distanceToDestinationKm > 250);
+});
+
+test("extends Belgium-bound route from Brussels to Antwerp", () => {
+  const brussels = calculateRouteMetrics(50.8503, 4.3517, "Antwerp, BE");
+  const antwerp = calculateRouteMetrics(51.2194, 4.4025, "Antwerp, BE");
+
+  assert.ok(brussels.progress < 100);
+  assert.equal(antwerp.progress, 100);
+  assert.ok(antwerp.distanceToDestinationKm < 0.1);
+});
+
 test("derives loading, in-transit and delivered states from GPS", () => {
   const atOrigin = calculateRouteMetrics(50.8503, 4.3517, "Casablanca, MA");
   assert.deepEqual(deriveDeliveryState("Loading", atOrigin, 0), { status: "Loading", progress: 0 });
