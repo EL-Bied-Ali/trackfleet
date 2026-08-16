@@ -22,6 +22,12 @@ const runtimeEnvPath = fileURLToPath(
     import.meta.url,
   ),
 );
+const deliveryStorePath = fileURLToPath(
+  new URL(
+    isVercel ? "./app/lib/delivery-store.vercel.ts" : "./app/lib/delivery-store.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -62,6 +68,7 @@ export default defineConfig(async () => {
       alias: {
         "maplibre-gl/dist/maplibre-gl.css": maplibreCssPath,
         "trackfleet-runtime-env": runtimeEnvPath,
+        "trackfleet-delivery-store": deliveryStorePath,
       },
     },
     server: isCodexSeatbeltSandbox
