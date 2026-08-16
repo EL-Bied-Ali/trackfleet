@@ -44,6 +44,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          CLEAN_CRON_SECRET="$(node -e 'process.stdout.write((process.env.CRON_SECRET || "").trim())')"
+          if [ -z "$CLEAN_CRON_SECRET" ]; then
+            echo "::error::TRACKFLEET_CRON_SECRET is empty after normalization"
+            exit 1
+          fi
           curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Authorization: Bearer $CLEAN_CRON_SECRET" \
             "$BASE_URL/api/automation/tick"
