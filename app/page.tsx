@@ -123,7 +123,6 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("All deliveries");
   const [showPopover, setShowPopover] = useState(true);
-  const [showTraffic, setShowTraffic] = useState(false);
   const [creating, setCreating] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
   const [locale, setLocale] = useState<Locale>("en");
@@ -262,6 +261,11 @@ export default function Home() {
     ? Math.round((completedWithPlan.filter((delivery) => (delivery.etaDelayMinutes ?? 0) <= 0).length / completedWithPlan.length) * 1000) / 10
     : null;
   const delayedCount = deliveries.filter((delivery) => delivery.status !== "Delivered" && (delivery.status === "Delayed" || (delivery.etaDelayMinutes ?? 0) >= 60)).length;
+  const liveKpiCopy = {
+    fr: { completed: "terminées", noHistory: "Pas encore d'historique", onTimeBody: "Basé sur les livraisons suivies et terminées", onTimeEmpty: "Disponible après les premières livraisons terminées", noDelay: "Aucun retard ETA important détecté" },
+    en: { completed: "completed", noHistory: "No history yet", onTimeBody: "Based on completed tracked deliveries", onTimeEmpty: "Available after the first completed deliveries", noDelay: "No material ETA delay detected" },
+    nl: { completed: "voltooid", noHistory: "Nog geen historiek", onTimeBody: "Gebaseerd op voltooide gevolgde leveringen", onTimeEmpty: "Beschikbaar na de eerste voltooide leveringen", noDelay: "Geen belangrijke ETA-vertraging gedetecteerd" },
+  }[locale];
 
   async function copyDeliveryLink(deliveryId: string) {
     const delivery = deliveries.find((item) => item.id === deliveryId);
@@ -557,7 +561,7 @@ export default function Home() {
               <div className="timeline">
                 {deliveryEvents.length > 0 ? deliveryEvents.map((event) => (
                   <div className={`timeline-step ${event.type === "GPS_STALE" || event.type === "DELAY_DETECTED" ? "is-delayed" : "done"}`} key={`${event.deliveryId}-${event.type}`}>
-                    <i>{event.type === "GPS_STALE" ? "!" : "✓"}</i>
+                    <i>{event.type === "GPS_STALE" || event.type === "DELAY_DETECTED" ? "!" : "✓"}</i>
                     <div><strong>{copy.events[event.type]}</strong><span>{formatEventTime(event.createdAt)} · {event.progress}%</span></div>
                   </div>
                 )) : <div className="timeline-step done"><i>✓</i><div><strong>{t.orderPrepared}</strong><span>{t.deliveryLabel} {selected.id}</span></div></div>}
@@ -607,16 +611,15 @@ export default function Home() {
 
         <div className="stats-grid">
           <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>{deliveries.filter((delivery) => delivery.status !== "Delivered").length}</strong><em className="up">GPS</em></div><p>{t.acrossVehicles}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} completed` : "No history"}</em></div><p>{completedWithPlan.length ? "Based on completed tracked deliveries" : "Available after completed tracked deliveries"}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : "No material ETA delay detected"}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} ${liveKpiCopy.completed}` : liveKpiCopy.noHistory}</em></div><p>{completedWithPlan.length ? liveKpiCopy.onTimeBody : liveKpiCopy.onTimeEmpty}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : liveKpiCopy.noDelay}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} GPS` : "17 / 20"}</strong><em className="neutral">{integration.connected ? t.sendatrack : t.atDepot}</em></div><p>{integration.connected ? t.positionsAutomatic : t.allReporting}</p></article>
         </div>
 
         <div className="map-panel">
-          <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? t.hideTraffic : t.showTraffic}</button></div></div>
-          <div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>
+          <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select></div></div>
+          <div className="map fleet-map">
             <InteractiveFleetMap deliveries={mapDeliveries} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
-            {showTraffic && <div className="traffic-layer" aria-label={t.showTraffic}><span>{t.moderateTraffic}</span><i /><i /><i /></div>}
             <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
             {showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
