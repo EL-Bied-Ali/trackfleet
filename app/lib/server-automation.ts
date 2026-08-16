@@ -37,10 +37,12 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
 
   // Delay detection must run in the autonomous tick too. Otherwise ETA delays
   // would only be discovered when a dispatcher or customer opens TrackFleet.
+  // Pass all company deliveries so future agency service time is identical to
+  // the ETA shown by the API/dashboard.
   const deliveries = await store.listForCompany(companyId);
   for (const delivery of deliveries) {
     const events = await store.listEvents(delivery.id);
-    if (!shouldCreateDelayEvent(delivery, events)) continue;
+    if (!shouldCreateDelayEvent(delivery, events, deliveries)) continue;
     if (await store.recordEvent(delivery.id, "DELAY_DETECTED", delivery.progress)) {
       newEvents += 1;
       delayEvents += 1;
