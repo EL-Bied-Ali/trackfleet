@@ -1,4 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { automationMissingRequirements } from "../../lib/automation-health";
 import { parseAutomationStartAt } from "../../lib/notification-policy";
 import { isSendatrackConfigured } from "../../lib/sendatrack";
 import { getStorageHealth } from "../../lib/storage-health";
@@ -14,11 +15,14 @@ export async function GET() {
     && runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim(),
   );
   const whatsappActivationConfigured = Boolean(parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT));
-  const automationReady = storage.persistent
-    && storage.connected
-    && sendatrackConfigured
-    && tickProtected
-    && (!whatsappEnabled || (whatsappProviderConfigured && whatsappActivationConfigured));
+  const missing = automationMissingRequirements({
+    storage,
+    sendatrackConfigured,
+    tickProtected,
+    whatsappEnabled,
+    whatsappProviderConfigured,
+    whatsappActivationConfigured,
+  });
 
   return Response.json({
     ok: storage.connected,
@@ -30,7 +34,8 @@ export async function GET() {
       whatsappEnabled,
       whatsappProviderConfigured,
       whatsappActivationConfigured,
-      ready: automationReady,
+      ready: missing.length === 0,
+      missing,
     },
     timestamp: new Date().toISOString(),
   }, {
