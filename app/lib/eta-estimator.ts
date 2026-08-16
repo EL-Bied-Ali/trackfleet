@@ -17,6 +17,7 @@ export function estimateArrival(input: {
   lastPositionAt: Date | null;
   plannedArrivalAt: Date | null;
   delivered?: boolean;
+  futureServiceMinutes?: number;
 }): EtaEstimate {
   const { remainingDistanceKm, completedDistanceKm, departedAt, lastPositionAt, plannedArrivalAt } = input;
   if (remainingDistanceKm === null || lastPositionAt === null) {
@@ -43,8 +44,9 @@ export function estimateArrival(input: {
     }
   }
 
+  const serviceMinutes = clamp(input.futureServiceMinutes ?? 0, 0, 24 * 60);
   const hoursRemaining = remainingDistanceKm / effectiveSpeedKmh;
-  const estimatedArrivalAt = new Date(lastPositionAt.getTime() + hoursRemaining * 3_600_000);
+  const estimatedArrivalAt = new Date(lastPositionAt.getTime() + hoursRemaining * 3_600_000 + serviceMinutes * 60_000);
   const delayMinutes = plannedArrivalAt ? Math.round((estimatedArrivalAt.getTime() - plannedArrivalAt.getTime()) / 60_000) : null;
 
   return { estimatedArrivalAt, effectiveSpeedKmh, delayMinutes, confidence, source };
