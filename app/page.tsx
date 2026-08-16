@@ -182,11 +182,19 @@ export default function Home() {
   useEffect(() => {
     if (authState !== "authenticated") return;
     let active = true;
-    void fetch("/api/sites", { cache: "no-store" })
-      .then(async (response) => response.ok ? response.json() as Promise<{ sites: KnownSite[] }> : { sites: [] })
-      .then((data) => { if (active) setKnownSites(data.sites ?? []); })
-      .catch(() => { if (active) setKnownSites([]); });
-    return () => { active = false; };
+    async function refreshSites() {
+      try {
+        const response = await fetch("/api/sites", { cache: "no-store" });
+        const data = response.ok ? await response.json() as { sites: KnownSite[] } : { sites: [] };
+        if (active) setKnownSites(data.sites ?? []);
+      } catch {
+        if (active) setKnownSites([]);
+      }
+    }
+    void refreshSites();
+    const handleSitesChanged = () => void refreshSites();
+    window.addEventListener("trackfleet-sites-changed", handleSitesChanged);
+    return () => { active = false; window.removeEventListener("trackfleet-sites-changed", handleSitesChanged); };
   }, [authState]);
 
   useEffect(() => {
