@@ -1,50 +1,10 @@
-name: One-shot tenant isolation patch
+name: Retired one-shot maintenance workflow
 
 on:
-  push:
-    paths:
-      - .github/workflows/one-shot-tracking-expiry.yml
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  patch:
+  retired:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Remove demo rows from real company scope
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path('app/lib/delivery-store.memory.ts')
-          t = p.read_text()
-          t = t.replace('delivery.trackingToken === tracking || (delivery.companyId === "demo" && delivery.id === tracking)', 'delivery.trackingToken === tracking')
-          t = t.replace('delivery.companyId === companyId || delivery.companyId === "demo"', 'delivery.companyId === companyId')
-          t = t.replace('(delivery.companyId !== companyId && delivery.companyId !== "demo")', 'delivery.companyId !== companyId')
-          t = t.replace('(item.companyId === companyId || item.companyId === "demo")', 'item.companyId === companyId')
-          p.write_text(t)
-
-          p = Path('app/lib/delivery-store.postgres.ts')
-          t = p.read_text()
-          t = t.replace("WHERE tracking_token = ${tracking} OR (company_id = 'demo' AND id = ${tracking}) LIMIT 1", "WHERE tracking_token = ${tracking} LIMIT 1")
-          t = t.replace("WHERE company_id = ${companyId} OR company_id = 'demo' ORDER BY created_at DESC", "WHERE company_id = ${companyId} ORDER BY created_at DESC")
-          t = t.replace("WHERE (company_id = ${companyId} OR company_id = 'demo') AND status <> 'Delivered'", "WHERE company_id = ${companyId} AND status <> 'Delivered'")
-          p.write_text(t)
-
-          p = Path('app/lib/delivery-store.cloudflare.ts')
-          t = p.read_text()
-          t = t.replace("WHERE tracking_token = ? OR (company_id = 'demo' AND id = ?) LIMIT 1`).bind(tracking, tracking)", "WHERE tracking_token = ? LIMIT 1`).bind(tracking)")
-          t = t.replace("WHERE company_id = ? OR company_id = 'demo' ORDER BY created_at DESC", "WHERE company_id = ? ORDER BY created_at DESC")
-          t = t.replace("WHERE (company_id = ? OR company_id = 'demo') AND status != 'Delivered'", "WHERE company_id = ? AND status != 'Delivered'")
-          t = t.replace("WHERE (d.company_id = ? OR d.company_id = 'demo') AND", "WHERE d.company_id = ? AND")
-          p.write_text(t)
-          PY
-      - name: Commit patch
-        run: |
-          git config user.name "TrackFleet automation"
-          git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
-          git add app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts
-          git commit -m "isolate real companies from demo deliveries"
-          git push
+      - run: echo "No maintenance patch is currently pending."
