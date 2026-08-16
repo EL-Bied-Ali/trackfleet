@@ -7,6 +7,8 @@ export type DeliveryRow = {
   id: string;
   customer: string;
   originSiteId: string | null;
+  originLatitude: number | null;
+  originLongitude: number | null;
   destinationSiteId: string | null;
   destination: string;
   destinationLatitude: number | null;
