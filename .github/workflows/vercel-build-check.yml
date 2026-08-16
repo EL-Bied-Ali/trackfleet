@@ -41,6 +41,8 @@ jobs:
         run: pnpm run test:site-store
       - name: Verify tenant-safe delivery site resolution
         run: pnpm run test:delivery-site-resolution
+      - name: Verify delivery persistence contract
+        run: pnpm run test:delivery-persistence
       - name: Verify truck stop plans
         run: pnpm run test:stop-plans
       - name: Verify full multi-stop tour
