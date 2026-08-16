@@ -1,13 +1,7 @@
+import { runtimeEnv } from "trackfleet-runtime-env";
+
 type WhatsAppKind = "tracking" | "arrival";
 
-type WhatsAppEnv = {
-  WHATSAPP_ACCESS_TOKEN?: string;
-  WHATSAPP_PHONE_NUMBER_ID?: string;
-  WHATSAPP_DEMO_RECIPIENT?: string;
-  WHATSAPP_TEMPLATE_NAME?: string;
-};
-
-const runtimeEnv = process.env as WhatsAppEnv;
 const graphApiVersion = "v25.0";
 const recentDemoEvents: Array<{ deliveryId: string; kind: WhatsAppKind; createdAt: number }> = [];
 
