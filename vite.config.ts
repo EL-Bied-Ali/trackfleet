@@ -1,5 +1,6 @@
 import vinext from "vinext";
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
 
@@ -11,6 +12,9 @@ const { d1, r2 } = hostingConfig;
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const isVercel = Boolean(process.env.VERCEL);
+const maplibreCssPath = fileURLToPath(
+  new URL("./node_modules/maplibre-gl/dist/maplibre-gl.css", import.meta.url),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -49,6 +53,11 @@ export default defineConfig(async () => {
       });
 
   return {
+    resolve: {
+      alias: {
+        "maplibre-gl/dist/maplibre-gl.css": maplibreCssPath,
+      },
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
