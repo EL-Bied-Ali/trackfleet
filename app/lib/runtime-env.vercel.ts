@@ -9,6 +9,7 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_PHONE_NUMBER_ID?: string;
   WHATSAPP_DEMO_RECIPIENT?: string;
   WHATSAPP_TEMPLATE_NAME?: string;
+  WHATSAPP_AUTOMATION_ENABLED?: string;
 };
 
 export const runtimeEnv = process.env as TrackFleetRuntimeEnv;
