@@ -3,6 +3,7 @@ import type { DeliveryTransition } from "../../lib/delivery-store.types";
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
+import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
@@ -168,7 +169,10 @@ export async function POST(request: Request) {
 
     const payload = (await request.json()) as Record<string, unknown>;
     const customer = String(payload.customer ?? "").trim();
-    const destination = String(payload.destination ?? "").trim();
+    const destinationInput = String(payload.destination ?? "").trim();
+    const destinationSiteId = String(payload.destinationSiteId ?? "").trim();
+    const site = resolveKnownSite(destinationSiteId) ?? resolveKnownSite(destinationInput);
+    const destination = site?.address ?? destinationInput;
     const truck = String(payload.truck ?? "").trim();
     const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
     const eta = String(payload.eta ?? "").trim();
@@ -180,16 +184,18 @@ export async function POST(request: Request) {
       return Response.json({ error: "customer, destination, truck, and a valid planned arrival are required" }, { status: 400 });
     }
 
-    const destinationLatitude = optionalNumber(payload.destinationLatitude);
-    const destinationLongitude = optionalNumber(payload.destinationLongitude);
-    if ((destinationLatitude === null) !== (destinationLongitude === null)) {
+    const requestedDestinationLatitude = optionalNumber(payload.destinationLatitude);
+    const requestedDestinationLongitude = optionalNumber(payload.destinationLongitude);
+    if ((requestedDestinationLatitude === null) !== (requestedDestinationLongitude === null)) {
       return Response.json({ error: "destinationLatitude and destinationLongitude must be provided together" }, { status: 400 });
     }
+    const destinationLatitude = requestedDestinationLatitude ?? site?.latitude ?? null;
+    const destinationLongitude = requestedDestinationLongitude ?? site?.longitude ?? null;
     if (destinationLatitude !== null && (destinationLatitude < -90 || destinationLatitude > 90 || destinationLongitude! < -180 || destinationLongitude! > 180)) {
       return Response.json({ error: "invalid destination coordinates" }, { status: 400 });
     }
     const requestedRadius = optionalNumber(payload.arrivalRadiusKm);
-    const arrivalRadiusKm = requestedRadius === null ? 0.5 : Math.max(0.05, Math.min(10, requestedRadius));
+    const arrivalRadiusKm = Math.max(0.05, Math.min(10, requestedRadius ?? site?.arrivalRadiusKm ?? 0.5));
     const exactDestination: [number, number] | null = destinationLatitude !== null && destinationLongitude !== null
       ? [destinationLongitude, destinationLatitude]
       : null;
