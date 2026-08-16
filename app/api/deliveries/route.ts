@@ -1,6 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import type { DeliveryTransition } from "../../lib/delivery-store.types";
 import { customerFacingEvent } from "../../lib/delivery-events";
+import { estimateArrival } from "../../lib/eta-estimator";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
@@ -24,12 +25,29 @@ function enrichDelivery<T extends {
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
   lastPositionAt: Date | null;
-}>(row: T, baselineProgress = 0) {
+  plannedArrivalAt?: Date | null;
+  status?: string;
+}>(
+  row: T,
+  events: Awaited<ReturnType<typeof store.listEvents>> = [],
+) {
+  const baselineProgress = events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0;
   const absoluteMetrics = typeof row.latitude === "number" && typeof row.longitude === "number"
     ? calculateRouteMetrics(row.latitude, row.longitude, row.destination, explicitDestination(row))
     : null;
   const metrics = absoluteMetrics ? rebaseRouteMetrics(absoluteMetrics, baselineProgress) : null;
   const positionAgeMinutes = row.lastPositionAt ? Math.max(0, Math.round((Date.now() - row.lastPositionAt.getTime()) / 60_000)) : null;
+  const departedAt = events.find((event) => event.type === "DEPARTED")?.createdAt ?? null;
+  const completedDistanceKm = metrics ? Math.max(0, metrics.routeDistanceKm - metrics.remainingDistanceKm) : null;
+  const etaEstimate = estimateArrival({
+    remainingDistanceKm: metrics?.remainingDistanceKm ?? null,
+    completedDistanceKm,
+    departedAt,
+    lastPositionAt: row.lastPositionAt,
+    plannedArrivalAt: row.plannedArrivalAt ?? null,
+    delivered: row.status === "Delivered",
+  });
+
   return {
     ...row,
     routeDistanceKm: metrics ? Math.round(metrics.routeDistanceKm) : null,
@@ -37,11 +55,12 @@ function enrichDelivery<T extends {
     distanceToDestinationKm: metrics ? Math.round(metrics.distanceToDestinationKm) : null,
     positionAgeMinutes,
     gpsFresh: positionAgeMinutes !== null && positionAgeMinutes <= 30,
+    estimatedArrivalAt: etaEstimate.estimatedArrivalAt?.toISOString() ?? null,
+    etaDelayMinutes: etaEstimate.delayMinutes,
+    etaConfidence: etaEstimate.confidence,
+    etaSource: etaEstimate.source,
+    effectiveSpeedKmh: etaEstimate.effectiveSpeedKmh === null ? null : Math.round(etaEstimate.effectiveSpeedKmh),
   };
-}
-
-function baselineFromEvents(events: Awaited<ReturnType<typeof store.listEvents>>) {
-  return events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0;
 }
 
 function optionalNumber(value: unknown) {
@@ -76,7 +95,7 @@ export async function GET(request: Request) {
 
       const allEvents = await store.listEvents(row.id);
       return Response.json({
-        deliveries: [enrichDelivery(row, baselineFromEvents(allEvents))],
+        deliveries: [enrichDelivery(row, allEvents)],
         events: allEvents.filter((event) => customerFacingEvent(event.type)),
         publicTracking: true,
       }, { headers: { "cache-control": "no-store" } });
@@ -92,7 +111,7 @@ export async function GET(request: Request) {
     const rows = await store.listForCompany(session.companyId);
     const enrichedRows = await Promise.all(rows.map(async (row) => {
       const events = await store.listEvents(row.id);
-      return enrichDelivery(row, baselineFromEvents(events));
+      return enrichDelivery(row, events);
     }));
 
     return Response.json({
@@ -170,7 +189,8 @@ export async function POST(request: Request) {
     });
     if (baselineMetrics) await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
 
-    return Response.json({ delivery: enrichDelivery(delivery, baselineMetrics?.progress ?? 0) }, { status: 201 });
+    const events = await store.listEvents(delivery.id);
+    return Response.json({ delivery: enrichDelivery(delivery, events) }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
