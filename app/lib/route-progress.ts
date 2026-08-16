@@ -68,46 +68,6 @@ function appendIfDifferent(route: Array<[number, number]>, point: [number, numbe
   return samePoint(route.at(-1)!, point) ? route : [...route, point];
 }
 
-export function routeForDestination(destination: string, explicitPoint?: [number, number] | null): Array<[number, number]> {
-  const normalized = destination.trim().toUpperCase();
-  const belgiumBound = isBelgiumDestination(normalized);
-  const destinationPoint = destinationPointFor(destination, explicitPoint);
-
-  if (belgiumBound) {
-    const base = [...belgiumMoroccoCorridor].reverse();
-    const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
-    if (exactIndex >= 0) return base.slice(0, exactIndex + 1);
-    return appendIfDifferent(base, destinationPoint);
-  }
-
-  const base = [...belgiumMoroccoCorridor];
-  const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
-  if (exactIndex >= 0) return base.slice(0, exactIndex + 1);
-
-  // Morocco agencies branch from the shared Europe→Morocco corridor at the
-  // nearest operational point. This avoids fictitious detours through
-  // Casablanca for northern stops such as Tanger Med, Tétouan or Salé.
-  if (includesAny(normalized, ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"])) {
-    return appendIfDifferent(base.slice(0, 5), destinationPoint); // branch after Algeciras
-  }
-  if (includesAny(normalized, ["TÉTOUAN", "TETOUAN"])) {
-    return appendIfDifferent(base.slice(0, 6), destinationPoint); // branch after Tanger
-  }
-  if (includesAny(normalized, ["TANGIER", "TANGER"])) {
-    return appendIfDifferent(base.slice(0, 6), destinationPoint);
-  }
-  if (includesAny(normalized, ["RABAT", "SALÉ", "SALE"])) {
-    return appendIfDifferent(base.slice(0, 7), destinationPoint); // branch around Rabat/Salé
-  }
-  if (includesAny(normalized, ["AGADIR", "TIKIOUINE"])) {
-    return appendIfDifferent(appendIfDifferent(base, MARRAKECH_FALLBACK), destinationPoint);
-  }
-
-  // Casablanca and the inland/southern branches share the corridor through
-  // Casablanca before continuing to the selected agency.
-  return appendIfDifferent(base, destinationPoint);
-}
-
 function projectToSegment(point: [number, number], start: [number, number], end: [number, number]) {
   const referenceLat = radians((start[1] + end[1] + point[1]) / 3);
   const scaleX = Math.cos(referenceLat);
@@ -119,7 +79,71 @@ function projectToSegment(point: [number, number], start: [number, number], end:
   const rawT = denominator === 0 ? 0 : ((px - sx) * dx + (py - sy) * dy) / denominator;
   const t = Math.max(0, Math.min(1, rawT));
   const projected: [number, number] = [start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t];
-  return { t, distanceKm: distanceKm(point, projected) };
+  return { t, projected, distanceKm: distanceKm(point, projected) };
+}
+
+function trimRouteFromOrigin(route: Array<[number, number]>, origin?: [number, number] | null) {
+  if (!origin || route.length < 2) return route;
+  if (samePoint(origin, route[0])) return route;
+
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let bestProjection = route[0];
+
+  for (let index = 0; index < route.length - 1; index += 1) {
+    const projection = projectToSegment(origin, route[index], route[index + 1]);
+    if (projection.distanceKm < bestDistance) {
+      bestDistance = projection.distanceKm;
+      bestIndex = index;
+      bestProjection = projection.projected;
+    }
+  }
+
+  const result: Array<[number, number]> = [origin];
+  if (!samePoint(origin, bestProjection)) result.push(bestProjection);
+  for (const point of route.slice(bestIndex + 1)) {
+    if (!samePoint(result.at(-1)!, point)) result.push(point);
+  }
+  return result.length >= 2 ? result : [origin, route.at(-1)!];
+}
+
+export function routeForDestination(
+  destination: string,
+  explicitPoint?: [number, number] | null,
+  explicitOrigin?: [number, number] | null,
+): Array<[number, number]> {
+  const normalized = destination.trim().toUpperCase();
+  const belgiumBound = isBelgiumDestination(normalized);
+  const destinationPoint = destinationPointFor(destination, explicitPoint);
+  let route: Array<[number, number]>;
+
+  if (belgiumBound) {
+    const base = [...belgiumMoroccoCorridor].reverse();
+    const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
+    route = exactIndex >= 0 ? base.slice(0, exactIndex + 1) : appendIfDifferent(base, destinationPoint);
+    return trimRouteFromOrigin(route, explicitOrigin);
+  }
+
+  const base = [...belgiumMoroccoCorridor];
+  const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
+  if (exactIndex >= 0) route = base.slice(0, exactIndex + 1);
+  else if (includesAny(normalized, ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"])) {
+    route = appendIfDifferent(base.slice(0, 5), destinationPoint); // branch after Algeciras
+  } else if (includesAny(normalized, ["TÉTOUAN", "TETOUAN"])) {
+    route = appendIfDifferent(base.slice(0, 6), destinationPoint); // branch after Tanger
+  } else if (includesAny(normalized, ["TANGIER", "TANGER"])) {
+    route = appendIfDifferent(base.slice(0, 6), destinationPoint);
+  } else if (includesAny(normalized, ["RABAT", "SALÉ", "SALE"])) {
+    route = appendIfDifferent(base.slice(0, 7), destinationPoint); // branch around Rabat/Salé
+  } else if (includesAny(normalized, ["AGADIR", "TIKIOUINE"])) {
+    route = appendIfDifferent(appendIfDifferent(base, MARRAKECH_FALLBACK), destinationPoint);
+  } else {
+    // Casablanca and the inland/southern branches share the corridor through
+    // Casablanca before continuing to the selected agency.
+    route = appendIfDifferent(base, destinationPoint);
+  }
+
+  return trimRouteFromOrigin(route, explicitOrigin);
 }
 
 export function calculateRouteMetrics(
@@ -127,8 +151,9 @@ export function calculateRouteMetrics(
   longitude: number,
   destination: string,
   explicitDestination?: [number, number] | null,
+  explicitOrigin?: [number, number] | null,
 ): RouteMetrics {
-  const route = routeForDestination(destination, explicitDestination);
+  const route = routeForDestination(destination, explicitDestination, explicitOrigin);
   const point: [number, number] = [longitude, latitude];
   const segmentLengths = route.slice(0, -1).map((start, index) => distanceKm(start, route[index + 1]));
   const routeDistanceKm = segmentLengths.reduce((sum, value) => sum + value, 0);
