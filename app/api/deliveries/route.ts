@@ -121,8 +121,12 @@ export async function POST(request: Request) {
     const truck = String(payload.truck ?? "").trim();
     const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
     const eta = String(payload.eta ?? "").trim();
-    if (!customer || !destination || !truck || !/^\d{2}:\d{2}$/.test(eta)) {
-      return Response.json({ error: "customer, destination, truck, and a valid ETA are required" }, { status: 400 });
+    const plannedArrivalRaw = String(payload.plannedArrivalAt ?? "").trim();
+    const parsedPlannedArrival = plannedArrivalRaw ? new Date(plannedArrivalRaw) : null;
+    const plannedArrivalAt = parsedPlannedArrival && Number.isFinite(parsedPlannedArrival.getTime()) ? parsedPlannedArrival : null;
+    const validLegacyEta = /^\d{2}:\d{2}$/.test(eta);
+    if (!customer || !destination || !truck || (!plannedArrivalAt && !validLegacyEta)) {
+      return Response.json({ error: "customer, destination, truck, and a valid planned arrival are required" }, { status: 400 });
     }
 
     const destinationLatitude = optionalNumber(payload.destinationLatitude);
@@ -153,7 +157,8 @@ export async function POST(request: Request) {
       destinationLongitude,
       arrivalRadiusKm,
       truck: liveVehicle?.name ?? truck,
-      eta,
+      eta: validLegacyEta ? eta : plannedArrivalAt!.toISOString().slice(11, 16),
+      plannedArrivalAt,
       contact: String(payload.contact ?? "").trim(),
       sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
       companyId: session.companyId,
