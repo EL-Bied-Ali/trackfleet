@@ -9,6 +9,7 @@ import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progr
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
+import { normalizeCustomerPhone } from "../../lib/customer-contact";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -188,6 +189,12 @@ export async function POST(request: Request) {
       return Response.json({ error: "customer, destination, truck, and a valid planned arrival are required" }, { status: 400 });
     }
 
+    const contactInput = String(payload.contact ?? "").trim();
+    const contact = normalizeCustomerPhone(contactInput);
+    if (contact === null) {
+      return Response.json({ error: "contact must use an international phone format, for example +212... or +32..." }, { status: 400 });
+    }
+
     const requestedDestinationLatitude = optionalNumber(payload.destinationLatitude);
     const requestedDestinationLongitude = optionalNumber(payload.destinationLongitude);
     if ((requestedDestinationLatitude === null) !== (requestedDestinationLongitude === null)) {
@@ -220,7 +227,7 @@ export async function POST(request: Request) {
       truck: liveVehicle?.name ?? truck,
       eta: validLegacyEta ? eta : plannedArrivalAt!.toISOString().slice(11, 16),
       plannedArrivalAt,
-      contact: String(payload.contact ?? "").trim(),
+      contact,
       sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
       companyId: session.companyId,
       trackingToken: createTrackingToken(),
