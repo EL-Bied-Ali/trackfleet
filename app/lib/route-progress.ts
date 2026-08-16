@@ -12,6 +12,8 @@ export const belgiumMoroccoCorridor: Array<[number, number]> = [
   [-5.453, 36.1408], [-5.8128, 35.7673], [-6.8498, 33.9716], [-7.5898, 33.5731],
 ];
 
+const MARRAKECH_FALLBACK: [number, number] = [-7.9811, 31.6295];
+
 const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
   // City-level fallbacks only. Exact agency coordinates override these points
   // as soon as a confirmed map pin is available.
@@ -20,7 +22,7 @@ const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
   { names: ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"], point: [-5.5000, 35.8900] },
   { names: ["TANGIER", "TANGER"], point: [-5.8128, 35.7673] },
   { names: ["TÉTOUAN", "TETOUAN"], point: [-5.3626, 35.5889] },
-  { names: ["MARRAKECH", "MARRAKESH"], point: [-7.9811, 31.6295] },
+  { names: ["MARRAKECH", "MARRAKESH"], point: MARRAKECH_FALLBACK },
   { names: ["AGADIR", "TIKIOUINE"], point: [-9.5981, 30.4278] },
   { names: ["KHOURIBGA"], point: [-6.9063, 32.8811] },
   { names: ["FQUIH BEN SALAH", "FQIH BEN SALAH"], point: [-6.6906, 32.5009] },
@@ -32,6 +34,10 @@ const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
 function isBelgiumDestination(value: string) {
   const normalized = value.trim().toUpperCase();
   return normalized.endsWith(", BE") || normalized.includes("BELGIQUE") || normalized.includes("BELGIUM");
+}
+
+function includesAny(value: string, names: string[]) {
+  return names.some((name) => value.includes(name));
 }
 
 function radians(value: number) { return value * Math.PI / 180; }
@@ -58,14 +64,48 @@ function samePoint(a: [number, number], b: [number, number]) {
   return Math.abs(a[0] - b[0]) < 0.000001 && Math.abs(a[1] - b[1]) < 0.000001;
 }
 
+function appendIfDifferent(route: Array<[number, number]>, point: [number, number]) {
+  return samePoint(route.at(-1)!, point) ? route : [...route, point];
+}
+
 export function routeForDestination(destination: string, explicitPoint?: [number, number] | null): Array<[number, number]> {
   const normalized = destination.trim().toUpperCase();
   const belgiumBound = isBelgiumDestination(normalized);
-  const base = belgiumBound ? [...belgiumMoroccoCorridor].reverse() : [...belgiumMoroccoCorridor];
   const destinationPoint = destinationPointFor(destination, explicitPoint);
+
+  if (belgiumBound) {
+    const base = [...belgiumMoroccoCorridor].reverse();
+    const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
+    if (exactIndex >= 0) return base.slice(0, exactIndex + 1);
+    return appendIfDifferent(base, destinationPoint);
+  }
+
+  const base = [...belgiumMoroccoCorridor];
   const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
   if (exactIndex >= 0) return base.slice(0, exactIndex + 1);
-  return [...base, destinationPoint];
+
+  // Morocco agencies branch from the shared Europe→Morocco corridor at the
+  // nearest operational point. This avoids fictitious detours through
+  // Casablanca for northern stops such as Tanger Med, Tétouan or Salé.
+  if (includesAny(normalized, ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"])) {
+    return appendIfDifferent(base.slice(0, 5), destinationPoint); // branch after Algeciras
+  }
+  if (includesAny(normalized, ["TÉTOUAN", "TETOUAN"])) {
+    return appendIfDifferent(base.slice(0, 6), destinationPoint); // branch after Tanger
+  }
+  if (includesAny(normalized, ["TANGIER", "TANGER"])) {
+    return appendIfDifferent(base.slice(0, 6), destinationPoint);
+  }
+  if (includesAny(normalized, ["RABAT", "SALÉ", "SALE"])) {
+    return appendIfDifferent(base.slice(0, 7), destinationPoint); // branch around Rabat/Salé
+  }
+  if (includesAny(normalized, ["AGADIR", "TIKIOUINE"])) {
+    return appendIfDifferent(appendIfDifferent(base, MARRAKECH_FALLBACK), destinationPoint);
+  }
+
+  // Casablanca and the inland/southern branches share the corridor through
+  // Casablanca before continuing to the selected agency.
+  return appendIfDifferent(base, destinationPoint);
 }
 
 function projectToSegment(point: [number, number], start: [number, number], end: [number, number]) {
