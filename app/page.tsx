@@ -257,6 +257,11 @@ export default function Home() {
   const mapDeliveries = integration.connected
     ? deliveries.filter((delivery) => delivery.gpsSource === "sendatrack")
     : deliveries;
+  const completedWithPlan = deliveries.filter((delivery) => delivery.status === "Delivered" && delivery.etaDelayMinutes != null);
+  const onTimeRate = completedWithPlan.length
+    ? Math.round((completedWithPlan.filter((delivery) => (delivery.etaDelayMinutes ?? 0) <= 0).length / completedWithPlan.length) * 1000) / 10
+    : null;
+  const delayedCount = deliveries.filter((delivery) => delivery.status !== "Delivered" && (delivery.status === "Delayed" || (delivery.etaDelayMinutes ?? 0) >= 60)).length;
 
   async function copyDeliveryLink(deliveryId: string) {
     const delivery = deliveries.find((item) => item.id === deliveryId);
@@ -551,7 +556,7 @@ export default function Home() {
               </div>
               <div className="timeline">
                 {deliveryEvents.length > 0 ? deliveryEvents.map((event) => (
-                  <div className={`timeline-step ${event.type === "GPS_STALE" ? "is-delayed" : "done"}`} key={`${event.deliveryId}-${event.type}`}>
+                  <div className={`timeline-step ${event.type === "GPS_STALE" || event.type === "DELAY_DETECTED" ? "is-delayed" : "done"}`} key={`${event.deliveryId}-${event.type}`}>
                     <i>{event.type === "GPS_STALE" ? "!" : "✓"}</i>
                     <div><strong>{copy.events[event.type]}</strong><span>{formatEventTime(event.createdAt)} · {event.progress}%</span></div>
                   </div>
@@ -602,8 +607,8 @@ export default function Home() {
 
         <div className="stats-grid">
           <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>{deliveries.filter((delivery) => delivery.status !== "Delivered").length}</strong><em className="up">GPS</em></div><p>{t.acrossVehicles}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>94.2%</strong><em className="up">↗ 2.4%</em></div><p>{t.last30Days}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>3</strong><em className="warning">{t.needsAttention}</em></div><p>{t.delayReasons}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} completed` : "No history"}</em></div><p>{completedWithPlan.length ? "Based on completed tracked deliveries" : "Available after completed tracked deliveries"}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : "No material ETA delay detected"}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} GPS` : "17 / 20"}</strong><em className="neutral">{integration.connected ? t.sendatrack : t.atDepot}</em></div><p>{integration.connected ? t.positionsAutomatic : t.allReporting}</p></article>
         </div>
 
@@ -641,7 +646,7 @@ export default function Home() {
           <div className="table-wrap">
             <table>
               <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{t.tableVehicle}</th><th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th><span className="sr-only">{t.tableActions}</span></th></tr></thead>
-              <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{delivery.destination}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.truck}</strong><span>{delivery.driver}</span></td><td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.eta}</strong><span>{delivery.status === "Delayed" ? t.updated : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
+              <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{delivery.destination}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.truck}</strong><span>{delivery.driver}</span></td><td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
             </table>
           </div>
         </div>
