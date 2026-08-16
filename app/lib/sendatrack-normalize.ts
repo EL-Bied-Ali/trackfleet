@@ -15,6 +15,7 @@ export type SendatrackNormalizationDiagnostics = {
   syntheticRows: number;
   namedRows: number;
   finalVehicles: number;
+  observedKeys: string[];
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -54,6 +55,22 @@ function candidateArrays(value: unknown, depth = 0): Array<{ items: unknown[]; d
   if (Array.isArray(value)) return [{ items: value, depth }, ...value.flatMap((item) => candidateArrays(item, depth + 1))];
   const record = asRecord(value);
   return record ? Object.values(record).flatMap((item) => candidateArrays(item, depth + 1)) : [];
+}
+
+function observedObjectKeys(value: unknown, depth = 0, keys = new Set<string>()) {
+  if (depth > 4 || keys.size >= 100) return keys;
+  if (Array.isArray(value)) {
+    for (const item of value) observedObjectKeys(item, depth + 1, keys);
+    return keys;
+  }
+  const record = asRecord(value);
+  if (!record) return keys;
+  for (const [key, nested] of Object.entries(record)) {
+    keys.add(key);
+    if (keys.size >= 100) break;
+    observedObjectKeys(nested, depth + 1, keys);
+  }
+  return keys;
 }
 
 export function normalizeSendatrackVehicle(value: unknown): SendatrackVehicle | null {
@@ -108,6 +125,7 @@ export function normalizeSendatrackFleet(payload: unknown) {
     syntheticRows,
     namedRows: namedVehicles.length,
     finalVehicles: result.length,
+    observedKeys: [...observedObjectKeys(payload)].sort(),
   };
 
   return { vehicles: result, diagnostics };
