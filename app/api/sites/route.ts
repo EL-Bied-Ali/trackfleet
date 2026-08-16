@@ -11,8 +11,10 @@ export async function GET(request: Request) {
     sites: knownSites.map((site) => ({
       id: site.id,
       label: site.label,
+      city: site.city,
       address: site.address,
       country: site.country,
+      roles: site.roles,
       latitude: site.latitude,
       longitude: site.longitude,
       arrivalRadiusKm: site.arrivalRadiusKm,
