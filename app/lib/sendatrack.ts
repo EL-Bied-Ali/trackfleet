@@ -155,12 +155,15 @@ function normalizeFleet(payload: unknown) {
     .filter((group) => group.vehicles.length > 0);
   const vehicles = groups.flatMap((group) => group.vehicles);
   const namedVehicles = vehicles.filter((vehicle) => !/^v\d+$/i.test(vehicle.name));
-  const fleetRows = vehicles.filter((vehicle) => {
-    if (!/^v\d+$/i.test(vehicle.name)) return true;
-    return !namedVehicles.some((named) =>
-      Math.abs(named.latitude - vehicle.latitude) < 0.000001
-      && Math.abs(named.longitude - vehicle.longitude) < 0.000001);
-  });
+
+  // SENDATRACK nests GPS EventData rows below the real vehicle rows. Those
+  // event objects can normalize into synthetic names such as v3/v4/v5. They
+  // are events, not extra fleet vehicles. The previous filter removed them
+  // only when their coordinates exactly matched a named vehicle; an older GPS
+  // event at a different position could therefore leak through as a 7th car.
+  // Once real named vehicles are present, keep only those real fleet rows.
+  const fleetRows = namedVehicles.length > 0 ? namedVehicles : vehicles;
+
   const newestByVehicle = new Map<string, SendatrackVehicle>();
   for (const vehicle of fleetRows) {
     const vehicleKey = vehicle.name.toLowerCase().replace(/[^a-z0-9]/g, "") || vehicle.id;
