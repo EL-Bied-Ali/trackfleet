@@ -35,7 +35,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "tanger-ville-said-kotb-19a",
@@ -46,7 +46,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "tetouan-cortoba-146",
@@ -57,7 +57,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "sale-hay-nasser-12bis",
@@ -68,7 +68,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "marrakech-essaouira-12",
@@ -79,7 +79,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "agadir-zaitoune-tikiouine-103a",
@@ -90,7 +90,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "khouribga-mohamed-vi-30",
@@ -101,7 +101,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "fquih-ben-salah-allal-ben-abdellah-197",
@@ -112,7 +112,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
   {
     id: "casablanca-mohammed-vi-959",
@@ -123,7 +123,7 @@ export const knownSites: KnownSite[] = [
     latitude: null,
     longitude: null,
     arrivalRadiusKm: 0.5,
-    roles: ["dropoff", "replenishment", "destination"],
+    roles: ["origin", "dropoff", "replenishment", "destination"],
   },
 ];
 
