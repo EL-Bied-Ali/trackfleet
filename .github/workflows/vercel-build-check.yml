@@ -1,4 +1,4 @@
-name: Vercel build check
+name: Platform build check
 
 on:
   push:
@@ -20,9 +20,23 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: Report Cloudflare-only imports
-        run: grep -RIn 'cloudflare:workers' app || true
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Build Vercel output
         run: pnpm run build:vercel
+
+  build-cloudflare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build Cloudflare output
+        run: pnpm run build
