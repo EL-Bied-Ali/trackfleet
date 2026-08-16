@@ -1,0 +1,34 @@
+name: One-shot refresh sites integration
+
+on:
+  push:
+    paths:
+      - .github/workflows/one-shot-refresh-sites.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refresh delivery site selectors after site changes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/page.tsx')
+          t = p.read_text()
+          old = '''  useEffect(() => {\n    if (authState !== "authenticated") return;\n    let active = true;\n    void fetch("/api/sites", { cache: "no-store" })\n      .then(async (response) => response.ok ? response.json() as Promise<{ sites: KnownSite[] }> : { sites: [] })\n      .then((data) => { if (active) setKnownSites(data.sites ?? []); })\n      .catch(() => { if (active) setKnownSites([]); });\n    return () => { active = false; };\n  }, [authState]);\n'''
+          new = '''  useEffect(() => {\n    if (authState !== "authenticated") return;\n    let active = true;\n    async function refreshSites() {\n      try {\n        const response = await fetch("/api/sites", { cache: "no-store" });\n        const data = response.ok ? await response.json() as { sites: KnownSite[] } : { sites: [] };\n        if (active) setKnownSites(data.sites ?? []);\n      } catch {\n        if (active) setKnownSites([]);\n      }\n    }\n    void refreshSites();\n    const handleSitesChanged = () => void refreshSites();\n    window.addEventListener("trackfleet-sites-changed", handleSitesChanged);\n    return () => { active = false; window.removeEventListener("trackfleet-sites-changed", handleSitesChanged); };\n  }, [authState]);\n'''
+          if old not in t:
+              raise SystemExit('sites effect anchor missing')
+          p.write_text(t.replace(old, new, 1))
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
+          git add app/page.tsx
+          git commit -m "refresh delivery site selectors after edits"
+          git push
