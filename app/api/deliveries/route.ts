@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import { calculateRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 
@@ -7,13 +8,45 @@ function errorResponse(error: unknown) {
   return Response.json({ error: message }, { status: 500 });
 }
 
+function enrichDelivery<T extends {
+  latitude: number | null;
+  longitude: number | null;
+  destination: string;
+  lastPositionAt: Date | null;
+}>(row: T) {
+  const metrics = typeof row.latitude === "number" && typeof row.longitude === "number"
+    ? calculateRouteMetrics(row.latitude, row.longitude, row.destination)
+    : null;
+  const positionAgeMinutes = row.lastPositionAt
+    ? Math.max(0, Math.round((Date.now() - row.lastPositionAt.getTime()) / 60_000))
+    : null;
+  return {
+    ...row,
+    routeDistanceKm: metrics ? Math.round(metrics.routeDistanceKm) : null,
+    remainingDistanceKm: metrics ? Math.round(metrics.remainingDistanceKm) : null,
+    distanceToDestinationKm: metrics ? Math.round(metrics.distanceToDestinationKm) : null,
+    positionAgeMinutes,
+    gpsFresh: positionAgeMinutes !== null && positionAgeMinutes <= 30,
+  };
+}
+
 export async function GET(request: Request) {
   try {
     const tracking = new URL(request.url).searchParams.get("tracking")?.trim();
     if (tracking) {
-      const row = await store.getPublic(tracking);
+      let row = await store.getPublic(tracking);
       if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
-      return Response.json({ deliveries: [row], publicTracking: true }, { headers: { "cache-control": "no-store" } });
+
+      // Public tracking has no company login cookie. For the current single-account
+      // deployment, refresh from server-side SENDATRACK credentials when available
+      // so the customer's link does not depend on an operator keeping the dashboard open.
+      const integration = await getSendatrackSnapshot();
+      if (integration.connected) {
+        await store.applySendatrackSnapshot(integration, row.companyId);
+        row = await store.getPublic(tracking) ?? row;
+      }
+
+      return Response.json({ deliveries: [enrichDelivery(row)], publicTracking: true }, { headers: { "cache-control": "no-store" } });
     }
 
     const session = await getCompanySession(request);
@@ -24,7 +57,7 @@ export async function GET(request: Request) {
     const rows = await store.listForCompany(session.companyId);
 
     return Response.json({
-      deliveries: rows,
+      deliveries: rows.map(enrichDelivery),
       integration: {
         configured: integration.configured,
         connected: integration.connected,
@@ -72,7 +105,7 @@ export async function POST(request: Request) {
       trackingToken: createTrackingToken(),
       driver: "To be assigned",
       status: "Loading",
-      progress: 8,
+      progress: 0,
       color: "#916ed7",
       latitude: null,
       longitude: null,
@@ -81,7 +114,7 @@ export async function POST(request: Request) {
       gpsSource: "simulation",
     });
 
-    return Response.json({ delivery }, { status: 201 });
+    return Response.json({ delivery: enrichDelivery(delivery) }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
