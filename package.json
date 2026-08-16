@@ -20,6 +20,7 @@
     "test:customer-contact": "node --experimental-strip-types --test tests/customer-contact.test.mjs",
     "test:tenant-isolation": "node --test tests/tenant-isolation.test.mjs",
     "test:known-sites": "node --experimental-strip-types --test tests/known-sites.test.mjs",
+    "test:stop-plans": "node --experimental-strip-types --test tests/truck-stop-plan.test.mjs",
     "test:eta": "node --experimental-strip-types --test tests/eta-estimator.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
