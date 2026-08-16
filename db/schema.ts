@@ -4,6 +4,8 @@ export const deliveries = sqliteTable("deliveries", {
   id: text("id").primaryKey(),
   customer: text("customer").notNull(),
   originSiteId: text("origin_site_id"),
+  originLatitude: real("origin_latitude"),
+  originLongitude: real("origin_longitude"),
   destinationSiteId: text("destination_site_id"),
   destination: text("destination").notNull(),
   destinationLatitude: real("destination_latitude"),
