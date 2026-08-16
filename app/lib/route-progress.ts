@@ -128,13 +128,23 @@ export function deriveDeliveryState(
   speed: number,
   previousProgress = 0,
   arrivalRadiusKm = 0.5,
+  positionAgeMinutes = 0,
 ) {
   const safeArrivalRadiusKm = Math.max(0.05, Math.min(10, arrivalRadiusKm));
-  if (currentStatus === "Delivered" || (metrics.distanceToDestinationKm <= safeArrivalRadiusKm && speed <= 5)) {
+  const freshPosition = positionAgeMinutes <= 30;
+  if (currentStatus === "Delivered" || (freshPosition && metrics.distanceToDestinationKm <= safeArrivalRadiusKm && speed <= 5)) {
     return { status: "Delivered" as const, progress: 100 };
   }
   const progress = Math.max(previousProgress, metrics.progress);
   if (currentStatus === "Delayed") return { status: currentStatus, progress };
-  if (metrics.distanceFromOriginKm >= 1 || progress >= 1) return { status: "In transit" as const, progress };
+
+  // A departure is a real movement away from the delivery baseline, not just a
+  // noisy/stale GPS jump. One kilometre gives enough margin for manoeuvring in
+  // a depot yard while >5 km/h confirms that the truck is actually moving.
+  const movedBeyondDepartureZone = metrics.distanceFromOriginKm >= 1 || progress >= 1;
+  if (currentStatus === "Loading" && freshPosition && movedBeyondDepartureZone && speed > 5) {
+    return { status: "In transit" as const, progress };
+  }
+  if (currentStatus === "In transit") return { status: currentStatus, progress };
   return { status: "Loading" as const, progress };
 }
