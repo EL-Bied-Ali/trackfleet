@@ -1,4 +1,4 @@
-import type { KnownSite } from "./known-sites";
+import type { KnownSite } from "./known-sites.ts";
 
 export type CompanySite = KnownSite & {
   companyId: string;
