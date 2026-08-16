@@ -31,6 +31,8 @@ jobs:
         run: pnpm run test:eta
       - name: Verify delay detection
         run: pnpm run test:delay
+      - name: Verify autonomous delay detection
+        run: pnpm run test:automation-delay
 
   build-vercel:
     runs-on: ubuntu-latest
