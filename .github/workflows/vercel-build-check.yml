@@ -20,6 +20,8 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - name: Report Cloudflare-only imports
+        run: grep -RIn 'cloudflare:workers' app || true
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
       - name: Build Vercel output
