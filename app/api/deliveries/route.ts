@@ -12,6 +12,7 @@ import { buildTruckStopPlans, pendingServiceMinutesBefore } from "../../lib/truc
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
+import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -203,15 +204,12 @@ export async function POST(request: Request) {
     const originSiteInput = String(payload.originSiteId ?? "").trim();
     const destinationSiteId = String(payload.destinationSiteId ?? "").trim();
     const companySites = await siteStore.listForCompany(session.companyId);
-    const findCompanySite = (value: string) => {
-      const wanted = normalized(value);
-      if (!wanted) return null;
-      return companySites.find((candidate) => candidate.id === value)
-        ?? companySites.find((candidate) => [candidate.label, candidate.city, candidate.address].some((entry) => normalized(entry) === wanted))
-        ?? null;
-    };
-    const originSite = findCompanySite(originSiteInput) ?? resolveKnownSite(originSiteInput);
-    const site = findCompanySite(destinationSiteId) ?? findCompanySite(destinationInput) ?? resolveKnownSite(destinationSiteId) ?? resolveKnownSite(destinationInput);
+    const originSelection = resolveExplicitCompanySite(companySites, originSiteInput);
+    if (originSelection.invalid) return Response.json({ error: "origin site is not available for this company" }, { status: 400 });
+    const destinationSelection = resolveExplicitCompanySite(companySites, destinationSiteId);
+    if (destinationSelection.invalid) return Response.json({ error: "destination site is not available for this company" }, { status: 400 });
+    const originSite = originSelection.site;
+    const site = destinationSelection.site ?? findCompanySiteByText(companySites, destinationInput) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
     const truck = String(payload.truck ?? "").trim();
     const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
