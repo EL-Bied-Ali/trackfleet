@@ -49,12 +49,9 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     try {
       const response = await fetch("/api/sites", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       if (!response.ok) throw new Error("save_failed");
-      event.currentTarget.reset();
-      await refresh();
-      window.dispatchEvent(new Event("trackfleet-sites-changed"));
+      window.location.reload();
     } catch {
       setError("save_failed");
-    } finally {
       setSaving(false);
     }
   }
