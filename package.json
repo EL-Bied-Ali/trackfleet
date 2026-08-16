@@ -16,6 +16,7 @@
     "test:delivery-events": "node --experimental-strip-types --test tests/delivery-events.test.mjs",
     "test:notifications": "node --experimental-strip-types --test tests/notification-queue.test.mjs",
     "test:eta": "node --experimental-strip-types --test tests/eta-estimator.test.mjs",
+    "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
