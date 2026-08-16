@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTruckStopPlans } from "../app/lib/truck-stop-plan.ts";
+import { buildTruckStopPlans, pendingServiceMinutesBefore } from "../app/lib/truck-stop-plan.ts";
 
 function delivery(overrides) {
   return {
@@ -80,4 +80,38 @@ test("excludes delivered parcels and separates different trucks", () => {
 
   assert.equal(plans.length, 2);
   assert.ok(plans.every((plan) => plan.stops.flatMap((stop) => stop.deliveryIds).every((id) => id !== "TF-1")));
+});
+
+test("adds service time only for distinct pending stops before the target", () => {
+  const target = delivery({
+    id: "TF-MAR",
+    destinationSiteId: "marrakech-essaouira-12",
+    destination: "12 Boulevard Essaouira, Marrakech, Maroc",
+    plannedArrivalAt: new Date("2026-08-21T09:00:00Z"),
+  });
+  const rows = [
+    target,
+    delivery({ id: "TF-CAS-1", plannedArrivalAt: new Date("2026-08-20T10:00:00Z") }),
+    delivery({ id: "TF-CAS-2", plannedArrivalAt: new Date("2026-08-20T11:00:00Z") }),
+    delivery({
+      id: "TF-TAN",
+      destinationSiteId: "tanger-ville-said-kotb-19a",
+      destination: "Tanger, Maroc",
+      plannedArrivalAt: new Date("2026-08-19T08:00:00Z"),
+    }),
+  ];
+  assert.equal(pendingServiceMinutesBefore(target, rows, 30), 60);
+});
+
+test("does not count an already delivered stop again", () => {
+  const target = delivery({
+    id: "TF-MAR",
+    destinationSiteId: "marrakech-essaouira-12",
+    plannedArrivalAt: new Date("2026-08-21T09:00:00Z"),
+  });
+  const rows = [
+    target,
+    delivery({ id: "TF-CAS", status: "Delivered", plannedArrivalAt: new Date("2026-08-20T10:00:00Z") }),
+  ];
+  assert.equal(pendingServiceMinutesBefore(target, rows, 30), 0);
 });
