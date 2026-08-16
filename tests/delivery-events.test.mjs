@@ -24,7 +24,7 @@ test("does not emit a milestone when already past it", () => {
   }), []);
 });
 
-test("detects near destination and arrival", () => {
+test("near destination is based on physical distance, not trip percentage", () => {
   assert.deepEqual(detectDeliveryEvents({
     previousStatus: "In transit",
     nextStatus: "In transit",
@@ -32,15 +32,28 @@ test("detects near destination and arrival", () => {
     nextProgress: 92,
     distanceToDestinationKm: 120,
     positionAgeMinutes: 1,
-  }), ["NEAR_DESTINATION"]);
+  }), []);
 
+  assert.deepEqual(detectDeliveryEvents({
+    previousStatus: "In transit",
+    nextStatus: "In transit",
+    previousProgress: 70,
+    nextProgress: 71,
+    distanceToDestinationKm: 8,
+    positionAgeMinutes: 1,
+    arrivalRadiusKm: 0.5,
+  }), ["NEAR_DESTINATION"]);
+});
+
+test("arrival remains separate from the near-destination alert", () => {
   assert.deepEqual(detectDeliveryEvents({
     previousStatus: "In transit",
     nextStatus: "Delivered",
     previousProgress: 98,
     nextProgress: 100,
-    distanceToDestinationKm: 1,
+    distanceToDestinationKm: 0.4,
     positionAgeMinutes: 1,
+    arrivalRadiusKm: 0.5,
   }), ["ARRIVED"]);
 });
 
