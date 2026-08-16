@@ -66,6 +66,15 @@ function destinationFor(delivery: MapDelivery): [number, number] {
   return [4.3517, 50.8503];
 }
 
+function keepMarkerMapPositioning(element: HTMLElement) {
+  // MapLibre positions custom marker elements with an inline transform and expects
+  // them to be absolutely positioned. Our visual marker CSS uses position:relative
+  // for its internal badges, which overrides MapLibre's marker rule and makes the
+  // element drift while the map zooms. Keep the marker itself absolute; absolute
+  // elements still establish the containing block used by the badge children.
+  element.style.position = "absolute";
+}
+
 export default function InteractiveFleetMap({ deliveries, liveVehicles = [], selectedId, customerMode = false, label, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
@@ -144,6 +153,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
       const button = document.createElement("button");
       button.type = "button";
       button.className = `maplibre-truck ${delivery.id === selectedId ? "selected" : ""}`;
+      keepMarkerMapPositioning(button);
       button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}`);
       button.innerHTML = `<span>▰</span><b>${delivery.truck.replace("TRK-0", "")}</b>`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
@@ -160,6 +170,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
         if (linkedVehicleIds.has(vehicle.id)) continue;
         const marker = document.createElement("div");
         marker.className = "maplibre-truck gps-only";
+        keepMarkerMapPositioning(marker);
         marker.setAttribute("role", "img");
         marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);
         marker.innerHTML = `<span>▰</span><b>GPS</b><em>${vehicle.name}</em>`;
@@ -170,6 +181,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
     if (customerMode && selected) {
       const pin = document.createElement("div");
       pin.className = "maplibre-destination";
+      keepMarkerMapPositioning(pin);
       pin.innerHTML = "◆";
       pin.setAttribute("aria-label", selected.destination);
       destinationMarkerRef.current = new maplibregl.Marker({ element: pin, anchor: "bottom" }).setLngLat(destinationFor(selected)).addTo(map);
