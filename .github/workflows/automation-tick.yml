@@ -1,0 +1,49 @@
+name: TrackFleet automation tick
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: trackfleet-automation-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    if: ${{ vars.TRACKFLEET_AUTOMATION_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
+      CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
+    steps:
+      - name: Verify production automation readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::TRACKFLEET_CRON_SECRET is not configured"
+            exit 1
+          fi
+          curl --fail --silent --show-error "$BASE_URL/api/health" -o /tmp/health.json
+          cat /tmp/health.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
+          const ready = health?.storage?.persistent === true
+            && health?.storage?.connected === true
+            && health?.automation?.tickProtected === true;
+          if (!ready) {
+            console.error('Production is not ready for scheduled automation:', JSON.stringify({ storage: health?.storage, automation: health?.automation }));
+            process.exit(1);
+          }
+          NODE
+
+      - name: Run TrackFleet automation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/automation/tick"
