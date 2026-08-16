@@ -32,7 +32,7 @@ export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventTy
   if (
     input.previousProgress < 90
     && input.nextProgress >= 90
-    && input.distanceToDestinationKm > 2
+    && input.distanceToDestinationKm > 0.5
   ) {
     events.push("NEAR_DESTINATION");
   }
