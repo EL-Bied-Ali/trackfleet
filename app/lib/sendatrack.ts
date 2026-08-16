@@ -1,9 +1,4 @@
-type SendatrackEnv = {
-  SENDATRACK_ACCOUNT_ID?: string;
-  SENDATRACK_USER?: string;
-  SENDATRACK_PASSWORD?: string;
-  SENDATRACK_API_URL?: string;
-};
+import { runtimeEnv } from "trackfleet-runtime-env";
 
 export type SendatrackCredentials = {
   accountID: string;
@@ -29,7 +24,6 @@ export type SendatrackSnapshot = {
   error?: "not_configured" | "authentication_failed" | "service_unavailable" | "unexpected_response";
 };
 
-const runtimeEnv = process.env as SendatrackEnv;
 const defaultApiUrl = "http://backend2.sendatrack.com/sendatrack/public/api/";
 const cachedTokens = new Map<string, { value: string; expiresAt: number }>();
 
