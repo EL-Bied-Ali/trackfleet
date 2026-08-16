@@ -20,6 +20,7 @@
     "test:known-sites": "node --experimental-strip-types --test tests/known-sites.test.mjs",
     "test:site-store": "node --experimental-strip-types --test tests/site-store.test.mjs",
     "test:stop-plans": "node --experimental-strip-types --test tests/truck-stop-plan.test.mjs",
+    "test:tour": "node --experimental-strip-types --test tests/multistop-tour.test.mjs",
     "test:eta": "node --experimental-strip-types --test tests/eta-estimator.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
