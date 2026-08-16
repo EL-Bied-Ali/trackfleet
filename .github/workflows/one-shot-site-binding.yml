@@ -1,0 +1,77 @@
+name: One-shot delivery site binding
+
+on:
+  push:
+    paths:
+      - .github/workflows/one-shot-site-binding.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Persist origin and destination site bindings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Postgres store
+          p = Path('app/lib/delivery-store.postgres.ts')
+          t = p.read_text()
+          replacements = [
+            ('  customer: string;\n  destination: string;\n', '  customer: string;\n  origin_site_id: string | null;\n  destination_site_id: string | null;\n  destination: string;\n'),
+            ('    customer: row.customer,\n    destination: row.destination,\n', '    customer: row.customer,\n    originSiteId: row.origin_site_id ?? null,\n    destinationSiteId: row.destination_site_id ?? null,\n    destination: row.destination,\n'),
+            ('      customer text NOT NULL,\n      destination text NOT NULL,\n', '      customer text NOT NULL,\n      origin_site_id text,\n      destination_site_id text,\n      destination text NOT NULL,\n'),
+            ('    await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;\n', '    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS origin_site_id text`;\n    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS destination_site_id text`;\n    await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;\n'),
+            ('        id, customer, destination, destination_latitude, destination_longitude, arrival_radius_km,\n', '        id, customer, origin_site_id, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,\n'),
+            ('        ${delivery.id}, ${delivery.customer}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},\n', '        ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},\n'),
+          ]
+          # The insert block appears twice (seed + create), apply globally where intended.
+          for old, new in replacements:
+            if old not in t:
+              raise SystemExit(f'postgres anchor not found: {old[:70]}')
+            t = t.replace(old, new)
+          p.write_text(t)
+
+          # Cloudflare store
+          p = Path('app/lib/delivery-store.cloudflare.ts')
+          t = p.read_text()
+          replacements = [
+            ('  id: string; customer: string; destination: string;\n', '  id: string; customer: string; originSiteId: string | null; destinationSiteId: string | null; destination: string;\n'),
+            ('    destinationLatitude: row.destinationLatitude ?? null,\n', '    originSiteId: row.originSiteId ?? null,\n    destinationSiteId: row.destinationSiteId ?? null,\n    destinationLatitude: row.destinationLatitude ?? null,\n'),
+            ('  if (!columns.has("destination_latitude"))', '  if (!columns.has("origin_site_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN origin_site_id text").run();\n  if (!columns.has("destination_site_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN destination_site_id text").run();\n  if (!columns.has("destination_latitude"))'),
+            ('    id text PRIMARY KEY NOT NULL, customer text NOT NULL, destination text NOT NULL,\n', '    id text PRIMARY KEY NOT NULL, customer text NOT NULL, origin_site_id text, destination_site_id text, destination text NOT NULL,\n'),
+            ('      (id, customer, destination, destination_latitude, destination_longitude, arrival_radius_km,\n', '      (id, customer, origin_site_id, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,\n'),
+            ('      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)', '      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`)'),
+            ('      .bind(delivery.id, delivery.customer, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,\n', '      .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,\n'),
+            ('const selectColumns = `id, customer, destination,\n', 'const selectColumns = `id, customer, origin_site_id AS originSiteId, destination_site_id AS destinationSiteId, destination,\n'),
+          ]
+          for old, new in replacements:
+            if old not in t:
+              raise SystemExit(f'cloudflare anchor not found: {old[:70]}')
+            t = t.replace(old, new)
+          p.write_text(t)
+
+          # API: persist explicit site ids while retaining address fallback compatibility.
+          p = Path('app/api/deliveries/route.ts')
+          t = p.read_text()
+          old = '    const destinationInput = String(payload.destination ?? "").trim();\n    const destinationSiteId = String(payload.destinationSiteId ?? "").trim();\n    const site = resolveKnownSite(destinationSiteId) ?? resolveKnownSite(destinationInput);\n'
+          new = '    const destinationInput = String(payload.destination ?? "").trim();\n    const originSiteInput = String(payload.originSiteId ?? "").trim();\n    const originSite = resolveKnownSite(originSiteInput);\n    const destinationSiteId = String(payload.destinationSiteId ?? "").trim();\n    const site = resolveKnownSite(destinationSiteId) ?? resolveKnownSite(destinationInput);\n'
+          if old not in t: raise SystemExit('api site parse anchor not found')
+          t = t.replace(old, new, 1)
+          old = '      customer,\n      destination,\n'
+          new = '      customer,\n      originSiteId: originSite?.id ?? null,\n      destinationSiteId: site?.id ?? null,\n      destination,\n'
+          if old not in t: raise SystemExit('api create site binding anchor not found')
+          t = t.replace(old, new, 1)
+          p.write_text(t)
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
+          git add app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts app/api/deliveries/route.ts
+          git commit -m "persist delivery origin and destination sites"
+          git push
