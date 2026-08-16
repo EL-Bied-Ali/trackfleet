@@ -35,7 +35,8 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     event.preventDefault();
     setSaving(true);
     setError("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const payload = {
       label: String(form.get("label") ?? ""),
       city: String(form.get("city") ?? ""),
@@ -49,7 +50,10 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     try {
       const response = await fetch("/api/sites", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       if (!response.ok) throw new Error("save_failed");
-      window.location.reload();
+      await refresh();
+      formElement.reset();
+      window.dispatchEvent(new Event("trackfleet-sites-changed"));
+      setSaving(false);
     } catch {
       setError("save_failed");
       setSaving(false);
