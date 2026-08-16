@@ -1,7 +1,7 @@
 import { seedDeliveries } from "./delivery-seed";
 import { detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition } from "./delivery-store.types";
-import { calculateRouteMetrics, deriveDeliveryState } from "./route-progress";
+import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
@@ -9,6 +9,10 @@ const deliveryEvents: DeliveryEventRow[] = [];
 
 function key(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function baselineProgress(deliveryId: string) {
+  return deliveryEvents.find((event) => event.deliveryId === deliveryId && event.type === "GPS_BASELINE")?.progress ?? 0;
 }
 
 export const store: DeliveryStore = {
@@ -35,27 +39,23 @@ export const store: DeliveryStore = {
 
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
-      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
+      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
+      const metrics = rebaseRouteMetrics(absoluteMetrics, baselineProgress(delivery.id));
       const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress);
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
-      const events = detectDeliveryEvents({
-        previousStatus,
-        nextStatus: state.status,
-        previousProgress,
-        nextProgress: state.progress,
-        distanceToDestinationKm: metrics.distanceToDestinationKm,
-        positionAgeMinutes,
-      });
+      const events = detectDeliveryEvents({ previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes });
 
-      delivery.sendatrackVehicleId = vehicle.id;
-      delivery.truck = vehicle.name;
-      delivery.latitude = vehicle.latitude;
-      delivery.longitude = vehicle.longitude;
-      delivery.speed = vehicle.speed;
-      delivery.lastPositionAt = new Date(vehicle.updatedAt);
-      delivery.gpsSource = "sendatrack";
-      delivery.progress = state.progress;
-      delivery.status = state.status;
+      Object.assign(delivery, {
+        sendatrackVehicleId: vehicle.id,
+        truck: vehicle.name,
+        latitude: vehicle.latitude,
+        longitude: vehicle.longitude,
+        speed: vehicle.speed,
+        lastPositionAt: new Date(vehicle.updatedAt),
+        gpsSource: "sendatrack",
+        progress: state.progress,
+        status: state.status,
+      });
       transitions.push({ delivery: { ...delivery }, events });
     }
     return transitions;
@@ -68,17 +68,11 @@ export const store: DeliveryStore = {
   },
 
   async listEvents(deliveryId: string) {
-    return deliveryEvents
-      .filter((event) => event.deliveryId === deliveryId)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return deliveryEvents.filter((event) => event.deliveryId === deliveryId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
 
   async create(input: CreateDeliveryInput) {
-    const delivery: DeliveryRow = {
-      ...input,
-      id: `TF-${String(Date.now()).slice(-6)}`,
-      createdAt: new Date(),
-    };
+    const delivery: DeliveryRow = { ...input, id: `TF-${String(Date.now()).slice(-6)}`, createdAt: new Date() };
     deliveryStore.push(delivery);
     return delivery;
   },
