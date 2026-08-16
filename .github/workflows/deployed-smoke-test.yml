@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '.github/workflows/deployed-smoke-test.yml'
 
 jobs:
   smoke-test:
