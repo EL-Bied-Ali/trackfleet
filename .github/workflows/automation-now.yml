@@ -1,0 +1,30 @@
+name: TrackFleet automation now
+
+on:
+  push:
+    paths:
+      - ".github/workflows/automation-now.yml"
+
+jobs:
+  tick-now:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      BASE_URL: https://trackfleet-self.vercel.app
+      CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
+    steps:
+      - name: Run production automation now
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLEAN_CRON_SECRET="$(node -e 'process.stdout.write((process.env.CRON_SECRET || "").trim())')"
+          test -n "$CLEAN_CRON_SECRET"
+          curl --fail --silent --show-error "$BASE_URL/api/health" -o /tmp/health.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
+          if (health?.storage?.persistent !== true || health?.storage?.connected !== true || health?.automation?.tickProtected !== true) process.exit(1);
+          NODE
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $CLEAN_CRON_SECRET" \
+            "$BASE_URL/api/automation/tick"
