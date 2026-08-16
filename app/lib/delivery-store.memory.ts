@@ -21,6 +21,11 @@ function explicitDestination(delivery: DeliveryRow): [number, number] | null {
     ? [delivery.destinationLongitude, delivery.destinationLatitude]
     : null;
 }
+function explicitOrigin(delivery: DeliveryRow): [number, number] | null {
+  return typeof delivery.originLatitude === "number" && typeof delivery.originLongitude === "number"
+    ? [delivery.originLongitude, delivery.originLatitude]
+    : null;
+}
 
 export const memoryStore: DeliveryStore = {
   async getPublic(tracking) {
@@ -39,8 +44,8 @@ export const memoryStore: DeliveryStore = {
       if (!vehicle) continue;
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
-      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery));
-      const metrics = rebaseRouteMetrics(absoluteMetrics, baselineProgress(delivery.id));
+      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      const metrics = rebaseRouteMetrics(absoluteMetrics, explicitOrigin(delivery) ? 0 : baselineProgress(delivery.id));
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
       const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
       const events = detectDeliveryEvents({ previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes });
