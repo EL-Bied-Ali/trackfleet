@@ -145,7 +145,7 @@ export const store: DeliveryStore = {
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
-      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed);
+      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress);
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
       const events = detectDeliveryEvents({
         previousStatus,
