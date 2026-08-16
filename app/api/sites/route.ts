@@ -1,24 +1,72 @@
 import { getCompanySession } from "../../lib/company-auth";
-import { knownSites } from "../../lib/known-sites";
+import { siteStore } from "trackfleet-site-store";
+
+const allowedRoles = new Set(["origin", "dropoff", "replenishment", "destination"] as const);
+
+function slug(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
+}
+
+function siteJson(site: Awaited<ReturnType<typeof siteStore.listForCompany>>[number]) {
+  return {
+    id: site.id,
+    label: site.label,
+    city: site.city,
+    address: site.address,
+    country: site.country,
+    roles: site.roles,
+    latitude: site.latitude,
+    longitude: site.longitude,
+    arrivalRadiusKm: site.arrivalRadiusKm,
+    geofenceReady: typeof site.latitude === "number" && typeof site.longitude === "number",
+  };
+}
 
 export async function GET(request: Request) {
   const session = await getCompanySession(request);
-  if (!session) {
-    return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
-  }
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
+  const sites = await siteStore.listForCompany(session.companyId);
+  return Response.json({ sites: sites.map(siteJson) }, { headers: { "cache-control": "no-store" } });
+}
 
-  return Response.json({
-    sites: knownSites.map((site) => ({
-      id: site.id,
-      label: site.label,
-      city: site.city,
-      address: site.address,
-      country: site.country,
-      roles: site.roles,
-      latitude: site.latitude,
-      longitude: site.longitude,
-      arrivalRadiusKm: site.arrivalRadiusKm,
-      geofenceReady: typeof site.latitude === "number" && typeof site.longitude === "number",
-    })),
-  }, { headers: { "cache-control": "no-store" } });
+export async function POST(request: Request) {
+  const session = await getCompanySession(request);
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
+
+  const payload = await request.json() as Record<string, unknown>;
+  const label = String(payload.label ?? "").trim();
+  const city = String(payload.city ?? "").trim();
+  const address = String(payload.address ?? "").trim();
+  const country = String(payload.country ?? "").trim().toUpperCase();
+  const requestedId = String(payload.id ?? "").trim();
+  const id = requestedId || slug(`${city}-${address}`);
+  const roles = Array.isArray(payload.roles)
+    ? [...new Set(payload.roles.map(String).filter((role): role is "origin" | "dropoff" | "replenishment" | "destination" => allowedRoles.has(role as any)))]
+    : ["origin", "dropoff", "replenishment", "destination"];
+  const latitude = payload.latitude === null || payload.latitude === undefined || payload.latitude === "" ? null : Number(payload.latitude);
+  const longitude = payload.longitude === null || payload.longitude === undefined || payload.longitude === "" ? null : Number(payload.longitude);
+  const requestedRadius = Number(payload.arrivalRadiusKm ?? 0.5);
+
+  if (!id || !label || !city || !address || (country !== "BE" && country !== "MA") || roles.length === 0) {
+    return Response.json({ error: "id, label, city, address, country BE/MA and at least one role are required" }, { status: 400 });
+  }
+  if ((latitude === null) !== (longitude === null)) return Response.json({ error: "latitude and longitude must be provided together" }, { status: 400 });
+  if (latitude !== null && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude! < -180 || longitude! > 180)) {
+    return Response.json({ error: "invalid coordinates" }, { status: 400 });
+  }
+  if (!Number.isFinite(requestedRadius)) return Response.json({ error: "invalid arrival radius" }, { status: 400 });
+
+  const site = await siteStore.upsert({
+    companyId: session.companyId,
+    id,
+    label,
+    city,
+    country: country as "BE" | "MA",
+    address,
+    latitude,
+    longitude,
+    arrivalRadiusKm: Math.max(0.05, Math.min(10, requestedRadius)),
+    roles,
+  });
+  return Response.json({ site: siteJson(site) }, { status: 201, headers: { "cache-control": "no-store" } });
 }
