@@ -1,0 +1,72 @@
+{
+  "data": [
+    {
+      "id_Vehicle": 101,
+      "Device_desc": "TRUCK-01",
+      "lastValidLatitude": 35.7595,
+      "lastValidLongitude": -5.834,
+      "Speed": 62,
+      "Timestamp": "2026-08-16T16:00:00Z",
+      "EventData": [
+        {
+          "DeviceCode": "evt-101",
+          "Device": "v3",
+          "GPSPoint_lat": 35.7401,
+          "GPSPoint_lon": -5.8201,
+          "Speed": 41,
+          "Timestamp": "2026-08-16T15:45:00Z"
+        }
+      ]
+    },
+    {
+      "id_Vehicle": 102,
+      "Device_desc": "TRUCK-02",
+      "lastValidLatitude": 33.5731,
+      "lastValidLongitude": -7.5898,
+      "Speed": 0,
+      "Timestamp": "2026-08-16T16:01:00Z",
+      "EventData": [
+        {
+          "DeviceCode": "evt-102",
+          "Device": "v4",
+          "GPSPoint_lat": 33.5731,
+          "GPSPoint_lon": -7.5898,
+          "Speed": 0,
+          "Timestamp": "2026-08-16T15:58:00Z"
+        }
+      ]
+    },
+    {
+      "id_Vehicle": 103,
+      "Device_desc": "TRUCK-03",
+      "lastValidLatitude": 34.0209,
+      "lastValidLongitude": -6.8416,
+      "Speed": 24,
+      "Timestamp": "2026-08-16T16:02:00Z"
+    },
+    {
+      "id_Vehicle": 104,
+      "Device_desc": "TRUCK-04",
+      "lastValidLatitude": 50.8503,
+      "lastValidLongitude": 4.3517,
+      "Speed": 70,
+      "Timestamp": "2026-08-16T16:03:00Z"
+    },
+    {
+      "id_Vehicle": 105,
+      "Device_desc": "TRUCK-05",
+      "lastValidLatitude": 51.2194,
+      "lastValidLongitude": 4.4025,
+      "Speed": 12,
+      "Timestamp": "2026-08-16T16:04:00Z"
+    },
+    {
+      "id_Vehicle": 106,
+      "Device_desc": "TRUCK-06",
+      "lastValidLatitude": 50.6326,
+      "lastValidLongitude": 5.5797,
+      "Speed": 0,
+      "Timestamp": "2026-08-16T16:05:00Z"
+    }
+  ]
+}
