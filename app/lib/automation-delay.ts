@@ -1,7 +1,7 @@
-import type { DeliveryEventRow, DeliveryRow } from "./delivery-store.types";
-import { shouldDetectDelay } from "./delay-detection";
-import { estimateArrival } from "./eta-estimator";
-import { calculateRouteMetrics, rebaseRouteMetrics } from "./route-progress";
+import type { DeliveryEventRow, DeliveryRow } from "./delivery-store.types.ts";
+import { shouldDetectDelay } from "./delay-detection.ts";
+import { estimateArrival } from "./eta-estimator.ts";
+import { calculateRouteMetrics, rebaseRouteMetrics } from "./route-progress.ts";
 
 function explicitDestination(row: DeliveryRow): [number, number] | null {
   return typeof row.destinationLatitude === "number" && typeof row.destinationLongitude === "number"
