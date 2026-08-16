@@ -1,5 +1,5 @@
-import { knownSites } from "./known-sites";
-import type { CompanySite, CreateCompanySiteInput, SiteStore } from "./site-store.types";
+import { knownSites } from "./known-sites.ts";
+import type { CompanySite, CreateCompanySiteInput, SiteStore } from "./site-store.types.ts";
 
 const rows = new Map<string, CompanySite>();
 
