@@ -26,6 +26,19 @@ test("uses observed effective pace after enough distance and time", () => {
   assert.equal(estimate.delayMinutes, 60);
 });
 
+test("adds only future agency service time to the projected arrival", () => {
+  const estimate = estimateArrival({
+    remainingDistanceKm: 600,
+    completedDistanceKm: 600,
+    departedAt: new Date("2026-08-16T00:00:00Z"),
+    lastPositionAt: new Date("2026-08-16T10:00:00Z"),
+    plannedArrivalAt: new Date("2026-08-16T20:00:00Z"),
+    futureServiceMinutes: 60,
+  });
+  assert.equal(estimate.estimatedArrivalAt?.toISOString(), "2026-08-16T21:00:00.000Z");
+  assert.equal(estimate.delayMinutes, 60);
+});
+
 test("clamps absurd observed pace and keeps the ETA stable", () => {
   const estimate = estimateArrival({
     remainingDistanceKm: 850,
