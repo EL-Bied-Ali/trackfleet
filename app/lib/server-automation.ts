@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import { shouldCreateDelayEvent } from "./automation-delay";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
 import { processPendingNotifications } from "./notification-runner";
@@ -9,6 +10,7 @@ export type AutomationRunResult = {
   vehicles: number;
   transitions: number;
   newEvents: number;
+  delayEvents: number;
   notificationsSent: number;
   notificationFailures: number;
 };
@@ -19,16 +21,29 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
 
   const snapshot = await getSendatrackSnapshot();
   if (!snapshot.connected) {
-    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, notificationsSent: 0, notificationFailures: 0 };
+    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0 };
   }
 
   const companyId = await companyIdForAccount(accountID);
   const transitions = await store.applySendatrackSnapshot(snapshot, companyId);
   let newEvents = 0;
+  let delayEvents = 0;
 
   for (const transition of transitions) {
     for (const type of transition.events) {
       if (await store.recordEvent(transition.delivery.id, type, transition.delivery.progress)) newEvents += 1;
+    }
+  }
+
+  // Delay detection must run in the autonomous tick too. Otherwise ETA delays
+  // would only be discovered when a dispatcher or customer opens TrackFleet.
+  const deliveries = await store.listForCompany(companyId);
+  for (const delivery of deliveries) {
+    const events = await store.listEvents(delivery.id);
+    if (!shouldCreateDelayEvent(delivery, events)) continue;
+    if (await store.recordEvent(delivery.id, "DELAY_DETECTED", delivery.progress)) {
+      newEvents += 1;
+      delayEvents += 1;
     }
   }
 
@@ -37,6 +52,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     vehicles: snapshot.vehicles.length,
     transitions: transitions.length,
     newEvents,
+    delayEvents,
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
   });
@@ -46,6 +62,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     vehicles: snapshot.vehicles.length,
     transitions: transitions.length,
     newEvents,
+    delayEvents,
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
   };
