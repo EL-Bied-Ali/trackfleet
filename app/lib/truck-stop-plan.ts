@@ -20,18 +20,52 @@ function timeValue(value: Date | null) {
   return value && Number.isFinite(value.getTime()) ? value.getTime() : Number.POSITIVE_INFINITY;
 }
 
+function vehicleKey(delivery: DeliveryRow) {
+  return delivery.sendatrackVehicleId || delivery.truck;
+}
+
+export function configuredStopServiceMinutes() {
+  const parsed = Number(process.env.TRACKFLEET_STOP_SERVICE_MINUTES ?? "30");
+  if (!Number.isFinite(parsed)) return 30;
+  return Math.max(0, Math.min(240, Math.round(parsed)));
+}
+
+// Returns only future service time before this delivery's stop. Stops whose
+// deliveries are already Delivered are excluded, so elapsed dwell time is not
+// counted twice on top of the observed GPS pace.
+export function pendingServiceMinutesBefore(
+  delivery: DeliveryRow,
+  deliveries: DeliveryRow[],
+  serviceMinutesPerStop = configuredStopServiceMinutes(),
+) {
+  if (!delivery.destinationSiteId || serviceMinutesPerStop <= 0) return 0;
+  const targetTime = timeValue(delivery.plannedArrivalAt);
+  const targetVehicle = vehicleKey(delivery);
+  const priorSites = new Set<string>();
+
+  for (const candidate of deliveries) {
+    if (candidate.id === delivery.id || candidate.status === "Delivered" || !candidate.destinationSiteId) continue;
+    if (vehicleKey(candidate) !== targetVehicle) continue;
+    if (candidate.destinationSiteId === delivery.destinationSiteId) continue;
+    if (timeValue(candidate.plannedArrivalAt) >= targetTime) continue;
+    priorSites.add(candidate.destinationSiteId);
+  }
+
+  return priorSites.size * serviceMinutesPerStop;
+}
+
 export function buildTruckStopPlans(deliveries: DeliveryRow[]): TruckStopPlan[] {
   const active = deliveries.filter((delivery) => delivery.status !== "Delivered" && delivery.destinationSiteId);
   const byVehicle = new Map<string, DeliveryRow[]>();
 
   for (const delivery of active) {
-    const vehicleKey = delivery.sendatrackVehicleId || delivery.truck;
-    const rows = byVehicle.get(vehicleKey) ?? [];
+    const key = vehicleKey(delivery);
+    const rows = byVehicle.get(key) ?? [];
     rows.push(delivery);
-    byVehicle.set(vehicleKey, rows);
+    byVehicle.set(key, rows);
   }
 
-  return [...byVehicle.entries()].map(([vehicleKey, rows]) => {
+  return [...byVehicle.entries()].map(([key, rows]) => {
     const bySite = new Map<string, DeliveryRow[]>();
     for (const row of rows) {
       const siteId = row.destinationSiteId!;
@@ -53,7 +87,7 @@ export function buildTruckStopPlans(deliveries: DeliveryRow[]): TruckStopPlan[] 
 
     const first = rows[0];
     return {
-      vehicleKey,
+      vehicleKey: key,
       truck: first.truck,
       sendatrackVehicleId: first.sendatrackVehicleId,
       source: "planned-arrival" as const,
