@@ -1,0 +1,74 @@
+name: One-shot UI truth cleanup
+
+on:
+  push:
+    paths:
+      - .github/workflows/one-shot-ui-truth-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove simulated traffic and localize live KPIs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('app/page.tsx')
+          text = path.read_text()
+
+          def replace(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly 1 match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace('  const [showTraffic, setShowTraffic] = useState(false);\n', '', 'traffic state')
+
+          marker = '''  const delayedCount = deliveries.filter((delivery) => delivery.status !== "Delivered" && (delivery.status === "Delayed" || (delivery.etaDelayMinutes ?? 0) >= 60)).length;'''
+          insertion = '''  const delayedCount = deliveries.filter((delivery) => delivery.status !== "Delivered" && (delivery.status === "Delayed" || (delivery.etaDelayMinutes ?? 0) >= 60)).length;\n  const liveKpiCopy = {\n    fr: { completed: "terminées", noHistory: "Pas encore d'historique", onTimeBody: "Basé sur les livraisons suivies et terminées", onTimeEmpty: "Disponible après les premières livraisons terminées", noDelay: "Aucun retard ETA important détecté" },\n    en: { completed: "completed", noHistory: "No history yet", onTimeBody: "Based on completed tracked deliveries", onTimeEmpty: "Available after the first completed deliveries", noDelay: "No material ETA delay detected" },\n    nl: { completed: "voltooid", noHistory: "Nog geen historiek", onTimeBody: "Gebaseerd op voltooide gevolgde leveringen", onTimeEmpty: "Beschikbaar na de eerste voltooide leveringen", noDelay: "Geen belangrijke ETA-vertraging gedetecteerd" },\n  }[locale];'''
+          replace(marker, insertion, 'localized KPI copy')
+
+          replace(
+              '''<article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} completed` : "No history"}</em></div><p>{completedWithPlan.length ? "Based on completed tracked deliveries" : "Available after completed tracked deliveries"}</p></article>''',
+              '''<article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} ${liveKpiCopy.completed}` : liveKpiCopy.noHistory}</em></div><p>{completedWithPlan.length ? liveKpiCopy.onTimeBody : liveKpiCopy.onTimeEmpty}</p></article>''',
+              'on-time KPI localization',
+          )
+
+          replace(
+              '''<article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : "No material ETA delay detected"}</p></article>''',
+              '''<article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : liveKpiCopy.noDelay}</p></article>''',
+              'delay KPI localization',
+          )
+
+          replace(
+              '''<div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select><button aria-pressed={showTraffic} onClick={() => setShowTraffic((value) => !value)}><Icon>☷</Icon>{showTraffic ? t.hideTraffic : t.showTraffic}</button></div></div>''',
+              '''<div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.truck}</option>)}</select></div></div>''',
+              'traffic toggle',
+          )
+
+          replace('''<div className={`map fleet-map ${showTraffic ? "traffic-visible" : ""}`}>''', '''<div className="map fleet-map">''', 'traffic map class')
+          replace('''            {showTraffic && <div className="traffic-layer" aria-label={t.showTraffic}><span>{t.moderateTraffic}</span><i /><i /><i /></div>}\n''', '', 'traffic layer')
+
+          replace(
+              '''<i>{event.type === "GPS_STALE" ? "!" : "✓"}</i>''',
+              '''<i>{event.type === "GPS_STALE" || event.type === "DELAY_DETECTED" ? "!" : "✓"}</i>''',
+              'delay timeline icon',
+          )
+
+          path.write_text(text)
+          PY
+      - name: Commit cleanup
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
+          git add app/page.tsx
+          git diff --cached --check
+          git commit -m "remove simulated traffic and localize live KPIs"
+          git push
