@@ -16,6 +16,12 @@ const isVercel = Boolean(process.env.VERCEL);
 const maplibreCssPath = fileURLToPath(
   new URL("./node_modules/maplibre-gl/dist/maplibre-gl.css", import.meta.url),
 );
+const runtimeEnvPath = fileURLToPath(
+  new URL(
+    isVercel ? "./app/lib/runtime-env.vercel.ts" : "./app/lib/runtime-env.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -55,6 +61,7 @@ export default defineConfig(async () => {
     resolve: {
       alias: {
         "maplibre-gl/dist/maplibre-gl.css": maplibreCssPath,
+        "trackfleet-runtime-env": runtimeEnvPath,
       },
     },
     server: isCodexSeatbeltSandbox
