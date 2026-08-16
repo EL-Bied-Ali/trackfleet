@@ -8,12 +8,17 @@ export async function GET() {
   const sendatrackConfigured = isSendatrackConfigured();
   const tickProtected = Boolean(runtimeEnv.CRON_SECRET?.trim());
   const whatsappEnabled = runtimeEnv.WHATSAPP_AUTOMATION_ENABLED === "true";
+  const whatsappProviderConfigured = Boolean(
+    runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim()
+    && runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim()
+    && runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim(),
+  );
   const whatsappActivationConfigured = Boolean(parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT));
   const automationReady = storage.persistent
     && storage.connected
     && sendatrackConfigured
     && tickProtected
-    && (!whatsappEnabled || whatsappActivationConfigured);
+    && (!whatsappEnabled || (whatsappProviderConfigured && whatsappActivationConfigured));
 
   return Response.json({
     ok: storage.connected,
@@ -23,6 +28,7 @@ export async function GET() {
     automation: {
       tickProtected,
       whatsappEnabled,
+      whatsappProviderConfigured,
       whatsappActivationConfigured,
       ready: automationReady,
     },
