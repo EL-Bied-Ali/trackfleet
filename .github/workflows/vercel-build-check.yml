@@ -29,6 +29,8 @@ jobs:
         run: pnpm run test:notifications
       - name: Verify notification activation policy
         run: pnpm run test:notification-policy
+      - name: Verify public tracking expiry
+        run: pnpm run test:tracking-access
       - name: Verify ETA estimator
         run: pnpm run test:eta
       - name: Verify delay detection
