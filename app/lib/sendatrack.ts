@@ -1,4 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { normalizeSendatrackFleet, type SendatrackVehicle } from "./sendatrack-normalize";
 
 export type SendatrackCredentials = {
   accountID: string;
@@ -6,16 +7,7 @@ export type SendatrackCredentials = {
   password: string;
 };
 
-export type SendatrackVehicle = {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  speed: number;
-  heading: number | null;
-  address: string;
-  updatedAt: number;
-};
+export type { SendatrackVehicle } from "./sendatrack-normalize";
 
 export type SendatrackSnapshot = {
   configured: boolean;
@@ -91,88 +83,6 @@ async function login(auth: SendatrackCredentials) {
   return token;
 }
 
-function numberFrom(...values: unknown[]) {
-  for (const value of values) {
-    const parsed = typeof value === "number" ? value : Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
-}
-
-function stringFrom(...values: unknown[]) {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-  return "";
-}
-
-function timestampFrom(...values: unknown[]) {
-  for (const value of values) {
-    if (typeof value === "string" && value && Number.isNaN(Number(value))) {
-      const parsed = Date.parse(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-    const numeric = numberFrom(value);
-    if (numeric !== null && numeric > 0) return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
-  }
-  return Date.now();
-}
-
-function candidateArrays(value: unknown, depth = 0): Array<{ items: unknown[]; depth: number }> {
-  if (depth > 4) return [];
-  if (Array.isArray(value)) return [{ items: value, depth }, ...value.flatMap((item) => candidateArrays(item, depth + 1))];
-  const record = asRecord(value);
-  return record ? Object.values(record).flatMap((item) => candidateArrays(item, depth + 1)) : [];
-}
-
-function normalizeVehicle(value: unknown): SendatrackVehicle | null {
-  const record = asRecord(value);
-  if (!record) return null;
-  const events = Array.isArray(record.EventData) ? record.EventData : Array.isArray(record.events) ? record.events : [];
-  const event = asRecord(events.at(-1)) ?? asRecord(record.lastEvent) ?? asRecord(record.event) ?? record;
-  const latitude = numberFrom(record.lastValidLatitude, record.latitude, record.lat, record.GPSPoint_lat, event.GPSPoint_lat, event.latitude, event.lat);
-  const longitude = numberFrom(record.lastValidLongitude, record.longitude, record.lng, record.lon, record.GPSPoint_lon, event.GPSPoint_lon, event.longitude, event.lng, event.lon);
-  if (latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
-  const id = stringFrom(record.id, record.id_Vehicle, record.vehicleId, record.DeviceCode, record.Device, event.DeviceCode);
-  const name = stringFrom(record.name, record.vehicleName, record.Device_desc, record.description, record.Device, id);
-  if (!id || !name) return null;
-  return {
-    id,
-    name,
-    latitude,
-    longitude,
-    speed: numberFrom(record.speed, record.Speed, event.Speed, event.speed) ?? 0,
-    heading: numberFrom(record.heading, record.Heading, event.Heading, event.heading),
-    address: stringFrom(record.address, record.Address, event.Address, event.address),
-    updatedAt: timestampFrom(record.timestamp, record.Timestamp, record.lastUpdate, event.Timestamp, event.timestamp),
-  };
-}
-
-function normalizeFleet(payload: unknown) {
-  const groups = candidateArrays(payload)
-    .map(({ items, depth }) => ({ depth, vehicles: items.map(normalizeVehicle).filter((item): item is SendatrackVehicle => Boolean(item)) }))
-    .filter((group) => group.vehicles.length > 0);
-  const vehicles = groups.flatMap((group) => group.vehicles);
-  const namedVehicles = vehicles.filter((vehicle) => !/^v\d+$/i.test(vehicle.name));
-
-  // SENDATRACK nests GPS EventData rows below the real vehicle rows. Those
-  // event objects can normalize into synthetic names such as v3/v4/v5. They
-  // are events, not extra fleet vehicles. The previous filter removed them
-  // only when their coordinates exactly matched a named vehicle; an older GPS
-  // event at a different position could therefore leak through as a 7th car.
-  // Once real named vehicles are present, keep only those real fleet rows.
-  const fleetRows = namedVehicles.length > 0 ? namedVehicles : vehicles;
-
-  const newestByVehicle = new Map<string, SendatrackVehicle>();
-  for (const vehicle of fleetRows) {
-    const vehicleKey = vehicle.name.toLowerCase().replace(/[^a-z0-9]/g, "") || vehicle.id;
-    const existing = newestByVehicle.get(vehicleKey);
-    if (!existing || vehicle.updatedAt >= existing.updatedAt) newestByVehicle.set(vehicleKey, vehicle);
-  }
-  return [...newestByVehicle.values()];
-}
-
 async function requestFleet(token: string, auth: SendatrackCredentials) {
   const response = await fetch(apiUrl("list?"), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
@@ -183,7 +93,11 @@ async function requestFleet(token: string, auth: SendatrackCredentials) {
     throw new Error("authentication_failed");
   }
   if (!response.ok) throw new Error("service_unavailable");
-  return normalizeFleet(await response.json() as unknown);
+
+  const payload = await response.json() as unknown;
+  const { vehicles, diagnostics } = normalizeSendatrackFleet(payload);
+  console.info("[trackfleet:sendatrack] fleet normalized", diagnostics);
+  return vehicles;
 }
 
 export function isSendatrackConfigured() {
@@ -209,6 +123,7 @@ export async function getSendatrackSnapshot(providedCredentials?: SendatrackCred
     }
   } catch (error) {
     const code = error instanceof Error ? error.message : "service_unavailable";
+    console.error("[trackfleet:sendatrack] snapshot failed", { code });
     return {
       configured: true,
       connected: false,
