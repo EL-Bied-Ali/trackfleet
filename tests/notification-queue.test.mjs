@@ -1,26 +1,33 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { store } from "../app/lib/delivery-store.vercel.ts";
+import { NotificationClaimState } from "../app/lib/notification-claim-state.ts";
 
-test("notification claim is deduplicated, retryable, then final after success", async () => {
-  const deliveryId = "TF-2841";
-  const eventType = "PROGRESS_25";
-  await store.recordEvent(deliveryId, eventType, 25);
+test("notification claim is deduplicated, retryable, then final after success", () => {
+  const state = new NotificationClaimState(5 * 60_000);
+  const key = "TF-2841:PROGRESS_25:whatsapp";
+  const now = 1_000_000;
 
-  let pending = await store.listPendingNotifications("demo");
-  assert.ok(pending.some((item) => item.delivery.id === deliveryId && item.event.type === eventType));
+  assert.equal(state.isPending(key, now), true);
+  assert.equal(state.claim(key, now), true);
+  assert.equal(state.claim(key, now + 1), false);
+  assert.equal(state.isPending(key, now + 1), false);
 
-  assert.equal(await store.claimNotification(deliveryId, eventType), true);
-  assert.equal(await store.claimNotification(deliveryId, eventType), false);
-  pending = await store.listPendingNotifications("demo");
-  assert.equal(pending.some((item) => item.delivery.id === deliveryId && item.event.type === eventType), false);
+  state.release(key);
+  assert.equal(state.isPending(key, now + 2), true);
 
-  await store.releaseNotification(deliveryId, eventType);
-  pending = await store.listPendingNotifications("demo");
-  assert.ok(pending.some((item) => item.delivery.id === deliveryId && item.event.type === eventType));
+  assert.equal(state.claim(key, now + 3), true);
+  state.markSent(key, now + 4);
+  assert.equal(state.isPending(key, now + 10 * 60_000), false);
+  assert.equal(state.claim(key, now + 10 * 60_000), false);
+});
 
-  assert.equal(await store.claimNotification(deliveryId, eventType), true);
-  await store.markNotificationSent(deliveryId, eventType);
-  pending = await store.listPendingNotifications("demo");
-  assert.equal(pending.some((item) => item.delivery.id === deliveryId && item.event.type === eventType), false);
+test("an abandoned claim becomes retryable after the timeout", () => {
+  const state = new NotificationClaimState(5 * 60_000);
+  const key = "TF-2841:PROGRESS_50:whatsapp";
+  const now = 2_000_000;
+
+  assert.equal(state.claim(key, now), true);
+  assert.equal(state.isPending(key, now + 4 * 60_000), false);
+  assert.equal(state.isPending(key, now + 5 * 60_000), true);
+  assert.equal(state.claim(key, now + 5 * 60_000), true);
 });
