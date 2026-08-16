@@ -20,6 +20,8 @@ function eventText(event: DeliveryEventType, delivery: DeliveryRow, trackingUrl:
       return `Your delivery is about 75% complete. Track it here: ${trackingUrl}`;
     case "NEAR_DESTINATION":
       return `Your delivery is approaching ${delivery.destination}. Track it here: ${trackingUrl}`;
+    case "DELAY_DETECTED":
+      return `Your delivery is running later than planned. The tracking page has the latest estimate: ${trackingUrl}`;
     case "ARRIVED":
       return `Your delivery has arrived at ${delivery.destination}.`;
     default:
