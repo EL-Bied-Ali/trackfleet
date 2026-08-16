@@ -27,6 +27,8 @@ jobs:
         run: pnpm run test:delivery-events
       - name: Verify notification retry queue
         run: pnpm run test:notifications
+      - name: Verify notification activation policy
+        run: pnpm run test:notification-policy
       - name: Verify ETA estimator
         run: pnpm run test:eta
       - name: Verify delay detection
