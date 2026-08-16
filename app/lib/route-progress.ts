@@ -3,6 +3,7 @@ export type RouteMetrics = {
   routeDistanceKm: number;
   completedDistanceKm: number;
   remainingDistanceKm: number;
+  distanceFromOriginKm: number;
   distanceToDestinationKm: number;
 };
 
@@ -57,24 +58,12 @@ export function routeForDestination(destination: string): Array<[number, number]
   const belgiumBound = normalized.endsWith(", BE");
   const base = belgiumBound ? [...belgiumMoroccoCorridor].reverse() : [...belgiumMoroccoCorridor];
   const destinationPoint = destinationPointFor(destination);
-
-  // If the destination lies on the known corridor (for example Tangier or Rabat),
-  // stop the route there rather than continuing to the old default endpoint.
   const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
   if (exactIndex >= 0) return base.slice(0, exactIndex + 1);
-
-  // Belgian destinations such as Antwerp and Liège branch from Brussels. For
-  // destinations not represented by a corridor waypoint, append the real point.
   return [...base, destinationPoint];
 }
 
-function projectToSegment(
-  point: [number, number],
-  start: [number, number],
-  end: [number, number],
-) {
-  // Equirectangular projection is accurate enough for choosing the closest point
-  // on these relatively short route segments. Distances themselves use haversine.
+function projectToSegment(point: [number, number], start: [number, number], end: [number, number]) {
   const referenceLat = radians((start[1] + end[1] + point[1]) / 3);
   const scaleX = Math.cos(referenceLat);
   const sx = start[0] * scaleX;
@@ -88,23 +77,15 @@ function projectToSegment(
   const denominator = dx * dx + dy * dy;
   const rawT = denominator === 0 ? 0 : ((px - sx) * dx + (py - sy) * dy) / denominator;
   const t = Math.max(0, Math.min(1, rawT));
-  const projected: [number, number] = [
-    start[0] + (end[0] - start[0]) * t,
-    start[1] + (end[1] - start[1]) * t,
-  ];
+  const projected: [number, number] = [start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t];
   return { t, projected, distanceKm: distanceKm(point, projected) };
 }
 
-export function calculateRouteMetrics(
-  latitude: number,
-  longitude: number,
-  destination: string,
-): RouteMetrics {
+export function calculateRouteMetrics(latitude: number, longitude: number, destination: string): RouteMetrics {
   const route = routeForDestination(destination);
   const point: [number, number] = [longitude, latitude];
   const segmentLengths = route.slice(0, -1).map((start, index) => distanceKm(start, route[index + 1]));
   const routeDistanceKm = segmentLengths.reduce((sum, value) => sum + value, 0);
-
   let bestDistance = Number.POSITIVE_INFINITY;
   let completedDistanceKm = 0;
   let distanceBeforeSegment = 0;
@@ -118,17 +99,20 @@ export function calculateRouteMetrics(
     distanceBeforeSegment += segmentLengths[index];
   }
 
+  const originPoint = route[0];
   const destinationPoint = route.at(-1)!;
+  const distanceFromOriginKm = distanceKm(point, originPoint);
   const distanceToDestinationKm = distanceKm(point, destinationPoint);
   const progress = routeDistanceKm > 0
     ? Math.max(0, Math.min(100, Math.round(completedDistanceKm / routeDistanceKm * 100)))
-    : distanceToDestinationKm <= 2 ? 100 : 0;
+    : distanceToDestinationKm <= 0.5 ? 100 : 0;
 
   return {
     progress,
     routeDistanceKm,
     completedDistanceKm,
     remainingDistanceKm: Math.max(0, routeDistanceKm - completedDistanceKm),
+    distanceFromOriginKm,
     distanceToDestinationKm,
   };
 }
@@ -139,19 +123,19 @@ export function deriveDeliveryState(
   speed: number,
   previousProgress = 0,
 ) {
-  if (currentStatus === "Delivered" || metrics.distanceToDestinationKm <= 2) {
+  // Arrival needs two independent signals: inside a tight 500 m destination
+  // geofence and effectively stopped. Merely driving past the destination no
+  // longer marks a shipment delivered.
+  if (currentStatus === "Delivered" || (metrics.distanceToDestinationKm <= 0.5 && speed <= 5)) {
     return { status: "Delivered" as const, progress: 100 };
   }
 
-  // A customer-facing trip should not appear to travel backwards because one GPS
-  // fix projected slightly behind the previous one. We keep the highest confirmed
-  // percentage while still using the newest position for distance and arrival.
   const progress = Math.max(previousProgress, metrics.progress);
+  if (currentStatus === "Delayed") return { status: currentStatus, progress };
 
-  if (currentStatus === "Delayed") {
-    return { status: currentStatus, progress };
-  }
-  if (progress >= 1 || speed > 3) {
+  // Leaving the origin is based on actually exiting its geofence. Speed alone
+  // is not enough: a truck manoeuvring inside the yard is still Loading.
+  if (metrics.distanceFromOriginKm >= 1 || progress >= 1) {
     return { status: "In transit" as const, progress };
   }
   return { status: "Loading" as const, progress };
