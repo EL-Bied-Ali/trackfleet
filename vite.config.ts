@@ -10,7 +10,6 @@ const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
 
 const { d1, r2 } = hostingConfig;
 
-// macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const isVercel = Boolean(process.env.VERCEL);
 const maplibreCssPath = fileURLToPath(
@@ -25,6 +24,12 @@ const runtimeEnvPath = fileURLToPath(
 const deliveryStorePath = fileURLToPath(
   new URL(
     isVercel ? "./app/lib/delivery-store.vercel.ts" : "./app/lib/delivery-store.cloudflare.ts",
+    import.meta.url,
+  ),
+);
+const siteStorePath = fileURLToPath(
+  new URL(
+    isVercel ? "./app/lib/site-store.vercel.ts" : "./app/lib/site-store.cloudflare.ts",
     import.meta.url,
   ),
 );
@@ -69,6 +74,7 @@ export default defineConfig(async () => {
         "maplibre-gl/dist/maplibre-gl.css": maplibreCssPath,
         "trackfleet-runtime-env": runtimeEnvPath,
         "trackfleet-delivery-store": deliveryStorePath,
+        "trackfleet-site-store": siteStorePath,
       },
     },
     server: isCodexSeatbeltSandbox
