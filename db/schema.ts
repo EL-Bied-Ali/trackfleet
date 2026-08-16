@@ -28,6 +28,7 @@ export const deliveries = sqliteTable("deliveries", {
 export const deliveryEvents = sqliteTable("delivery_events", {
   deliveryId: text("delivery_id").notNull(),
   type: text("type", { enum: [
+    "GPS_BASELINE",
     "DEPARTED",
     "PROGRESS_25",
     "PROGRESS_50",
@@ -41,6 +42,16 @@ export const deliveryEvents = sqliteTable("delivery_events", {
 }, (table) => [
   primaryKey({ columns: [table.deliveryId, table.type] }),
   index("idx_delivery_events_delivery_id").on(table.deliveryId),
+]);
+
+export const deliveryNotifications = sqliteTable("delivery_notifications", {
+  deliveryId: text("delivery_id").notNull(),
+  eventType: text("event_type").notNull(),
+  channel: text("channel").notNull(),
+  attemptedAt: integer("attempted_at", { mode: "timestamp_ms" }).notNull(),
+  sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+}, (table) => [
+  primaryKey({ columns: [table.deliveryId, table.eventType, table.channel] }),
 ]);
 
 export const companies = sqliteTable("companies", {
