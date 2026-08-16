@@ -31,6 +31,8 @@ jobs:
         run: pnpm run test:notification-policy
       - name: Verify public tracking expiry
         run: pnpm run test:tracking-access
+      - name: Verify customer contact normalization
+        run: pnpm run test:customer-contact
       - name: Verify ETA estimator
         run: pnpm run test:eta
       - name: Verify delay detection
