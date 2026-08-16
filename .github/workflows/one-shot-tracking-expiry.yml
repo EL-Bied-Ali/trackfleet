@@ -1,0 +1,54 @@
+name: One-shot tracking expiry patch
+
+on:
+  push:
+    paths:
+      - .github/workflows/one-shot-tracking-expiry.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply targeted tracking expiry patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          route = Path('app/api/deliveries/route.ts')
+          text = route.read_text()
+          needle = 'import { createTrackingToken, getCompanySession } from "../../lib/company-auth";\n'
+          replacement = needle + 'import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";\n'
+          if needle not in text:
+              raise SystemExit('deliveries import anchor not found')
+          text = text.replace(needle, replacement, 1)
+          needle = '      let row = await store.getPublic(tracking);\n      if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });\n\n'
+          replacement = needle + '      if (!publicTrackingIsActive(row)) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });\n\n'
+          if needle not in text:
+              raise SystemExit('public tracking anchor not found')
+          text = text.replace(needle, replacement, 1)
+          needle = '    effectiveSpeedKmh: etaEstimate.effectiveSpeedKmh === null ? null : Math.round(etaEstimate.effectiveSpeedKmh),\n'
+          replacement = needle + '    trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt }).toISOString() : null,\n'
+          if needle not in text:
+              raise SystemExit('enrichment anchor not found')
+          text = text.replace(needle, replacement, 1)
+          route.write_text(text)
+
+          workflow = Path('.github/workflows/vercel-build-check.yml')
+          text = workflow.read_text()
+          needle = '      - name: Verify notification activation policy\n        run: pnpm run test:notification-policy\n'
+          replacement = needle + '      - name: Verify public tracking expiry\n        run: pnpm run test:tracking-access\n'
+          if needle not in text:
+              raise SystemExit('CI anchor not found')
+          workflow.write_text(text.replace(needle, replacement, 1))
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
+          git add app/api/deliveries/route.ts .github/workflows/vercel-build-check.yml
+          git commit -m "enforce public tracking link expiry"
+          git push
