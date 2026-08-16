@@ -41,34 +41,38 @@ jobs:
           const url = 'https://trackfleet-demo.brisk-chub-9029.chatgpt.site/';
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-
           const consoleErrors = [];
           page.on('console', msg => {
             if (msg.type() === 'error') consoleErrors.push(msg.text());
           });
 
-          const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
-          if (!response) throw new Error('No navigation response');
-          if (!response.ok()) throw new Error(`Navigation failed with HTTP ${response.status()}`);
+          try {
+            const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            if (!response) throw new Error('No navigation response');
+            if (!response.ok()) throw new Error(`Navigation failed with HTTP ${response.status()}`);
 
-          const title = await page.title();
-          const bodyText = (await page.locator('body').innerText()).trim();
-          if (!bodyText) throw new Error('Rendered page body is empty');
+            await page.locator('body').waitFor({ state: 'visible', timeout: 15000 });
+            await page.waitForTimeout(3000);
 
-          console.log(`HTTP ${response.status()}`);
-          console.log(`Title: ${title || '(empty)'}`);
-          console.log(`Rendered body length: ${bodyText.length}`);
-          console.log(`Rendered body preview: ${bodyText.slice(0, 500).replace(/\s+/g, ' ')}`);
+            const title = await page.title();
+            const bodyText = (await page.locator('body').innerText()).trim();
+            if (!bodyText) throw new Error('Rendered page body is empty');
 
-          if (consoleErrors.length) {
-            console.log('Browser console errors:');
-            for (const error of consoleErrors) console.log(`- ${error}`);
-          } else {
-            console.log('Browser console errors: none');
+            console.log(`HTTP ${response.status()}`);
+            console.log(`Title: ${title || '(empty)'}`);
+            console.log(`Rendered body length: ${bodyText.length}`);
+            console.log(`Rendered body preview: ${bodyText.slice(0, 500).replace(/\s+/g, ' ')}`);
+
+            if (consoleErrors.length) {
+              console.log('Browser console errors:');
+              for (const error of consoleErrors) console.log(`- ${error}`);
+            } else {
+              console.log('Browser console errors: none');
+            }
+          } finally {
+            await page.screenshot({ path: 'trackfleet-home.png', fullPage: true }).catch(() => {});
+            await browser.close();
           }
-
-          await page.screenshot({ path: 'trackfleet-home.png', fullPage: true });
-          await browser.close();
           EOF
           node smoke.mjs
 
