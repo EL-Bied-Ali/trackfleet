@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import type { DeliveryTransition } from "../../lib/delivery-store.types";
 import { calculateRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
@@ -30,6 +31,14 @@ function enrichDelivery<T extends {
   };
 }
 
+async function persistTransitionEvents(transitions: DeliveryTransition[]) {
+  for (const transition of transitions) {
+    for (const type of transition.events) {
+      await store.recordEvent(transition.delivery.id, type, transition.delivery.progress);
+    }
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const tracking = new URL(request.url).searchParams.get("tracking")?.trim();
@@ -42,18 +51,25 @@ export async function GET(request: Request) {
       // so the customer's link does not depend on an operator keeping the dashboard open.
       const integration = await getSendatrackSnapshot();
       if (integration.connected) {
-        await store.applySendatrackSnapshot(integration, row.companyId);
+        const transitions = await store.applySendatrackSnapshot(integration, row.companyId);
+        await persistTransitionEvents(transitions);
         row = await store.getPublic(tracking) ?? row;
       }
 
-      return Response.json({ deliveries: [enrichDelivery(row)], publicTracking: true }, { headers: { "cache-control": "no-store" } });
+      const events = await store.listEvents(row.id);
+      return Response.json({
+        deliveries: [enrichDelivery(row)],
+        events,
+        publicTracking: true,
+      }, { headers: { "cache-control": "no-store" } });
     }
 
     const session = await getCompanySession(request);
     if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
 
     const integration = await getSendatrackSnapshot(session.credentials);
-    await store.applySendatrackSnapshot(integration, session.companyId);
+    const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
+    await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
 
     return Response.json({
