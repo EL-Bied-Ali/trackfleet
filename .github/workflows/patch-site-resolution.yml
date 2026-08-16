@@ -28,31 +28,19 @@ jobs:
           new = '''    const companySites = await siteStore.listForCompany(session.companyId);\n    const originSelection = resolveExplicitCompanySite(companySites, originSiteInput);\n    if (originSelection.invalid) return Response.json({ error: "origin site is not available for this company" }, { status: 400 });\n    const destinationSelection = resolveExplicitCompanySite(companySites, destinationSiteId);\n    if (destinationSelection.invalid) return Response.json({ error: "destination site is not available for this company" }, { status: 400 });\n    const originSite = originSelection.site;\n    const site = destinationSelection.site ?? findCompanySiteByText(companySites, destinationInput) ?? resolveKnownSite(destinationInput);\n'''
           if old not in text:
               raise SystemExit("target delivery site block not found")
-          text = text.replace(old, new)
-          route.write_text(text)
+          route.write_text(text.replace(old, new))
 
-          test = Path("tests/delivery-site-resolution.test.mjs")
-          test.write_text('''import assert from "node:assert/strict";\nimport test from "node:test";\nimport { findCompanySiteByText, resolveExplicitCompanySite } from "../app/lib/delivery-site-resolution.ts";\n\nfunction site(companyId, id, label, address) {\n  return {\n    companyId, id, label, city: label.split(" · ")[0], address, country: "MA",\n    roles: ["origin", "destination"], latitude: 34, longitude: -6, arrivalRadiusKm: 0.5,\n    geofenceReady: true, createdAt: new Date(), updatedAt: new Date(),\n  };\n}\n\ntest("resolves tenant custom site by explicit id and text", () => {\n  const sites = [site("company-a", "custom-rabat", "Rabat · Custom", "Rue test Rabat")];\n  assert.equal(resolveExplicitCompanySite(sites, "custom-rabat").site?.id, "custom-rabat");\n  assert.equal(findCompanySiteByText(sites, "rue test rabat")?.id, "custom-rabat");\n});\n\ntest("rejects an explicit site id that is not present in the company site list", () => {\n  const companyASites = [site("company-a", "custom-rabat", "Rabat · Custom", "Rue test Rabat")];\n  const selection = resolveExplicitCompanySite(companyASites, "company-b-private-site");\n  assert.equal(selection.site, null);\n  assert.equal(selection.invalid, true);\n});\n\ntest("blank explicit site selection remains optional", () => {\n  const selection = resolveExplicitCompanySite([], "   ");\n  assert.equal(selection.site, null);\n  assert.equal(selection.invalid, false);\n});\n''')
+          Path("tests/delivery-site-resolution.test.mjs").write_text('''import assert from "node:assert/strict";\nimport test from "node:test";\nimport { findCompanySiteByText, resolveExplicitCompanySite } from "../app/lib/delivery-site-resolution.ts";\n\nfunction site(companyId, id, label, address) {\n  return { companyId, id, label, city: label.split(" · ")[0], address, country: "MA", roles: ["origin", "destination"], latitude: 34, longitude: -6, arrivalRadiusKm: 0.5, geofenceReady: true, createdAt: new Date(), updatedAt: new Date() };\n}\n\ntest("resolves tenant custom site by explicit id and text", () => {\n  const sites = [site("company-a", "custom-rabat", "Rabat · Custom", "Rue test Rabat")];\n  assert.equal(resolveExplicitCompanySite(sites, "custom-rabat").site?.id, "custom-rabat");\n  assert.equal(findCompanySiteByText(sites, "rue test rabat")?.id, "custom-rabat");\n});\n\ntest("rejects an explicit site id that is not present in the company site list", () => {\n  const companyASites = [site("company-a", "custom-rabat", "Rabat · Custom", "Rue test Rabat")];\n  const selection = resolveExplicitCompanySite(companyASites, "company-b-private-site");\n  assert.equal(selection.site, null);\n  assert.equal(selection.invalid, true);\n});\n\ntest("blank explicit site selection remains optional", () => {\n  const selection = resolveExplicitCompanySite([], "   ");\n  assert.equal(selection.site, null);\n  assert.equal(selection.invalid, false);\n});\n''')
 
           package = Path("package.json")
           package_text = package.read_text()
           marker = '    "test:site-store": "node --experimental-strip-types --test tests/site-store.test.mjs",\n'
-          addition = marker + '    "test:delivery-site-resolution": "node --experimental-strip-types --test tests/delivery-site-resolution.test.mjs",\n'
           if 'test:delivery-site-resolution' not in package_text:
-              package_text = package_text.replace(marker, addition)
-              package.write_text(package_text)
-
-          ci = Path(".github/workflows/vercel-build-check.yml")
-          ci_text = ci.read_text()
-          marker = '      - name: Verify persistent company site store\n        run: pnpm run test:site-store\n'
-          addition = marker + '      - name: Verify tenant-safe delivery site resolution\n        run: pnpm run test:delivery-site-resolution\n'
-          if 'Verify tenant-safe delivery site resolution' not in ci_text:
-              ci_text = ci_text.replace(marker, addition)
-              ci.write_text(ci_text)
+              package.write_text(package_text.replace(marker, marker + '    "test:delivery-site-resolution": "node --experimental-strip-types --test tests/delivery-site-resolution.test.mjs",\n'))
       - name: Commit patch
         run: |
           git config user.name "TrackFleet automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app/api/deliveries/route.ts tests/delivery-site-resolution.test.mjs package.json .github/workflows/vercel-build-check.yml
+          git add app/api/deliveries/route.ts tests/delivery-site-resolution.test.mjs package.json
           git commit -m "harden tenant delivery site resolution"
           git push
