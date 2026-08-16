@@ -10,7 +10,8 @@ export function normalizeCustomerPhone(value: string) {
   const digits = international.replace(/\D/g, "");
 
   // WhatsApp Cloud API expects an international recipient number without the
-  // leading '+'. Do not guess a country code from a local number such as 06….
+  // leading '+'. TrackFleet deliberately does not guess a country code from a
+  // local number such as 06… or 0470… because the delivery can cross countries.
   if (!/^[1-9]\d{7,14}$/.test(digits)) return null;
   return digits;
 }
