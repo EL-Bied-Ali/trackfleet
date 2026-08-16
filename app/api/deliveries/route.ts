@@ -1,9 +1,9 @@
 import { store } from "trackfleet-delivery-store";
 import type { DeliveryTransition } from "../../lib/delivery-store.types";
 import { customerFacingEvent } from "../../lib/delivery-events";
+import { processPendingNotifications } from "../../lib/notification-runner";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
-import { sendAutomaticWhatsAppNotification } from "../../lib/whatsapp-automation";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 
 function errorResponse(error: unknown) {
@@ -11,19 +11,12 @@ function errorResponse(error: unknown) {
   return Response.json({ error: message }, { status: 500 });
 }
 
-function enrichDelivery<T extends {
-  latitude: number | null;
-  longitude: number | null;
-  destination: string;
-  lastPositionAt: Date | null;
-}>(row: T, baselineProgress = 0) {
+function enrichDelivery<T extends { latitude: number | null; longitude: number | null; destination: string; lastPositionAt: Date | null }>(row: T, baselineProgress = 0) {
   const absoluteMetrics = typeof row.latitude === "number" && typeof row.longitude === "number"
     ? calculateRouteMetrics(row.latitude, row.longitude, row.destination)
     : null;
   const metrics = absoluteMetrics ? rebaseRouteMetrics(absoluteMetrics, baselineProgress) : null;
-  const positionAgeMinutes = row.lastPositionAt
-    ? Math.max(0, Math.round((Date.now() - row.lastPositionAt.getTime()) / 60_000))
-    : null;
+  const positionAgeMinutes = row.lastPositionAt ? Math.max(0, Math.round((Date.now() - row.lastPositionAt.getTime()) / 60_000)) : null;
   return {
     ...row,
     routeDistanceKm: metrics ? Math.round(metrics.routeDistanceKm) : null,
@@ -38,14 +31,10 @@ function baselineFromEvents(events: Awaited<ReturnType<typeof store.listEvents>>
   return events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0;
 }
 
-async function persistTransitionEvents(transitions: DeliveryTransition[], origin: string) {
+async function persistTransitionEvents(transitions: DeliveryTransition[]) {
   for (const transition of transitions) {
     for (const type of transition.events) {
-      const isNew = await store.recordEvent(transition.delivery.id, type, transition.delivery.progress);
-      if (!isNew) continue;
-      const trackingUrl = new URL(origin);
-      trackingUrl.searchParams.set("tracking", transition.delivery.trackingToken || transition.delivery.id);
-      await sendAutomaticWhatsAppNotification(type, transition.delivery, trackingUrl.toString());
+      await store.recordEvent(transition.delivery.id, type, transition.delivery.progress);
     }
   }
 }
@@ -61,7 +50,8 @@ export async function GET(request: Request) {
       const integration = await getSendatrackSnapshot();
       if (integration.connected) {
         const transitions = await store.applySendatrackSnapshot(integration, row.companyId);
-        await persistTransitionEvents(transitions, requestUrl.origin);
+        await persistTransitionEvents(transitions);
+        await processPendingNotifications(row.companyId, requestUrl.origin);
         row = await store.getPublic(tracking) ?? row;
       }
 
@@ -78,7 +68,8 @@ export async function GET(request: Request) {
 
     const integration = await getSendatrackSnapshot(session.credentials);
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
-    await persistTransitionEvents(transitions, requestUrl.origin);
+    await persistTransitionEvents(transitions);
+    await processPendingNotifications(session.companyId, requestUrl.origin);
     const rows = await store.listForCompany(session.companyId);
     const enrichedRows = await Promise.all(rows.map(async (row) => {
       const events = await store.listEvents(row.id);
@@ -92,10 +83,7 @@ export async function GET(request: Request) {
         connected: integration.connected,
         vehicleCount: integration.vehicles.length,
         error: integration.error ?? null,
-        vehicles: integration.vehicles.map((vehicle) => ({
-          id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt,
-          latitude: vehicle.latitude, longitude: vehicle.longitude,
-        })),
+        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude })),
       },
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
@@ -114,47 +102,29 @@ export async function POST(request: Request) {
     const truck = String(payload.truck ?? "").trim();
     const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
     const eta = String(payload.eta ?? "").trim();
-
     if (!customer || !destination || !truck || !/^\d{2}:\d{2}$/.test(eta)) {
       return Response.json({ error: "customer, destination, truck, and a valid ETA are required" }, { status: 400 });
     }
 
-    // Capture the selected truck's actual GPS fix at creation. That absolute
-    // corridor position becomes the 0% baseline for this delivery.
     const snapshot = await getSendatrackSnapshot(session.credentials);
     const liveVehicle = snapshot.vehicles.find((vehicle) => vehicle.id === sendatrackVehicleId)
       ?? snapshot.vehicles.find((vehicle) => vehicle.name === truck);
-    const baselineMetrics = liveVehicle
-      ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination)
-      : null;
+    const baselineMetrics = liveVehicle ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination) : null;
 
     const delivery = await store.create({
-      customer,
-      destination,
-      truck: liveVehicle?.name ?? truck,
-      eta,
+      customer, destination, truck: liveVehicle?.name ?? truck, eta,
       contact: String(payload.contact ?? "").trim(),
       sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
       companyId: session.companyId,
       trackingToken: createTrackingToken(),
-      driver: "To be assigned",
-      status: "Loading",
-      progress: 0,
-      color: "#916ed7",
-      latitude: liveVehicle?.latitude ?? null,
-      longitude: liveVehicle?.longitude ?? null,
-      speed: liveVehicle?.speed ?? null,
-      lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,
+      driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
+      latitude: liveVehicle?.latitude ?? null, longitude: liveVehicle?.longitude ?? null,
+      speed: liveVehicle?.speed ?? null, lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,
       gpsSource: liveVehicle ? "sendatrack" : "simulation",
     });
+    if (baselineMetrics) await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
 
-    if (baselineMetrics) {
-      await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
-    }
-
-    return Response.json({
-      delivery: enrichDelivery(delivery, baselineMetrics?.progress ?? 0),
-    }, { status: 201 });
+    return Response.json({ delivery: enrichDelivery(delivery, baselineMetrics?.progress ?? 0) }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
