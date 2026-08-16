@@ -1,4 +1,4 @@
-name: One-shot delivery site binding fix
+name: One-shot agency selector patch
 
 on:
   push:
@@ -13,23 +13,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fix D1 insert placeholders
+      - name: Bind delivery form to known sites
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('app/lib/delivery-store.cloudflare.ts')
+          p = Path('app/page.tsx')
           t = p.read_text()
-          old = '      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`)'
-          new = '      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)'
-          count = t.count(old)
-          if count != 2:
-              raise SystemExit(f'expected 2 malformed D1 VALUES blocks, found {count}')
-          p.write_text(t.replace(old, new))
+
+          old = '  customer: string;\n  destination: string;\n'
+          new = '  customer: string;\n  originSiteId?: string | null;\n  destinationSiteId?: string | null;\n  destination: string;\n'
+          if old not in t: raise SystemExit('delivery type anchor not found')
+          t = t.replace(old, new, 1)
+
+          old = 'type KnownSite = { id: string; label: string; address: string; country: "BE" | "MA"; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; geofenceReady: boolean };'
+          new = 'type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; geofenceReady: boolean };'
+          if old not in t: raise SystemExit('KnownSite type anchor not found')
+          t = t.replace(old, new, 1)
+
+          old = '''    const destination = String(form.get("destination") ?? "").trim();\n    const selectedSite = knownSites.find((site) => site.address === destination || site.label === destination);\n'''
+          new = '''    const originSiteId = String(form.get("originSiteId") ?? "").trim();\n    const destinationSiteId = String(form.get("destinationSiteId") ?? "").trim();\n    const selectedSite = knownSites.find((site) => site.id === destinationSiteId);\n    const destination = selectedSite?.address ?? "";\n'''
+          if old not in t: raise SystemExit('createDelivery destination anchor not found')
+          t = t.replace(old, new, 1)
+
+          old = '''      customer: String(form.get("customer")),\n      destination,\n      destinationSiteId: selectedSite?.id ?? "",\n'''
+          new = '''      customer: String(form.get("customer")),\n      originSiteId,\n      destination,\n      destinationSiteId: selectedSite?.id ?? "",\n'''
+          if old not in t: raise SystemExit('draft delivery binding anchor not found')
+          t = t.replace(old, new, 1)
+
+          old = '''<form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><label>{t.destination}<input name="destination" required list="trackfleet-known-sites" placeholder={t.destinationPlaceholder} /><datalist id="trackfleet-known-sites">{knownSites.map((site) => <option key={site.id} value={site.address}>{site.label}</option>)}</datalist></label><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId"'''
+          new = '''<form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required defaultValue={knownSites.find((site) => site.roles.includes("origin"))?.id ?? ""}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId"'''
+          if old not in t: raise SystemExit('modal site selector anchor not found')
+          t = t.replace(old, new, 1)
+
+          p.write_text(t)
           PY
-      - name: Commit fix
+      - name: Commit patch
         run: |
           git config user.name "TrackFleet automation"
           git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
-          git add app/lib/delivery-store.cloudflare.ts
-          git commit -m "fix D1 site binding inserts"
+          git add app/page.tsx
+          git commit -m "select delivery origin and destination agencies"
           git push
