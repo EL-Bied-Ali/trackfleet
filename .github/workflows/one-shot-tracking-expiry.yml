@@ -1,4 +1,4 @@
-name: One-shot tracking expiry patch
+name: One-shot customer contact patch
 
 on:
   push:
@@ -13,29 +13,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply targeted tracking expiry patch
+      - name: Apply targeted customer contact patch
         run: |
           python - <<'PY'
           from pathlib import Path
 
           route = Path('app/api/deliveries/route.ts')
           text = route.read_text()
-          needle = 'import { createTrackingToken, getCompanySession } from "../../lib/company-auth";\n'
-          replacement = needle + 'import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";\n'
+
+          needle = 'import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";\n'
+          replacement = needle + 'import { normalizeCustomerPhone } from "../../lib/customer-contact";\n'
           if needle not in text:
-              raise SystemExit('deliveries import anchor not found')
+              raise SystemExit('contact import anchor not found')
           text = text.replace(needle, replacement, 1)
 
-          needle = '      let row = await store.getPublic(tracking);\n      if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });\n\n'
-          replacement = needle + '      if (!publicTrackingIsActive(row)) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });\n\n'
+          needle = '    if (!customer || !destination || !truck || (!plannedArrivalAt && !validLegacyEta)) {\n      return Response.json({ error: "customer, destination, truck, and a valid planned arrival are required" }, { status: 400 });\n    }\n\n'
+          replacement = needle + '    const contactInput = String(payload.contact ?? "").trim();\n    const contact = normalizeCustomerPhone(contactInput);\n    if (contact === null) {\n      return Response.json({ error: "contact must use an international phone format, for example +212... or +32..." }, { status: 400 });\n    }\n\n'
           if needle not in text:
-              raise SystemExit('public tracking anchor not found')
+              raise SystemExit('contact validation anchor not found')
           text = text.replace(needle, replacement, 1)
 
-          needle = '    effectiveSpeedKmh: etaEstimate.effectiveSpeedKmh === null ? null : Math.round(etaEstimate.effectiveSpeedKmh),\n'
-          replacement = needle + '    trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt }).toISOString() : null,\n'
+          needle = '      contact: String(payload.contact ?? "").trim(),\n'
+          replacement = '      contact,\n'
           if needle not in text:
-              raise SystemExit('enrichment anchor not found')
+              raise SystemExit('contact persistence anchor not found')
           route.write_text(text.replace(needle, replacement, 1))
           PY
       - name: Commit patch
@@ -43,5 +44,5 @@ jobs:
           git config user.name "TrackFleet automation"
           git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
           git add app/api/deliveries/route.ts
-          git commit -m "enforce public tracking link expiry"
+          git commit -m "validate customer WhatsApp contact on delivery creation"
           git push
