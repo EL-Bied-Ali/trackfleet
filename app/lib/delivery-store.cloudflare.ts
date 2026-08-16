@@ -1,6 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { seedDeliveries } from "./delivery-seed";
-import type { CreateDeliveryInput, DeliveryRow, DeliveryStore, DeliveryStatus } from "./delivery-store.types";
+import { detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 
@@ -35,12 +36,23 @@ type RawDelivery = {
   createdAt: number;
 };
 
+type RawDeliveryEvent = {
+  deliveryId: string;
+  type: DeliveryEventType;
+  progress: number;
+  createdAt: number;
+};
+
 function hydrate(row: RawDelivery): DeliveryRow {
   return {
     ...row,
     lastPositionAt: row.lastPositionAt ? new Date(row.lastPositionAt) : null,
     createdAt: new Date(row.createdAt),
   };
+}
+
+function hydrateEvent(row: RawDeliveryEvent): DeliveryEventRow {
+  return { ...row, createdAt: new Date(row.createdAt) };
 }
 
 async function ensureTable() {
@@ -66,9 +78,17 @@ async function ensureTable() {
     tracking_token text,
     created_at integer NOT NULL
   )`).run();
+  await database.prepare(`CREATE TABLE IF NOT EXISTS delivery_events (
+    delivery_id text NOT NULL,
+    type text NOT NULL,
+    progress integer NOT NULL,
+    created_at integer NOT NULL,
+    PRIMARY KEY (delivery_id, type)
+  )`).run();
   await database.batch([
     database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)"),
     database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)"),
   ]);
 
   for (const delivery of seedDeliveries) {
@@ -108,27 +128,33 @@ export const store: DeliveryStore = {
   },
 
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
-    if (!snapshot.connected || !snapshot.vehicles.length) return;
+    const transitions: DeliveryTransition[] = [];
+    if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
     await ensureTable();
-    const result = await db().prepare(`SELECT id, truck, destination, status,
-      sendatrack_vehicle_id AS sendatrackVehicleId, company_id AS companyId
-      FROM deliveries WHERE (company_id = ? OR company_id = 'demo') AND status != 'Delivered'`)
-      .bind(companyId).all<{
-        id: string;
-        truck: string;
-        destination: string;
-        status: DeliveryStatus;
-        sendatrackVehicleId: string;
-        companyId: string;
-      }>();
+    const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries
+      WHERE (company_id = ? OR company_id = 'demo') AND status != 'Delivered'`)
+      .bind(companyId).all<RawDelivery>();
     const statements = [];
-    for (const delivery of result.results ?? []) {
+
+    for (const rawDelivery of result.results ?? []) {
+      const delivery = hydrate(rawDelivery);
       const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId)
         ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
       if (!vehicle) continue;
 
+      const previousStatus = delivery.status;
+      const previousProgress = delivery.progress;
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
       const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed);
+      const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
+      const events = detectDeliveryEvents({
+        previousStatus,
+        nextStatus: state.status,
+        previousProgress,
+        nextProgress: state.progress,
+        distanceToDestinationKm: metrics.distanceToDestinationKm,
+        positionAgeMinutes,
+      });
 
       statements.push(db().prepare(`UPDATE deliveries SET
         sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?,
@@ -144,8 +170,42 @@ export const store: DeliveryStore = {
           state.status,
           delivery.id,
         ));
+
+      transitions.push({
+        delivery: {
+          ...delivery,
+          sendatrackVehicleId: vehicle.id,
+          truck: vehicle.name,
+          latitude: vehicle.latitude,
+          longitude: vehicle.longitude,
+          speed: vehicle.speed,
+          lastPositionAt: new Date(vehicle.updatedAt),
+          gpsSource: "sendatrack",
+          progress: state.progress,
+          status: state.status,
+        },
+        events,
+      });
     }
+
     if (statements.length) await db().batch(statements);
+    return transitions;
+  },
+
+  async recordEvent(deliveryId: string, type: DeliveryEventType, progress: number) {
+    await ensureTable();
+    const result = await db().prepare(`INSERT OR IGNORE INTO delivery_events
+      (delivery_id, type, progress, created_at) VALUES (?, ?, ?, ?)`)
+      .bind(deliveryId, type, progress, Date.now()).run();
+    return Boolean(result.meta?.changes);
+  },
+
+  async listEvents(deliveryId: string) {
+    await ensureTable();
+    const result = await db().prepare(`SELECT delivery_id AS deliveryId, type, progress, created_at AS createdAt
+      FROM delivery_events WHERE delivery_id = ? ORDER BY created_at ASC`)
+      .bind(deliveryId).all<RawDeliveryEvent>();
+    return (result.results ?? []).map(hydrateEvent);
   },
 
   async create(input: CreateDeliveryInput) {
