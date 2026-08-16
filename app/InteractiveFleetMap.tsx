@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatLike } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
-import { belgiumMoroccoCorridor as corridor } from "./lib/route-progress";
+import { belgiumMoroccoCorridor as corridor, destinationPointFor, routeForDestination } from "./lib/route-progress";
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
@@ -48,14 +48,6 @@ function positionFor(delivery: MapDelivery, index: number): [number, number] {
   return vehiclePositions[delivery.id] ?? corridor[Math.min(index + 1, corridor.length - 1)];
 }
 
-function destinationFor(delivery: MapDelivery): [number, number] {
-  if (delivery.destination.includes("Casablanca")) return [-7.5898, 33.5731];
-  if (delivery.destination.includes("Tangier")) return [-5.8128, 35.7673];
-  if (delivery.destination.includes("Antwerp")) return [4.4025, 51.2194];
-  if (delivery.destination.includes("Liège")) return [5.5797, 50.6326];
-  return [4.3517, 50.8503];
-}
-
 function keepMarkerMapPositioning(element: HTMLElement) {
   // MapLibre positions custom marker elements with an inline transform and expects
   // them to be absolutely positioned. Our visual marker CSS uses position:relative
@@ -78,8 +70,6 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const selected = deliveries.find((delivery) => delivery.id === selectedId) ?? deliveries[0];
-    const routeCoordinates = selected?.destination.endsWith(", BE") ? [...corridor].reverse() : corridor;
     const map = new maplibregl.Map({
       container: containerRef.current,
       center: [-1.6, 42.6] as LngLatLike,
@@ -106,7 +96,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
     map.on("load", () => {
       map.addSource("corridor", {
         type: "geojson",
-        data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeCoordinates } },
+        data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: corridor } },
       });
       map.addLayer({ id: "corridor-casing", type: "line", source: "corridor", paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.9 } });
       map.addLayer({ id: "corridor-line", type: "line", source: "corridor", paint: { "line-color": "#26755b", "line-width": 4, "line-dasharray": [2, 1] } });
@@ -115,7 +105,6 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
         data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [corridor[4], corridor[5]] } },
       });
       map.addLayer({ id: "ferry-line", type: "line", source: "ferry", paint: { "line-color": "#268f9b", "line-width": 5, "line-dasharray": [1, 1] } });
-      (map.getSource("corridor") as GeoJSONSource)?.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeCoordinates } });
       map.fitBounds([[-8.5, 32.7], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
     });
 
@@ -138,6 +127,10 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
     destinationMarkerRef.current = null;
 
     const selected = deliveries.find((delivery) => delivery.id === selectedId) ?? deliveries[0];
+    const routeCoordinates = selected ? routeForDestination(selected.destination) : corridor;
+    const corridorSource = map.getSource("corridor") as GeoJSONSource | undefined;
+    corridorSource?.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeCoordinates } });
+
     const shownDeliveries = customerMode ? deliveries.filter((delivery) => delivery.id === selectedId) : deliveries;
     const markers = shownDeliveries.map((delivery, index) => {
       const button = document.createElement("button");
@@ -174,7 +167,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
       keepMarkerMapPositioning(pin);
       pin.innerHTML = "◆";
       pin.setAttribute("aria-label", selected.destination);
-      destinationMarkerRef.current = new maplibregl.Marker({ element: pin, anchor: "bottom" }).setLngLat(destinationFor(selected)).addTo(map);
+      destinationMarkerRef.current = new maplibregl.Marker({ element: pin, anchor: "bottom" }).setLngLat(destinationPointFor(selected.destination)).addTo(map);
     }
     markersRef.current = markers;
   }, [customerMode, deliveries, liveVehicles, selectedId]);
