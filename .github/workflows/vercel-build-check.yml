@@ -43,6 +43,8 @@ jobs:
         run: pnpm run test:stop-plans
       - name: Verify full multi-stop tour
         run: pnpm run test:tour
+      - name: Verify automation storage safety
+        run: pnpm run test:automation-readiness
       - name: Verify ETA estimator
         run: pnpm run test:eta
       - name: Verify delay detection
