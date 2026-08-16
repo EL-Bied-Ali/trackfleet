@@ -16,6 +16,7 @@
     "test:delivery-events": "node --experimental-strip-types --test tests/delivery-events.test.mjs",
     "test:notifications": "node --experimental-strip-types --test tests/notification-queue.test.mjs",
     "test:notification-policy": "node --experimental-strip-types --test tests/notification-policy.test.mjs",
+    "test:tracking-access": "node --experimental-strip-types --test tests/tracking-access.test.mjs",
     "test:eta": "node --experimental-strip-types --test tests/eta-estimator.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
