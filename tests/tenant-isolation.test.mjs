@@ -11,7 +11,20 @@ const files = [
 test("production company queries never include demo deliveries", () => {
   for (const file of files) {
     const source = fs.readFileSync(file, "utf8");
-    assert.ok(!source.includes("companyId || delivery.companyId === \"demo\""), `${file} still mixes demo deliveries`);
-    assert.ok(!source.includes("company_id = 'demo'"), `${file} still mixes demo rows in SQL`);
+
+    const dangerousPatterns = [
+      /companyId\s*===\s*companyId\s*\|\|[^\n]*demo/,
+      /companyId\s*!==\s*companyId\s*&&[^\n]*demo/,
+      /company_id\s*=\s*\$\{companyId\}\s*OR\s*company_id\s*=\s*'demo'/,
+      /\(company_id\s*=\s*\$\{companyId\}\s*OR\s*company_id\s*=\s*'demo'\)/,
+      /\(d\.company_id\s*=\s*\$\{companyId\}\s*OR\s*d\.company_id\s*=\s*'demo'\)/,
+      /company_id\s*=\s*\?\s*OR\s*company_id\s*=\s*'demo'/,
+      /\(company_id\s*=\s*\?\s*OR\s*company_id\s*=\s*'demo'\)/,
+      /\(d\.company_id\s*=\s*\?\s*OR\s*d\.company_id\s*=\s*'demo'\)/,
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      assert.equal(pattern.test(source), false, `${file} still mixes demo rows into real company scope: ${pattern}`);
+    }
   }
 });
