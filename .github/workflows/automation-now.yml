@@ -17,14 +17,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CLEAN_CRON_SECRET="$(node -e 'process.stdout.write((process.env.CRON_SECRET || "").trim())')"
-          test -n "$CLEAN_CRON_SECRET"
-          curl --fail --silent --show-error "$BASE_URL/api/health" -o /tmp/health.json
           node - <<'NODE'
-          const fs = require('node:fs');
-          const health = JSON.parse(fs.readFileSync('/tmp/health.json', 'utf8'));
-          if (health?.storage?.persistent !== true || health?.storage?.connected !== true || health?.automation?.tickProtected !== true) process.exit(1);
+          const baseUrl = process.env.BASE_URL;
+          const secret = (process.env.CRON_SECRET || '').trim();
+          if (!secret) throw new Error('TRACKFLEET_CRON_SECRET is empty');
+
+          const healthResponse = await fetch(`${baseUrl}/api/health`, { cache: 'no-store' });
+          if (!healthResponse.ok) throw new Error(`health_http_${healthResponse.status}`);
+          const health = await healthResponse.json();
+          if (health?.storage?.persistent !== true || health?.storage?.connected !== true || health?.automation?.tickProtected !== true) {
+            throw new Error(`production_not_ready:${JSON.stringify({ storage: health?.storage, automation: health?.automation })}`);
+          }
+
+          const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
+            headers: { authorization: `Bearer ${secret}` },
+            cache: 'no-store',
+          });
+          const body = await tickResponse.text();
+          console.log(body);
+          if (!tickResponse.ok) throw new Error(`tick_http_${tickResponse.status}`);
           NODE
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer $CLEAN_CRON_SECRET" \
-            "$BASE_URL/api/automation/tick"
