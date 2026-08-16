@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   try {
     const session = await getCompanySession(request);
     if (!session) return json({ error: "authentication_required" }, 401);
+    if (runtimeEnv.WHATSAPP_DEMO_ENABLED !== "true") return json({ error: "whatsapp_demo_disabled" }, 403);
 
     const requestUrl = new URL(request.url);
     const origin = request.headers.get("origin");
