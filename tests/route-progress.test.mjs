@@ -35,6 +35,20 @@ test("extends Belgium-bound route from Brussels to Antwerp", () => {
   assert.ok(antwerp.distanceToDestinationKm < 0.1);
 });
 
+test("uses the correct Morocco city fallback instead of Casablanca for agency stops", () => {
+  const marrakech = calculateRouteMetrics(31.6295, -7.9811, "12 Boulevard Essaouira, Marrakech, Maroc");
+  assert.equal(marrakech.progress, 100);
+  assert.ok(marrakech.distanceToDestinationKm < 0.1);
+
+  const agadir = calculateRouteMetrics(30.4278, -9.5981, "Lot 103/A Zaitoune Tikiouine, Agadir, Maroc");
+  assert.equal(agadir.progress, 100);
+  assert.ok(agadir.distanceToDestinationKm < 0.1);
+
+  const tetouan = calculateRouteMetrics(35.5889, -5.3626, "146 Avenue Cortoba, Tétouan, Maroc");
+  assert.equal(tetouan.progress, 100);
+  assert.ok(tetouan.distanceToDestinationKm < 0.1);
+});
+
 test("uses an exact customer site instead of the city fallback when provided", () => {
   const exactSite = [-7.62, 33.55];
   const atCityFallback = calculateRouteMetrics(33.5731, -7.5898, "Casablanca, MA", exactSite);

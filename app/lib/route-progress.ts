@@ -13,9 +13,17 @@ export const belgiumMoroccoCorridor: Array<[number, number]> = [
 ];
 
 const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
+  // City-level fallbacks only. Exact agency coordinates override these points
+  // as soon as a confirmed map pin is available.
   { names: ["CASABLANCA"], point: [-7.5898, 33.5731] },
-  { names: ["RABAT"], point: [-6.8498, 33.9716] },
+  { names: ["RABAT", "SALÉ", "SALE"], point: [-6.7985, 34.0337] },
+  { names: ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"], point: [-5.5000, 35.8900] },
   { names: ["TANGIER", "TANGER"], point: [-5.8128, 35.7673] },
+  { names: ["TÉTOUAN", "TETOUAN"], point: [-5.3626, 35.5889] },
+  { names: ["MARRAKECH", "MARRAKESH"], point: [-7.9811, 31.6295] },
+  { names: ["AGADIR", "TIKIOUINE"], point: [-9.5981, 30.4278] },
+  { names: ["KHOURIBGA"], point: [-6.9063, 32.8811] },
+  { names: ["FQUIH BEN SALAH", "FQIH BEN SALAH"], point: [-6.6906, 32.5009] },
   { names: ["BRUSSELS", "BRUXELLES", "BRUSSEL"], point: [4.3517, 50.8503] },
   { names: ["ANTWERP", "ANTWERPEN", "ANVERS"], point: [4.4025, 51.2194] },
   { names: ["LIÈGE", "LIEGE", "LUIK"], point: [5.5797, 50.6326] },
