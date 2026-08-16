@@ -19,7 +19,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.2",
+    "@neondatabase/serverless": "1.1.0",
     "drizzle-orm": "0.45.2",
     "maplibre-gl": "^6.3.0",
     "react": "19.2.6",
@@ -40,7 +40,7 @@
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react": "7.37.5",
-    "eslint-plugin-react-hooks": "7.0.1",
+    "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
     "nitro": "3.0.260610-beta",
     "react-server-dom-webpack": "19.2.6",
