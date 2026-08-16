@@ -29,6 +29,11 @@ const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
   { names: ["LIÈGE", "LIEGE", "LUIK"], point: [5.5797, 50.6326] },
 ];
 
+function isBelgiumDestination(value: string) {
+  const normalized = value.trim().toUpperCase();
+  return normalized.endsWith(", BE") || normalized.includes("BELGIQUE") || normalized.includes("BELGIUM");
+}
+
 function radians(value: number) { return value * Math.PI / 180; }
 
 export function distanceKm(a: [number, number], b: [number, number]) {
@@ -46,7 +51,7 @@ export function destinationPointFor(destination: string, explicitPoint?: [number
   const normalized = destination.trim().toUpperCase();
   const known = knownDestinations.find((candidate) => candidate.names.some((name) => normalized.includes(name)));
   if (known) return known.point;
-  return normalized.endsWith(", BE") ? belgiumMoroccoCorridor[0] : belgiumMoroccoCorridor.at(-1)!;
+  return isBelgiumDestination(normalized) ? belgiumMoroccoCorridor[0] : belgiumMoroccoCorridor.at(-1)!;
 }
 
 function samePoint(a: [number, number], b: [number, number]) {
@@ -55,7 +60,7 @@ function samePoint(a: [number, number], b: [number, number]) {
 
 export function routeForDestination(destination: string, explicitPoint?: [number, number] | null): Array<[number, number]> {
   const normalized = destination.trim().toUpperCase();
-  const belgiumBound = normalized.endsWith(", BE");
+  const belgiumBound = isBelgiumDestination(normalized);
   const base = belgiumBound ? [...belgiumMoroccoCorridor].reverse() : [...belgiumMoroccoCorridor];
   const destinationPoint = destinationPointFor(destination, explicitPoint);
   const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));

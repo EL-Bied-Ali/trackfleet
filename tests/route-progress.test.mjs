@@ -19,6 +19,13 @@ test("reverses progress for Belgium-bound deliveries", () => {
   assert.equal(end.progress, 100);
 });
 
+test("recognizes a full Belgian address as a Belgium-bound destination", () => {
+  const start = calculateRouteMetrics(33.5731, -7.5898, "45 Boulevard de l'Abattoir, 1000 Bruxelles, Belgique");
+  const end = calculateRouteMetrics(50.8503, 4.3517, "45 Boulevard de l'Abattoir, 1000 Bruxelles, Belgique");
+  assert.equal(start.progress, 0);
+  assert.equal(end.progress, 100);
+});
+
 test("stops the Morocco route at Tangier instead of continuing to Casablanca", () => {
   const tangier = calculateRouteMetrics(35.7673, -5.8128, "Tangier, MA");
   assert.equal(tangier.progress, 100);

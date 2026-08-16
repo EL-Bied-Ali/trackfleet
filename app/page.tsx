@@ -249,7 +249,8 @@ export default function Home() {
   // while that delivery list is empty instead of dereferencing `undefined`.
   const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? initialDeliveries[0];
   const customerCopy = t.customerStatus[selected.status];
-  const headingToMorocco = selected.destination.endsWith(", MA");
+  const destinationSite = knownSites.find((site) => site.id === selected.destinationSiteId);
+  const headingToMorocco = destinationSite?.country === "MA" || selected.destination.toUpperCase().includes("MAROC") || selected.destination.endsWith(", MA");
   const routeDirection = headingToMorocco ? t.belgiumToMorocco : t.moroccoToBelgium;
   const visibleDeliveries = useMemo(() => {
     if (filter === "All deliveries") return deliveries;
