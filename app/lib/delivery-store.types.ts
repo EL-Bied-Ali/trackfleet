@@ -7,6 +7,9 @@ export type DeliveryRow = {
   id: string;
   customer: string;
   destination: string;
+  destinationLatitude: number | null;
+  destinationLongitude: number | null;
+  arrivalRadiusKm: number;
   truck: string;
   driver: string;
   status: DeliveryStatus;
