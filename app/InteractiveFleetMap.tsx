@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatLike } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
+import { belgiumMoroccoCorridor as corridor } from "./lib/route-progress";
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
@@ -33,17 +34,6 @@ type Props = {
   label: string;
   onSelect?: (deliveryId: string) => void;
 };
-
-const corridor: Array<[number, number]> = [
-  [4.3517, 50.8503],
-  [2.3522, 48.8566],
-  [-0.5792, 44.8378],
-  [-3.7038, 40.4168],
-  [-5.453, 36.1408],
-  [-5.8128, 35.7673],
-  [-6.8498, 33.9716],
-  [-7.5898, 33.5731],
-];
 
 const vehiclePositions: Record<string, [number, number]> = {
   "TF-2841": [-5.55, 35.92],
