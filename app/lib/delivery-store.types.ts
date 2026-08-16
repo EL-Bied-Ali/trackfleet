@@ -37,6 +37,11 @@ export type DeliveryTransition = {
   events: DeliveryEventType[];
 };
 
+export type PendingDeliveryNotification = {
+  delivery: DeliveryRow;
+  event: DeliveryEventRow;
+};
+
 export type CreateDeliveryInput = Omit<DeliveryRow, "id" | "trackingToken" | "createdAt"> & {
   trackingToken: string;
 };
@@ -47,5 +52,9 @@ export interface DeliveryStore {
   applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string): Promise<DeliveryTransition[]>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
+  listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
+  claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
+  markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
+  releaseNotification(deliveryId: string, type: DeliveryEventType): Promise<void>;
   create(input: CreateDeliveryInput): Promise<DeliveryRow>;
 }
