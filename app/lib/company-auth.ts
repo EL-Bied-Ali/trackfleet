@@ -1,9 +1,5 @@
+import { runtimeEnv } from "trackfleet-runtime-env";
 import { getSendatrackSnapshot, type SendatrackCredentials } from "./sendatrack";
-
-type RuntimeEnv = {
-  TRACKFLEET_ENCRYPTION_KEY?: string;
-  SENDATRACK_PASSWORD?: string;
-};
 
 export type CompanySession = {
   companyId: string;
@@ -12,7 +8,6 @@ export type CompanySession = {
   credentials: SendatrackCredentials;
 };
 
-const runtimeEnv = process.env as RuntimeEnv;
 const cookieName = "__Host-trackfleet_session";
 const sessionDurationSeconds = 30 * 24 * 60 * 60;
 
@@ -93,7 +88,7 @@ function cookieValue(request: Request) {
 }
 
 export async function ensureAuthTables() {
-  // Kept as a compatibility no-op for callers from the previous D1-backed implementation.
+  // Compatibility no-op: sessions are encrypted, stateless cookies on both runtimes.
 }
 
 export async function createCompanySession(credentials: SendatrackCredentials) {
