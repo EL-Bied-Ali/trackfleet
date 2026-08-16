@@ -33,7 +33,27 @@ export const knownSites: KnownSite[] = [
   },
 ];
 
+function normalizeSiteText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 export function knownSite(id: string | null | undefined) {
   if (!id) return null;
   return knownSites.find((site) => site.id === id) ?? null;
+}
+
+export function resolveKnownSite(value: string | null | undefined) {
+  if (!value) return null;
+  const byId = knownSite(value);
+  if (byId) return byId;
+  const normalized = normalizeSiteText(value);
+  return knownSites.find((site) =>
+    normalizeSiteText(site.address) === normalized
+    || normalizeSiteText(site.label) === normalized
+  ) ?? null;
 }
