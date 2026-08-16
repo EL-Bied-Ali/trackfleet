@@ -1,0 +1,81 @@
+name: Deployed site smoke test
+
+on:
+  push:
+    branches:
+      - agent/deployed-site-smoke-test
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check deployed site over HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://trackfleet-demo.brisk-chub-9029.chatgpt.site/"
+          echo "Checking $URL"
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+            --output /tmp/trackfleet.html \
+            --write-out 'HTTP %{http_code}\nFinal URL: %{url_effective}\nContent-Type: %{content_type}\n' \
+            "$URL"
+          test -s /tmp/trackfleet.html
+          echo "Downloaded $(wc -c < /tmp/trackfleet.html) bytes"
+          echo "Page title:"
+          grep -o -m1 '<title[^>]*>[^<]*</title>' /tmp/trackfleet.html || true
+
+      - name: Browser smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/trackfleet-e2e
+          cd /tmp/trackfleet-e2e
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright
+          npx playwright install --with-deps chromium >/dev/null
+          cat > smoke.mjs <<'EOF'
+          import { chromium } from 'playwright';
+
+          const url = 'https://trackfleet-demo.brisk-chub-9029.chatgpt.site/';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+          const consoleErrors = [];
+          page.on('console', msg => {
+            if (msg.type() === 'error') consoleErrors.push(msg.text());
+          });
+
+          const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+          if (!response) throw new Error('No navigation response');
+          if (!response.ok()) throw new Error(`Navigation failed with HTTP ${response.status()}`);
+
+          const title = await page.title();
+          const bodyText = (await page.locator('body').innerText()).trim();
+          if (!bodyText) throw new Error('Rendered page body is empty');
+
+          console.log(`HTTP ${response.status()}`);
+          console.log(`Title: ${title || '(empty)'}`);
+          console.log(`Rendered body length: ${bodyText.length}`);
+          console.log(`Rendered body preview: ${bodyText.slice(0, 500).replace(/\s+/g, ' ')}`);
+
+          if (consoleErrors.length) {
+            console.log('Browser console errors:');
+            for (const error of consoleErrors) console.log(`- ${error}`);
+          } else {
+            console.log('Browser console errors: none');
+          }
+
+          await page.screenshot({ path: 'trackfleet-home.png', fullPage: true });
+          await browser.close();
+          EOF
+          node smoke.mjs
+
+      - name: Upload rendered screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trackfleet-rendered-home
+          path: /tmp/trackfleet-e2e/trackfleet-home.png
+          if-no-files-found: ignore
