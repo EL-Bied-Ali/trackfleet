@@ -2,6 +2,7 @@ import type { DeliveryEventRow, DeliveryRow } from "./delivery-store.types.ts";
 import { shouldDetectDelay } from "./delay-detection.ts";
 import { estimateArrival } from "./eta-estimator.ts";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "./route-progress.ts";
+import { pendingServiceMinutesBefore } from "./truck-stop-plan.ts";
 
 function explicitDestination(row: DeliveryRow): [number, number] | null {
   return typeof row.destinationLatitude === "number" && typeof row.destinationLongitude === "number"
@@ -9,7 +10,7 @@ function explicitDestination(row: DeliveryRow): [number, number] | null {
     : null;
 }
 
-export function shouldCreateDelayEvent(row: DeliveryRow, events: DeliveryEventRow[]) {
+export function shouldCreateDelayEvent(row: DeliveryRow, events: DeliveryEventRow[], companyDeliveries: DeliveryRow[] = [row]) {
   if (row.status === "Delivered" || events.some((event) => event.type === "DELAY_DETECTED")) return false;
   if (typeof row.latitude !== "number" || typeof row.longitude !== "number" || !row.lastPositionAt) return false;
 
@@ -29,6 +30,7 @@ export function shouldCreateDelayEvent(row: DeliveryRow, events: DeliveryEventRo
     lastPositionAt: row.lastPositionAt,
     plannedArrivalAt: row.plannedArrivalAt,
     delivered: false,
+    futureServiceMinutes: pendingServiceMinutesBefore(row, companyDeliveries),
   });
 
   return shouldDetectDelay({
