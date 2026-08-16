@@ -16,6 +16,11 @@ function notificationKey(deliveryId: string, type: DeliveryEventType) { return `
 function baselineProgress(deliveryId: string) {
   return deliveryEvents.find((event) => event.deliveryId === deliveryId && event.type === "GPS_BASELINE")?.progress ?? 0;
 }
+function explicitDestination(delivery: DeliveryRow): [number, number] | null {
+  return typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
+    ? [delivery.destinationLongitude, delivery.destinationLatitude]
+    : null;
+}
 
 export const store: DeliveryStore = {
   async getPublic(tracking) {
@@ -34,9 +39,9 @@ export const store: DeliveryStore = {
       if (!vehicle) continue;
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
-      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
+      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery));
       const metrics = rebaseRouteMetrics(absoluteMetrics, baselineProgress(delivery.id));
-      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress);
+      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm);
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
       const events = detectDeliveryEvents({ previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes });
       Object.assign(delivery, { sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude, speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", progress: state.progress, status: state.status });
