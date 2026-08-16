@@ -175,6 +175,8 @@ export async function POST(request: Request) {
     const payload = (await request.json()) as Record<string, unknown>;
     const customer = String(payload.customer ?? "").trim();
     const destinationInput = String(payload.destination ?? "").trim();
+    const originSiteInput = String(payload.originSiteId ?? "").trim();
+    const originSite = resolveKnownSite(originSiteInput);
     const destinationSiteId = String(payload.destinationSiteId ?? "").trim();
     const site = resolveKnownSite(destinationSiteId) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
@@ -220,6 +222,8 @@ export async function POST(request: Request) {
 
     const delivery = await store.create({
       customer,
+      originSiteId: originSite?.id ?? null,
+      destinationSiteId: site?.id ?? null,
       destination,
       destinationLatitude,
       destinationLongitude,

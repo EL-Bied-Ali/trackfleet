@@ -13,6 +13,8 @@ let schemaPromise: Promise<void> | null = null;
 type RawDelivery = {
   id: string;
   customer: string;
+  origin_site_id: string | null;
+  destination_site_id: string | null;
   destination: string;
   destination_latitude: number | string | null;
   destination_longitude: number | string | null;
@@ -52,6 +54,8 @@ function hydrate(row: RawDelivery): DeliveryRow {
   return {
     id: row.id,
     customer: row.customer,
+    originSiteId: row.origin_site_id ?? null,
+    destinationSiteId: row.destination_site_id ?? null,
     destination: row.destination,
     destinationLatitude: numberOrNull(row.destination_latitude),
     destinationLongitude: numberOrNull(row.destination_longitude),
@@ -91,6 +95,8 @@ async function ensureSchema() {
     await sql`CREATE TABLE IF NOT EXISTS deliveries (
       id text PRIMARY KEY,
       customer text NOT NULL,
+      origin_site_id text,
+      destination_site_id text,
       destination text NOT NULL,
       destination_latitude double precision,
       destination_longitude double precision,
@@ -113,6 +119,8 @@ async function ensureSchema() {
       tracking_token text UNIQUE,
       created_at timestamptz NOT NULL
     )`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS origin_site_id text`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS destination_site_id text`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
     await sql`CREATE TABLE IF NOT EXISTS delivery_events (
       delivery_id text NOT NULL,
@@ -133,11 +141,11 @@ async function ensureSchema() {
 
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
-        id, customer, destination, destination_latitude, destination_longitude, arrival_radius_km,
+        id, customer, origin_site_id, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
         truck, driver, status, eta, planned_arrival_at, progress, color, contact, sendatrack_vehicle_id,
         latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at
       ) VALUES (
-        ${delivery.id}, ${delivery.customer}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
+        ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
         ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.sendatrackVehicleId},
         ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.createdAt.toISOString()}
       ) ON CONFLICT (id) DO NOTHING`;
