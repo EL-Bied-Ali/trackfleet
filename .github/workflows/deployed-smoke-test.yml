@@ -9,22 +9,26 @@ on:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
-      - name: Check deployed site over HTTP
+      - name: Wait for deployed Vercel site
         shell: bash
         run: |
           set -euo pipefail
-          URL="https://trackfleet-demo.brisk-chub-9029.chatgpt.site/"
-          echo "Checking $URL"
-          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
-            --output /tmp/trackfleet.html \
-            --write-out 'HTTP %{http_code}\nFinal URL: %{url_effective}\nContent-Type: %{content_type}\n' \
-            "$URL"
-          test -s /tmp/trackfleet.html
-          echo "Downloaded $(wc -c < /tmp/trackfleet.html) bytes"
-          echo "Page title:"
-          grep -o -m1 '<title[^>]*>[^<]*</title>' /tmp/trackfleet.html || true
+          URL="https://trackfleet-self.vercel.app/"
+          echo "Waiting for $URL"
+          for attempt in $(seq 1 36); do
+            code=$(curl --silent --location --output /tmp/trackfleet.html --write-out '%{http_code}' "$URL" || true)
+            if [ "$code" = "200" ] && [ -s /tmp/trackfleet.html ]; then
+              echo "Live deployment returned HTTP 200 on attempt $attempt"
+              grep -o -m1 '<title[^>]*>[^<]*</title>' /tmp/trackfleet.html || true
+              exit 0
+            fi
+            echo "Attempt $attempt: HTTP $code"
+            sleep 5
+          done
+          echo "Vercel site did not become ready"
+          exit 1
 
       - name: Browser smoke test
         shell: bash
@@ -38,7 +42,7 @@ jobs:
           cat > smoke.mjs <<'EOF'
           import { chromium } from 'playwright';
 
-          const url = 'https://trackfleet-demo.brisk-chub-9029.chatgpt.site/';
+          const url = 'https://trackfleet-self.vercel.app/';
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
           const consoleErrors = [];
@@ -47,30 +51,36 @@ jobs:
           });
 
           try {
-            const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
             if (!response) throw new Error('No navigation response');
             if (!response.ok()) throw new Error(`Navigation failed with HTTP ${response.status()}`);
 
             await page.locator('body').waitFor({ state: 'visible', timeout: 15000 });
-            await page.waitForTimeout(3000);
+            await page.waitForTimeout(4000);
 
             const title = await page.title();
             const bodyText = (await page.locator('body').innerText()).trim();
             if (!bodyText) throw new Error('Rendered page body is empty');
+            if (/404|NOT_FOUND/i.test(bodyText.slice(0, 500))) throw new Error('Vercel 404 page is still rendered');
+            if (!/TrackFleet/i.test(`${title} ${bodyText.slice(0, 1000)}`)) throw new Error('TrackFleet UI was not detected');
+
+            const markerCount = await page.locator('.maplibre-truck').count();
+            if (markerCount > 0) {
+              const positions = await page.locator('.maplibre-truck').evaluateAll(nodes =>
+                nodes.map(node => getComputedStyle(node).position));
+              if (positions.some(position => position !== 'absolute')) {
+                throw new Error(`Map marker positioning regression: ${positions.join(', ')}`);
+              }
+            }
 
             console.log(`HTTP ${response.status()}`);
             console.log(`Title: ${title || '(empty)'}`);
             console.log(`Rendered body length: ${bodyText.length}`);
-            console.log(`Rendered body preview: ${bodyText.slice(0, 500).replace(/\s+/g, ' ')}`);
-
-            if (consoleErrors.length) {
-              console.log('Browser console errors:');
-              for (const error of consoleErrors) console.log(`- ${error}`);
-            } else {
-              console.log('Browser console errors: none');
-            }
+            console.log(`Map truck markers: ${markerCount}`);
+            console.log(`Browser console errors: ${consoleErrors.length}`);
+            for (const error of consoleErrors) console.log(`console-error: ${error}`);
           } finally {
-            await page.screenshot({ path: 'trackfleet-home.png', fullPage: true }).catch(() => {});
+            await page.screenshot({ path: 'trackfleet-vercel-home.png', fullPage: true }).catch(() => {});
             await browser.close();
           }
           EOF
@@ -80,6 +90,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: trackfleet-rendered-home
-          path: /tmp/trackfleet-e2e/trackfleet-home.png
+          name: trackfleet-vercel-rendered-home
+          path: /tmp/trackfleet-e2e/trackfleet-vercel-home.png
           if-no-files-found: ignore
