@@ -33,7 +33,8 @@ export function distanceKm(a: [number, number], b: [number, number]) {
   return 2 * earthRadiusKm * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-export function destinationPointFor(destination: string): [number, number] {
+export function destinationPointFor(destination: string, explicitPoint?: [number, number] | null): [number, number] {
+  if (explicitPoint) return explicitPoint;
   const normalized = destination.trim().toUpperCase();
   const known = knownDestinations.find((candidate) => candidate.names.some((name) => normalized.includes(name)));
   if (known) return known.point;
@@ -44,11 +45,11 @@ function samePoint(a: [number, number], b: [number, number]) {
   return Math.abs(a[0] - b[0]) < 0.000001 && Math.abs(a[1] - b[1]) < 0.000001;
 }
 
-export function routeForDestination(destination: string): Array<[number, number]> {
+export function routeForDestination(destination: string, explicitPoint?: [number, number] | null): Array<[number, number]> {
   const normalized = destination.trim().toUpperCase();
   const belgiumBound = normalized.endsWith(", BE");
   const base = belgiumBound ? [...belgiumMoroccoCorridor].reverse() : [...belgiumMoroccoCorridor];
-  const destinationPoint = destinationPointFor(destination);
+  const destinationPoint = destinationPointFor(destination, explicitPoint);
   const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
   if (exactIndex >= 0) return base.slice(0, exactIndex + 1);
   return [...base, destinationPoint];
@@ -68,8 +69,13 @@ function projectToSegment(point: [number, number], start: [number, number], end:
   return { t, distanceKm: distanceKm(point, projected) };
 }
 
-export function calculateRouteMetrics(latitude: number, longitude: number, destination: string): RouteMetrics {
-  const route = routeForDestination(destination);
+export function calculateRouteMetrics(
+  latitude: number,
+  longitude: number,
+  destination: string,
+  explicitDestination?: [number, number] | null,
+): RouteMetrics {
+  const route = routeForDestination(destination, explicitDestination);
   const point: [number, number] = [longitude, latitude];
   const segmentLengths = route.slice(0, -1).map((start, index) => distanceKm(start, route[index + 1]));
   const routeDistanceKm = segmentLengths.reduce((sum, value) => sum + value, 0);
@@ -97,10 +103,6 @@ export function calculateRouteMetrics(latitude: number, longitude: number, desti
   return { progress, routeDistanceKm, completedDistanceKm, remainingDistanceKm: Math.max(0, routeDistanceKm - completedDistanceKm), distanceFromOriginKm, distanceToDestinationKm };
 }
 
-// A delivery can be created after the truck has already travelled part of our
-// Belgium↔Morocco corridor. The baseline is that absolute corridor percentage at
-// creation time. This converts future absolute positions into 0→100 for this
-// delivery only, without needing a new database column.
 export function rebaseRouteMetrics(metrics: RouteMetrics, baselineProgress: number): RouteMetrics {
   const baseline = Math.max(0, Math.min(99, baselineProgress));
   const baselineDistanceKm = metrics.routeDistanceKm * baseline / 100;
@@ -125,8 +127,10 @@ export function deriveDeliveryState(
   metrics: RouteMetrics,
   speed: number,
   previousProgress = 0,
+  arrivalRadiusKm = 0.5,
 ) {
-  if (currentStatus === "Delivered" || (metrics.distanceToDestinationKm <= 0.5 && speed <= 5)) {
+  const safeArrivalRadiusKm = Math.max(0.05, Math.min(10, arrivalRadiusKm));
+  if (currentStatus === "Delivered" || (metrics.distanceToDestinationKm <= safeArrivalRadiusKm && speed <= 5)) {
     return { status: "Delivered" as const, progress: 100 };
   }
   const progress = Math.max(previousProgress, metrics.progress);
