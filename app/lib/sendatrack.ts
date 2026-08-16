@@ -1,5 +1,3 @@
-import { env } from "cloudflare:workers";
-
 type SendatrackEnv = {
   SENDATRACK_ACCOUNT_ID?: string;
   SENDATRACK_USER?: string;
@@ -31,7 +29,7 @@ export type SendatrackSnapshot = {
   error?: "not_configured" | "authentication_failed" | "service_unavailable" | "unexpected_response";
 };
 
-const runtimeEnv = env as unknown as SendatrackEnv;
+const runtimeEnv = process.env as SendatrackEnv;
 const defaultApiUrl = "http://backend2.sendatrack.com/sendatrack/public/api/";
 const cachedTokens = new Map<string, { value: string; expiresAt: number }>();
 
@@ -163,10 +161,6 @@ function normalizeFleet(payload: unknown) {
     .filter((group) => group.vehicles.length > 0);
   const vehicles = groups.flatMap((group) => group.vehicles);
   const namedVehicles = vehicles.filter((vehicle) => !/^v\d+$/i.test(vehicle.name));
-  // SENDATRACK's response nests each GPS event below its vehicle. Those event
-  // rows look like extra vehicles named v3, v4, ... and carry the exact same
-  // coordinates as the real plate-number row. Discard only those confirmed
-  // nested duplicates so legitimate vehicles parked together remain visible.
   const fleetRows = vehicles.filter((vehicle) => {
     if (!/^v\d+$/i.test(vehicle.name)) return true;
     return !namedVehicles.some((named) =>
