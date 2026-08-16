@@ -11,6 +11,8 @@ maplibregl.setWorkerUrl(maplibreWorkerUrl);
 type MapDelivery = {
   id: string;
   destination: string;
+  destinationLatitude?: number | null;
+  destinationLongitude?: number | null;
   truck: string;
   status: string;
   latitude?: number | null;
@@ -48,12 +50,13 @@ function positionFor(delivery: MapDelivery, index: number): [number, number] {
   return vehiclePositions[delivery.id] ?? corridor[Math.min(index + 1, corridor.length - 1)];
 }
 
+function exactDestination(delivery: MapDelivery): [number, number] | null {
+  return typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
+    ? [delivery.destinationLongitude, delivery.destinationLatitude]
+    : null;
+}
+
 function keepMarkerMapPositioning(element: HTMLElement) {
-  // MapLibre positions custom marker elements with an inline transform and expects
-  // them to be absolutely positioned. Our visual marker CSS uses position:relative
-  // for its internal badges, which overrides MapLibre's marker rule and makes the
-  // element drift while the map zooms. Keep the marker itself absolute; absolute
-  // elements still establish the containing block used by the badge children.
   element.style.position = "absolute";
 }
 
@@ -127,7 +130,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
     destinationMarkerRef.current = null;
 
     const selected = deliveries.find((delivery) => delivery.id === selectedId) ?? deliveries[0];
-    const routeCoordinates = selected ? routeForDestination(selected.destination) : corridor;
+    const routeCoordinates = selected ? routeForDestination(selected.destination, exactDestination(selected)) : corridor;
     const corridorSource = map.getSource("corridor") as GeoJSONSource | undefined;
     corridorSource?.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeCoordinates } });
 
@@ -167,7 +170,9 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
       keepMarkerMapPositioning(pin);
       pin.innerHTML = "◆";
       pin.setAttribute("aria-label", selected.destination);
-      destinationMarkerRef.current = new maplibregl.Marker({ element: pin, anchor: "bottom" }).setLngLat(destinationPointFor(selected.destination)).addTo(map);
+      destinationMarkerRef.current = new maplibregl.Marker({ element: pin, anchor: "bottom" })
+        .setLngLat(destinationPointFor(selected.destination, exactDestination(selected)))
+        .addTo(map);
     }
     markersRef.current = markers;
   }, [customerMode, deliveries, liveVehicles, selectedId]);
