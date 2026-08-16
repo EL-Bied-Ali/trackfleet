@@ -2,6 +2,7 @@ import { store } from "trackfleet-delivery-store";
 import type { DeliveryTransition } from "../../lib/delivery-store.types";
 import { calculateRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
+import { sendAutomaticWhatsAppNotification } from "../../lib/whatsapp-automation";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 
 function errorResponse(error: unknown) {
@@ -31,17 +32,23 @@ function enrichDelivery<T extends {
   };
 }
 
-async function persistTransitionEvents(transitions: DeliveryTransition[]) {
+async function persistTransitionEvents(transitions: DeliveryTransition[], origin: string) {
   for (const transition of transitions) {
     for (const type of transition.events) {
-      await store.recordEvent(transition.delivery.id, type, transition.delivery.progress);
+      const isNew = await store.recordEvent(transition.delivery.id, type, transition.delivery.progress);
+      if (!isNew) continue;
+
+      const trackingUrl = new URL(origin);
+      trackingUrl.searchParams.set("tracking", transition.delivery.trackingToken || transition.delivery.id);
+      await sendAutomaticWhatsAppNotification(type, transition.delivery, trackingUrl.toString());
     }
   }
 }
 
 export async function GET(request: Request) {
   try {
-    const tracking = new URL(request.url).searchParams.get("tracking")?.trim();
+    const requestUrl = new URL(request.url);
+    const tracking = requestUrl.searchParams.get("tracking")?.trim();
     if (tracking) {
       let row = await store.getPublic(tracking);
       if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
@@ -52,7 +59,7 @@ export async function GET(request: Request) {
       const integration = await getSendatrackSnapshot();
       if (integration.connected) {
         const transitions = await store.applySendatrackSnapshot(integration, row.companyId);
-        await persistTransitionEvents(transitions);
+        await persistTransitionEvents(transitions, requestUrl.origin);
         row = await store.getPublic(tracking) ?? row;
       }
 
@@ -69,7 +76,7 @@ export async function GET(request: Request) {
 
     const integration = await getSendatrackSnapshot(session.credentials);
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
-    await persistTransitionEvents(transitions);
+    await persistTransitionEvents(transitions, requestUrl.origin);
     const rows = await store.listForCompany(session.companyId);
 
     return Response.json({
