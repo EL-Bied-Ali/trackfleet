@@ -8,6 +8,7 @@ export type TrackFleetRuntimeEnv = {
   CRON_SECRET?: string;
   WHATSAPP_ACCESS_TOKEN?: string;
   WHATSAPP_PHONE_NUMBER_ID?: string;
+  WHATSAPP_BUSINESS_ACCOUNT_ID?: string;
   WHATSAPP_DEMO_RECIPIENT?: string;
   WHATSAPP_TEMPLATE_NAME?: string;
   WHATSAPP_AUTOMATION_ENABLED?: string;
