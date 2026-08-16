@@ -1,4 +1,4 @@
-name: One-shot departure freshness patch
+name: One-shot tenant isolation patch
 
 on:
   push:
@@ -13,37 +13,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply departure freshness patch
+      - name: Remove demo rows from real company scope
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          files = [
-              Path('app/lib/delivery-store.memory.ts'),
-              Path('app/lib/delivery-store.postgres.ts'),
-              Path('app/lib/delivery-store.cloudflare.ts'),
-          ]
+          p = Path('app/lib/delivery-store.memory.ts')
+          t = p.read_text()
+          t = t.replace('delivery.trackingToken === tracking || (delivery.companyId === "demo" && delivery.id === tracking)', 'delivery.trackingToken === tracking')
+          t = t.replace('delivery.companyId === companyId || delivery.companyId === "demo"', 'delivery.companyId === companyId')
+          t = t.replace('(delivery.companyId !== companyId && delivery.companyId !== "demo")', 'delivery.companyId !== companyId')
+          t = t.replace('(item.companyId === companyId || item.companyId === "demo")', 'item.companyId === companyId')
+          p.write_text(t)
 
-          for path in files:
-              text = path.read_text()
-              old = '      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm);\n      const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));\n'
-              new = '      const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));\n      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);\n'
-              if old not in text:
-                  raise SystemExit(f'departure state anchor not found in {path}')
-              path.write_text(text.replace(old, new, 1))
+          p = Path('app/lib/delivery-store.postgres.ts')
+          t = p.read_text()
+          t = t.replace("WHERE tracking_token = ${tracking} OR (company_id = 'demo' AND id = ${tracking}) LIMIT 1", "WHERE tracking_token = ${tracking} LIMIT 1")
+          t = t.replace("WHERE company_id = ${companyId} OR company_id = 'demo' ORDER BY created_at DESC", "WHERE company_id = ${companyId} ORDER BY created_at DESC")
+          t = t.replace("WHERE (company_id = ${companyId} OR company_id = 'demo') AND status <> 'Delivered'", "WHERE company_id = ${companyId} AND status <> 'Delivered'")
+          p.write_text(t)
 
-          tests = Path('tests/route-progress.test.mjs')
-          text = tests.read_text()
-          anchor = 'test("does not move customer progress backwards after a noisier GPS fix", () => {\n'
-          addition = '''test("does not mark departure from a stale GPS position", () => {\n  const moved = {\n    progress: 3, routeDistanceKm: 1000, completedDistanceKm: 30, remainingDistanceKm: 970,\n    distanceFromOriginKm: 30, distanceToDestinationKm: 970,\n  };\n  const state = deriveDeliveryState("Loading", moved, 60, 0, 0.5, 45);\n  assert.equal(state.status, "Loading");\n});\n\ntest("does not mark departure from GPS displacement while the truck is stopped", () => {\n  const moved = {\n    progress: 3, routeDistanceKm: 1000, completedDistanceKm: 30, remainingDistanceKm: 970,\n    distanceFromOriginKm: 30, distanceToDestinationKm: 970,\n  };\n  const state = deriveDeliveryState("Loading", moved, 0, 0, 0.5, 2);\n  assert.equal(state.status, "Loading");\n});\n\ntest("marks departure only after fresh movement beyond the departure zone", () => {\n  const moved = {\n    progress: 2, routeDistanceKm: 1000, completedDistanceKm: 20, remainingDistanceKm: 980,\n    distanceFromOriginKm: 20, distanceToDestinationKm: 980,\n  };\n  const state = deriveDeliveryState("Loading", moved, 35, 0, 0.5, 2);\n  assert.equal(state.status, "In transit");\n});\n\n'''
-          if anchor not in text:
-              raise SystemExit('route test anchor not found')
-          tests.write_text(text.replace(anchor, addition + anchor, 1))
+          p = Path('app/lib/delivery-store.cloudflare.ts')
+          t = p.read_text()
+          t = t.replace("WHERE tracking_token = ? OR (company_id = 'demo' AND id = ?) LIMIT 1`).bind(tracking, tracking)", "WHERE tracking_token = ? LIMIT 1`).bind(tracking)")
+          t = t.replace("WHERE company_id = ? OR company_id = 'demo' ORDER BY created_at DESC", "WHERE company_id = ? ORDER BY created_at DESC")
+          t = t.replace("WHERE (company_id = ? OR company_id = 'demo') AND status != 'Delivered'", "WHERE company_id = ? AND status != 'Delivered'")
+          t = t.replace("WHERE (d.company_id = ? OR d.company_id = 'demo') AND", "WHERE d.company_id = ? AND")
+          p.write_text(t)
           PY
       - name: Commit patch
         run: |
           git config user.name "TrackFleet automation"
           git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
-          git add app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts tests/route-progress.test.mjs
-          git commit -m "require fresh movement before automatic departure"
+          git add app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts
+          git commit -m "isolate real companies from demo deliveries"
           git push
