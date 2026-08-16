@@ -13,6 +13,7 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_DEMO_RECIPIENT?: string;
   WHATSAPP_TEMPLATE_NAME?: string;
   WHATSAPP_AUTOMATION_ENABLED?: string;
+  WHATSAPP_AUTOMATION_START_AT?: string;
 };
 
 export const runtimeEnv = env as unknown as TrackFleetRuntimeEnv;
