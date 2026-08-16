@@ -1,12 +1,13 @@
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition } from "./delivery-store.types";
+import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];
-const notificationClaims = new Map<string, { attemptedAt: number; sent: boolean }>();
+const notificationClaims = new NotificationClaimState();
 
 function key(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -52,32 +53,22 @@ export const store: DeliveryStore = {
     return deliveryEvents.filter((event) => event.deliveryId === deliveryId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
   async listPendingNotifications(companyId) {
-    const now = Date.now();
     return deliveryEvents.flatMap((event) => {
       if (!customerFacingEvent(event.type)) return [];
       const delivery = deliveryStore.find((item) => item.id === event.deliveryId && (item.companyId === companyId || item.companyId === "demo"));
       if (!delivery) return [];
-      const claim = notificationClaims.get(notificationKey(event.deliveryId, event.type));
-      if (claim?.sent) return [];
-      if (claim && now - claim.attemptedAt < 5 * 60_000) return [];
+      if (!notificationClaims.isPending(notificationKey(event.deliveryId, event.type))) return [];
       return [{ delivery: { ...delivery }, event: { ...event } }];
     });
   },
   async claimNotification(deliveryId, type) {
-    const claimKey = notificationKey(deliveryId, type);
-    const existing = notificationClaims.get(claimKey);
-    const now = Date.now();
-    if (existing?.sent) return false;
-    if (existing && now - existing.attemptedAt < 5 * 60_000) return false;
-    notificationClaims.set(claimKey, { attemptedAt: now, sent: false });
-    return true;
+    return notificationClaims.claim(notificationKey(deliveryId, type));
   },
   async markNotificationSent(deliveryId, type) {
-    notificationClaims.set(notificationKey(deliveryId, type), { attemptedAt: Date.now(), sent: true });
+    notificationClaims.markSent(notificationKey(deliveryId, type));
   },
   async releaseNotification(deliveryId, type) {
-    const claimKey = notificationKey(deliveryId, type);
-    if (!notificationClaims.get(claimKey)?.sent) notificationClaims.delete(claimKey);
+    notificationClaims.release(notificationKey(deliveryId, type));
   },
   async create(input: CreateDeliveryInput) {
     const delivery: DeliveryRow = { ...input, id: `TF-${String(Date.now()).slice(-6)}`, createdAt: new Date() };
