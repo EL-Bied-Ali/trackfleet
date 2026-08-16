@@ -53,11 +53,16 @@ test("derives loading, in-transit and delivered states from GPS", () => {
 });
 
 test("does not move customer progress backwards after a noisier GPS fix", () => {
-  const olderConfirmedProgress = 55;
-  const slightlyBehind = calculateRouteMetrics(40.4168, -3.7038, "Casablanca, MA");
-  assert.ok(slightlyBehind.progress < olderConfirmedProgress);
+  const previousProgress = 55;
+  const noisierFixMetrics = {
+    progress: 52,
+    routeDistanceKm: 2200,
+    completedDistanceKm: 1144,
+    remainingDistanceKm: 1056,
+    distanceToDestinationKm: 1000,
+  };
 
-  const state = deriveDeliveryState("In transit", slightlyBehind, 60, olderConfirmedProgress);
-  assert.equal(state.progress, olderConfirmedProgress);
+  const state = deriveDeliveryState("In transit", noisierFixMetrics, 60, previousProgress);
+  assert.equal(state.progress, previousProgress);
   assert.equal(state.status, "In transit");
 });
