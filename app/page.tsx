@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { localeOptions, translations, type Locale } from "./i18n";
 import InteractiveFleetMap from "./InteractiveFleetMap";
+import SiteManager from "./SiteManager";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -612,7 +613,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div><h1>{t.greeting}</h1><p>{t.greetingSub}</p></div>
-          <div className="top-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} /><button className="primary-button" onClick={() => setModalOpen(true)}><span>＋</span>{t.newDelivery}</button></div>
+          <div className="top-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} /><SiteManager locale={locale} /><button className="primary-button" onClick={() => setModalOpen(true)}><span>＋</span>{t.newDelivery}</button></div>
         </header>
 
         <div className="stats-grid">
