@@ -12,6 +12,8 @@ Configure:
 
 SENDATRACK credentials must remain configured as they are today.
 
+After changing production environment variables, trigger a fresh production deployment so the new values are loaded by the runtime.
+
 After redeploying, `GET /api/health` must report:
 
 - `storage.mode = "postgres"`
