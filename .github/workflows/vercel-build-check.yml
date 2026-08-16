@@ -49,6 +49,8 @@ jobs:
         run: pnpm run test:automation-health
       - name: Verify WhatsApp production readiness safety
         run: pnpm run test:whatsapp-readiness
+      - name: Verify WhatsApp dry-run preview safety
+        run: pnpm run test:whatsapp-preview
       - name: Verify ETA estimator
         run: pnpm run test:eta
       - name: Verify delay detection
