@@ -29,6 +29,8 @@ jobs:
         run: pnpm run test:notifications
       - name: Verify ETA estimator
         run: pnpm run test:eta
+      - name: Verify delay detection
+        run: pnpm run test:delay
 
   build-vercel:
     runs-on: ubuntu-latest
