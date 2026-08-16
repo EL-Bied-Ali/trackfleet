@@ -35,6 +35,8 @@ jobs:
         run: pnpm run test:customer-contact
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
+      - name: Verify agency site registry
+        run: pnpm run test:known-sites
       - name: Verify ETA estimator
         run: pnpm run test:eta
       - name: Verify delay detection
