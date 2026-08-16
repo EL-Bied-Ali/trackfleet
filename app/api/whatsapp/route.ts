@@ -1,17 +1,15 @@
-import { env } from "cloudflare:workers";
-
 type WhatsAppKind = "tracking" | "arrival";
 
 type WhatsAppEnv = {
-  DB: D1Database;
   WHATSAPP_ACCESS_TOKEN?: string;
   WHATSAPP_PHONE_NUMBER_ID?: string;
   WHATSAPP_DEMO_RECIPIENT?: string;
   WHATSAPP_TEMPLATE_NAME?: string;
 };
 
-const runtimeEnv = env as unknown as WhatsAppEnv;
+const runtimeEnv = process.env as WhatsAppEnv;
 const graphApiVersion = "v25.0";
+const recentDemoEvents: Array<{ deliveryId: string; kind: WhatsAppKind; createdAt: number }> = [];
 
 function json(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -22,22 +20,27 @@ function cleanText(value: unknown, maxLength: number) {
 }
 
 async function enforceRateLimit(deliveryId: string, kind: WhatsAppKind) {
-  await runtimeEnv.DB.prepare(`CREATE TABLE IF NOT EXISTS whatsapp_demo_events (
-    id integer PRIMARY KEY AUTOINCREMENT,
-    delivery_id text NOT NULL,
-    kind text NOT NULL,
-    created_at integer NOT NULL
-  )`).run();
+  const now = Date.now();
+  const oneHourAgo = now - 60 * 60 * 1000;
+  const fiveMinutesAgo = now - 5 * 60 * 1000;
 
-  const recent = await runtimeEnv.DB.prepare(
-    "SELECT COUNT(*) AS total FROM whatsapp_demo_events WHERE created_at >= ?",
-  ).bind(Date.now() - 60 * 60 * 1000).first<{ total: number }>();
-  if (Number(recent?.total ?? 0) >= 6) return false;
+  while (recentDemoEvents.length && recentDemoEvents[0].createdAt < oneHourAgo) {
+    recentDemoEvents.shift();
+  }
 
-  const duplicate = await runtimeEnv.DB.prepare(
-    "SELECT COUNT(*) AS total FROM whatsapp_demo_events WHERE delivery_id = ? AND kind = ? AND created_at >= ?",
-  ).bind(deliveryId, kind, Date.now() - 5 * 60 * 1000).first<{ total: number }>();
-  return Number(duplicate?.total ?? 0) === 0;
+  if (recentDemoEvents.length >= 6) return false;
+  if (
+    recentDemoEvents.some(
+      (event) =>
+        event.deliveryId === deliveryId &&
+        event.kind === kind &&
+        event.createdAt >= fiveMinutesAgo,
+    )
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 export async function POST(request: Request) {
@@ -93,9 +96,7 @@ export async function POST(request: Request) {
     });
     if (!response.ok) return json({ error: "Meta could not send the demo message" }, 502);
 
-    await runtimeEnv.DB.prepare(
-      "INSERT INTO whatsapp_demo_events (delivery_id, kind, created_at) VALUES (?, ?, ?)",
-    ).bind(deliveryId, kind, Date.now()).run();
+    recentDemoEvents.push({ deliveryId, kind, createdAt: Date.now() });
     return json({ sent: true, kind });
   } catch {
     return json({ error: "WhatsApp demo request failed" }, 500);
