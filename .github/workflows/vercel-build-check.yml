@@ -23,6 +23,8 @@ jobs:
         run: pnpm run test:sendatrack
       - name: Verify GPS route progress
         run: pnpm run test:route-progress
+      - name: Verify delivery event detection
+        run: pnpm run test:delivery-events
 
   build-vercel:
     runs-on: ubuntu-latest
