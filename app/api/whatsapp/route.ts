@@ -1,4 +1,6 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { getCompanySession } from "../../lib/company-auth";
+import { normalizeCustomerPhone } from "../../lib/customer-contact";
 
 type WhatsAppKind = "tracking" | "arrival";
 
@@ -18,35 +20,26 @@ async function enforceRateLimit(deliveryId: string, kind: WhatsAppKind) {
   const oneHourAgo = now - 60 * 60 * 1000;
   const fiveMinutesAgo = now - 5 * 60 * 1000;
 
-  while (recentDemoEvents.length && recentDemoEvents[0].createdAt < oneHourAgo) {
-    recentDemoEvents.shift();
-  }
-
+  while (recentDemoEvents.length && recentDemoEvents[0].createdAt < oneHourAgo) recentDemoEvents.shift();
   if (recentDemoEvents.length >= 6) return false;
-  if (
-    recentDemoEvents.some(
-      (event) =>
-        event.deliveryId === deliveryId &&
-        event.kind === kind &&
-        event.createdAt >= fiveMinutesAgo,
-    )
-  ) {
-    return false;
-  }
-
+  if (recentDemoEvents.some((event) => event.deliveryId === deliveryId && event.kind === kind && event.createdAt >= fiveMinutesAgo)) return false;
   return true;
 }
 
 export async function POST(request: Request) {
   try {
+    const session = await getCompanySession(request);
+    if (!session) return json({ error: "authentication_required" }, 401);
+
     const requestUrl = new URL(request.url);
     const origin = request.headers.get("origin");
     if (origin && new URL(origin).host !== requestUrl.host) return json({ error: "Origin not allowed" }, 403);
 
     const token = runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim();
     const phoneNumberId = runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim();
-    const recipient = runtimeEnv.WHATSAPP_DEMO_RECIPIENT?.replace(/\D/g, "");
-    if (!token || !phoneNumberId || !recipient) return json({ error: "WhatsApp demo is not configured" }, 503);
+    const recipient = normalizeCustomerPhone(runtimeEnv.WHATSAPP_DEMO_RECIPIENT ?? "");
+    const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
+    if (!token || !phoneNumberId || !recipient || !templateName) return json({ error: "WhatsApp demo is not configured" }, 503);
 
     const payload = (await request.json()) as Record<string, unknown>;
     const deliveryId = cleanText(payload.deliveryId, 32);
@@ -66,7 +59,6 @@ export async function POST(request: Request) {
     if (!(await enforceRateLimit(deliveryId, kind))) return json({ error: "Please wait before sending another demo message" }, 429);
 
     const thirdValue = kind === "tracking" ? trackingUrl : `Arrived at ${destination}`;
-    const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim() || "jaspers_market_order_confirmation_v1";
     const response = await fetch(`https://graph.facebook.com/${graphApiVersion}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
