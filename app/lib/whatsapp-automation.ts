@@ -41,9 +41,9 @@ export async function sendAutomaticWhatsAppNotification(
   const token = runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim();
   const phoneNumberId = runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim();
   const recipient = recipientFrom(delivery);
-  const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim() || "jaspers_market_order_confirmation_v1";
+  const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
   const message = eventText(event, delivery, trackingUrl);
-  if (!token || !phoneNumberId || !recipient || !message) return { sent: false, reason: "not_configured" as const };
+  if (!token || !phoneNumberId || !templateName || !recipient || !message) return { sent: false, reason: "not_configured" as const };
 
   const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
     method: "POST",
