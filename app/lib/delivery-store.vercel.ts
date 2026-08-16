@@ -1,9 +1,11 @@
 import { seedDeliveries } from "./delivery-seed";
-import type { CreateDeliveryInput, DeliveryRow, DeliveryStore } from "./delivery-store.types";
+import { detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
+const deliveryEvents: DeliveryEventRow[] = [];
 
 function key(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -22,15 +24,28 @@ export const store: DeliveryStore = {
   },
 
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
-    if (!snapshot.connected || !snapshot.vehicles.length) return;
+    const transitions: DeliveryTransition[] = [];
+    if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
+
     for (const delivery of deliveryStore) {
       if (delivery.status === "Delivered" || (delivery.companyId !== companyId && delivery.companyId !== "demo")) continue;
       const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId)
         ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
       if (!vehicle) continue;
 
+      const previousStatus = delivery.status;
+      const previousProgress = delivery.progress;
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
       const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed);
+      const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
+      const events = detectDeliveryEvents({
+        previousStatus,
+        nextStatus: state.status,
+        previousProgress,
+        nextProgress: state.progress,
+        distanceToDestinationKm: metrics.distanceToDestinationKm,
+        positionAgeMinutes,
+      });
 
       delivery.sendatrackVehicleId = vehicle.id;
       delivery.truck = vehicle.name;
@@ -41,7 +56,21 @@ export const store: DeliveryStore = {
       delivery.gpsSource = "sendatrack";
       delivery.progress = state.progress;
       delivery.status = state.status;
+      transitions.push({ delivery: { ...delivery }, events });
     }
+    return transitions;
+  },
+
+  async recordEvent(deliveryId: string, type: DeliveryEventType, progress: number) {
+    if (deliveryEvents.some((event) => event.deliveryId === deliveryId && event.type === type)) return false;
+    deliveryEvents.push({ deliveryId, type, progress, createdAt: new Date() });
+    return true;
+  },
+
+  async listEvents(deliveryId: string) {
+    return deliveryEvents
+      .filter((event) => event.deliveryId === deliveryId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
 
   async create(input: CreateDeliveryInput) {
