@@ -42,6 +42,7 @@ test("extends Belgium-bound route from Brussels to Antwerp", () => {
 test("derives loading, in-transit and delivered states from GPS", () => {
   const atOrigin = calculateRouteMetrics(50.8503, 4.3517, "Casablanca, MA");
   assert.deepEqual(deriveDeliveryState("Loading", atOrigin, 0), { status: "Loading", progress: 0 });
+  assert.deepEqual(deriveDeliveryState("Loading", atOrigin, 15), { status: "Loading", progress: 0 });
 
   const madrid = calculateRouteMetrics(40.4168, -3.7038, "Casablanca, MA");
   const moving = deriveDeliveryState("Loading", madrid, 70);
@@ -50,6 +51,7 @@ test("derives loading, in-transit and delivered states from GPS", () => {
 
   const destination = calculateRouteMetrics(33.5731, -7.5898, "Casablanca, MA");
   assert.deepEqual(deriveDeliveryState("In transit", destination, 0), { status: "Delivered", progress: 100 });
+  assert.equal(deriveDeliveryState("In transit", destination, 50).status, "In transit");
 });
 
 test("does not move customer progress backwards after a noisier GPS fix", () => {
@@ -59,6 +61,7 @@ test("does not move customer progress backwards after a noisier GPS fix", () => 
     routeDistanceKm: 2200,
     completedDistanceKm: 1144,
     remainingDistanceKm: 1056,
+    distanceFromOriginKm: 1200,
     distanceToDestinationKm: 1000,
   };
 
