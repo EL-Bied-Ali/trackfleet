@@ -6,6 +6,8 @@ export type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 export type DeliveryRow = {
   id: string;
   customer: string;
+  originSiteId: string | null;
+  destinationSiteId: string | null;
   destination: string;
   destinationLatitude: number | null;
   destinationLongitude: number | null;
