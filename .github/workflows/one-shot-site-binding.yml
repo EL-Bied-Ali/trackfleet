@@ -1,4 +1,4 @@
-name: One-shot agency selector patch
+name: One-shot Morocco city fallback routing
 
 on:
   push:
@@ -13,44 +13,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Bind delivery form to known sites
+      - name: Add city-specific fallback route points
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('app/page.tsx')
+
+          p = Path('app/lib/route-progress.ts')
           t = p.read_text()
+          old = '''const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [\n  { names: ["CASABLANCA"], point: [-7.5898, 33.5731] },\n  { names: ["RABAT"], point: [-6.8498, 33.9716] },\n  { names: ["TANGIER", "TANGER"], point: [-5.8128, 35.7673] },\n  { names: ["BRUSSELS", "BRUXELLES", "BRUSSEL"], point: [4.3517, 50.8503] },\n  { names: ["ANTWERP", "ANTWERPEN", "ANVERS"], point: [4.4025, 51.2194] },\n  { names: ["LIÈGE", "LIEGE", "LUIK"], point: [5.5797, 50.6326] },\n];'''
+          new = '''const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [\n  // City-level fallbacks only. Exact agency coordinates override these points\n  // as soon as a confirmed map pin is available.\n  { names: ["CASABLANCA"], point: [-7.5898, 33.5731] },\n  { names: ["RABAT", "SALÉ", "SALE"], point: [-6.7985, 34.0337] },\n  { names: ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"], point: [-5.5000, 35.8900] },\n  { names: ["TANGIER", "TANGER"], point: [-5.8128, 35.7673] },\n  { names: ["TÉTOUAN", "TETOUAN"], point: [-5.3626, 35.5889] },\n  { names: ["MARRAKECH", "MARRAKESH"], point: [-7.9811, 31.6295] },\n  { names: ["AGADIR", "TIKIOUINE"], point: [-9.5981, 30.4278] },\n  { names: ["KHOURIBGA"], point: [-6.9063, 32.8811] },\n  { names: ["FQUIH BEN SALAH", "FQIH BEN SALAH"], point: [-6.6906, 32.5009] },\n  { names: ["BRUSSELS", "BRUXELLES", "BRUSSEL"], point: [4.3517, 50.8503] },\n  { names: ["ANTWERP", "ANTWERPEN", "ANVERS"], point: [4.4025, 51.2194] },\n  { names: ["LIÈGE", "LIEGE", "LUIK"], point: [5.5797, 50.6326] },\n];'''
+          if old not in t: raise SystemExit('known destination routing anchor not found')
+          p.write_text(t.replace(old, new, 1))
 
-          old = '  customer: string;\n  destination: string;\n'
-          new = '  customer: string;\n  originSiteId?: string | null;\n  destinationSiteId?: string | null;\n  destination: string;\n'
-          if old not in t: raise SystemExit('delivery type anchor not found')
-          t = t.replace(old, new, 1)
-
-          old = 'type KnownSite = { id: string; label: string; address: string; country: "BE" | "MA"; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; geofenceReady: boolean };'
-          new = 'type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; geofenceReady: boolean };'
-          if old not in t: raise SystemExit('KnownSite type anchor not found')
-          t = t.replace(old, new, 1)
-
-          old = '''    const destination = String(form.get("destination") ?? "").trim();\n    const selectedSite = knownSites.find((site) => site.address === destination || site.label === destination);\n'''
-          new = '''    const originSiteId = String(form.get("originSiteId") ?? "").trim();\n    const destinationSiteId = String(form.get("destinationSiteId") ?? "").trim();\n    const selectedSite = knownSites.find((site) => site.id === destinationSiteId);\n    const destination = selectedSite?.address ?? "";\n'''
-          if old not in t: raise SystemExit('createDelivery destination anchor not found')
-          t = t.replace(old, new, 1)
-
-          old = '''      customer: String(form.get("customer")),\n      destination,\n      destinationSiteId: selectedSite?.id ?? "",\n'''
-          new = '''      customer: String(form.get("customer")),\n      originSiteId,\n      destination,\n      destinationSiteId: selectedSite?.id ?? "",\n'''
-          if old not in t: raise SystemExit('draft delivery binding anchor not found')
-          t = t.replace(old, new, 1)
-
-          old = '''<form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><label>{t.destination}<input name="destination" required list="trackfleet-known-sites" placeholder={t.destinationPlaceholder} /><datalist id="trackfleet-known-sites">{knownSites.map((site) => <option key={site.id} value={site.address}>{site.label}</option>)}</datalist></label><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId"'''
-          new = '''<form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required defaultValue={knownSites.find((site) => site.roles.includes("origin"))?.id ?? ""}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId"'''
-          if old not in t: raise SystemExit('modal site selector anchor not found')
-          t = t.replace(old, new, 1)
-
-          p.write_text(t)
+          p = Path('tests/route-progress.test.mjs')
+          t = p.read_text()
+          anchor = 'test("uses an exact customer site instead of the city fallback when provided", () => {\n'
+          addition = '''test("uses the correct Morocco city fallback instead of Casablanca for agency stops", () => {\n  const marrakech = calculateRouteMetrics(31.6295, -7.9811, "12 Boulevard Essaouira, Marrakech, Maroc");\n  assert.equal(marrakech.progress, 100);\n  assert.ok(marrakech.distanceToDestinationKm < 0.1);\n\n  const agadir = calculateRouteMetrics(30.4278, -9.5981, "Lot 103/A Zaitoune Tikiouine, Agadir, Maroc");\n  assert.equal(agadir.progress, 100);\n  assert.ok(agadir.distanceToDestinationKm < 0.1);\n\n  const tetouan = calculateRouteMetrics(35.5889, -5.3626, "146 Avenue Cortoba, Tétouan, Maroc");\n  assert.equal(tetouan.progress, 100);\n  assert.ok(tetouan.distanceToDestinationKm < 0.1);\n});\n\n'''
+          if anchor not in t: raise SystemExit('route test anchor not found')
+          p.write_text(t.replace(anchor, addition + anchor, 1))
           PY
       - name: Commit patch
         run: |
           git config user.name "TrackFleet automation"
           git config user.email "104447048+EL-Bied-Ali@users.noreply.github.com"
-          git add app/page.tsx
-          git commit -m "select delivery origin and destination agencies"
+          git add app/lib/route-progress.ts tests/route-progress.test.mjs
+          git commit -m "route agency deliveries to their Morocco cities"
           git push
