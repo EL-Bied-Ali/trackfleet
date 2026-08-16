@@ -1,5 +1,6 @@
 import { seedDeliveries } from "./delivery-seed";
 import type { CreateDeliveryInput, DeliveryRow, DeliveryStore } from "./delivery-store.types";
+import { calculateRouteMetrics, deriveDeliveryState } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
@@ -27,6 +28,10 @@ export const store: DeliveryStore = {
       const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId)
         ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
       if (!vehicle) continue;
+
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
+      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed);
+
       delivery.sendatrackVehicleId = vehicle.id;
       delivery.truck = vehicle.name;
       delivery.latitude = vehicle.latitude;
@@ -34,6 +39,8 @@ export const store: DeliveryStore = {
       delivery.speed = vehicle.speed;
       delivery.lastPositionAt = new Date(vehicle.updatedAt);
       delivery.gpsSource = "sendatrack";
+      delivery.progress = state.progress;
+      delivery.status = state.status;
     }
   },
 
