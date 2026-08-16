@@ -7,16 +7,9 @@ export type RouteMetrics = {
   distanceToDestinationKm: number;
 };
 
-// Shared Belgium ↔ Morocco corridor used by the map. Coordinates are [longitude, latitude].
 export const belgiumMoroccoCorridor: Array<[number, number]> = [
-  [4.3517, 50.8503], // Brussels
-  [2.3522, 48.8566], // Paris
-  [-0.5792, 44.8378], // Bordeaux
-  [-3.7038, 40.4168], // Madrid
-  [-5.453, 36.1408], // Algeciras
-  [-5.8128, 35.7673], // Tangier
-  [-6.8498, 33.9716], // Rabat
-  [-7.5898, 33.5731], // Casablanca
+  [4.3517, 50.8503], [2.3522, 48.8566], [-0.5792, 44.8378], [-3.7038, 40.4168],
+  [-5.453, 36.1408], [-5.8128, 35.7673], [-6.8498, 33.9716], [-7.5898, 33.5731],
 ];
 
 const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
@@ -28,9 +21,7 @@ const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
   { names: ["LIÈGE", "LIEGE", "LUIK"], point: [5.5797, 50.6326] },
 ];
 
-function radians(value: number) {
-  return value * Math.PI / 180;
-}
+function radians(value: number) { return value * Math.PI / 180; }
 
 export function distanceKm(a: [number, number], b: [number, number]) {
   const earthRadiusKm = 6371;
@@ -66,19 +57,15 @@ export function routeForDestination(destination: string): Array<[number, number]
 function projectToSegment(point: [number, number], start: [number, number], end: [number, number]) {
   const referenceLat = radians((start[1] + end[1] + point[1]) / 3);
   const scaleX = Math.cos(referenceLat);
-  const sx = start[0] * scaleX;
-  const sy = start[1];
-  const ex = end[0] * scaleX;
-  const ey = end[1];
-  const px = point[0] * scaleX;
-  const py = point[1];
-  const dx = ex - sx;
-  const dy = ey - sy;
+  const sx = start[0] * scaleX; const sy = start[1];
+  const ex = end[0] * scaleX; const ey = end[1];
+  const px = point[0] * scaleX; const py = point[1];
+  const dx = ex - sx; const dy = ey - sy;
   const denominator = dx * dx + dy * dy;
   const rawT = denominator === 0 ? 0 : ((px - sx) * dx + (py - sy) * dy) / denominator;
   const t = Math.max(0, Math.min(1, rawT));
   const projected: [number, number] = [start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t];
-  return { t, projected, distanceKm: distanceKm(point, projected) };
+  return { t, distanceKm: distanceKm(point, projected) };
 }
 
 export function calculateRouteMetrics(latitude: number, longitude: number, destination: string): RouteMetrics {
@@ -107,13 +94,29 @@ export function calculateRouteMetrics(latitude: number, longitude: number, desti
     ? Math.max(0, Math.min(100, Math.round(completedDistanceKm / routeDistanceKm * 100)))
     : distanceToDestinationKm <= 0.5 ? 100 : 0;
 
+  return { progress, routeDistanceKm, completedDistanceKm, remainingDistanceKm: Math.max(0, routeDistanceKm - completedDistanceKm), distanceFromOriginKm, distanceToDestinationKm };
+}
+
+// A delivery can be created after the truck has already travelled part of our
+// Belgium↔Morocco corridor. The baseline is that absolute corridor percentage at
+// creation time. This converts future absolute positions into 0→100 for this
+// delivery only, without needing a new database column.
+export function rebaseRouteMetrics(metrics: RouteMetrics, baselineProgress: number): RouteMetrics {
+  const baseline = Math.max(0, Math.min(99, baselineProgress));
+  const baselineDistanceKm = metrics.routeDistanceKm * baseline / 100;
+  const tripDistanceKm = Math.max(0, metrics.routeDistanceKm - baselineDistanceKm);
+  const tripCompletedKm = Math.max(0, metrics.completedDistanceKm - baselineDistanceKm);
+  const progress = tripDistanceKm > 0
+    ? Math.max(0, Math.min(100, Math.round(tripCompletedKm / tripDistanceKm * 100)))
+    : metrics.distanceToDestinationKm <= 0.5 ? 100 : 0;
+
   return {
+    ...metrics,
     progress,
-    routeDistanceKm,
-    completedDistanceKm,
-    remainingDistanceKm: Math.max(0, routeDistanceKm - completedDistanceKm),
-    distanceFromOriginKm,
-    distanceToDestinationKm,
+    routeDistanceKm: tripDistanceKm,
+    completedDistanceKm: tripCompletedKm,
+    remainingDistanceKm: Math.max(0, tripDistanceKm - tripCompletedKm),
+    distanceFromOriginKm: tripCompletedKm,
   };
 }
 
@@ -123,20 +126,11 @@ export function deriveDeliveryState(
   speed: number,
   previousProgress = 0,
 ) {
-  // Arrival needs two independent signals: inside a tight 500 m destination
-  // geofence and effectively stopped. Merely driving past the destination no
-  // longer marks a shipment delivered.
   if (currentStatus === "Delivered" || (metrics.distanceToDestinationKm <= 0.5 && speed <= 5)) {
     return { status: "Delivered" as const, progress: 100 };
   }
-
   const progress = Math.max(previousProgress, metrics.progress);
   if (currentStatus === "Delayed") return { status: currentStatus, progress };
-
-  // Leaving the origin is based on actually exiting its geofence. Speed alone
-  // is not enough: a truck manoeuvring inside the yard is still Loading.
-  if (metrics.distanceFromOriginKm >= 1 || progress >= 1) {
-    return { status: "In transit" as const, progress };
-  }
+  if (metrics.distanceFromOriginKm >= 1 || progress >= 1) return { status: "In transit" as const, progress };
   return { status: "Loading" as const, progress };
 }
