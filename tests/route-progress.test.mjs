@@ -26,6 +26,35 @@ test("recognizes a full Belgian address as a Belgium-bound destination", () => {
   assert.equal(end.progress, 100);
 });
 
+test("tracks a return delivery from Agadir all the way to Brussels", () => {
+  const agadirOrigin = [-9.5981, 30.4278];
+  const start = calculateRouteMetrics(30.4278, -9.5981, "45 Boulevard de l'Abattoir, 1000 Bruxelles, Belgique", null, agadirOrigin);
+  const casablanca = calculateRouteMetrics(33.5731, -7.5898, "45 Boulevard de l'Abattoir, 1000 Bruxelles, Belgique", null, agadirOrigin);
+  const end = calculateRouteMetrics(50.8503, 4.3517, "45 Boulevard de l'Abattoir, 1000 Bruxelles, Belgique", null, agadirOrigin);
+  assert.equal(start.progress, 0);
+  assert.ok(casablanca.progress > 5 && casablanca.progress < 50, `Casablanca return progress was ${casablanca.progress}`);
+  assert.equal(end.progress, 100);
+  assert.ok(start.routeDistanceKm > 2000);
+});
+
+test("tracks a delivery loaded at Marrakech for Agadir", () => {
+  const marrakechOrigin = [-7.9811, 31.6295];
+  const start = calculateRouteMetrics(31.6295, -7.9811, "Lot 103/A Zaitoune Tikiouine, Agadir, Maroc", null, marrakechOrigin);
+  const end = calculateRouteMetrics(30.4278, -9.5981, "Lot 103/A Zaitoune Tikiouine, Agadir, Maroc", null, marrakechOrigin);
+  assert.equal(start.progress, 0);
+  assert.equal(end.progress, 100);
+  assert.ok(start.routeDistanceKm > 150 && start.routeDistanceKm < 400);
+});
+
+test("tracks a northbound intra-Morocco delivery from Agadir to Casablanca", () => {
+  const agadirOrigin = [-9.5981, 30.4278];
+  const start = calculateRouteMetrics(30.4278, -9.5981, "959 Boulevard Mohammed VI, Casablanca, Maroc", null, agadirOrigin);
+  const end = calculateRouteMetrics(33.5731, -7.5898, "959 Boulevard Mohammed VI, Casablanca, Maroc", null, agadirOrigin);
+  assert.equal(start.progress, 0);
+  assert.equal(end.progress, 100);
+  assert.ok(start.routeDistanceKm > 300);
+});
+
 test("stops the Morocco route at Tangier instead of continuing to Casablanca", () => {
   const tangier = calculateRouteMetrics(35.7673, -5.8128, "Tangier, MA");
   assert.equal(tangier.progress, 100);
