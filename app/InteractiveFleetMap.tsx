@@ -10,6 +10,8 @@ maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
 type MapDelivery = {
   id: string;
+  originLatitude?: number | null;
+  originLongitude?: number | null;
   destination: string;
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
@@ -53,6 +55,11 @@ function positionFor(delivery: MapDelivery, index: number): [number, number] {
 function exactDestination(delivery: MapDelivery): [number, number] | null {
   return typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
     ? [delivery.destinationLongitude, delivery.destinationLatitude]
+    : null;
+}
+function exactOrigin(delivery: MapDelivery): [number, number] | null {
+  return typeof delivery.originLatitude === "number" && typeof delivery.originLongitude === "number"
+    ? [delivery.originLongitude, delivery.originLatitude]
     : null;
 }
 
@@ -108,7 +115,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
         data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [corridor[4], corridor[5]] } },
       });
       map.addLayer({ id: "ferry-line", type: "line", source: "ferry", paint: { "line-color": "#268f9b", "line-width": 5, "line-dasharray": [1, 1] } });
-      map.fitBounds([[-8.5, 32.7], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
+      map.fitBounds([[-10.5, 29.5], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
     });
 
     return () => {
@@ -130,7 +137,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
     destinationMarkerRef.current = null;
 
     const selected = deliveries.find((delivery) => delivery.id === selectedId) ?? deliveries[0];
-    const routeCoordinates = selected ? routeForDestination(selected.destination, exactDestination(selected)) : corridor;
+    const routeCoordinates = selected ? routeForDestination(selected.destination, exactDestination(selected), exactOrigin(selected)) : corridor;
     const corridorSource = map.getSource("corridor") as GeoJSONSource | undefined;
     corridorSource?.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeCoordinates } });
 
