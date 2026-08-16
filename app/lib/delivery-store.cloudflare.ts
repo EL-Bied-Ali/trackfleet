@@ -1,6 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { seedDeliveries } from "./delivery-seed";
 import type { CreateDeliveryInput, DeliveryRow, DeliveryStore, DeliveryStatus } from "./delivery-store.types";
+import { calculateRouteMetrics, deriveDeliveryState } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 
 function db() {
@@ -109,15 +110,40 @@ export const store: DeliveryStore = {
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
     if (!snapshot.connected || !snapshot.vehicles.length) return;
     await ensureTable();
-    const result = await db().prepare("SELECT id, truck, sendatrack_vehicle_id AS sendatrackVehicleId, company_id AS companyId FROM deliveries WHERE (company_id = ? OR company_id = 'demo') AND status != 'Delivered'")
-      .bind(companyId).all<{ id: string; truck: string; sendatrackVehicleId: string; companyId: string }>();
+    const result = await db().prepare(`SELECT id, truck, destination, status,
+      sendatrack_vehicle_id AS sendatrackVehicleId, company_id AS companyId
+      FROM deliveries WHERE (company_id = ? OR company_id = 'demo') AND status != 'Delivered'`)
+      .bind(companyId).all<{
+        id: string;
+        truck: string;
+        destination: string;
+        status: DeliveryStatus;
+        sendatrackVehicleId: string;
+        companyId: string;
+      }>();
     const statements = [];
     for (const delivery of result.results ?? []) {
       const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId)
         ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
       if (!vehicle) continue;
-      statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack' WHERE id = ?`)
-        .bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, delivery.id));
+
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination);
+      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed);
+
+      statements.push(db().prepare(`UPDATE deliveries SET
+        sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?,
+        last_position_at = ?, gps_source = 'sendatrack', progress = ?, status = ? WHERE id = ?`)
+        .bind(
+          vehicle.id,
+          vehicle.name,
+          vehicle.latitude,
+          vehicle.longitude,
+          vehicle.speed,
+          vehicle.updatedAt,
+          state.progress,
+          state.status,
+          delivery.id,
+        ));
     }
     if (statements.length) await db().batch(statements);
   },
