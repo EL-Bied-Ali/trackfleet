@@ -3,6 +3,8 @@ import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from
 export const deliveries = sqliteTable("deliveries", {
   id: text("id").primaryKey(),
   customer: text("customer").notNull(),
+  originSiteId: text("origin_site_id"),
+  destinationSiteId: text("destination_site_id"),
   destination: text("destination").notNull(),
   destinationLatitude: real("destination_latitude"),
   destinationLongitude: real("destination_longitude"),
