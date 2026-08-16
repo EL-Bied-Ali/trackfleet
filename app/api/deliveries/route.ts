@@ -1,5 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import type { DeliveryTransition } from "../../lib/delivery-store.types";
+import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { processPendingNotifications } from "../../lib/notification-runner";
@@ -63,6 +64,40 @@ function enrichDelivery<T extends {
   };
 }
 
+async function enrichAndDetectDelay<T extends {
+  id: string;
+  progress: number;
+  latitude: number | null;
+  longitude: number | null;
+  destination: string;
+  destinationLatitude?: number | null;
+  destinationLongitude?: number | null;
+  lastPositionAt: Date | null;
+  plannedArrivalAt?: Date | null;
+  status: string;
+}>(row: T) {
+  let events = await store.listEvents(row.id);
+  let delivery = enrichDelivery(row, events);
+  const delayDetected = shouldDetectDelay({
+    eta: {
+      estimatedArrivalAt: delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt) : null,
+      effectiveSpeedKmh: delivery.effectiveSpeedKmh,
+      delayMinutes: delivery.etaDelayMinutes,
+      confidence: delivery.etaConfidence,
+      source: delivery.etaSource,
+    },
+    delivered: row.status === "Delivered",
+    alreadyDetected: events.some((event) => event.type === "DELAY_DETECTED"),
+  });
+
+  if (delayDetected && await store.recordEvent(row.id, "DELAY_DETECTED", row.progress)) {
+    events = await store.listEvents(row.id);
+    delivery = enrichDelivery(row, events);
+  }
+
+  return { delivery, events };
+}
+
 function optionalNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
@@ -89,14 +124,14 @@ export async function GET(request: Request) {
       if (integration.connected) {
         const transitions = await store.applySendatrackSnapshot(integration, row.companyId);
         await persistTransitionEvents(transitions);
-        await processPendingNotifications(row.companyId, requestUrl.origin);
         row = await store.getPublic(tracking) ?? row;
       }
 
-      const allEvents = await store.listEvents(row.id);
+      const enriched = await enrichAndDetectDelay(row);
+      await processPendingNotifications(row.companyId, requestUrl.origin);
       return Response.json({
-        deliveries: [enrichDelivery(row, allEvents)],
-        events: allEvents.filter((event) => customerFacingEvent(event.type)),
+        deliveries: [enriched.delivery],
+        events: enriched.events.filter((event) => customerFacingEvent(event.type)),
         publicTracking: true,
       }, { headers: { "cache-control": "no-store" } });
     }
@@ -107,12 +142,9 @@ export async function GET(request: Request) {
     const integration = await getSendatrackSnapshot(session.credentials);
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
-    await processPendingNotifications(session.companyId, requestUrl.origin);
     const rows = await store.listForCompany(session.companyId);
-    const enrichedRows = await Promise.all(rows.map(async (row) => {
-      const events = await store.listEvents(row.id);
-      return enrichDelivery(row, events);
-    }));
+    const enrichedRows = await Promise.all(rows.map(async (row) => (await enrichAndDetectDelay(row)).delivery));
+    await processPendingNotifications(session.companyId, requestUrl.origin);
 
     return Response.json({
       deliveries: enrichedRows,
@@ -189,8 +221,8 @@ export async function POST(request: Request) {
     });
     if (baselineMetrics) await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
 
-    const events = await store.listEvents(delivery.id);
-    return Response.json({ delivery: enrichDelivery(delivery, events) }, { status: 201 });
+    const enriched = await enrichAndDetectDelay(delivery);
+    return Response.json({ delivery: enriched.delivery }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
