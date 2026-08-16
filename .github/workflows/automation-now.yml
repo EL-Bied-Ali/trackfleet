@@ -37,3 +37,5 @@ jobs:
           console.log(body);
           if (!tickResponse.ok) throw new Error(`tick_http_${tickResponse.status}`);
           NODE
+
+          # one-shot trigger after rotating the production cron secret
