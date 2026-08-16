@@ -35,6 +35,29 @@ test("extends Belgium-bound route from Brussels to Antwerp", () => {
   assert.ok(antwerp.distanceToDestinationKm < 0.1);
 });
 
+test("uses an exact customer site instead of the city fallback when provided", () => {
+  const exactSite = [-7.62, 33.55];
+  const atCityFallback = calculateRouteMetrics(33.5731, -7.5898, "Casablanca, MA", exactSite);
+  assert.ok(atCityFallback.distanceToDestinationKm > 2);
+
+  const atExactSite = calculateRouteMetrics(33.55, -7.62, "Casablanca, MA", exactSite);
+  assert.ok(atExactSite.distanceToDestinationKm < 0.1);
+  assert.equal(atExactSite.progress, 100);
+});
+
+test("honours a configurable arrival geofence radius", () => {
+  const metrics = {
+    progress: 99,
+    routeDistanceKm: 100,
+    completedDistanceKm: 99,
+    remainingDistanceKm: 1,
+    distanceFromOriginKm: 99,
+    distanceToDestinationKm: 0.8,
+  };
+  assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 0.5).status, "In transit");
+  assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 1).status, "Delivered");
+});
+
 test("rebases a delivery created mid-corridor to zero percent", () => {
   const creationFix = calculateRouteMetrics(35.7673, -5.8128, "Casablanca, MA");
   assert.ok(creationFix.progress > 0);
