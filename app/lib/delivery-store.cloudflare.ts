@@ -81,7 +81,7 @@ async function ensureTable() {
       (id, customer, origin_site_id, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
        truck, driver, status, eta, planned_arrival_at, progress, color, contact, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
         delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
         delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
@@ -187,7 +187,7 @@ export const store: DeliveryStore = {
       (id, customer, origin_site_id, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
        truck, driver, status, eta, planned_arrival_at, progress, color, contact, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
         delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
         delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
