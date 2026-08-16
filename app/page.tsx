@@ -5,6 +5,7 @@ import { localeOptions, translations, type Locale } from "./i18n";
 import InteractiveFleetMap from "./InteractiveFleetMap";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
+type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "ARRIVED" | "GPS_STALE";
 
 type Delivery = {
   id: string;
@@ -24,6 +25,18 @@ type Delivery = {
   lastPositionAt?: string | null;
   gpsSource?: "sendatrack" | "simulation";
   trackingToken?: string | null;
+  routeDistanceKm?: number | null;
+  remainingDistanceKm?: number | null;
+  distanceToDestinationKm?: number | null;
+  positionAgeMinutes?: number | null;
+  gpsFresh?: boolean;
+};
+
+type DeliveryEventRow = {
+  deliveryId: string;
+  type: DeliveryEventType;
+  progress: number;
+  createdAt: string;
 };
 
 type VehicleOption = { id: string; name: string; speed: number; updatedAt: number; latitude: number; longitude: number };
@@ -110,6 +123,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState("");
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
+  const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
     { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
   ]);
@@ -172,10 +186,11 @@ export default function Home() {
         const endpoint = tracking ? `/api/deliveries?tracking=${encodeURIComponent(tracking)}` : "/api/deliveries";
         const response = await fetch(endpoint, { cache: "no-store" });
         if (!response.ok) throw new Error("Delivery service unavailable");
-        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState };
+        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[] };
         if (!active) return;
         if (tracking && data.deliveries.length) {
           setDeliveries(data.deliveries);
+          setDeliveryEvents(data.events ?? []);
           setSelectedId(data.deliveries[0].id);
           setPublicTrackingState("ready");
         } else if (!tracking) {
@@ -214,8 +229,6 @@ export default function Home() {
   const customerCopy = t.customerStatus[selected.status];
   const headingToMorocco = selected.destination.endsWith(", MA");
   const routeDirection = headingToMorocco ? t.belgiumToMorocco : t.moroccoToBelgium;
-  const reachedFerry = selected.progress >= 52;
-  const clearedCustoms = selected.progress >= 72;
   const visibleDeliveries = useMemo(() => {
     if (filter === "All deliveries") return deliveries;
     return deliveries.filter((delivery) => delivery.status === filter);
@@ -381,6 +394,76 @@ export default function Home() {
   if (view !== "customer" && authState === "anonymous") return <LoginScreen locale={locale} busy={loginBusy} error={loginError} onLocale={changeLocale} onSubmit={login} />;
 
   if (view === "customer") {
+    const copy = {
+      fr: {
+        progress: "Trajet effectué",
+        remaining: "Distance restante",
+        speed: "Vitesse GPS",
+        gps: "Dernière position",
+        fresh: "GPS à jour",
+        noGps: "Position indisponible",
+        current: "Position actuelle",
+        currentDetail: (progress: number) => `${progress}% du trajet effectué`,
+        destination: "Destination",
+        events: {
+          DEPARTED: "Camion parti",
+          PROGRESS_25: "25% du trajet effectué",
+          PROGRESS_50: "Mi-parcours atteint",
+          PROGRESS_75: "75% du trajet effectué",
+          NEAR_DESTINATION: "Le camion approche",
+          ARRIVED: "Livraison arrivée",
+          GPS_STALE: "Position GPS ancienne",
+        } as Record<DeliveryEventType, string>,
+      },
+      en: {
+        progress: "Trip completed",
+        remaining: "Distance remaining",
+        speed: "GPS speed",
+        gps: "Last position",
+        fresh: "GPS up to date",
+        noGps: "Position unavailable",
+        current: "Current position",
+        currentDetail: (progress: number) => `${progress}% of the trip completed`,
+        destination: "Destination",
+        events: {
+          DEPARTED: "Truck departed",
+          PROGRESS_25: "25% of the trip completed",
+          PROGRESS_50: "Halfway point reached",
+          PROGRESS_75: "75% of the trip completed",
+          NEAR_DESTINATION: "Truck is approaching",
+          ARRIVED: "Delivery arrived",
+          GPS_STALE: "GPS position is old",
+        } as Record<DeliveryEventType, string>,
+      },
+      nl: {
+        progress: "Traject voltooid",
+        remaining: "Resterende afstand",
+        speed: "GPS-snelheid",
+        gps: "Laatste positie",
+        fresh: "GPS is actueel",
+        noGps: "Positie niet beschikbaar",
+        current: "Huidige positie",
+        currentDetail: (progress: number) => `${progress}% van het traject voltooid`,
+        destination: "Bestemming",
+        events: {
+          DEPARTED: "Vrachtwagen vertrokken",
+          PROGRESS_25: "25% van het traject voltooid",
+          PROGRESS_50: "Halverwege bereikt",
+          PROGRESS_75: "75% van het traject voltooid",
+          NEAR_DESTINATION: "Vrachtwagen nadert",
+          ARRIVED: "Levering aangekomen",
+          GPS_STALE: "GPS-positie is verouderd",
+        } as Record<DeliveryEventType, string>,
+      },
+    }[locale];
+    const dateLocale = locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB";
+    const formatEventTime = (value: string) => new Date(value).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    const gpsText = selected.positionAgeMinutes == null
+      ? copy.noGps
+      : selected.gpsFresh
+        ? `${copy.fresh} · ${selected.positionAgeMinutes} min`
+        : `${selected.positionAgeMinutes} min`;
+
     return (
       <main className="customer-page">
         <header className="customer-header">
@@ -406,10 +489,17 @@ export default function Home() {
             </div>
           </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
+            <article className="stat-card"><div className="stat-head"><span>{copy.progress}</span><Icon>↗</Icon></div><div><strong>{selected.progress}%</strong></div><div className="progress"><div><i style={{ width: `${selected.progress}%` }} /></div></div></article>
+            <article className="stat-card"><div className="stat-head"><span>{copy.remaining}</span><Icon>◇</Icon></div><div><strong>{selected.remainingDistanceKm == null ? "—" : `${selected.remainingDistanceKm.toLocaleString(dateLocale)} km`}</strong></div><p>{selected.routeDistanceKm == null ? "" : `${Math.round(selected.routeDistanceKm).toLocaleString(dateLocale)} km total`}</p></article>
+            <article className="stat-card"><div className="stat-head"><span>{copy.speed}</span><Icon>▰</Icon></div><div><strong>{selected.speed == null ? "—" : `${Math.round(selected.speed)} km/h`}</strong></div><p>{selected.status === "Delivered" ? t.statuses.Delivered : t.statuses[selected.status]}</p></article>
+            <article className="stat-card"><div className="stat-head"><span>{copy.gps}</span><Icon>⌖</Icon></div><div><strong>{selected.gpsFresh ? "●" : selected.positionAgeMinutes == null ? "—" : "△"}</strong></div><p>{gpsText}</p></article>
+          </div>
+
           <div className="customer-grid">
             <div className="map customer-map">
               <InteractiveFleetMap deliveries={deliveries} selectedId={selectedId} customerMode label={`${routeDirection} · ${selected.truck}`} />
-              <div className="map-live"><i /> {t.liveUpdated}</div>
+              <div className="map-live"><i className={selected.gpsFresh ? "" : "fallback"} /> {gpsText}</div>
             </div>
 
             <aside className="journey-card">
@@ -418,12 +508,14 @@ export default function Home() {
                 <div><strong>{selected.truck}</strong><span>{t.yourVehicle}</span></div>
               </div>
               <div className="timeline">
-                <div className="timeline-step done"><i>✓</i><div><strong>{t.orderPrepared}</strong><span>{t.todayTime("08:42")}</span></div></div>
-                <div className="timeline-step done"><i>✓</i><div><strong>{t.leftWarehouse}</strong><span>{t.todayTime("10:16")}</span></div></div>
-                <div className={`timeline-step ${reachedFerry ? "done" : "active"}`}><i>{reachedFerry ? "✓" : "●"}</i><div><strong>{t.europeanLeg}</strong><span>{t.europeanLegDetail}</span></div></div>
-                <div className={`timeline-step ${clearedCustoms ? "done" : reachedFerry ? `active ${selected.status === "Delayed" ? "is-delayed" : ""}` : ""}`}><i>{clearedCustoms ? "✓" : reachedFerry ? "●" : "○"}</i><div><strong>{t.ferryAndCustoms}</strong><span>{reachedFerry ? t.ferryDetailActive : t.ferryDetailPending}</span></div></div>
-                {clearedCustoms && selected.status !== "Delivered" && <div className="timeline-step active"><i>●</i><div><strong>{customerCopy.currentTitle}</strong><span>{customerCopy.currentDetail(selected.progress, selected.eta)}</span></div></div>}
-                <div className={selected.status === "Delivered" ? "timeline-step done" : "timeline-step"}><i>{selected.status === "Delivered" ? "✓" : "◆"}</i><div><strong>{customerCopy.finalTitle}</strong><span>{customerCopy.finalDetail(selected.eta)}</span></div></div>
+                {deliveryEvents.length > 0 ? deliveryEvents.map((event) => (
+                  <div className={`timeline-step ${event.type === "GPS_STALE" ? "is-delayed" : "done"}`} key={`${event.deliveryId}-${event.type}`}>
+                    <i>{event.type === "GPS_STALE" ? "!" : "✓"}</i>
+                    <div><strong>{copy.events[event.type]}</strong><span>{formatEventTime(event.createdAt)} · {event.progress}%</span></div>
+                  </div>
+                )) : <div className="timeline-step done"><i>✓</i><div><strong>{t.orderPrepared}</strong><span>{t.deliveryLabel} {selected.id}</span></div></div>}
+                {selected.status !== "Delivered" && <div className="timeline-step active"><i>●</i><div><strong>{copy.current}</strong><span>{copy.currentDetail(selected.progress)}</span></div></div>}
+                <div className={selected.status === "Delivered" ? "timeline-step done" : "timeline-step"}><i>{selected.status === "Delivered" ? "✓" : "◆"}</i><div><strong>{copy.destination}</strong><span>{selected.destination}{selected.distanceToDestinationKm == null ? "" : ` · ${Math.round(selected.distanceToDestinationKm)} km`}</span></div></div>
               </div>
               <div className="privacy-note"><Icon>⌁</Icon><p><strong>{t.privacyTitle}</strong><span>{t.privacyBody}</span></p></div>
             </aside>
