@@ -5,6 +5,7 @@ export type DeliveryEventType =
   | "PROGRESS_50"
   | "PROGRESS_75"
   | "NEAR_DESTINATION"
+  | "DELAY_DETECTED"
   | "ARRIVED"
   | "GPS_STALE";
 
