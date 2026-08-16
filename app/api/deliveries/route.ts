@@ -1,6 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import type { DeliveryTransition } from "../../lib/delivery-store.types";
-import { calculateRouteMetrics } from "../../lib/route-progress";
+import { customerFacingEvent } from "../../lib/delivery-events";
+import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { sendAutomaticWhatsAppNotification } from "../../lib/whatsapp-automation";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
@@ -15,10 +16,11 @@ function enrichDelivery<T extends {
   longitude: number | null;
   destination: string;
   lastPositionAt: Date | null;
-}>(row: T) {
-  const metrics = typeof row.latitude === "number" && typeof row.longitude === "number"
+}>(row: T, baselineProgress = 0) {
+  const absoluteMetrics = typeof row.latitude === "number" && typeof row.longitude === "number"
     ? calculateRouteMetrics(row.latitude, row.longitude, row.destination)
     : null;
+  const metrics = absoluteMetrics ? rebaseRouteMetrics(absoluteMetrics, baselineProgress) : null;
   const positionAgeMinutes = row.lastPositionAt
     ? Math.max(0, Math.round((Date.now() - row.lastPositionAt.getTime()) / 60_000))
     : null;
@@ -32,12 +34,15 @@ function enrichDelivery<T extends {
   };
 }
 
+function baselineFromEvents(events: Awaited<ReturnType<typeof store.listEvents>>) {
+  return events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0;
+}
+
 async function persistTransitionEvents(transitions: DeliveryTransition[], origin: string) {
   for (const transition of transitions) {
     for (const type of transition.events) {
       const isNew = await store.recordEvent(transition.delivery.id, type, transition.delivery.progress);
       if (!isNew) continue;
-
       const trackingUrl = new URL(origin);
       trackingUrl.searchParams.set("tracking", transition.delivery.trackingToken || transition.delivery.id);
       await sendAutomaticWhatsAppNotification(type, transition.delivery, trackingUrl.toString());
@@ -53,9 +58,6 @@ export async function GET(request: Request) {
       let row = await store.getPublic(tracking);
       if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
 
-      // Public tracking has no company login cookie. For the current single-account
-      // deployment, refresh from server-side SENDATRACK credentials when available
-      // so the customer's link does not depend on an operator keeping the dashboard open.
       const integration = await getSendatrackSnapshot();
       if (integration.connected) {
         const transitions = await store.applySendatrackSnapshot(integration, row.companyId);
@@ -63,10 +65,10 @@ export async function GET(request: Request) {
         row = await store.getPublic(tracking) ?? row;
       }
 
-      const events = await store.listEvents(row.id);
+      const allEvents = await store.listEvents(row.id);
       return Response.json({
-        deliveries: [enrichDelivery(row)],
-        events,
+        deliveries: [enrichDelivery(row, baselineFromEvents(allEvents))],
+        events: allEvents.filter((event) => customerFacingEvent(event.type)),
         publicTracking: true,
       }, { headers: { "cache-control": "no-store" } });
     }
@@ -78,21 +80,21 @@ export async function GET(request: Request) {
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions, requestUrl.origin);
     const rows = await store.listForCompany(session.companyId);
+    const enrichedRows = await Promise.all(rows.map(async (row) => {
+      const events = await store.listEvents(row.id);
+      return enrichDelivery(row, baselineFromEvents(events));
+    }));
 
     return Response.json({
-      deliveries: rows.map(enrichDelivery),
+      deliveries: enrichedRows,
       integration: {
         configured: integration.configured,
         connected: integration.connected,
         vehicleCount: integration.vehicles.length,
         error: integration.error ?? null,
         vehicles: integration.vehicles.map((vehicle) => ({
-          id: vehicle.id,
-          name: vehicle.name,
-          speed: vehicle.speed,
-          updatedAt: vehicle.updatedAt,
-          latitude: vehicle.latitude,
-          longitude: vehicle.longitude,
+          id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt,
+          latitude: vehicle.latitude, longitude: vehicle.longitude,
         })),
       },
     }, { headers: { "cache-control": "no-store" } });
@@ -117,27 +119,42 @@ export async function POST(request: Request) {
       return Response.json({ error: "customer, destination, truck, and a valid ETA are required" }, { status: 400 });
     }
 
+    // Capture the selected truck's actual GPS fix at creation. That absolute
+    // corridor position becomes the 0% baseline for this delivery.
+    const snapshot = await getSendatrackSnapshot(session.credentials);
+    const liveVehicle = snapshot.vehicles.find((vehicle) => vehicle.id === sendatrackVehicleId)
+      ?? snapshot.vehicles.find((vehicle) => vehicle.name === truck);
+    const baselineMetrics = liveVehicle
+      ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination)
+      : null;
+
     const delivery = await store.create({
       customer,
       destination,
-      truck,
+      truck: liveVehicle?.name ?? truck,
       eta,
       contact: String(payload.contact ?? "").trim(),
-      sendatrackVehicleId,
+      sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
       companyId: session.companyId,
       trackingToken: createTrackingToken(),
       driver: "To be assigned",
       status: "Loading",
       progress: 0,
       color: "#916ed7",
-      latitude: null,
-      longitude: null,
-      speed: null,
-      lastPositionAt: null,
-      gpsSource: "simulation",
+      latitude: liveVehicle?.latitude ?? null,
+      longitude: liveVehicle?.longitude ?? null,
+      speed: liveVehicle?.speed ?? null,
+      lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,
+      gpsSource: liveVehicle ? "sendatrack" : "simulation",
     });
 
-    return Response.json({ delivery: enrichDelivery(delivery) }, { status: 201 });
+    if (baselineMetrics) {
+      await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
+    }
+
+    return Response.json({
+      delivery: enrichDelivery(delivery, baselineMetrics?.progress ?? 0),
+    }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
