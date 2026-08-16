@@ -1,14 +1,16 @@
 import { isSendatrackConfigured } from "../../lib/sendatrack";
+import { getStorageHealth } from "../../lib/storage-health";
 
 export async function GET() {
+  const storage = await getStorageHealth();
   return Response.json({
-    ok: true,
+    ok: storage.connected,
     service: "trackfleet",
     sendatrackConfigured: isSendatrackConfigured(),
-    storage: process.env.DATABASE_URL?.trim() ? "postgres" : process.env.CF_PAGES ? "cloudflare-d1" : "memory",
-    persistentStorageConfigured: Boolean(process.env.DATABASE_URL?.trim() || process.env.CF_PAGES),
+    storage,
     timestamp: new Date().toISOString(),
   }, {
+    status: storage.connected ? 200 : 503,
     headers: {
       "cache-control": "no-store",
       "x-robots-tag": "noindex, nofollow, noarchive",
