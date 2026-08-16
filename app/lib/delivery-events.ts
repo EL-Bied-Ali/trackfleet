@@ -16,6 +16,7 @@ export type DeliveryEventInput = {
   nextProgress: number;
   distanceToDestinationKm: number;
   positionAgeMinutes: number;
+  arrivalRadiusKm?: number;
 };
 
 export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventType[] {
@@ -31,10 +32,12 @@ export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventTy
     }
   }
 
+  const arrivalRadiusKm = Math.max(0.05, Math.min(10, input.arrivalRadiusKm ?? 0.5));
+  const nearDestinationRadiusKm = Math.max(10, arrivalRadiusKm * 4);
   if (
-    input.previousProgress < 90
-    && input.nextProgress >= 90
-    && input.distanceToDestinationKm > 0.5
+    input.nextStatus !== "Delivered"
+    && input.distanceToDestinationKm > arrivalRadiusKm
+    && input.distanceToDestinationKm <= nearDestinationRadiusKm
   ) {
     events.push("NEAR_DESTINATION");
   }
