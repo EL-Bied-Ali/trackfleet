@@ -183,8 +183,8 @@ export const postgresStore: DeliveryStore = {
       const previousProgress = delivery.progress;
       const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery));
       const metrics = rebaseRouteMetrics(absoluteMetrics, await baselineProgress(delivery.id));
-      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm);
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
+      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
       const events = detectDeliveryEvents({
         previousStatus,
         nextStatus: state.status,

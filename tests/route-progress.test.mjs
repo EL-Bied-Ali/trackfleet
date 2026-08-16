@@ -83,6 +83,33 @@ test("derives loading, in-transit and delivered states from GPS", () => {
   assert.equal(deriveDeliveryState("In transit", destination, 50).status, "In transit");
 });
 
+test("does not mark departure from a stale GPS position", () => {
+  const moved = {
+    progress: 3, routeDistanceKm: 1000, completedDistanceKm: 30, remainingDistanceKm: 970,
+    distanceFromOriginKm: 30, distanceToDestinationKm: 970,
+  };
+  const state = deriveDeliveryState("Loading", moved, 60, 0, 0.5, 45);
+  assert.equal(state.status, "Loading");
+});
+
+test("does not mark departure from GPS displacement while the truck is stopped", () => {
+  const moved = {
+    progress: 3, routeDistanceKm: 1000, completedDistanceKm: 30, remainingDistanceKm: 970,
+    distanceFromOriginKm: 30, distanceToDestinationKm: 970,
+  };
+  const state = deriveDeliveryState("Loading", moved, 0, 0, 0.5, 2);
+  assert.equal(state.status, "Loading");
+});
+
+test("marks departure only after fresh movement beyond the departure zone", () => {
+  const moved = {
+    progress: 2, routeDistanceKm: 1000, completedDistanceKm: 20, remainingDistanceKm: 980,
+    distanceFromOriginKm: 20, distanceToDestinationKm: 980,
+  };
+  const state = deriveDeliveryState("Loading", moved, 35, 0, 0.5, 2);
+  assert.equal(state.status, "In transit");
+});
+
 test("does not move customer progress backwards after a noisier GPS fix", () => {
   const previousProgress = 55;
   const noisierFixMetrics = {
