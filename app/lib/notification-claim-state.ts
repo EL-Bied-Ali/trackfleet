@@ -2,8 +2,11 @@ export type NotificationClaim = { attemptedAt: number; sent: boolean };
 
 export class NotificationClaimState {
   private readonly claims = new Map<string, NotificationClaim>();
+  private readonly retryAfterMs: number;
 
-  constructor(private readonly retryAfterMs = 5 * 60_000) {}
+  constructor(retryAfterMs = 5 * 60_000) {
+    this.retryAfterMs = retryAfterMs;
+  }
 
   isPending(key: string, now = Date.now()) {
     const claim = this.claims.get(key);
