@@ -137,15 +137,22 @@ export function deriveDeliveryState(
   currentStatus: "In transit" | "Delayed" | "Loading" | "Delivered",
   metrics: RouteMetrics,
   speed: number,
+  previousProgress = 0,
 ) {
   if (currentStatus === "Delivered" || metrics.distanceToDestinationKm <= 2) {
     return { status: "Delivered" as const, progress: 100 };
   }
+
+  // A customer-facing trip should not appear to travel backwards because one GPS
+  // fix projected slightly behind the previous one. We keep the highest confirmed
+  // percentage while still using the newest position for distance and arrival.
+  const progress = Math.max(previousProgress, metrics.progress);
+
   if (currentStatus === "Delayed") {
-    return { status: currentStatus, progress: metrics.progress };
+    return { status: currentStatus, progress };
   }
-  if (metrics.progress >= 1 || speed > 3) {
-    return { status: "In transit" as const, progress: metrics.progress };
+  if (progress >= 1 || speed > 3) {
+    return { status: "In transit" as const, progress };
   }
-  return { status: "Loading" as const, progress: metrics.progress };
+  return { status: "Loading" as const, progress };
 }
