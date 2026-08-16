@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "../app/lib/route-progress.ts";
+import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics, routeForDestination } from "../app/lib/route-progress.ts";
 
 test("calculates Morocco-bound progress along the shared corridor", () => {
   const start = calculateRouteMetrics(50.8503, 4.3517, "Casablanca, MA");
@@ -32,6 +32,23 @@ test("stops the Morocco route at Tangier instead of continuing to Casablanca", (
   assert.ok(tangier.distanceToDestinationKm < 0.1);
   const casablanca = calculateRouteMetrics(33.5731, -7.5898, "Tangier, MA");
   assert.ok(casablanca.distanceToDestinationKm > 250);
+});
+
+test("branches northern Morocco stops before Casablanca", () => {
+  const casablanca = [-7.5898, 33.5731];
+  const tangerMedRoute = routeForDestination("Oued Ghlala, Ksar Al Majaz, 93000 Tanger Med, Maroc");
+  const tetouanRoute = routeForDestination("146 Avenue Cortoba, Tétouan, Maroc");
+  const saleRoute = routeForDestination("12 Bis Hay Nasser, Salé, Maroc");
+
+  assert.ok(!tangerMedRoute.some((point) => point[0] === casablanca[0] && point[1] === casablanca[1]));
+  assert.ok(!tetouanRoute.some((point) => point[0] === casablanca[0] && point[1] === casablanca[1]));
+  assert.ok(!saleRoute.some((point) => point[0] === casablanca[0] && point[1] === casablanca[1]));
+});
+
+test("routes Agadir through Marrakech instead of jumping directly from Casablanca", () => {
+  const route = routeForDestination("Lot 103/A Zaitoune Tikiouine, Agadir, Maroc");
+  assert.ok(route.some((point) => Math.abs(point[0] - -7.9811) < 0.0001 && Math.abs(point[1] - 31.6295) < 0.0001));
+  assert.deepEqual(route.at(-1), [-9.5981, 30.4278]);
 });
 
 test("extends Belgium-bound route from Brussels to Antwerp", () => {
