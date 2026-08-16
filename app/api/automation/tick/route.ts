@@ -1,5 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { automationStorageIsReady } from "../../../lib/automation-readiness";
 import { runFleetAutomation } from "../../../lib/server-automation";
+import { getStorageHealth } from "../../../lib/storage-health";
 
 function authorized(request: Request) {
   const secret = runtimeEnv.CRON_SECRET?.trim();
@@ -10,6 +12,15 @@ function authorized(request: Request) {
 export async function GET(request: Request) {
   if (!authorized(request)) {
     return Response.json({ error: "unauthorized" }, { status: 401, headers: { "cache-control": "no-store" } });
+  }
+
+  const storage = await getStorageHealth();
+  if (!automationStorageIsReady(storage)) {
+    return Response.json({
+      ok: false,
+      error: "persistent_storage_required",
+      storage,
+    }, { status: 503, headers: { "cache-control": "no-store" } });
   }
 
   try {
