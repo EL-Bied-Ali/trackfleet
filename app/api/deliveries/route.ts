@@ -7,6 +7,7 @@ import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
+import { buildTruckStopPlans } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
@@ -149,11 +150,13 @@ export async function GET(request: Request) {
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
+    const stopPlans = buildTruckStopPlans(rows);
     const enrichedRows = await Promise.all(rows.map(async (row) => (await enrichAndDetectDelay(row)).delivery));
     await processPendingNotifications(session.companyId, requestUrl.origin);
 
     return Response.json({
       deliveries: enrichedRows,
+      stopPlans,
       integration: {
         configured: integration.configured,
         connected: integration.connected,
