@@ -241,7 +241,7 @@ export const postgresStore: DeliveryStore = {
       FROM delivery_events e
       JOIN deliveries d ON d.id = e.delivery_id
       LEFT JOIN delivery_notifications n ON n.delivery_id = e.delivery_id AND n.event_type = e.type AND n.channel = 'whatsapp'
-      WHERE (d.company_id = ${companyId} OR d.company_id = 'demo')
+      WHERE d.company_id = ${companyId}
         AND n.sent_at IS NULL
         AND (n.attempted_at IS NULL OR n.attempted_at < ${staleBefore})
       ORDER BY e.created_at ASC` as RawEvent[];
