@@ -14,6 +14,7 @@ export type DeliveryRow = {
   driver: string;
   status: DeliveryStatus;
   eta: string;
+  plannedArrivalAt: Date | null;
   progress: number;
   color: string;
   contact: string;
