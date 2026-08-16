@@ -157,13 +157,13 @@ async function baselineProgress(deliveryId: string) {
 export const postgresStore: DeliveryStore = {
   async getPublic(tracking) {
     await ensureSchema();
-    const rows = await sql`SELECT * FROM deliveries WHERE tracking_token = ${tracking} OR (company_id = 'demo' AND id = ${tracking}) LIMIT 1` as RawDelivery[];
+    const rows = await sql`SELECT * FROM deliveries WHERE tracking_token = ${tracking} LIMIT 1` as RawDelivery[];
     return rows[0] ? hydrate(rows[0]) : null;
   },
 
   async listForCompany(companyId) {
     await ensureSchema();
-    const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} OR company_id = 'demo' ORDER BY created_at DESC` as RawDelivery[];
+    const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} ORDER BY created_at DESC` as RawDelivery[];
     return rows.map(hydrate);
   },
 
@@ -171,7 +171,7 @@ export const postgresStore: DeliveryStore = {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
     await ensureSchema();
-    const rows = await sql`SELECT * FROM deliveries WHERE (company_id = ${companyId} OR company_id = 'demo') AND status <> 'Delivered'` as RawDelivery[];
+    const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} AND status <> 'Delivered'` as RawDelivery[];
 
     for (const raw of rows) {
       const delivery = hydrate(raw);

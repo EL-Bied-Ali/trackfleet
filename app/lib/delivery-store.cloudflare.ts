@@ -101,19 +101,19 @@ async function baselineProgress(deliveryId: string) {
 export const store: DeliveryStore = {
   async getPublic(tracking) {
     await ensureTable();
-    const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE tracking_token = ? OR (company_id = 'demo' AND id = ?) LIMIT 1`).bind(tracking, tracking).first<RawDelivery>();
+    const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE tracking_token = ? LIMIT 1`).bind(tracking).first<RawDelivery>();
     return row ? hydrate(row) : null;
   },
   async listForCompany(companyId) {
     await ensureTable();
-    const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE company_id = ? OR company_id = 'demo' ORDER BY created_at DESC`).bind(companyId).all<RawDelivery>();
+    const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE company_id = ? ORDER BY created_at DESC`).bind(companyId).all<RawDelivery>();
     return (result.results ?? []).map(hydrate);
   },
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
     await ensureTable();
-    const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE (company_id = ? OR company_id = 'demo') AND status != 'Delivered'`).bind(companyId).all<RawDelivery>();
+    const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE company_id = ? AND status != 'Delivered'`).bind(companyId).all<RawDelivery>();
     const statements = [];
     for (const rawDelivery of result.results ?? []) {
       const delivery = hydrate(rawDelivery);
@@ -149,7 +149,7 @@ export const store: DeliveryStore = {
       FROM delivery_events e
       JOIN deliveries d ON d.id = e.delivery_id
       LEFT JOIN delivery_notifications n ON n.delivery_id = e.delivery_id AND n.event_type = e.type AND n.channel = 'whatsapp'
-      WHERE (d.company_id = ? OR d.company_id = 'demo') AND (n.sent_at IS NULL) AND (n.attempted_at IS NULL OR n.attempted_at < ?)
+      WHERE d.company_id = ? AND (n.sent_at IS NULL) AND (n.attempted_at IS NULL OR n.attempted_at < ?)
       ORDER BY e.created_at ASC`).bind(companyId, staleBefore).all<RawDeliveryEvent>();
     const pending = [];
     for (const rawEvent of result.results ?? []) {

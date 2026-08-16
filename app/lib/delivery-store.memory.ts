@@ -24,16 +24,16 @@ function explicitDestination(delivery: DeliveryRow): [number, number] | null {
 
 export const memoryStore: DeliveryStore = {
   async getPublic(tracking) {
-    return deliveryStore.find((delivery) => delivery.trackingToken === tracking || (delivery.companyId === "demo" && delivery.id === tracking)) ?? null;
+    return deliveryStore.find((delivery) => delivery.trackingToken === tracking) ?? null;
   },
   async listForCompany(companyId) {
-    return deliveryStore.filter((delivery) => delivery.companyId === companyId || delivery.companyId === "demo").sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return deliveryStore.filter((delivery) => delivery.companyId === companyId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   },
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
     for (const delivery of deliveryStore) {
-      if (delivery.status === "Delivered" || (delivery.companyId !== companyId && delivery.companyId !== "demo")) continue;
+      if (delivery.status === "Delivered" || delivery.companyId !== companyId) continue;
       const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId)
         ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
       if (!vehicle) continue;
@@ -60,7 +60,7 @@ export const memoryStore: DeliveryStore = {
   async listPendingNotifications(companyId) {
     return deliveryEvents.flatMap((event) => {
       if (!customerFacingEvent(event.type)) return [];
-      const delivery = deliveryStore.find((item) => item.id === event.deliveryId && (item.companyId === companyId || item.companyId === "demo"));
+      const delivery = deliveryStore.find((item) => item.id === event.deliveryId && item.companyId === companyId);
       if (!delivery) return [];
       if (!notificationClaims.isPending(notificationKey(event.deliveryId, event.type))) return [];
       return [{ delivery: { ...delivery }, event: { ...event } }];
