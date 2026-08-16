@@ -51,3 +51,13 @@ test("derives loading, in-transit and delivered states from GPS", () => {
   const destination = calculateRouteMetrics(33.5731, -7.5898, "Casablanca, MA");
   assert.deepEqual(deriveDeliveryState("In transit", destination, 0), { status: "Delivered", progress: 100 });
 });
+
+test("does not move customer progress backwards after a noisier GPS fix", () => {
+  const olderConfirmedProgress = 55;
+  const slightlyBehind = calculateRouteMetrics(40.4168, -3.7038, "Casablanca, MA");
+  assert.ok(slightlyBehind.progress < olderConfirmedProgress);
+
+  const state = deriveDeliveryState("In transit", slightlyBehind, 60, olderConfirmedProgress);
+  assert.equal(state.progress, olderConfirmedProgress);
+  assert.equal(state.status, "In transit");
+});
