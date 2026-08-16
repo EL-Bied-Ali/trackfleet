@@ -1,4 +1,5 @@
 export type DeliveryEventType =
+  | "GPS_BASELINE"
   | "DEPARTED"
   | "PROGRESS_25"
   | "PROGRESS_50"
@@ -49,5 +50,5 @@ export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventTy
 }
 
 export function customerFacingEvent(event: DeliveryEventType) {
-  return event !== "GPS_STALE";
+  return event !== "GPS_STALE" && event !== "GPS_BASELINE";
 }
