@@ -8,14 +8,23 @@ export type RouteMetrics = {
 
 // Shared Belgium ↔ Morocco corridor used by the map. Coordinates are [longitude, latitude].
 export const belgiumMoroccoCorridor: Array<[number, number]> = [
-  [4.3517, 50.8503],
-  [2.3522, 48.8566],
-  [-0.5792, 44.8378],
-  [-3.7038, 40.4168],
-  [-5.453, 36.1408],
-  [-5.8128, 35.7673],
-  [-6.8498, 33.9716],
-  [-7.5898, 33.5731],
+  [4.3517, 50.8503], // Brussels
+  [2.3522, 48.8566], // Paris
+  [-0.5792, 44.8378], // Bordeaux
+  [-3.7038, 40.4168], // Madrid
+  [-5.453, 36.1408], // Algeciras
+  [-5.8128, 35.7673], // Tangier
+  [-6.8498, 33.9716], // Rabat
+  [-7.5898, 33.5731], // Casablanca
+];
+
+const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
+  { names: ["CASABLANCA"], point: [-7.5898, 33.5731] },
+  { names: ["RABAT"], point: [-6.8498, 33.9716] },
+  { names: ["TANGIER", "TANGER"], point: [-5.8128, 35.7673] },
+  { names: ["BRUSSELS", "BRUXELLES", "BRUSSEL"], point: [4.3517, 50.8503] },
+  { names: ["ANTWERP", "ANTWERPEN", "ANVERS"], point: [4.4025, 51.2194] },
+  { names: ["LIÈGE", "LIEGE", "LUIK"], point: [5.5797, 50.6326] },
 ];
 
 function radians(value: number) {
@@ -32,10 +41,31 @@ export function distanceKm(a: [number, number], b: [number, number]) {
   return 2 * earthRadiusKm * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-function routeForDestination(destination: string) {
-  return destination.trim().toUpperCase().endsWith(", BE")
-    ? [...belgiumMoroccoCorridor].reverse()
-    : belgiumMoroccoCorridor;
+export function destinationPointFor(destination: string): [number, number] {
+  const normalized = destination.trim().toUpperCase();
+  const known = knownDestinations.find((candidate) => candidate.names.some((name) => normalized.includes(name)));
+  if (known) return known.point;
+  return normalized.endsWith(", BE") ? belgiumMoroccoCorridor[0] : belgiumMoroccoCorridor.at(-1)!;
+}
+
+function samePoint(a: [number, number], b: [number, number]) {
+  return Math.abs(a[0] - b[0]) < 0.000001 && Math.abs(a[1] - b[1]) < 0.000001;
+}
+
+export function routeForDestination(destination: string): Array<[number, number]> {
+  const normalized = destination.trim().toUpperCase();
+  const belgiumBound = normalized.endsWith(", BE");
+  const base = belgiumBound ? [...belgiumMoroccoCorridor].reverse() : [...belgiumMoroccoCorridor];
+  const destinationPoint = destinationPointFor(destination);
+
+  // If the destination lies on the known corridor (for example Tangier or Rabat),
+  // stop the route there rather than continuing to the old default endpoint.
+  const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
+  if (exactIndex >= 0) return base.slice(0, exactIndex + 1);
+
+  // Belgian destinations such as Antwerp and Liège branch from Brussels. For
+  // destinations not represented by a corridor waypoint, append the real point.
+  return [...base, destinationPoint];
 }
 
 function projectToSegment(
@@ -92,7 +122,7 @@ export function calculateRouteMetrics(
   const distanceToDestinationKm = distanceKm(point, destinationPoint);
   const progress = routeDistanceKm > 0
     ? Math.max(0, Math.min(100, Math.round(completedDistanceKm / routeDistanceKm * 100)))
-    : 0;
+    : distanceToDestinationKm <= 2 ? 100 : 0;
 
   return {
     progress,
