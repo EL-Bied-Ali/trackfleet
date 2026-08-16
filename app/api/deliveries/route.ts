@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import { siteStore } from "trackfleet-site-store";
 import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent } from "../../lib/delivery-events";
@@ -22,10 +23,17 @@ function explicitDestination(row: { destinationLatitude?: number | null; destina
     ? [row.destinationLongitude, row.destinationLatitude]
     : null;
 }
+function explicitOrigin(row: { originLatitude?: number | null; originLongitude?: number | null }): [number, number] | null {
+  return typeof row.originLatitude === "number" && typeof row.originLongitude === "number"
+    ? [row.originLongitude, row.originLatitude]
+    : null;
+}
 
 function enrichDelivery<T extends {
   latitude: number | null;
   longitude: number | null;
+  originLatitude?: number | null;
+  originLongitude?: number | null;
   destination: string;
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
@@ -37,9 +45,10 @@ function enrichDelivery<T extends {
   events: Awaited<ReturnType<typeof store.listEvents>> = [],
   futureServiceMinutes = 0,
 ) {
-  const baselineProgress = events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0;
+  const origin = explicitOrigin(row);
+  const baselineProgress = origin ? 0 : (events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0);
   const absoluteMetrics = typeof row.latitude === "number" && typeof row.longitude === "number"
-    ? calculateRouteMetrics(row.latitude, row.longitude, row.destination, explicitDestination(row))
+    ? calculateRouteMetrics(row.latitude, row.longitude, row.destination, explicitDestination(row), origin)
     : null;
   const metrics = absoluteMetrics ? rebaseRouteMetrics(absoluteMetrics, baselineProgress) : null;
   const positionAgeMinutes = row.lastPositionAt ? Math.max(0, Math.round((Date.now() - row.lastPositionAt.getTime()) / 60_000)) : null;
@@ -77,6 +86,8 @@ async function enrichAndDetectDelay<T extends {
   progress: number;
   latitude: number | null;
   longitude: number | null;
+  originLatitude?: number | null;
+  originLongitude?: number | null;
   destination: string;
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
@@ -111,6 +122,9 @@ function optionalNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+function normalized(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
 
 async function persistTransitionEvents(transitions: DeliveryTransition[]) {
   for (const transition of transitions) {
@@ -137,8 +151,6 @@ export async function GET(request: Request) {
         row = await store.getPublic(tracking) ?? row;
       }
 
-      // We may inspect sibling deliveries to estimate future operational stops,
-      // but they are never returned to the public tracking response.
       const companyRows = await store.listForCompany(row.companyId);
       const serviceMinutes = pendingServiceMinutesBefore(row, companyRows);
       const enriched = await enrichAndDetectDelay(row, serviceMinutes);
@@ -189,9 +201,17 @@ export async function POST(request: Request) {
     const customer = String(payload.customer ?? "").trim();
     const destinationInput = String(payload.destination ?? "").trim();
     const originSiteInput = String(payload.originSiteId ?? "").trim();
-    const originSite = resolveKnownSite(originSiteInput);
     const destinationSiteId = String(payload.destinationSiteId ?? "").trim();
-    const site = resolveKnownSite(destinationSiteId) ?? resolveKnownSite(destinationInput);
+    const companySites = await siteStore.listForCompany(session.companyId);
+    const findCompanySite = (value: string) => {
+      const wanted = normalized(value);
+      if (!wanted) return null;
+      return companySites.find((candidate) => candidate.id === value)
+        ?? companySites.find((candidate) => [candidate.label, candidate.city, candidate.address].some((entry) => normalized(entry) === wanted))
+        ?? null;
+    };
+    const originSite = findCompanySite(originSiteInput) ?? resolveKnownSite(originSiteInput);
+    const site = findCompanySite(destinationSiteId) ?? findCompanySite(destinationInput) ?? resolveKnownSite(destinationSiteId) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
     const truck = String(payload.truck ?? "").trim();
     const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
@@ -229,13 +249,20 @@ export async function POST(request: Request) {
     const snapshot = await getSendatrackSnapshot(session.credentials);
     const liveVehicle = snapshot.vehicles.find((vehicle) => vehicle.id === sendatrackVehicleId)
       ?? snapshot.vehicles.find((vehicle) => vehicle.name === truck);
+    const originLatitude = liveVehicle?.latitude ?? originSite?.latitude ?? null;
+    const originLongitude = liveVehicle?.longitude ?? originSite?.longitude ?? null;
+    const exactOrigin: [number, number] | null = originLatitude !== null && originLongitude !== null
+      ? [originLongitude, originLatitude]
+      : null;
     const baselineMetrics = liveVehicle
-      ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination, exactDestination)
+      ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination, exactDestination, exactOrigin)
       : null;
 
     const delivery = await store.create({
       customer,
       originSiteId: originSite?.id ?? null,
+      originLatitude,
+      originLongitude,
       destinationSiteId: site?.id ?? null,
       destination,
       destinationLatitude,
@@ -249,7 +276,7 @@ export async function POST(request: Request) {
       companyId: session.companyId,
       trackingToken: createTrackingToken(),
       driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
-      latitude: liveVehicle?.latitude ?? null, longitude: liveVehicle?.longitude ?? null,
+      latitude: liveVehicle?.latitude ?? originLatitude, longitude: liveVehicle?.longitude ?? originLongitude,
       speed: liveVehicle?.speed ?? null, lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,
       gpsSource: liveVehicle ? "sendatrack" : "simulation",
     });
