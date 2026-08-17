@@ -662,7 +662,7 @@ export default function Home() {
         <a className="brand" href="#"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></a>
         <nav aria-label="Main navigation">
           <button className="nav-item active"><Icon>▦</Icon>{t.overview}</button>
-          <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">{integration.connected ? integration.vehicleCount : 20}</span></button>
+          <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">{integration.connected ? integration.vehicleCount : "—"}</span></button>
           <button className="nav-item" disabled><Icon>◇</Icon>{t.deliveries} <span className="nav-count">{deliveries.length}</span></button>
           <button className="nav-item" disabled><Icon>◉</Icon>{t.customers}</button>
         </nav>
@@ -691,7 +691,7 @@ export default function Home() {
           <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>{deliveries.filter((delivery) => delivery.status !== "Delivered").length}</strong><em className="up">GPS</em></div><p>{t.acrossVehicles}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} ${liveKpiCopy.completed}` : liveKpiCopy.noHistory}</em></div><p>{completedWithPlan.length ? liveKpiCopy.onTimeBody : liveKpiCopy.onTimeEmpty}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : liveKpiCopy.noDelay}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} GPS` : "17 / 20"}</strong><em className="neutral">{integration.connected ? t.sendatrack : t.atDepot}</em></div><p>{integration.connected ? t.positionsAutomatic : t.allReporting}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} GPS` : "—"}</strong><em className="neutral">{integration.connected ? t.sendatrack : (locale === "fr" ? "GPS indisponible" : locale === "nl" ? "GPS niet beschikbaar" : "GPS unavailable")}</em></div><p>{integration.connected ? t.positionsAutomatic : integration.configured ? t.gpsIssueBody : t.gpsPendingBody}</p></article>
         </div>
 
         <div className="map-panel">
