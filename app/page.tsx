@@ -10,6 +10,7 @@ import { rankVehicleSuggestions } from "./lib/vehicle-linking";
 import { activeTourDisplayId, stopSequence, tourCustomerCount, tourDeliveryCount } from "./lib/tour-view";
 import { customerEtaNote, etaExplanation } from "./lib/eta-display";
 import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_VEHICLE_ID } from "./lib/delivery-vehicle-choice";
+import { suggestPlannedTrip } from "./lib/trip-suggestion";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -317,6 +318,8 @@ export default function Home() {
   const mapDeliveries = integration.connected
     ? deliveries.filter((delivery) => delivery.gpsSource === "sendatrack")
     : deliveries;
+  const unassignedDeliveries = deliveries.filter((delivery) => delivery.status !== "Delivered" && isUnassignedVehicle(delivery));
+  const tripSuggestions = new Map(unassignedDeliveries.map((delivery) => [delivery.id, suggestPlannedTrip(delivery, trips)]));
   const completedWithPlan = deliveries.filter((delivery) => delivery.status === "Delivered" && delivery.etaDelayMinutes != null);
   const onTimeRate = completedWithPlan.length
     ? Math.round((completedWithPlan.filter((delivery) => (delivery.etaDelayMinutes ?? 0) <= 0).length / completedWithPlan.length) * 1000) / 10
@@ -762,6 +765,21 @@ export default function Home() {
             </div>
           </section>}
         </div>
+
+        {unassignedDeliveries.length > 0 && <section className="tours-panel" aria-label={locale === "fr" ? "Colis à affecter" : locale === "nl" ? "Toe te wijzen zendingen" : "Parcels to assign"}>
+          <div className="panel-header"><div><h2>{locale === "fr" ? "Colis à affecter" : locale === "nl" ? "Toe te wijzen zendingen" : "Parcels to assign"}</h2><p>{locale === "fr" ? "Le camion n’est pas figé à l’entrée du colis. Une suggestion apparaît seulement si un voyage planifié compatible existe." : locale === "nl" ? "Het voertuig wordt niet vastgezet bij registratie. Een suggestie verschijnt alleen voor een compatibele geplande rit." : "The truck is not locked when the parcel is registered. A suggestion appears only when a compatible planned trip exists."}</p></div><span className="tour-count">{unassignedDeliveries.length}</span></div>
+          <div className="tour-list">
+            {unassignedDeliveries.map((delivery) => {
+              const suggestion = tripSuggestions.get(delivery.id) ?? null;
+              const canPrepare = Boolean(suggestion?.sendatrackVehicleId && integration.vehicles.some((vehicle) => vehicle.id === suggestion.sendatrackVehicleId));
+              return <article className="tour-card" key={`assign-${delivery.id}`}>
+                <div className="tour-card-head"><div><strong>{delivery.customer}</strong><span>{delivery.id} · {delivery.destination}</span></div><small>{locale === "fr" ? "À affecter" : locale === "nl" ? "Toe te wijzen" : "To assign"}</small></div>
+                {suggestion ? <div className="eta-explanation"><strong>{locale === "fr" ? "Voyage compatible proposé" : locale === "nl" ? "Voorgestelde compatibele rit" : "Suggested compatible trip"}</strong><span>{suggestion.truck} · {suggestion.tripId} · {locale === "fr" ? `arrêt ${suggestion.stopSequence}` : locale === "nl" ? `stop ${suggestion.stopSequence}` : `stop ${suggestion.stopSequence}`}</span>{suggestion.plannedArrivalAt && <span>{new Date(suggestion.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>}</div> : <div className="eta-explanation"><strong>{locale === "fr" ? "Aucune suggestion sûre" : locale === "nl" ? "Geen veilige suggestie" : "No safe suggestion"}</strong><span>{locale === "fr" ? "Le colis reste simplement en attente d’affectation." : locale === "nl" ? "De zending blijft gewoon wachten op toewijzing." : "The parcel simply remains waiting for assignment."}</span></div>}
+                <div className="popover-actions"><button type="button" onClick={() => { setSelectedId(delivery.id); setShowPopover(true); setVehicleLinkOpen(true); setVehicleLinkSearch(suggestion?.truck ?? ""); setVehicleLinkChoice(canPrepare ? suggestion?.sendatrackVehicleId ?? "" : ""); }}>{suggestion && canPrepare ? (locale === "fr" ? "Vérifier l’affectation" : locale === "nl" ? "Toewijzing controleren" : "Review assignment") : (locale === "fr" ? "Choisir un camion" : locale === "nl" ? "Voertuig kiezen" : "Choose a truck")}</button></div>
+              </article>;
+            })}
+          </div>
+        </section>}
 
         {stopPlans.length > 0 && <section className="tours-panel" aria-label={locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}>
           <div className="panel-header"><div><h2>{locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}</h2><p>{locale === "fr" ? "La même séquence d’agences réutilise automatiquement la même route" : locale === "nl" ? "Dezelfde volgorde van locaties hergebruikt automatisch dezelfde route" : "The same stop sequence automatically reuses the same route"}</p></div><span className="tour-count">{stopPlans.length}</span></div>
