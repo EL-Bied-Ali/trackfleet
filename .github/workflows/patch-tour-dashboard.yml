@@ -1,0 +1,74 @@
+name: Patch active tour dashboard
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-tour-dashboard.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add active tour dashboard
+        shell: python
+        run: |
+          from pathlib import Path
+
+          page = Path('app/page.tsx')
+          s = page.read_text()
+          marker = 'import { rankVehicleSuggestions } from "./lib/vehicle-linking";\n'
+          if 'tour-view' not in s:
+            s = s.replace(marker, marker + 'import { activeTourDisplayId, stopSequence, tourCustomerCount, tourDeliveryCount } from "./lib/tour-view";\n')
+
+          type_marker = 'type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };\n'
+          tour_types = '''type TourStop = { siteId: string; destination: string; plannedArrivalAt: string | null; deliveryIds: string[]; customers: string[] };\ntype TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; source: "planned-arrival"; stops: TourStop[] };\n'''
+          if 'type TourPlan =' not in s:
+            s = s.replace(type_marker, type_marker + tour_types)
+
+          state_marker = '  const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });\n'
+          if 'setStopPlans' not in s:
+            s = s.replace(state_marker, state_marker + '  const [stopPlans, setStopPlans] = useState<TourPlan[]>([]);\n')
+
+          response_type = 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[] };'
+          if response_type in s:
+            s = s.replace(response_type, 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };')
+          else:
+            raise SystemExit('delivery response type marker missing')
+
+          integration_marker = '        if (data.integration) setIntegration(data.integration);\n'
+          if 'setStopPlans(data.stopPlans' not in s:
+            s = s.replace(integration_marker, integration_marker + '        if (!tracking) setStopPlans(data.stopPlans ?? []);\n')
+
+          panel_marker = '        <div className="deliveries-panel">\n'
+          tour_panel = '''        {stopPlans.length > 0 && <section className="tours-panel" aria-label={locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}>\n          <div className="panel-header"><div><h2>{locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}</h2><p>{locale === "fr" ? "Un camion, plusieurs agences, dans l’ordre prévu" : locale === "nl" ? "Eén vrachtwagen, meerdere locaties, in geplande volgorde" : "One truck, multiple stops, in planned order"}</p></div><span className="tour-count">{stopPlans.length}</span></div>\n          <div className="tour-list">\n            {stopPlans.map((plan) => <article className="tour-card" key={plan.vehicleKey}>\n              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>\n              <div className="tour-stops">{stopSequence(plan).map((stop) => <button type="button" className="tour-stop" key={stop.siteId} onClick={() => { const firstDelivery = stop.deliveryIds.find((id) => deliveries.some((delivery) => delivery.id === id)); if (firstDelivery) { setSelectedId(firstDelivery); setShowPopover(true); } }}><i>{stop.sequence}</i><span><strong>{stop.destination}</strong><small>{stop.deliveryIds.length} {locale === "fr" ? "colis" : locale === "nl" ? "zending(en)" : "parcel(s)"}{stop.plannedArrivalAt ? ` · ${new Date(stop.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</small></span></button>)}</div>\n            </article>)}\n          </div>\n        </section>}\n\n'''
+          if 'className="tours-panel"' not in s:
+            if panel_marker not in s: raise SystemExit('deliveries panel marker missing')
+            s = s.replace(panel_marker, tour_panel + panel_marker, 1)
+          page.write_text(s)
+
+          css = Path('app/globals.css')
+          c = css.read_text()
+          styles = '''\n/* Active multi-stop tours */\n.tours-panel { margin-bottom: 15px; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: white; box-shadow: 0 3px 9px rgba(25,51,42,.025); }\n.tour-count { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 14px; color: #1f6952; background: #e7f3ed; font-size: 10px; font-weight: 750; }\n.tour-list { display: grid; gap: 10px; padding: 0 17px 17px; }\n.tour-card { padding: 14px; border: 1px solid #e5ebe7; border-radius: 10px; background: #fbfcfb; }\n.tour-card-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }\n.tour-card-head > div { display: flex; align-items: baseline; gap: 8px; }\n.tour-card-head strong { font-size: 12px; }\n.tour-card-head span, .tour-card-head small { color: #849189; font-size: 9px; }\n.tour-stops { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 2px; }\n.tour-stop { min-width: 190px; display: flex; align-items: center; gap: 9px; padding: 10px; border: 1px solid #e0e9e4; border-radius: 9px; color: #31463c; background: white; text-align: left; cursor: pointer; }\n.tour-stop:hover { border-color: #b8d4c7; background: #f4faf7; }\n.tour-stop > i { width: 25px; height: 25px; flex: 0 0 25px; display: grid; place-items: center; border-radius: 50%; color: white; background: #2b735b; font-size: 9px; font-style: normal; font-weight: 800; }\n.tour-stop span { min-width: 0; }\n.tour-stop strong, .tour-stop small { display: block; }\n.tour-stop strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }\n.tour-stop small { margin-top: 3px; color: #8a9690; font-size: 8.5px; }\n@media (max-width: 760px) { .tour-card-head { align-items: flex-start; flex-direction: column; }.tour-stop { min-width: 170px; } }\n'''
+          if '/* Active multi-stop tours */' not in c:
+            css.write_text(c + styles)
+
+          package = Path('package.json')
+          p = package.read_text()
+          marker = '    "test:tour": "node --experimental-strip-types --test tests/multistop-tour.test.mjs",\n'
+          if 'test:tour-view' not in p:
+            if marker not in p: raise SystemExit('package tour marker missing')
+            p = p.replace(marker, marker + '    "test:tour-view": "node --experimental-strip-types --test tests/tour-view.test.mjs",\n')
+          package.write_text(p)
+      - name: Test tour helpers
+        run: node --experimental-strip-types --test tests/tour-view.test.mjs
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/page.tsx app/globals.css package.json
+          git commit -m "show active multi-stop tours in dashboard"
+          git push
