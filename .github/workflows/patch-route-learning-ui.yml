@@ -1,0 +1,83 @@
+name: Patch route learning UI
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-route-learning-ui.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Stabilize tour route display and expose learning state
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/api/deliveries/route.ts')
+          s = p.read_text()
+          route_import = 'import { summarizeStopDwell } from "../../lib/stop-dwell";\n'
+          if 'routeLearningState' not in s:
+            s = s.replace(route_import, route_import + 'import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";\n')
+
+          marker = '    const enrichedRows = await Promise.all(rows.map(async (row) => {\n'
+          if 'const stableContexts = new Map' not in s:
+            s = s.replace(marker, '    const stableContexts = new Map<string, ReturnType<typeof stableEtaRouteContext>>();\n' + marker, 1)
+          context_marker = '      const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);\n'
+          if 'stableContexts.set(row.id, routeContext);' not in s:
+            s = s.replace(context_marker, context_marker + '      stableContexts.set(row.id, routeContext);\n', 1)
+
+          after_rows = '''    }));\n    await processPendingNotifications(session.companyId, requestUrl.origin);\n\n    return Response.json({\n      deliveries: enrichedRows,\n      stopPlans,'''
+          replacement = '''    }));\n    const stopPlansWithLearning = await Promise.all(stopPlans.map(async (plan) => {\n      const deliveryIds = plan.stops.flatMap((stop) => stop.deliveryIds);\n      const stableRouteTemplateId = stablePlanRouteTemplateId(plan.routeTemplateId, deliveryIds, stableContexts);\n      const currentTripInstanceId = deliveryIds.map((id) => stableContexts.get(id)?.tripInstanceId).find(Boolean) ?? null;\n      const finalStop = plan.stops[plan.stops.length - 1] ?? null;\n      const historyRows = finalStop ? await cachedEtaHistory(stableRouteTemplateId, finalStop.siteId) : [];\n      const history = summarizeRouteHistory(historyRows, 5, currentTripInstanceId);\n      const learnedDwell = await cachedLearnedDwell(stableRouteTemplateId, currentTripInstanceId);\n      const futureStopIds = plan.stops.slice(0, -1).map((stop) => stop.siteId);\n      const learning = routeLearningState({\n        historicalTrips: history.tripCount,\n        learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,\n        futureStops: futureStopIds.length,\n      });\n      return { ...plan, routeTemplateId: stableRouteTemplateId, learning };\n    }));\n    await processPendingNotifications(session.companyId, requestUrl.origin);\n\n    return Response.json({\n      deliveries: enrichedRows,\n      stopPlans: stopPlansWithLearning,'''
+          if after_rows not in s: raise SystemExit('stop plan response marker missing')
+          s = s.replace(after_rows, replacement, 1)
+          p.write_text(s)
+
+          p = Path('app/page.tsx')
+          s = p.read_text()
+          old_type = 'type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[] };\n'
+          new_type = 'type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[]; learning?: { historicalTrips: number; requiredTrips: number; learnedStops: number; futureStops: number; etaHistoryReady: boolean; dwellHistoryReady: boolean; stage: "collecting" | "partial" | "ready" } };\n'
+          if old_type in s: s = s.replace(old_type, new_type, 1)
+
+          old_card = '<div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>'
+          new_card = old_card + '{plan.learning && <div className="eta-explanation"><strong>{plan.learning.stage === "ready" ? (locale === "fr" ? "Route apprise" : locale === "nl" ? "Route geleerd" : "Route learned") : (locale === "fr" ? "Apprentissage de la route" : locale === "nl" ? "Route wordt geleerd" : "Learning route")}</strong><span>{plan.learning.historicalTrips}/{plan.learning.requiredTrips} {locale === "fr" ? "voyages" : locale === "nl" ? "ritten" : "trips"}{plan.learning.futureStops > 0 ? ` · ${plan.learning.learnedStops}/${plan.learning.futureStops} ${locale === "fr" ? "arrêts appris" : locale === "nl" ? "stops geleerd" : "stops learned"}` : ""}</span></div>}'
+          if 'plan.learning.stage === "ready"' not in s:
+            if old_card not in s: raise SystemExit('tour card marker missing')
+            s = s.replace(old_card, new_card, 1)
+          p.write_text(s)
+
+          p = Path('package.json')
+          s = p.read_text()
+          marker = '    "test:route-history": "node --experimental-strip-types --test tests/route-history.test.mjs",\n'
+          if 'test:route-learning' not in s:
+            if marker not in s: raise SystemExit('route history package marker missing')
+            s = s.replace(marker, marker + '    "test:route-learning": "node --experimental-strip-types --test tests/route-learning.test.mjs",\n')
+          p.write_text(s)
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Test and build
+        run: |
+          pnpm run test:route-learning
+          pnpm run test:route-history
+          pnpm run test:stop-dwell
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/api/deliveries/route.ts app/page.tsx package.json
+          git commit -m "show stable reusable route learning progress"
+          git push
