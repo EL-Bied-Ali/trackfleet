@@ -44,7 +44,9 @@ async function inspect(url: URL, token: string) {
           keys = Object.keys(record).slice(0, 15);
           if (typeof record.message === "string") message = record.message.slice(0, 200);
         }
-      } catch {}
+      } catch (error) {
+        message = error instanceof Error ? `json:${error.name}` : "json:error";
+      }
     }
     return { status: response.status, contentType: contentType.split(";")[0], keys, arrayLength, message };
   } catch (error) {
