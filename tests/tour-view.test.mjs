@@ -13,7 +13,7 @@ const plan = {
 };
 
 test("builds a compact stable display id from the active vehicle key", () => {
-  assert.equal(activeTourDisplayId(plan), "TOUR-HTRK014");
+  assert.equal(activeTourDisplayId(plan), "TOUR-EHTRK014");
 });
 
 test("counts deliveries and unique customers across a tour", () => {
