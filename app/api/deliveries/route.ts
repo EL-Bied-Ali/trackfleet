@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import { runtimeEnv } from "trackfleet-runtime-env";
 import { siteStore } from "trackfleet-site-store";
 import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { shouldDetectDelay } from "../../lib/delay-detection";
@@ -257,6 +258,9 @@ export async function GET(request: Request) {
     return Response.json({
       deliveries: enrichedRows,
       stopPlans: stopPlansWithLearning,
+      features: {
+        whatsappDemoEnabled: runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",
+      },
       integration: {
         configured: integration.configured,
         connected: integration.connected,

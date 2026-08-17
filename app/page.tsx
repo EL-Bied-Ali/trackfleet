@@ -60,6 +60,7 @@ type DeliveryEventRow = {
 
 type VehicleOption = { id: string; name: string; speed: number; updatedAt: number; latitude: number; longitude: number };
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };
+type FeatureState = { whatsappDemoEnabled: boolean };
 type TourStop = { siteId: string; destination: string; plannedArrivalAt: string | null; deliveryIds: string[]; customers: string[] };
 type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[]; learning?: { historicalTrips: number; requiredTrips: number; learnedStops: number; futureStops: number; etaHistoryReady: boolean; dwellHistoryReady: boolean; stage: "collecting" | "partial" | "ready" } };
 
@@ -144,6 +145,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState<LoginErrorKind | "">("");
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
+  const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false });
   const [stopPlans, setStopPlans] = useState<TourPlan[]>([]);
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
   const [knownSites, setKnownSites] = useState<KnownSite[]>([]);
@@ -242,7 +244,7 @@ export default function Home() {
         const endpoint = tracking ? `/api/deliveries?tracking=${encodeURIComponent(tracking)}` : "/api/deliveries";
         const response = await fetch(endpoint, { cache: "no-store" });
         if (!response.ok) throw new Error("Delivery service unavailable");
-        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };
+        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };
         if (!active) return;
         if (tracking && data.deliveries.length) {
           setDeliveries(data.deliveries);
@@ -254,6 +256,7 @@ export default function Home() {
           if (data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === selectedId)) setSelectedId(data.deliveries[0].id);
         }
         if (data.integration) setIntegration(data.integration);
+        if (data.features) setFeatures(data.features);
         if (!tracking) setStopPlans(data.stopPlans ?? []);
       } catch {
         if (new URLSearchParams(window.location.search).get("tracking")) setPublicTrackingState("error");
@@ -719,7 +722,7 @@ export default function Home() {
               <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
             </div>}
           </div>
-          {deliveries.length > 0 && <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">
+          {features.whatsappDemoEnabled && deliveries.length > 0 && <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">
             <div className="whatsapp-demo-intro">
               <div className="whatsapp-mark" aria-hidden="true">◔</div>
               <div><div className="demo-title-line"><h3 id="whatsapp-demo-title">{t.whatsAppDemoTitle}</h3><span>{t.demoMode}</span></div><p>{t.whatsAppDemoBody}</p></div>
