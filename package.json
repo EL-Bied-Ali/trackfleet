@@ -37,6 +37,7 @@
     "test:eta-observation": "node --experimental-strip-types --test tests/eta-observation.test.mjs",
     "test:eta-display": "node --experimental-strip-types --test tests/eta-display.test.mjs",
     "test:route-history": "node --experimental-strip-types --test tests/route-history.test.mjs",
+    "test:route-learning": "node --experimental-strip-types --test tests/route-learning.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",

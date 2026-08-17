@@ -16,6 +16,7 @@ import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/del
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
 import { summarizeStopDwell } from "../../lib/stop-dwell";
+import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -181,6 +182,7 @@ export async function GET(request: Request) {
       const routeEvents = await store.listEvents(row.id);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
+      stableContexts.set(row.id, routeContext);
       const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await learnedStopMinutes(row.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
@@ -223,6 +225,7 @@ export async function GET(request: Request) {
       }
       return pending;
     };
+    const stableContexts = new Map<string, ReturnType<typeof stableEtaRouteContext>>();
     const enrichedRows = await Promise.all(rows.map(async (row) => {
       const routeEvents = await store.listEvents(row.id);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
@@ -233,11 +236,27 @@ export async function GET(request: Request) {
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, rows, learnedDwell);
       return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount)).delivery;
     }));
+    const stopPlansWithLearning = await Promise.all(stopPlans.map(async (plan) => {
+      const deliveryIds = plan.stops.flatMap((stop) => stop.deliveryIds);
+      const stableRouteTemplateId = stablePlanRouteTemplateId(plan.routeTemplateId, deliveryIds, stableContexts);
+      const currentTripInstanceId = deliveryIds.map((id) => stableContexts.get(id)?.tripInstanceId).find(Boolean) ?? null;
+      const finalStop = plan.stops[plan.stops.length - 1] ?? null;
+      const historyRows = finalStop ? await cachedEtaHistory(stableRouteTemplateId, finalStop.siteId) : [];
+      const history = summarizeRouteHistory(historyRows, 5, currentTripInstanceId);
+      const learnedDwell = await cachedLearnedDwell(stableRouteTemplateId, currentTripInstanceId);
+      const futureStopIds = plan.stops.slice(0, -1).map((stop) => stop.siteId);
+      const learning = routeLearningState({
+        historicalTrips: history.tripCount,
+        learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,
+        futureStops: futureStopIds.length,
+      });
+      return { ...plan, routeTemplateId: stableRouteTemplateId, learning };
+    }));
     await processPendingNotifications(session.companyId, requestUrl.origin);
 
     return Response.json({
       deliveries: enrichedRows,
-      stopPlans,
+      stopPlans: stopPlansWithLearning,
       integration: {
         configured: integration.configured,
         connected: integration.connected,
