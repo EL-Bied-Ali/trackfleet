@@ -1,0 +1,68 @@
+name: Apply internal route history API patch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Add tenant-safe completed route history to dispatch API
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const routePath = 'app/api/deliveries/route.ts';
+          let source = fs.readFileSync(routePath, 'utf8');
+
+          const importAnchor = 'import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/trip-record";\n';
+          if (!source.includes(importAnchor)) throw new Error('route history import anchor missing');
+          source = source.replace(importAnchor, importAnchor + 'import { summarizeCompletedTripRoutes } from "../../lib/trip-history-summary";\n');
+
+          const historyAnchor = '    const tripHistory = (await store.listTrips(session.companyId, 20)).map((trip) => ({\n';
+          if (!source.includes(historyAnchor)) throw new Error('trip history anchor missing');
+          source = source.replace(historyAnchor, `    const allTripsForHistory = await store.listTrips(session.companyId, 500);\n    const routeHistory = summarizeCompletedTripRoutes(allTripsForHistory).map((route) => ({\n      routeTemplateId: route.routeTemplateId,\n      originSiteId: route.originSiteId,\n      destinationSiteIds: route.destinationSiteIds,\n      destinations: route.destinations,\n      tripCount: route.tripCount,\n      trucks: route.trucks,\n      lastCompletedAt: route.lastCompletedAt.toISOString(),\n    }));\n    const tripHistory = allTripsForHistory.slice(0, 20).map((trip) => ({\n`);
+
+          const responseAnchor = '      trips: tripHistory,\n';
+          if (!source.includes(responseAnchor)) throw new Error('API response anchor missing');
+          source = source.replace(responseAnchor, responseAnchor + '      routeHistory,\n');
+          fs.writeFileSync(routePath, source);
+
+          const contractTest = `import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst route = fs.readFileSync(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8");\n\ntest("dispatch API exposes tenant-safe completed route history", () => {\n  assert.match(route, /summarizeCompletedTripRoutes\\(allTripsForHistory\\)/);\n  assert.match(route, /routeHistory,/);\n  assert.match(route, /destinationSiteIds: route\\.destinationSiteIds/);\n  assert.match(route, /destinations: route\\.destinations/);\n  assert.match(route, /tripCount: route\\.tripCount/);\n  assert.match(route, /lastCompletedAt: route\\.lastCompletedAt\\.toISOString\\(\\)/);\n  assert.doesNotMatch(route, /routeHistory[\\s\\S]{0,500}companyId: route\\./);\n});\n`;
+          fs.writeFileSync('tests/trip-route-history-api.test.mjs', contractTest);
+
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.scripts['test:trip-history-summary'] = 'node --experimental-strip-types --test tests/trip-history-summary.test.mjs';
+          pkg.scripts['test:trip-route-history-api'] = 'node --test tests/trip-route-history-api.test.mjs';
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+          pnpm run test:trip-history-summary
+          pnpm run test:trip-route-history-api
+          pnpm exec eslint app/api/deliveries/route.ts app/lib/trip-history-summary.ts tests/trip-history-summary.test.mjs tests/trip-route-history-api.test.mjs --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          git diff --check
+
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/api/deliveries/route.ts app/lib/trip-history-summary.ts tests/trip-history-summary.test.mjs tests/trip-route-history-api.test.mjs package.json
+          git commit -m "expose completed route history in dispatch API"
+          git push origin HEAD:main
