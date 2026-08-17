@@ -21,6 +21,7 @@
     "test:origin-preference": "node --experimental-strip-types --test tests/origin-preference.test.mjs",
     "test:vehicle-linking": "node --experimental-strip-types --test tests/vehicle-linking.test.mjs",
     "test:delivery-vehicle-choice": "node --experimental-strip-types --test tests/delivery-vehicle-choice.test.mjs",
+    "test:unassigned-trip-safety": "node --test tests/unassigned-trip-safety.test.mjs",
     "test:tenant-isolation": "node --test tests/tenant-isolation.test.mjs",
     "test:known-sites": "node --experimental-strip-types --test tests/known-sites.test.mjs",
     "test:site-store": "node --experimental-strip-types --test tests/site-store.test.mjs",

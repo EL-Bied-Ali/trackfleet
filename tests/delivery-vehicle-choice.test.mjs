@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveCreationVehicle } from "../app/lib/delivery-vehicle-choice.ts";
+import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_TRUCK, UNASSIGNED_VEHICLE_ID } from "../app/lib/delivery-vehicle-choice.ts";
 
 const vehicles = [
   { id: "veh-14", name: "TRK-014" },
@@ -29,4 +29,19 @@ test("an unknown typed vehicle id never becomes a trusted provider link", () => 
     sendatrackVehicleId: "",
     source: "manual",
   });
+});
+
+
+test("new parcel can remain unassigned until a real truck is confirmed", () => {
+  const choice = resolveCreationVehicle({ selectedVehicleId: UNASSIGNED_VEHICLE_ID, vehicles: [{ id: "gps-1", name: "TRK-1" }] });
+  assert.equal(choice.source, "unassigned");
+  assert.equal(choice.truck, UNASSIGNED_TRUCK);
+  assert.equal(choice.sendatrackVehicleId, "");
+  assert.equal(isUnassignedVehicle(choice), true);
+});
+
+test("blank offline truck stays unassigned instead of inventing a vehicle", () => {
+  const choice = resolveCreationVehicle({ manualTruck: "", selectedVehicleId: "", vehicles: [] });
+  assert.equal(choice.source, "unassigned");
+  assert.equal(isUnassignedVehicle(choice), true);
 });

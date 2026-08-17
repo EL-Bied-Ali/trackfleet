@@ -14,3 +14,11 @@ test("manual search tolerates leading zero differences without changing auto-lin
   assert.equal(suggestions[0]?.id, "send-1");
   assert.equal(matchDeliveryVehicle({ sendatrackVehicleId: "", truck: "trk 14" }, vehicles).vehicle, null);
 });
+
+
+test("unassigned parcel never auto-links to a provider vehicle", async () => {
+  const { matchDeliveryVehicle } = await import("../app/lib/vehicle-linking.ts");
+  const { UNASSIGNED_TRUCK } = await import("../app/lib/delivery-vehicle-choice.ts");
+  const match = matchDeliveryVehicle({ truck: UNASSIGNED_TRUCK, sendatrackVehicleId: "" }, [{ id: "v1", name: "Unassigned", latitude: 0, longitude: 0, speed: 0, updatedAt: Date.now() }]);
+  assert.equal(match.vehicle, null);
+});

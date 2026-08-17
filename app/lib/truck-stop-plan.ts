@@ -1,5 +1,6 @@
 import type { DeliveryRow } from "./delivery-store.types";
 import { routeOriginSiteId, routeTemplateId } from "./route-template.ts";
+import { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";
 
 export type TruckStop = {
   siteId: string;
@@ -34,13 +35,13 @@ export function configuredStopServiceMinutes() {
 }
 
 function priorStopSiteIds(delivery: DeliveryRow, deliveries: DeliveryRow[]) {
-  if (!delivery.destinationSiteId) return [];
+  if (!delivery.destinationSiteId || isUnassignedVehicle(delivery)) return [];
   const targetTime = timeValue(delivery.plannedArrivalAt);
   const targetVehicle = vehicleKey(delivery);
   const priorSites = new Set<string>();
 
   for (const candidate of deliveries) {
-    if (candidate.id === delivery.id || candidate.status === "Delivered" || !candidate.destinationSiteId) continue;
+    if (candidate.id === delivery.id || candidate.status === "Delivered" || !candidate.destinationSiteId || isUnassignedVehicle(candidate)) continue;
     if (vehicleKey(candidate) !== targetVehicle) continue;
     if (candidate.destinationSiteId === delivery.destinationSiteId) continue;
     if (timeValue(candidate.plannedArrivalAt) >= targetTime) continue;
@@ -74,7 +75,7 @@ export function pendingServiceMinutesBeforeWithHistory(
 }
 
 export function buildTruckStopPlans(deliveries: DeliveryRow[]): TruckStopPlan[] {
-  const active = deliveries.filter((delivery) => delivery.status !== "Delivered" && delivery.destinationSiteId);
+  const active = deliveries.filter((delivery) => delivery.status !== "Delivered" && delivery.destinationSiteId && !isUnassignedVehicle(delivery));
   const byVehicle = new Map<string, DeliveryRow[]>();
 
   for (const delivery of active) {

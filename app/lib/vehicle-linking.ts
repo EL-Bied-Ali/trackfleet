@@ -1,4 +1,5 @@
 import type { SendatrackVehicle } from "./sendatrack";
+import { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";
 
 export type VehicleLinkMatch = {
   vehicle: SendatrackVehicle | null;
@@ -17,6 +18,7 @@ export function matchDeliveryVehicle(
   delivery: { sendatrackVehicleId?: string | null; truck?: string | null },
   vehicles: SendatrackVehicle[],
 ): VehicleLinkMatch {
+  if (isUnassignedVehicle(delivery)) return { vehicle: null, reason: "none", candidates: [] };
   const knownId = delivery.sendatrackVehicleId?.trim();
   if (knownId) {
     const exact = vehicles.find((vehicle) => vehicle.id === knownId) ?? null;
