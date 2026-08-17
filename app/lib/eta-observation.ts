@@ -2,6 +2,7 @@ import type { DeliveryEventRow, DeliveryRow, EtaObservationInput } from "./deliv
 import { estimateArrival } from "./eta-estimator.ts";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "./route-progress.ts";
 import { pendingServiceMinutesBefore } from "./truck-stop-plan.ts";
+import type { EtaRouteContext } from "./route-history.ts";
 
 function explicitDestination(row: DeliveryRow): [number, number] | null {
   return typeof row.destinationLatitude === "number" && typeof row.destinationLongitude === "number"
@@ -19,6 +20,7 @@ export function buildEtaObservation(
   row: DeliveryRow,
   events: DeliveryEventRow[],
   companyDeliveries: DeliveryRow[] = [row],
+  routeContext: EtaRouteContext | null = null,
 ): EtaObservationInput | null {
   if (row.gpsSource !== "sendatrack" || typeof row.latitude !== "number" || typeof row.longitude !== "number" || !row.lastPositionAt) return null;
 
@@ -40,6 +42,9 @@ export function buildEtaObservation(
   if (!eta.estimatedArrivalAt) return null;
   return {
     deliveryId: row.id,
+    routeTemplateId: routeContext?.routeTemplateId ?? null,
+    tripInstanceId: routeContext?.tripInstanceId ?? null,
+    destinationSiteId: routeContext?.destinationSiteId ?? row.destinationSiteId ?? null,
     positionAt: row.lastPositionAt,
     estimatedArrivalAt: eta.estimatedArrivalAt,
     plannedArrivalAt: row.plannedArrivalAt,
