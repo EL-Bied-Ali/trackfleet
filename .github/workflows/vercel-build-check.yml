@@ -75,6 +75,8 @@ jobs:
         run: pnpm run test:eta-display
       - name: Verify route history ETA learning
         run: pnpm run test:route-history
+      - name: Verify route learning status
+        run: pnpm run test:route-learning
       - name: Verify delay detection
         run: pnpm run test:delay
       - name: Verify autonomous delay detection
