@@ -41,6 +41,8 @@ jobs:
         run: pnpm run test:origin-preference
       - name: Verify safe vehicle linking
         run: pnpm run test:vehicle-linking
+      - name: Verify delivery vehicle creation choice
+        run: pnpm run test:delivery-vehicle-choice
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
