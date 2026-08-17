@@ -15,6 +15,7 @@ export type TruckStopPlan = {
   truck: string;
   sendatrackVehicleId: string;
   routeTemplateId: string;
+  tripId: string | null;
   originSiteId: string | null;
   source: "planned-arrival";
   stops: TruckStop[];
@@ -76,16 +77,16 @@ export function pendingServiceMinutesBeforeWithHistory(
 
 export function buildTruckStopPlans(deliveries: DeliveryRow[]): TruckStopPlan[] {
   const active = deliveries.filter((delivery) => delivery.status !== "Delivered" && delivery.destinationSiteId && !isUnassignedVehicle(delivery));
-  const byVehicle = new Map<string, DeliveryRow[]>();
+  const groups = new Map<string, DeliveryRow[]>();
 
   for (const delivery of active) {
-    const key = vehicleKey(delivery);
-    const rows = byVehicle.get(key) ?? [];
+    const key = delivery.tripId ? `trip:${delivery.tripId}` : `vehicle:${vehicleKey(delivery)}`;
+    const rows = groups.get(key) ?? [];
     rows.push(delivery);
-    byVehicle.set(key, rows);
+    groups.set(key, rows);
   }
 
-  return [...byVehicle.entries()].map(([key, rows]) => {
+  return [...groups.entries()].map(([, rows]) => {
     const bySite = new Map<string, DeliveryRow[]>();
     for (const row of rows) {
       const siteId = row.destinationSiteId!;
@@ -107,11 +108,13 @@ export function buildTruckStopPlans(deliveries: DeliveryRow[]): TruckStopPlan[] 
 
     const first = rows[0];
     const originSiteId = routeOriginSiteId(rows);
+    const explicitTripIds = [...new Set(rows.map((delivery) => delivery.tripId).filter((value): value is string => Boolean(value)))];
     return {
-      vehicleKey: key,
+      vehicleKey: vehicleKey(first),
       truck: first.truck,
       sendatrackVehicleId: first.sendatrackVehicleId,
       routeTemplateId: routeTemplateId(originSiteId, stops.map((stop) => stop.siteId)),
+      tripId: explicitTripIds.length === 1 ? explicitTripIds[0] : null,
       originSiteId,
       source: "planned-arrival" as const,
       stops,

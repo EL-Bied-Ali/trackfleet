@@ -31,6 +31,7 @@ export type DeliveryRow = {
   gpsSource: string;
   companyId: string;
   trackingToken: string | null;
+  tripId?: string | null;
   createdAt: Date;
 };
 

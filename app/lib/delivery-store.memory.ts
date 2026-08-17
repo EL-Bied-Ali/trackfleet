@@ -137,6 +137,7 @@ export const memoryStore: DeliveryStore = {
     const current = deliveryTripAssignments.get(key);
     if (current && current !== tripId) return false;
     deliveryTripAssignments.set(key, tripId);
+    delivery.tripId = tripId;
     return true;
   },
   async listDeliveryIdsForTrip(companyId, tripId) {

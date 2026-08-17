@@ -71,7 +71,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   for (const plan of plans) {
     const deliveryIds = plan.stops.flatMap((stop) => stop.deliveryIds);
     const routeTemplateId = stablePlanRouteTemplateId(plan.routeTemplateId, deliveryIds, stableContexts);
-    const tripInstanceId = deliveryIds.map((id) => stableContexts.get(id)?.tripInstanceId).find(Boolean) ?? null;
+    const tripInstanceId = plan.tripId ?? deliveryIds.map((id) => stableContexts.get(id)?.tripInstanceId).find(Boolean) ?? null;
     if (!tripInstanceId) continue;
     const persistedTrip = await store.upsertTrip({
       id: tripInstanceId,

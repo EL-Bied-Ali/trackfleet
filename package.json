@@ -23,6 +23,7 @@
     "test:delivery-vehicle-choice": "node --experimental-strip-types --test tests/delivery-vehicle-choice.test.mjs",
     "test:unassigned-trip-safety": "node --test tests/unassigned-trip-safety.test.mjs",
     "test:trip-suggestion": "node --experimental-strip-types --test tests/trip-suggestion.test.mjs",
+    "test:explicit-trip-membership": "node --experimental-strip-types --test tests/explicit-trip-membership.test.mjs",
     "test:assignment-queue-ui": "node --test tests/assignment-queue-ui.test.mjs",
     "test:tenant-isolation": "node --test tests/tenant-isolation.test.mjs",
     "test:known-sites": "node --experimental-strip-types --test tests/known-sites.test.mjs",

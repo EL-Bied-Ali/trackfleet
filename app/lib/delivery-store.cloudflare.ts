@@ -18,7 +18,7 @@ type RawDelivery = {
   truck: string; driver: string; status: DeliveryStatus; eta: string; plannedArrivalAt: number | null;
   progress: number; color: string; contact: string;
   sendatrackVehicleId: string; latitude: number | null; longitude: number | null; speed: number | null;
-  lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; createdAt: number;
+  lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; tripId: string | null; createdAt: number;
 };
 type RawDeliveryEvent = { deliveryId: string; type: DeliveryEventType; progress: number; createdAt: number };
 function hydrate(row: RawDelivery): DeliveryRow {
@@ -131,7 +131,7 @@ const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_lati
   truck, driver, status, eta, planned_arrival_at AS plannedArrivalAt, progress, color, contact,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
   last_position_at AS lastPositionAt, gps_source AS gpsSource, company_id AS companyId,
-  tracking_token AS trackingToken, created_at AS createdAt`;
+  tracking_token AS trackingToken, trip_id AS tripId, created_at AS createdAt`;
 
 async function baselineProgress(deliveryId: string) {
   const row = await db().prepare("SELECT progress FROM delivery_events WHERE delivery_id = ? AND type = 'GPS_BASELINE' LIMIT 1").bind(deliveryId).first<{ progress: number }>();

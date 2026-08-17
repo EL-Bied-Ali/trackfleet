@@ -237,7 +237,7 @@ export async function GET(request: Request) {
     const stopPlansWithLearning = await Promise.all(stopPlans.map(async (plan) => {
       const deliveryIds = plan.stops.flatMap((stop) => stop.deliveryIds);
       const stableRouteTemplateId = stablePlanRouteTemplateId(plan.routeTemplateId, deliveryIds, stableContexts);
-      const currentTripInstanceId = deliveryIds.map((id) => stableContexts.get(id)?.tripInstanceId).find(Boolean) ?? null;
+      const currentTripInstanceId = plan.tripId ?? deliveryIds.map((id) => stableContexts.get(id)?.tripInstanceId).find(Boolean) ?? null;
       const finalStop = plan.stops[plan.stops.length - 1] ?? null;
       const historyRows = finalStop ? await cachedEtaHistory(stableRouteTemplateId, finalStop.siteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, currentTripInstanceId);
