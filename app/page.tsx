@@ -8,7 +8,7 @@ import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";
 import { originPreferenceKey, resolvePreferredOriginSite } from "./lib/origin-preference";
 import { rankVehicleSuggestions } from "./lib/vehicle-linking";
 import { activeTourDisplayId, stopSequence, tourCustomerCount, tourDeliveryCount } from "./lib/tour-view";
-import { etaExplanation } from "./lib/eta-display";
+import { customerEtaNote, etaExplanation } from "./lib/eta-display";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -587,11 +587,11 @@ export default function Home() {
       : selected.plannedArrivalAt
         ? new Date(selected.plannedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
         : selected.eta;
-    const etaNote = selected.etaDelayMinutes != null && selected.etaDelayMinutes >= 60
-      ? `+${Math.round(selected.etaDelayMinutes / 60)} h`
-      : selected.etaConfidence === "medium"
-        ? (locale === "fr" ? "Estimation basée sur le trajet réel" : locale === "nl" ? "Schatting op basis van werkelijk traject" : "Estimate based on observed trip pace")
-        : (locale === "fr" ? "Estimation indicative" : locale === "nl" ? "Indicatieve schatting" : "Indicative estimate");
+    const etaNote = customerEtaNote({
+      source: selected.etaSource,
+      delayMinutes: selected.etaDelayMinutes,
+      historyTrips: selected.etaHistoryTrips,
+    }, locale);
 
     return (
       <main className="customer-page">
