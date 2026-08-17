@@ -155,9 +155,7 @@ export default function Home() {
   const [vehicleLinkSearch, setVehicleLinkSearch] = useState("");
   const [vehicleLinkChoice, setVehicleLinkChoice] = useState("");
   const [vehicleLinkBusy, setVehicleLinkBusy] = useState(false);
-  const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
-    { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
-  ]);
+  const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([]);
   const t = translations[locale];
 
   useEffect(() => {
