@@ -36,7 +36,7 @@ jobs:
           response_type = 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[] };'
           if response_type in s:
             s = s.replace(response_type, 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };')
-          else:
+          elif 'stopPlans?: TourPlan[]' not in s:
             raise SystemExit('delivery response type marker missing')
 
           integration_marker = '        if (data.integration) setIntegration(data.integration);\n'
@@ -72,3 +72,5 @@ jobs:
           git add app/page.tsx app/globals.css package.json
           git commit -m "show active multi-stop tours in dashboard"
           git push
+
+# retry after fixing the helper expectation
