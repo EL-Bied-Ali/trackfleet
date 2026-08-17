@@ -47,6 +47,7 @@
     "test:route-learning": "node --experimental-strip-types --test tests/route-learning.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
+    "test:automation-trip-sync": "node --test tests/automation-trip-sync.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
