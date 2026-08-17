@@ -9,8 +9,17 @@ test("authenticated dashboard is gated until real API data resolves", () => {
   assert.match(source, /setDispatchDataState\("ready"\)/);
 });
 
-test("delivery API failure clears displayed rows instead of leaving stale deliveries or trips", () => {
-  assert.match(source, /setDeliveries\(\[\]\);\n\s+setStopPlans\(\[\]\);\n\s+setTrips\(\[\]\);\n\s+setDispatchDataState\("error"\)/);
+test("delivery API failure clears displayed rows instead of leaving stale tenant data", () => {
+  const errorStart = source.indexOf("if (active && !tracking) {");
+  const errorEnd = source.indexOf('setToast(translations[locale].cloudReconnecting)', errorStart);
+  const errorCleanup = source.slice(errorStart, errorEnd);
+  for (const statement of [
+    "setDeliveries([])",
+    "setStopPlans([])",
+    "setTrips([])",
+    "setRouteHistory([])",
+    'setDispatchDataState("error")',
+  ]) assert.ok(errorCleanup.includes(statement), statement);
 });
 
 
