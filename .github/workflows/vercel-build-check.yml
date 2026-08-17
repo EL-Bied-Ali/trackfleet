@@ -91,6 +91,8 @@ jobs:
         run: pnpm run test:trip-record
       - name: Verify delivery trip persistence
         run: pnpm run test:trip-persistence
+      - name: Verify complete trip snapshot refresh
+        run: pnpm run test:trip-upsert-refresh
       - name: Verify persistent completed trip history
         run: pnpm run test:trip-history
       - name: Verify automation storage safety
