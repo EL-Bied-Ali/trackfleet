@@ -33,15 +33,9 @@ jobs:
           const ready = health?.storage?.persistent === true
             && health?.storage?.connected === true
             && health?.automation?.tickProtected === true;
-          if (!ready) throw new Error(`production_not_ready:${JSON.stringify({ storage: health?.storage, automation: health?.automation })}`);
-
-          const probeResponse = await fetch(`${baseUrl}/api/automation/sendatrack-events-alias-probe`, {
-            headers: { authorization: `Bearer ${secret}` },
-            cache: 'no-store',
-          });
-          const probeBody = await probeResponse.text();
-          console.log(`SENDATRACK_ALIAS_PROBE ${probeBody}`);
-          if (!probeResponse.ok) throw new Error(`probe_http_${probeResponse.status}`);
+          if (!ready) {
+            throw new Error(`production_not_ready:${JSON.stringify({ storage: health?.storage, automation: health?.automation })}`);
+          }
 
           const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
             headers: { authorization: `Bearer ${secret}` },
