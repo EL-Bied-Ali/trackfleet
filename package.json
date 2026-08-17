@@ -36,6 +36,7 @@
     "test:stop-dwell": "node --experimental-strip-types --test tests/stop-dwell.test.mjs",
     "test:tour": "node --experimental-strip-types --test tests/multistop-tour.test.mjs",
     "test:tour-view": "node --experimental-strip-types --test tests/tour-view.test.mjs",
+    "test:trip-ui-key-contract": "node --test tests/trip-ui-key-contract.test.mjs",
     "test:route-api-context-safety": "node --test tests/route-api-context-safety.test.mjs",
     "test:dispatch-data-gate": "node --test tests/dispatch-data-gate.test.mjs",
     "test:route-template": "node --experimental-strip-types --test tests/route-template.test.mjs",

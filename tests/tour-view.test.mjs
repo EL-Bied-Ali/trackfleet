@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeTourDisplayId, stopSequence, tourCustomerCount, tourDeliveryCount } from "../app/lib/tour-view.ts";
+import { activeTourDisplayId, activeTourKey, stopSequence, tourCustomerCount, tourDeliveryCount } from "../app/lib/tour-view.ts";
 
 const plan = {
   vehicleKey: "veh-TRK-014",
@@ -28,4 +28,14 @@ test("counts deliveries and unique customers across a tour", () => {
 
 test("numbers stops in server-provided order", () => {
   assert.deepEqual(stopSequence(plan).map((stop) => [stop.sequence, stop.siteId]), [[1, "casa"], [2, "marrakech"]]);
+});
+
+
+test("explicit trip ids keep two trips of the same truck visually distinct", () => {
+  const base = { vehicleKey: "gps-1", truck: "TRK-1", sendatrackVehicleId: "gps-1", stops: [] };
+  const a = { ...base, tripId: "TRIP-A", tripInstanceId: "LEGACY-A" };
+  const b = { ...base, tripId: "TRIP-B", tripInstanceId: "LEGACY-B" };
+  assert.equal(activeTourDisplayId(a), "TRIP-A");
+  assert.equal(activeTourDisplayId(b), "TRIP-B");
+  assert.notEqual(activeTourKey(a), activeTourKey(b));
 });
