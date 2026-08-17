@@ -10,12 +10,15 @@
       "trackfleet-site-store": ["./app/lib/site-store.vercel.ts"]
     }
   },
+  "include": [
+    "next-env.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx"
+  ],
   "exclude": [
     "node_modules",
     "app/lib/delivery-store.cloudflare.ts",
     "app/lib/runtime-env.cloudflare.ts",
-    "app/lib/site-store.cloudflare.ts",
-    "worker/**/*",
-    "db/**/*"
+    "app/lib/site-store.cloudflare.ts"
   ]
 }
