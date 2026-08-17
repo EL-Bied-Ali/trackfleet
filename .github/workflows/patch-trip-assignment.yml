@@ -1,0 +1,139 @@
+name: Patch delivery trip assignment
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-trip-assignment.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Link deliveries to persistent trips
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/lib/trip-record.ts')
+          s = p.read_text()
+          s += '''\nexport function tripStatusFromDeliveryStatuses(statuses: string[]): TripStatus {\n  if (statuses.length > 0 && statuses.every((status) => status === "Delivered")) return "completed";\n  if (statuses.some((status) => status === "In transit" || status === "Delayed")) return "active";\n  return "planned";\n}\n'''
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.types.ts')
+          s = p.read_text()
+          marker = '  listTrips(companyId: string, limit?: number): Promise<TripRecord[]>;\n'
+          add = marker + '  assignDeliveryTrip(deliveryId: string, companyId: string, tripId: string): Promise<boolean>;\n  listDeliveryIdsForTrip(companyId: string, tripId: string): Promise<string[]>;\n'
+          if marker not in s: raise SystemExit('trip store marker missing')
+          s = s.replace(marker, add, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.memory.ts')
+          s = p.read_text()
+          s = s.replace('const trips: TripRecord[] = [];\n', 'const trips: TripRecord[] = [];\nconst deliveryTripAssignments = new Map<string, string>();\n', 1)
+          marker = '  async listPendingNotifications(companyId) {'
+          methods = '''  async assignDeliveryTrip(deliveryId, companyId, tripId) {\n    const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId);\n    if (!delivery) return false;\n    const key = `${companyId}:${deliveryId}`;\n    const current = deliveryTripAssignments.get(key);\n    if (current && current !== tripId) return false;\n    deliveryTripAssignments.set(key, tripId);\n    return true;\n  },\n  async listDeliveryIdsForTrip(companyId, tripId) {\n    return [...deliveryTripAssignments.entries()]\n      .filter(([key, assignedTripId]) => key.startsWith(`${companyId}:`) && assignedTripId === tripId)\n      .map(([key]) => key.slice(companyId.length + 1));\n  },\n\n'''
+          if marker not in s: raise SystemExit('memory pending marker missing')
+          s = s.replace(marker, methods + marker, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.postgres.ts')
+          s = p.read_text()
+          schema_marker = '    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS destination_site_id text`;\n'
+          if schema_marker not in s: raise SystemExit('postgres delivery alter marker missing')
+          s = s.replace(schema_marker, schema_marker + '    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS trip_id text`;\n', 1)
+          idx_marker = '    await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;\n'
+          if idx_marker not in s: raise SystemExit('postgres delivery index marker missing')
+          s = s.replace(idx_marker, idx_marker + '    await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)`;\n', 1)
+          marker = '  async listPendingNotifications(companyId) {'
+          methods = '''  async assignDeliveryTrip(deliveryId, companyId, tripId) {\n    await ensureSchema();\n    const rows = await sql`UPDATE deliveries SET trip_id = ${tripId}\n      WHERE id = ${deliveryId} AND company_id = ${companyId} AND (trip_id IS NULL OR trip_id = ${tripId})\n      RETURNING id` as Array<{ id: string }>;\n    return rows.length > 0;\n  },\n  async listDeliveryIdsForTrip(companyId, tripId) {\n    await ensureSchema();\n    const rows = await sql`SELECT id FROM deliveries WHERE company_id = ${companyId} AND trip_id = ${tripId} ORDER BY created_at ASC` as Array<{ id: string }>;\n    return rows.map((row) => row.id);\n  },\n\n'''
+          if marker not in s: raise SystemExit('postgres pending marker missing')
+          s = s.replace(marker, methods + marker, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.cloudflare.ts')
+          s = p.read_text()
+          marker = '  if (!columns.has("planned_arrival_at")) await db().prepare("ALTER TABLE deliveries ADD COLUMN planned_arrival_at integer").run();\n'
+          if marker not in s: raise SystemExit('D1 delivery columns marker missing')
+          s = s.replace(marker, marker + '  if (!columns.has("trip_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN trip_id text").run();\n', 1)
+          idx_marker = '    database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)"),\n'
+          if idx_marker not in s: raise SystemExit('D1 company index marker missing')
+          s = s.replace(idx_marker, idx_marker + '    database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)"),\n', 1)
+          marker = '  async listPendingNotifications(companyId) {'
+          methods = '''  async assignDeliveryTrip(deliveryId, companyId, tripId) {\n    await ensureTable();\n    const result = await db().prepare("UPDATE deliveries SET trip_id = ? WHERE id = ? AND company_id = ? AND (trip_id IS NULL OR trip_id = ?)").bind(tripId, deliveryId, companyId, tripId).run();\n    return Boolean(result.meta?.changes);\n  },\n  async listDeliveryIdsForTrip(companyId, tripId) {\n    await ensureTable();\n    const result = await db().prepare("SELECT id FROM deliveries WHERE company_id = ? AND trip_id = ? ORDER BY created_at ASC").bind(companyId, tripId).all<{ id: string }>();\n    return (result.results ?? []).map((row) => row.id);\n  },\n\n'''
+          if marker not in s: raise SystemExit('D1 pending marker missing')
+          s = s.replace(marker, methods + marker, 1)
+          p.write_text(s)
+
+          p = Path('db/schema.ts')
+          s = p.read_text()
+          field_marker = '  trackingToken: text("tracking_token"),\n'
+          if field_marker not in s: raise SystemExit('schema tracking marker missing')
+          s = s.replace(field_marker, '  tripId: text("trip_id"),\n' + field_marker, 1)
+          idx_marker = '  index("idx_deliveries_company_id").on(table.companyId),\n'
+          if idx_marker not in s: raise SystemExit('schema delivery index marker missing')
+          s = s.replace(idx_marker, idx_marker + '  index("idx_deliveries_company_trip").on(table.companyId, table.tripId),\n', 1)
+          p.write_text(s)
+
+          p = Path('app/api/deliveries/route.ts')
+          s = p.read_text()
+          s = s.replace('import { tripStopsFromPlan } from "../../lib/trip-record";\n', 'import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/trip-record";\n', 1)
+          rows_marker = '    const stopPlans = buildTruckStopPlans(rows);\n'
+          if rows_marker not in s: raise SystemExit('route stop plans marker missing')
+          s = s.replace(rows_marker, '    const rowById = new Map(rows.map((row) => [row.id, row]));\n' + rows_marker, 1)
+          old_status = '        status: plan.stops.some((stop) => stop.deliveryIds.some((id) => rows.find((row) => row.id === id)?.status === "In transit" || rows.find((row) => row.id === id)?.status === "Delayed")) ? "active" : "planned",\n'
+          new_status = '        status: tripStatusFromDeliveryStatuses(deliveryIds.map((id) => rowById.get(id)?.status).filter((status): status is string => Boolean(status))),\n'
+          if old_status not in s: raise SystemExit('trip status marker missing')
+          s = s.replace(old_status, new_status, 1)
+          return_marker = '      return { ...plan, routeTemplateId: persistedTrip.routeTemplateId, tripInstanceId: persistedTrip.id, learning };\n    }));\n    await processPendingNotifications(session.companyId, requestUrl.origin);'
+          replacement = '''      await Promise.all(deliveryIds.map((deliveryId) => store.assignDeliveryTrip(deliveryId, session.companyId, persistedTrip.id)));\n      return { ...plan, routeTemplateId: persistedTrip.routeTemplateId, tripInstanceId: persistedTrip.id, learning };\n    }));\n\n    const activeTripIds = new Set(stopPlansWithLearning.map((plan) => plan.tripInstanceId).filter((id): id is string => Boolean(id)));\n    const persistedTrips = await store.listTrips(session.companyId, 500);\n    for (const trip of persistedTrips) {\n      if (trip.status === "completed" || activeTripIds.has(trip.id)) continue;\n      const deliveryIds = await store.listDeliveryIdsForTrip(session.companyId, trip.id);\n      const statuses = deliveryIds.map((id) => rowById.get(id)?.status).filter((status): status is string => Boolean(status));\n      if (tripStatusFromDeliveryStatuses(statuses) !== "completed") continue;\n      await store.upsertTrip({\n        id: trip.id, companyId: trip.companyId, routeTemplateId: trip.routeTemplateId, vehicleKey: trip.vehicleKey,\n        truck: trip.truck, sendatrackVehicleId: trip.sendatrackVehicleId, originSiteId: trip.originSiteId, stops: trip.stops, status: "completed",\n      });\n    }\n\n    await processPendingNotifications(session.companyId, requestUrl.origin);'''
+          if return_marker not in s: raise SystemExit('trip return marker missing')
+          s = s.replace(return_marker, replacement, 1)
+          p.write_text(s)
+
+          p = Path('tests/trip-record.test.mjs')
+          s = p.read_text()
+          s = s.replace('import { tripStopsFromPlan } from "../app/lib/trip-record.ts";', 'import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../app/lib/trip-record.ts";')
+          s += '''\n\ntest("trip lifecycle follows assigned delivery statuses", () => {\n  assert.equal(tripStatusFromDeliveryStatuses(["Loading", "Delivered"]), "planned");\n  assert.equal(tripStatusFromDeliveryStatuses(["In transit", "Delivered"]), "active");\n  assert.equal(tripStatusFromDeliveryStatuses(["Delayed"]), "active");\n  assert.equal(tripStatusFromDeliveryStatuses(["Delivered", "Delivered"]), "completed");\n  assert.equal(tripStatusFromDeliveryStatuses([]), "planned");\n});\n'''
+          p.write_text(s)
+
+          Path('tests/trip-persistence-contract.test.mjs').write_text('''import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst postgres = fs.readFileSync(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8");\nconst cloudflare = fs.readFileSync(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8");\nconst schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");\n\ntest("persistent stores keep delivery to trip assignment immutable", () => {\n  assert.match(postgres, /ADD COLUMN IF NOT EXISTS trip_id text/);\n  assert.match(postgres, /trip_id IS NULL OR trip_id =/);\n  assert.match(cloudflare, /ALTER TABLE deliveries ADD COLUMN trip_id text/);\n  assert.match(cloudflare, /trip_id IS NULL OR trip_id = \?/);\n  assert.match(schema, /tripId: text\("trip_id"\)/);\n});\n''')
+
+          p = Path('package.json')
+          s = p.read_text()
+          marker = '    "test:trip-record": "node --experimental-strip-types --test tests/trip-record.test.mjs",\n'
+          if marker not in s: raise SystemExit('package trip test marker missing')
+          s = s.replace(marker, marker + '    "test:trip-persistence": "node --test tests/trip-persistence-contract.test.mjs",\n', 1)
+          p.write_text(s)
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify assignment and lifecycle
+        run: |
+          pnpm run test:trip-record
+          pnpm run test:trip-persistence
+          pnpm run test:tour
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit product files
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app db tests package.json
+          git commit -m "link deliveries to persistent trips"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push
