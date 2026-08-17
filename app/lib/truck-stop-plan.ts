@@ -1,5 +1,5 @@
 import type { DeliveryRow } from "./delivery-store.types";
-import { routeOriginSiteId, routeTemplateId } from "./route-template";
+import { routeOriginSiteId, routeTemplateId } from "./route-template.ts";
 
 export type TruckStop = {
   siteId: string;
@@ -33,9 +33,6 @@ export function configuredStopServiceMinutes() {
   return Math.max(0, Math.min(240, Math.round(parsed)));
 }
 
-// Returns only future service time before this delivery's stop. Stops whose
-// deliveries are already Delivered are excluded, so elapsed dwell time is not
-// counted twice on top of the observed GPS pace.
 export function pendingServiceMinutesBefore(
   delivery: DeliveryRow,
   deliveries: DeliveryRow[],
