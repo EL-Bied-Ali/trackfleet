@@ -1,6 +1,8 @@
 name: TrackFleet automation tick
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -33,13 +35,15 @@ jobs:
           const ready = health?.storage?.persistent === true
             && health?.storage?.connected === true
             && health?.automation?.tickProtected === true;
-          if (!ready) {
-            throw new Error(`production_not_ready:${JSON.stringify({ storage: health?.storage, automation: health?.automation })}`);
-          }
+          if (!ready) throw new Error('production_not_ready');
+
+          const probe = await fetch(`${baseUrl}/api/automation/sendatrack-protocol-probe`, {
+            headers: { authorization: `Bearer ${secret}` }, cache: 'no-store'
+          });
+          console.log(`sendatrack_protocol_probe:${probe.status}:${await probe.text()}`);
 
           const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
-            headers: { authorization: `Bearer ${secret}` },
-            cache: 'no-store',
+            headers: { authorization: `Bearer ${secret}` }, cache: 'no-store'
           });
           const body = await tickResponse.text();
           console.log(body);
