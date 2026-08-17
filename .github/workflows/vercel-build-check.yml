@@ -99,6 +99,8 @@ jobs:
         run: pnpm run test:trip-history-summary
       - name: Verify completed route history API
         run: pnpm run test:trip-route-history-api
+      - name: Verify completed route history dashboard
+        run: pnpm run test:trip-route-history-ui
       - name: Verify automation storage safety
         run: pnpm run test:automation-readiness
       - name: Verify automation health diagnostics
