@@ -100,9 +100,9 @@ export interface DeliveryStore {
   listEtaObservations(deliveryId: string, limit?: number): Promise<EtaObservationRow[]>;
   listEtaObservationsForRoute(routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
   recordTripPosition(input: TripPositionInput): Promise<boolean>;
-  listTripPositionsForRoute(routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;
+  listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
-  claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
+  claimNotification(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
   releaseNotification(deliveryId: string, type: DeliveryEventType): Promise<void>;
   create(input: CreateDeliveryInput): Promise<DeliveryRow>;
