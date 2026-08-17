@@ -5,7 +5,7 @@ import { companyIdForAccount } from "./company-id";
 import { processPendingNotifications } from "./notification-runner";
 import { getSendatrackSnapshot } from "./sendatrack";
 import { buildEtaObservation } from "./eta-observation";
-import { buildEtaRouteContexts } from "./route-history";
+import { buildEtaRouteContexts, stableEtaRouteContext } from "./route-history";
 
 export type AutomationRunResult = {
   connected: boolean;
@@ -43,7 +43,9 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   let etaObservations = 0;
   for (const delivery of deliveries) {
     const events = await store.listEvents(delivery.id);
-    const etaObservation = buildEtaObservation(delivery, events, deliveries, routeContexts.get(delivery.id) ?? null);
+    const previousEtaObservations = await store.listEtaObservations(delivery.id, 2000);
+    const routeContext = stableEtaRouteContext(routeContexts.get(delivery.id) ?? null, previousEtaObservations, events);
+    const etaObservation = buildEtaObservation(delivery, events, deliveries, routeContext);
     if (etaObservation && await store.recordEtaObservation(etaObservation)) etaObservations += 1;
     if (!shouldCreateDelayEvent(delivery, events, deliveries)) continue;
     if (await store.recordEvent(delivery.id, "DELAY_DETECTED", delivery.progress)) {

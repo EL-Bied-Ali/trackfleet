@@ -14,7 +14,7 @@ import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-ac
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
-import { buildEtaRouteContexts, summarizeRouteHistory } from "../../lib/route-history";
+import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -162,7 +162,9 @@ export async function GET(request: Request) {
 
       const companyRows = await store.listForCompany(row.companyId);
       const routeContexts = buildEtaRouteContexts(companyRows);
-      const routeContext = routeContexts.get(row.id) ?? null;
+      const routeEvents = await store.listEvents(row.id);
+      const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
+      const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
       const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBefore(row, companyRows);
@@ -186,7 +188,9 @@ export async function GET(request: Request) {
     const routeContexts = buildEtaRouteContexts(rows, stopPlans);
     const enrichedRows = await Promise.all(rows.map(async (row) => {
       const serviceMinutes = pendingServiceMinutesBefore(row, rows);
-      const routeContext = routeContexts.get(row.id) ?? null;
+      const routeEvents = await store.listEvents(row.id);
+      const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
+      const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
       const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount)).delivery;
