@@ -1,0 +1,121 @@
+name: Patch unassigned deliveries
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-unassigned-deliveries.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Keep new parcels unassigned until a truck is confirmed
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/lib/delivery-vehicle-choice.ts')
+          p.write_text('''export type CreationVehicleOption = { id: string; name: string };\n\nexport const UNASSIGNED_TRUCK = "__unassigned__";\nexport const UNASSIGNED_VEHICLE_ID = "__unassigned__";\n\nexport function isUnassignedVehicle(delivery: { truck?: string | null; sendatrackVehicleId?: string | null }) {\n  return !String(delivery.sendatrackVehicleId ?? "").trim() && String(delivery.truck ?? "").trim() === UNASSIGNED_TRUCK;\n}\n\nexport function resolveCreationVehicle(input: {\n  manualTruck?: string | null;\n  selectedVehicleId?: string | null;\n  vehicles: CreationVehicleOption[];\n}) {\n  const manualTruck = String(input.manualTruck ?? "").trim();\n  if (manualTruck) {\n    return {\n      truck: manualTruck,\n      sendatrackVehicleId: "",\n      source: "manual" as const,\n    };\n  }\n\n  const selectedVehicleId = String(input.selectedVehicleId ?? "").trim();\n  if (!selectedVehicleId || selectedVehicleId === UNASSIGNED_VEHICLE_ID) {\n    return {\n      truck: UNASSIGNED_TRUCK,\n      sendatrackVehicleId: "",\n      source: "unassigned" as const,\n    };\n  }\n\n  const liveVehicle = input.vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? null;\n  return {\n    truck: liveVehicle?.name ?? selectedVehicleId,\n    sendatrackVehicleId: liveVehicle?.id ?? "",\n    source: liveVehicle ? "sendatrack" as const : "manual" as const,\n  };\n}\n''')
+
+          p = Path('app/lib/vehicle-linking.ts')
+          s = p.read_text()
+          if 'isUnassignedVehicle' not in s:
+            s = s.replace('import type { SendatrackVehicle } from "./sendatrack";\n', 'import type { SendatrackVehicle } from "./sendatrack";\nimport { isUnassignedVehicle } from "./delivery-vehicle-choice";\n', 1)
+            marker = ') : VehicleLinkMatch {\n  const knownId = delivery.sendatrackVehicleId?.trim();\n'
+            replacement = ') : VehicleLinkMatch {\n  if (isUnassignedVehicle(delivery)) return { vehicle: null, reason: "none", candidates: [] };\n  const knownId = delivery.sendatrackVehicleId?.trim();\n'
+            if marker not in s: raise SystemExit('vehicle linking marker missing')
+            s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/truck-stop-plan.ts')
+          s = p.read_text()
+          if 'isUnassignedVehicle' not in s:
+            s = s.replace('import { routeOriginSiteId, routeTemplateId } from "./route-template.ts";\n', 'import { routeOriginSiteId, routeTemplateId } from "./route-template.ts";\nimport { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";\n', 1)
+          s = s.replace('function priorStopSiteIds(delivery: DeliveryRow, deliveries: DeliveryRow[]) {\n  if (!delivery.destinationSiteId) return [];', 'function priorStopSiteIds(delivery: DeliveryRow, deliveries: DeliveryRow[]) {\n  if (!delivery.destinationSiteId || isUnassignedVehicle(delivery)) return [];')
+          s = s.replace('    if (candidate.id === delivery.id || candidate.status === "Delivered" || !candidate.destinationSiteId) continue;', '    if (candidate.id === delivery.id || candidate.status === "Delivered" || !candidate.destinationSiteId || isUnassignedVehicle(candidate)) continue;')
+          s = s.replace('  const active = deliveries.filter((delivery) => delivery.status !== "Delivered" && delivery.destinationSiteId);', '  const active = deliveries.filter((delivery) => delivery.status !== "Delivered" && delivery.destinationSiteId && !isUnassignedVehicle(delivery));')
+          p.write_text(s)
+
+          p = Path('app/page.tsx')
+          s = p.read_text()
+          s = s.replace('import { resolveCreationVehicle } from "./lib/delivery-vehicle-choice";', 'import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_VEHICLE_ID } from "./lib/delivery-vehicle-choice";')
+          selected_marker = '  const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? emptyDelivery;\n'
+          helper = '''  const vehicleLabel = (delivery: Pick<Delivery, "truck" | "sendatrackVehicleId">) => isUnassignedVehicle(delivery)\n    ? (locale === "fr" ? "À affecter" : locale === "nl" ? "Toe te wijzen" : "To assign")\n    : delivery.truck;\n'''
+          if helper not in s:
+            if selected_marker not in s: raise SystemExit('selected marker missing')
+            s = s.replace(selected_marker, selected_marker + helper, 1)
+          s = s.replace('>{delivery.truck}</option>)}</select>', '>{vehicleLabel(delivery)}</option>)}</select>')
+          s = s.replace('<p><strong>{selected.truck}</strong><small>{selected.driver}</small></p>', '<p><strong>{vehicleLabel(selected)}</strong><small>{isUnassignedVehicle(selected) ? (locale === "fr" ? "Aucun camion confirmé" : locale === "nl" ? "Nog geen voertuig bevestigd" : "No truck confirmed yet") : selected.driver}</small></p>')
+          s = s.replace('<td><strong>{delivery.truck}</strong><span>{delivery.gpsSource === "sendatrack" ? delivery.driver : (locale === "fr" ? "GPS en attente" : locale === "nl" ? "GPS in afwachting" : "Waiting for GPS")}</span></td>', '<td><strong>{vehicleLabel(delivery)}</strong><span>{isUnassignedVehicle(delivery) ? (locale === "fr" ? "En attente d’affectation" : locale === "nl" ? "Wacht op toewijzing" : "Waiting for assignment") : delivery.gpsSource === "sendatrack" ? delivery.driver : (locale === "fr" ? "GPS en attente" : locale === "nl" ? "GPS in afwachting" : "Waiting for GPS")}</span></td>')
+          online_old = '<select name="sendatrackVehicleId" defaultValue={integration.vehicles[0]?.id ?? ""}>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select>'
+          online_new = '<select name="sendatrackVehicleId" defaultValue={UNASSIGNED_VEHICLE_ID}><option value={UNASSIGNED_VEHICLE_ID}>{locale === "fr" ? "À affecter plus tard (recommandé)" : locale === "nl" ? "Later toewijzen (aanbevolen)" : "Assign later (recommended)"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select>'
+          if online_old not in s: raise SystemExit('online vehicle select marker missing')
+          s = s.replace(online_old, online_new, 1)
+          offline_old = '<input name="manualTruck" required placeholder={locale === "fr" ? "Ex. TRK-005 / plaque" : locale === "nl" ? "Bijv. TRK-005 / nummerplaat" : "E.g. TRK-005 / plate"} />'
+          offline_new = '<input name="manualTruck" placeholder={locale === "fr" ? "Optionnel · Ex. TRK-005 / plaque" : locale === "nl" ? "Optioneel · Bijv. TRK-005 / nummerplaat" : "Optional · E.g. TRK-005 / plate"} />'
+          if offline_old not in s: raise SystemExit('offline manual truck marker missing')
+          s = s.replace(offline_old, offline_new, 1)
+          offline_help_old = 'SENDATRACK hors ligne : le GPS sera rattaché automatiquement quand le camion réapparaîtra.'
+          offline_help_new = 'Laissez vide si le camion n’est pas encore connu. Vous pourrez l’affecter plus tard.'
+          s = s.replace(offline_help_old, offline_help_new, 1)
+          s = s.replace('SENDATRACK offline: GPS wordt automatisch gekoppeld zodra de vrachtwagen terug verschijnt.', 'Laat leeg als het voertuig nog niet bekend is. U kunt het later toewijzen.', 1)
+          s = s.replace('SENDATRACK offline: GPS will attach automatically when the truck reappears.', 'Leave blank if the truck is not known yet. You can assign it later.', 1)
+          p.write_text(s)
+
+          p = Path('tests/delivery-vehicle-choice.test.mjs')
+          s = p.read_text()
+          if 'UNASSIGNED_VEHICLE_ID' not in s:
+            s = s.replace('import { resolveCreationVehicle } from "../app/lib/delivery-vehicle-choice.ts";', 'import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_TRUCK, UNASSIGNED_VEHICLE_ID } from "../app/lib/delivery-vehicle-choice.ts";')
+            s += '''\n\ntest("new parcel can remain unassigned until a real truck is confirmed", () => {\n  const choice = resolveCreationVehicle({ selectedVehicleId: UNASSIGNED_VEHICLE_ID, vehicles: [{ id: "gps-1", name: "TRK-1" }] });\n  assert.equal(choice.source, "unassigned");\n  assert.equal(choice.truck, UNASSIGNED_TRUCK);\n  assert.equal(choice.sendatrackVehicleId, "");\n  assert.equal(isUnassignedVehicle(choice), true);\n});\n\ntest("blank offline truck stays unassigned instead of inventing a vehicle", () => {\n  const choice = resolveCreationVehicle({ manualTruck: "", selectedVehicleId: "", vehicles: [] });\n  assert.equal(choice.source, "unassigned");\n  assert.equal(isUnassignedVehicle(choice), true);\n});\n'''
+          p.write_text(s)
+
+          p = Path('tests/vehicle-linking.test.mjs')
+          s = p.read_text()
+          if 'unassigned parcel never auto-links' not in s:
+            s += '''\n\ntest("unassigned parcel never auto-links to a provider vehicle", async () => {\n  const { matchDeliveryVehicle } = await import("../app/lib/vehicle-linking.ts");\n  const { UNASSIGNED_TRUCK } = await import("../app/lib/delivery-vehicle-choice.ts");\n  const match = matchDeliveryVehicle({ truck: UNASSIGNED_TRUCK, sendatrackVehicleId: "" }, [{ id: "v1", name: "Unassigned", latitude: 0, longitude: 0, speed: 0, updatedAt: Date.now() }]);\n  assert.equal(match.vehicle, null);\n});\n'''
+          p.write_text(s)
+
+          Path('tests/unassigned-trip-safety.test.mjs').write_text('''import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst stopPlan = fs.readFileSync(new URL("../app/lib/truck-stop-plan.ts", import.meta.url), "utf8");\nconst page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");\n\ntest("unassigned parcels are excluded from active trip planning", () => {\n  assert.match(stopPlan, /!isUnassignedVehicle\(delivery\)/);\n  assert.match(stopPlan, /isUnassignedVehicle\(candidate\)/);\n});\n\ntest("creation UI defaults to assign later and allows offline unassigned parcels", () => {\n  assert.match(page, /defaultValue=\{UNASSIGNED_VEHICLE_ID\}/);\n  assert.match(page, /Assign later \(recommended\)/);\n  assert.doesNotMatch(page, /name="manualTruck" required/);\n});\n''')
+
+          p = Path('package.json')
+          s = p.read_text()
+          marker = '    "test:delivery-vehicle-choice": "node --experimental-strip-types --test tests/delivery-vehicle-choice.test.mjs",\n'
+          if marker not in s: raise SystemExit('package vehicle choice marker missing')
+          if 'test:unassigned-trip-safety' not in s:
+            s = s.replace(marker, marker + '    "test:unassigned-trip-safety": "node --test tests/unassigned-trip-safety.test.mjs",\n', 1)
+          p.write_text(s)
+
+      - run: pnpm install --no-frozen-lockfile
+      - name: Verify
+        run: |
+          pnpm run test:delivery-vehicle-choice
+          pnpm run test:vehicle-linking
+          pnpm run test:unassigned-trip-safety
+          pnpm run test:stop-plans
+          pnpm run test:trip-record
+          pnpm run test:automation-trip-sync
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit product files
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app tests package.json
+          git commit -m "keep parcels unassigned until truck confirmation"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push
