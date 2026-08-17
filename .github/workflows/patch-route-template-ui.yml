@@ -65,3 +65,5 @@ jobs:
           git add app/page.tsx package.json .github/workflows/vercel-build-check.yml
           git commit -m "reuse stable route identity across truck trips"
           git push
+
+# retry after fixing the TypeScript test import
