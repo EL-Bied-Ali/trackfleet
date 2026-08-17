@@ -64,7 +64,8 @@
     "db:generate": "drizzle-kit generate",
     "test:trip-upsert-refresh": "node --test tests/trip-upsert-refresh.test.mjs",
     "test:trip-history-summary": "node --experimental-strip-types --test tests/trip-history-summary.test.mjs",
-    "test:trip-route-history-api": "node --test tests/trip-route-history-api.test.mjs"
+    "test:trip-route-history-api": "node --test tests/trip-route-history-api.test.mjs",
+    "test:trip-route-history-ui": "node --test tests/trip-route-history-ui.test.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",
