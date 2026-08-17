@@ -18,7 +18,7 @@ import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
 import { summarizeStopDwell } from "../../lib/stop-dwell";
 import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";
-import { tripStopsFromPlan } from "../../lib/trip-record";
+import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/trip-record";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -199,6 +199,7 @@ export async function GET(request: Request) {
     const rows = await store.listForCompany(session.companyId);
     const companySites = await siteStore.listForCompany(session.companyId);
     const siteById = new Map(companySites.map((site) => [site.id, site]));
+    const rowById = new Map(rows.map((row) => [row.id, row]));
     const stopPlans = buildTruckStopPlans(rows);
     const routeContexts = buildEtaRouteContexts(rows, stopPlans);
     const etaHistoryCache = new Map<string, Promise<Awaited<ReturnType<typeof store.listEtaObservationsForRoute>>>>();
@@ -264,10 +265,25 @@ export async function GET(request: Request) {
         sendatrackVehicleId: plan.sendatrackVehicleId,
         originSiteId: plan.originSiteId,
         stops: tripStopsFromPlan(plan.stops),
-        status: plan.stops.some((stop) => stop.deliveryIds.some((id) => rows.find((row) => row.id === id)?.status === "In transit" || rows.find((row) => row.id === id)?.status === "Delayed")) ? "active" : "planned",
+        status: tripStatusFromDeliveryStatuses(deliveryIds.flatMap((id) => { const status = rowById.get(id)?.status; return status ? [status] : []; })),
       });
+      await Promise.all(deliveryIds.map((deliveryId) => store.assignDeliveryTrip(deliveryId, session.companyId, persistedTrip.id)));
       return { ...plan, routeTemplateId: persistedTrip.routeTemplateId, tripInstanceId: persistedTrip.id, learning };
     }));
+
+    const activeTripIds = new Set(stopPlansWithLearning.map((plan) => plan.tripInstanceId).filter((id): id is string => Boolean(id)));
+    const persistedTrips = await store.listTrips(session.companyId, 500);
+    for (const trip of persistedTrips) {
+      if (trip.status === "completed" || activeTripIds.has(trip.id)) continue;
+      const deliveryIds = await store.listDeliveryIdsForTrip(session.companyId, trip.id);
+      const statuses = deliveryIds.flatMap((id) => { const status = rowById.get(id)?.status; return status ? [status] : []; });
+      if (tripStatusFromDeliveryStatuses(statuses) !== "completed") continue;
+      await store.upsertTrip({
+        id: trip.id, companyId: trip.companyId, routeTemplateId: trip.routeTemplateId, vehicleKey: trip.vehicleKey,
+        truck: trip.truck, sendatrackVehicleId: trip.sendatrackVehicleId, originSiteId: trip.originSiteId, stops: trip.stops, status: "completed",
+      });
+    }
+
     await processPendingNotifications(session.companyId, requestUrl.origin);
 
     return Response.json({

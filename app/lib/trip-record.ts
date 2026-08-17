@@ -31,3 +31,9 @@ export function tripStopsFromPlan(stops: Array<{ siteId: string; destination: st
     plannedArrivalAt: stop.plannedArrivalAt,
   }));
 }
+
+export function tripStatusFromDeliveryStatuses(statuses: string[]): TripStatus {
+  if (statuses.length > 0 && statuses.every((status) => status === "Delivered")) return "completed";
+  if (statuses.some((status) => status === "In transit" || status === "Delayed")) return "active";
+  return "planned";
+}

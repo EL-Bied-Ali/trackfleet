@@ -135,7 +135,9 @@ async function ensureSchema() {
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS origin_latitude double precision`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS origin_longitude double precision`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS destination_site_id text`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS trip_id text`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)`;
     await sql`CREATE TABLE IF NOT EXISTS delivery_events (
       delivery_id text NOT NULL,
       type text NOT NULL,
@@ -397,6 +399,19 @@ export const postgresStore: DeliveryStore = {
     const capped = Math.max(1, Math.min(1000, Math.round(limit)));
     const rows = await sql`SELECT id FROM trips WHERE company_id = ${companyId} ORDER BY updated_at DESC LIMIT ${capped}` as Array<{ id: string }>;
     return (await Promise.all(rows.map((row) => this.getTrip(companyId, row.id)))).filter((trip): trip is TripRecord => Boolean(trip));
+  },
+
+  async assignDeliveryTrip(deliveryId, companyId, tripId) {
+    await ensureSchema();
+    const rows = await sql`UPDATE deliveries SET trip_id = ${tripId}
+      WHERE id = ${deliveryId} AND company_id = ${companyId} AND (trip_id IS NULL OR trip_id = ${tripId})
+      RETURNING id` as Array<{ id: string }>;
+    return rows.length > 0;
+  },
+  async listDeliveryIdsForTrip(companyId, tripId) {
+    await ensureSchema();
+    const rows = await sql`SELECT id FROM deliveries WHERE company_id = ${companyId} AND trip_id = ${tripId} ORDER BY created_at ASC` as Array<{ id: string }>;
+    return rows.map((row) => row.id);
   },
 
   async listPendingNotifications(companyId) {

@@ -34,6 +34,7 @@
     "test:dispatch-data-gate": "node --test tests/dispatch-data-gate.test.mjs",
     "test:route-template": "node --experimental-strip-types --test tests/route-template.test.mjs",
     "test:trip-record": "node --experimental-strip-types --test tests/trip-record.test.mjs",
+    "test:trip-persistence": "node --test tests/trip-persistence-contract.test.mjs",
     "test:automation-readiness": "node --experimental-strip-types --test tests/automation-readiness.test.mjs",
     "test:automation-health": "node --experimental-strip-types --test tests/automation-health.test.mjs",
     "test:whatsapp-readiness": "node --test tests/whatsapp-readiness.test.mjs",

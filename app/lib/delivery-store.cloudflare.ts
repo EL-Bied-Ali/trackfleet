@@ -59,6 +59,7 @@ async function ensureDeliveryColumns() {
   if (!columns.has("destination_longitude")) await db().prepare("ALTER TABLE deliveries ADD COLUMN destination_longitude real").run();
   if (!columns.has("arrival_radius_km")) await db().prepare("ALTER TABLE deliveries ADD COLUMN arrival_radius_km real DEFAULT 0.5 NOT NULL").run();
   if (!columns.has("planned_arrival_at")) await db().prepare("ALTER TABLE deliveries ADD COLUMN planned_arrival_at integer").run();
+  if (!columns.has("trip_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN trip_id text").run();
 }
 
 async function ensureTable() {
@@ -103,6 +104,7 @@ async function ensureTable() {
   )`).run();
   await database.batch([
     database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)"),
     database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)"),
@@ -266,6 +268,17 @@ export const store: DeliveryStore = {
     const capped = Math.max(1, Math.min(1000, Math.round(limit)));
     const result = await db().prepare("SELECT id FROM trips WHERE company_id = ? ORDER BY updated_at DESC LIMIT ?").bind(companyId, capped).all<{ id: string }>();
     return (await Promise.all((result.results ?? []).map((row) => this.getTrip(companyId, row.id)))).filter((trip): trip is TripRecord => Boolean(trip));
+  },
+
+  async assignDeliveryTrip(deliveryId, companyId, tripId) {
+    await ensureTable();
+    const result = await db().prepare("UPDATE deliveries SET trip_id = ? WHERE id = ? AND company_id = ? AND (trip_id IS NULL OR trip_id = ?)").bind(tripId, deliveryId, companyId, tripId).run();
+    return Boolean(result.meta?.changes);
+  },
+  async listDeliveryIdsForTrip(companyId, tripId) {
+    await ensureTable();
+    const result = await db().prepare("SELECT id FROM deliveries WHERE company_id = ? AND trip_id = ? ORDER BY created_at ASC").bind(companyId, tripId).all<{ id: string }>();
+    return (result.results ?? []).map((row) => row.id);
   },
 
   async listPendingNotifications(companyId) {

@@ -105,6 +105,8 @@ export interface DeliveryStore {
   upsertTrip(input: UpsertTripInput): Promise<TripRecord>;
   getTrip(companyId: string, tripId: string): Promise<TripRecord | null>;
   listTrips(companyId: string, limit?: number): Promise<TripRecord[]>;
+  assignDeliveryTrip(deliveryId: string, companyId: string, tripId: string): Promise<boolean>;
+  listDeliveryIdsForTrip(companyId: string, tripId: string): Promise<string[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;

@@ -12,6 +12,7 @@ const deliveryEvents: DeliveryEventRow[] = [];
 const etaObservations: EtaObservationRow[] = [];
 const tripPositions: TripPositionRow[] = [];
 const trips: TripRecord[] = [];
+const deliveryTripAssignments = new Map<string, string>();
 const notificationClaims = new NotificationClaimState();
 
 function notificationKey(deliveryId: string, type: DeliveryEventType) { return `${deliveryId}:${type}:whatsapp`; }
@@ -127,6 +128,21 @@ export const memoryStore: DeliveryStore = {
   },
   async listTrips(companyId, limit = 100) {
     return trips.filter((trip) => trip.companyId === companyId).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, Math.max(1, Math.min(1000, limit))).map((trip) => ({ ...trip, stops: trip.stops.map((stop) => ({ ...stop })) }));
+  },
+
+  async assignDeliveryTrip(deliveryId, companyId, tripId) {
+    const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId);
+    if (!delivery) return false;
+    const key = `${companyId}:${deliveryId}`;
+    const current = deliveryTripAssignments.get(key);
+    if (current && current !== tripId) return false;
+    deliveryTripAssignments.set(key, tripId);
+    return true;
+  },
+  async listDeliveryIdsForTrip(companyId, tripId) {
+    return [...deliveryTripAssignments.entries()]
+      .filter(([key, assignedTripId]) => key.startsWith(`${companyId}:`) && assignedTripId === tripId)
+      .map(([key]) => key.slice(companyId.length + 1));
   },
 
   async listPendingNotifications(companyId) {

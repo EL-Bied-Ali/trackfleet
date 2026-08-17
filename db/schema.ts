@@ -26,10 +26,12 @@ export const deliveries = sqliteTable("deliveries", {
   lastPositionAt: integer("last_position_at", { mode: "timestamp_ms" }),
   gpsSource: text("gps_source").notNull().default("simulation"),
   companyId: text("company_id").notNull().default("demo"),
+  tripId: text("trip_id"),
   trackingToken: text("tracking_token"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 }, (table) => [
   index("idx_deliveries_company_id").on(table.companyId),
+  index("idx_deliveries_company_trip").on(table.companyId, table.tripId),
   uniqueIndex("idx_deliveries_tracking_token").on(table.trackingToken),
 ]);
 
