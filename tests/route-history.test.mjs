@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { summarizeRouteHistory } from "../app/lib/route-history.ts";
+import { stableEtaRouteContext, summarizeRouteHistory } from "../app/lib/route-history.ts";
 import { estimateArrival } from "../app/lib/eta-estimator.ts";
 
-function observation(tripInstanceId, speed, source = "observed-pace", offset = 0) {
+function observation(tripInstanceId, speed, source = "observed-pace", offset = 0, routeTemplateId = "ROUTE-ABC", destinationSiteId = "casablanca") {
   return {
     deliveryId: `D-${tripInstanceId}`,
-    routeTemplateId: "ROUTE-ABC",
+    routeTemplateId,
     tripInstanceId,
-    destinationSiteId: "casablanca",
+    destinationSiteId,
     positionAt: new Date(1_700_000_000_000 + offset),
     estimatedArrivalAt: new Date(1_700_010_000_000 + offset),
     plannedArrivalAt: null,
@@ -74,4 +74,23 @@ test("current observed pace overrides route history once enough live distance ex
   });
   assert.equal(eta.source, "observed-pace");
   assert.equal(eta.effectiveSpeedKmh, 50);
+});
+
+test("route context remains frozen from the first post-departure observation", () => {
+  const departedAt = new Date(1_700_000_000_500);
+  const events = [{ deliveryId: "D", type: "DEPARTED", progress: 1, createdAt: departedAt }];
+  const observations = [
+    observation("TRIP-LATE", 50, "observed-pace", 5_000, "ROUTE-PARTIAL", "agadir"),
+    observation("TRIP-FULL", 50, "observed-pace", 1_000, "ROUTE-FULL", "agadir"),
+    observation("TRIP-PRE", 50, "baseline-model", 100, "ROUTE-PRE", "agadir"),
+  ];
+  const currentComputed = { routeTemplateId: "ROUTE-PARTIAL", tripInstanceId: "TRIP-LATE", destinationSiteId: "agadir" };
+  const stable = stableEtaRouteContext(currentComputed, observations, events);
+  assert.deepEqual(stable, { routeTemplateId: "ROUTE-FULL", tripInstanceId: "TRIP-FULL", destinationSiteId: "agadir" });
+});
+
+test("route context can keep changing before departure", () => {
+  const currentComputed = { routeTemplateId: "ROUTE-NEW", tripInstanceId: "TRIP-NEW", destinationSiteId: "agadir" };
+  const stable = stableEtaRouteContext(currentComputed, [observation("TRIP-OLD", 50)], []);
+  assert.deepEqual(stable, currentComputed);
 });
