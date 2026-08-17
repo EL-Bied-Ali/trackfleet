@@ -31,6 +31,8 @@ jobs:
         run: pnpm run test:notification-policy
       - name: Verify public tracking expiry
         run: pnpm run test:tracking-access
+      - name: Verify public provider isolation
+        run: pnpm run test:public-provider-isolation
       - name: Verify customer contact normalization
         run: pnpm run test:customer-contact
       - name: Verify SENDATRACK login error classification
