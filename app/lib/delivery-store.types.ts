@@ -40,6 +40,23 @@ export type DeliveryEventRow = {
   createdAt: Date;
 };
 
+export type EtaObservationInput = {
+  deliveryId: string;
+  positionAt: Date;
+  estimatedArrivalAt: Date;
+  plannedArrivalAt: Date | null;
+  delayMinutes: number | null;
+  effectiveSpeedKmh: number | null;
+  remainingDistanceKm: number;
+  progress: number;
+  confidence: "none" | "low" | "medium";
+  source: "unavailable" | "baseline-model" | "observed-pace";
+};
+
+export type EtaObservationRow = EtaObservationInput & {
+  createdAt: Date;
+};
+
 export type DeliveryTransition = {
   delivery: DeliveryRow;
   events: DeliveryEventType[];
@@ -61,6 +78,8 @@ export interface DeliveryStore {
   linkVehicle(deliveryId: string, companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow | null>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
+  recordEtaObservation(input: EtaObservationInput): Promise<boolean>;
+  listEtaObservations(deliveryId: string, limit?: number): Promise<EtaObservationRow[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
