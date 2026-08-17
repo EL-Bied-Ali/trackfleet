@@ -1,0 +1,57 @@
+name: Apply logout state cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Clear tenant-scoped UI state on logout
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'app/page.tsx';
+          let source = fs.readFileSync(path, 'utf8');
+          const before = `    setCompany(null);\n    setDeliveries([]);\n    setStopPlans([]);\n    setDispatchDataState("loading");\n    setAuthState("anonymous");`;
+          const after = `    setCompany(null);\n    setDeliveries([]);\n    setStopPlans([]);\n    setTrips([]);\n    setRouteHistory([]);\n    setDeliveryEvents([]);\n    setKnownSites([]);\n    setIntegration({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });\n    setDispatchDataState("loading");\n    setAuthState("anonymous");`;
+          if (!source.includes(before)) throw new Error('logout cleanup anchor missing');
+          source = source.replace(before, after);
+          fs.writeFileSync(path, source);
+
+          const test = `import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");\nconst start = page.indexOf("async function logout()");\nconst end = page.indexOf("async function linkSelectedVehicle", start);\nconst logout = page.slice(start, end);\n\ntest("logout clears tenant-scoped dashboard state", () => {\n  for (const statement of [\n    "setDeliveries([])",\n    "setStopPlans([])",\n    "setTrips([])",\n    "setRouteHistory([])",\n    "setDeliveryEvents([])",\n    "setKnownSites([])",\n    "setIntegration({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] })",\n  ]) assert.ok(logout.includes(statement), statement);\n});\n`;
+          fs.writeFileSync('tests/logout-state-cleanup.test.mjs', test);
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.scripts['test:logout-state-cleanup'] = 'node --test tests/logout-state-cleanup.test.mjs';
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+          pnpm run test:logout-state-cleanup
+          pnpm exec eslint app/page.tsx tests/logout-state-cleanup.test.mjs --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          git diff --check
+
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/page.tsx tests/logout-state-cleanup.test.mjs package.json
+          git commit -m "clear tenant dashboard state on logout"
+          git push origin HEAD:main
