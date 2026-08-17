@@ -138,12 +138,12 @@ function normalized(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-async function learnedStopMinutes(companyId: string, routeTemplateId: string | null, currentTripInstanceId: string | null) {
+async function learnedStopMinutes(companyId: string, routeTemplateId: string | null, currentTripInstanceId: string | null, prefetchedSites?: Awaited<ReturnType<typeof siteStore.listForCompany>>) {
   const learned = new Map<string, number>();
   if (!routeTemplateId) return learned;
   const [positions, sites] = await Promise.all([
     store.listTripPositionsForRoute(companyId, routeTemplateId, 20000),
-    siteStore.listForCompany(companyId),
+    prefetchedSites ? Promise.resolve(prefetchedSites) : siteStore.listForCompany(companyId),
   ]);
   for (const site of sites) {
     if (typeof site.latitude !== "number" || typeof site.longitude !== "number") continue;
@@ -201,6 +201,8 @@ export async function GET(request: Request) {
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
+    const companySites = await siteStore.listForCompany(session.companyId);
+    const siteById = new Map(companySites.map((site) => [site.id, site]));
     const stopPlans = buildTruckStopPlans(rows);
     const routeContexts = buildEtaRouteContexts(rows, stopPlans);
     const etaHistoryCache = new Map<string, Promise<Awaited<ReturnType<typeof store.listEtaObservationsForRoute>>>>();
@@ -218,7 +220,7 @@ export async function GET(request: Request) {
       const key = `${routeTemplateId ?? "none"}|${tripInstanceId ?? "none"}`;
       let pending = dwellCache.get(key);
       if (!pending) {
-        pending = learnedStopMinutes(session.companyId, routeTemplateId, tripInstanceId);
+        pending = learnedStopMinutes(session.companyId, routeTemplateId, tripInstanceId, companySites);
         dwellCache.set(key, pending);
       }
       return pending;
@@ -243,10 +245,15 @@ export async function GET(request: Request) {
       const history = summarizeRouteHistory(historyRows, 5, currentTripInstanceId);
       const learnedDwell = await cachedLearnedDwell(stableRouteTemplateId, currentTripInstanceId);
       const futureStopIds = plan.stops.slice(0, -1).map((stop) => stop.siteId);
+      const unconfiguredStops = futureStopIds.filter((siteId) => {
+        const site = siteById.get(siteId);
+        return !site || typeof site.latitude !== "number" || typeof site.longitude !== "number";
+      }).length;
       const learning = routeLearningState({
         historicalTrips: history.tripCount,
         learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,
         futureStops: futureStopIds.length,
+        unconfiguredStops,
       });
       return { ...plan, routeTemplateId: stableRouteTemplateId, learning };
     }));
