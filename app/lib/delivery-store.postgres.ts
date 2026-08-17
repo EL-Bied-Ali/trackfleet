@@ -5,6 +5,7 @@ import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
+import { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -252,7 +253,7 @@ export const postgresStore: DeliveryStore = {
       const vehicle = match.vehicle;
       if (!vehicle) continue;
 
-      const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";
+      const firstLink = delivery.gpsSource !== "sendatrack";
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const origin = explicitOrigin(delivery);
@@ -409,6 +410,14 @@ export const postgresStore: DeliveryStore = {
       WHERE id = ${deliveryId} AND company_id = ${companyId} AND (trip_id IS NULL OR trip_id = ${tripId})
       RETURNING id` as Array<{ id: string }>;
     return rows.length > 0;
+  },
+  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {
+    await ensureSchema();
+    const rows = await sql`UPDATE deliveries SET trip_id = ${tripId}, truck = ${truck}, sendatrack_vehicle_id = ${sendatrackVehicleId}
+      WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' AND trip_id IS NULL
+        AND truck = ${UNASSIGNED_TRUCK} AND (sendatrack_vehicle_id IS NULL OR sendatrack_vehicle_id = '')
+      RETURNING *` as RawDelivery[];
+    return rows[0] ? hydrate(rows[0]) : null;
   },
   async listDeliveryIdsForTrip(companyId, tripId) {
     await ensureSchema();

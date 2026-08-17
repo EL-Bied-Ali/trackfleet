@@ -5,6 +5,7 @@ import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
+import { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
@@ -45,7 +46,7 @@ export const memoryStore: DeliveryStore = {
       const match = matchDeliveryVehicle(delivery, snapshot.vehicles);
       const vehicle = match.vehicle;
       if (!vehicle) continue;
-      const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";
+      const firstLink = delivery.gpsSource !== "sendatrack";
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
@@ -139,6 +140,15 @@ export const memoryStore: DeliveryStore = {
     deliveryTripAssignments.set(key, tripId);
     delivery.tripId = tripId;
     return true;
+  },
+  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {
+    const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId) ?? null;
+    if (!delivery || delivery.status === "Delivered" || delivery.tripId || !isUnassignedVehicle(delivery)) return null;
+    const key = `${companyId}:${deliveryId}`;
+    if (deliveryTripAssignments.has(key)) return null;
+    deliveryTripAssignments.set(key, tripId);
+    Object.assign(delivery, { tripId, truck, sendatrackVehicleId });
+    return { ...delivery };
   },
   async listDeliveryIdsForTrip(companyId, tripId) {
     return [...deliveryTripAssignments.entries()]

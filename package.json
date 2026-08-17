@@ -24,6 +24,8 @@
     "test:unassigned-trip-safety": "node --test tests/unassigned-trip-safety.test.mjs",
     "test:trip-suggestion": "node --experimental-strip-types --test tests/trip-suggestion.test.mjs",
     "test:explicit-trip-membership": "node --experimental-strip-types --test tests/explicit-trip-membership.test.mjs",
+    "test:trip-assignment": "node --experimental-strip-types --test tests/trip-assignment.test.mjs",
+    "test:planned-trip-assignment-contract": "node --test tests/planned-trip-assignment-contract.test.mjs",
     "test:assignment-queue-ui": "node --test tests/assignment-queue-ui.test.mjs",
     "test:tenant-isolation": "node --test tests/tenant-isolation.test.mjs",
     "test:known-sites": "node --experimental-strip-types --test tests/known-sites.test.mjs",

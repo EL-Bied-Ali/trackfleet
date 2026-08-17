@@ -5,6 +5,7 @@ import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore,
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
+import { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record";
 
 function db() {
@@ -160,7 +161,7 @@ export const store: DeliveryStore = {
       const match = matchDeliveryVehicle(delivery, snapshot.vehicles);
       const vehicle = match.vehicle;
       if (!vehicle) continue;
-      const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";
+      const firstLink = delivery.gpsSource !== "sendatrack";
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const origin = explicitOrigin(delivery);
@@ -274,6 +275,14 @@ export const store: DeliveryStore = {
     await ensureTable();
     const result = await db().prepare("UPDATE deliveries SET trip_id = ? WHERE id = ? AND company_id = ? AND (trip_id IS NULL OR trip_id = ?)").bind(tripId, deliveryId, companyId, tripId).run();
     return Boolean(result.meta?.changes);
+  },
+  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {
+    await ensureTable();
+    const result = await db().prepare("UPDATE deliveries SET trip_id = ?, truck = ?, sendatrack_vehicle_id = ? WHERE id = ? AND company_id = ? AND status != 'Delivered' AND trip_id IS NULL AND truck = ? AND sendatrack_vehicle_id = ''")
+      .bind(tripId, truck, sendatrackVehicleId, deliveryId, companyId, UNASSIGNED_TRUCK).run();
+    if (!result.meta?.changes) return null;
+    const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
+    return updated ? hydrate(updated) : null;
   },
   async listDeliveryIdsForTrip(companyId, tripId) {
     await ensureTable();
