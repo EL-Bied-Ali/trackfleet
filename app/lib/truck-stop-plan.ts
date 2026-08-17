@@ -33,12 +33,8 @@ export function configuredStopServiceMinutes() {
   return Math.max(0, Math.min(240, Math.round(parsed)));
 }
 
-export function pendingServiceMinutesBefore(
-  delivery: DeliveryRow,
-  deliveries: DeliveryRow[],
-  serviceMinutesPerStop = configuredStopServiceMinutes(),
-) {
-  if (!delivery.destinationSiteId || serviceMinutesPerStop <= 0) return 0;
+function priorStopSiteIds(delivery: DeliveryRow, deliveries: DeliveryRow[]) {
+  if (!delivery.destinationSiteId) return [];
   const targetTime = timeValue(delivery.plannedArrivalAt);
   const targetVehicle = vehicleKey(delivery);
   const priorSites = new Set<string>();
@@ -50,8 +46,31 @@ export function pendingServiceMinutesBefore(
     if (timeValue(candidate.plannedArrivalAt) >= targetTime) continue;
     priorSites.add(candidate.destinationSiteId);
   }
+  return [...priorSites];
+}
 
-  return priorSites.size * serviceMinutesPerStop;
+export function pendingServiceMinutesBefore(
+  delivery: DeliveryRow,
+  deliveries: DeliveryRow[],
+  serviceMinutesPerStop = configuredStopServiceMinutes(),
+) {
+  if (serviceMinutesPerStop <= 0) return 0;
+  return priorStopSiteIds(delivery, deliveries).length * serviceMinutesPerStop;
+}
+
+export function pendingServiceMinutesBeforeWithHistory(
+  delivery: DeliveryRow,
+  deliveries: DeliveryRow[],
+  learnedMinutesBySite: ReadonlyMap<string, number>,
+  fallbackMinutesPerStop = configuredStopServiceMinutes(),
+) {
+  return priorStopSiteIds(delivery, deliveries).reduce((total, siteId) => {
+    const learned = learnedMinutesBySite.get(siteId);
+    const minutes = typeof learned === "number" && Number.isFinite(learned)
+      ? Math.max(0, Math.min(240, Math.round(learned)))
+      : fallbackMinutesPerStop;
+    return total + minutes;
+  }, 0);
 }
 
 export function buildTruckStopPlans(deliveries: DeliveryRow[]): TruckStopPlan[] {
