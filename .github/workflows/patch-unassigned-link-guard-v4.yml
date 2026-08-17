@@ -1,0 +1,81 @@
+name: Patch unassigned vehicle link guard v4
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply product guard only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('app/api/deliveries/link-vehicle/route.ts'); s = p.read_text()
+          if 'isUnassignedVehicle' not in s:
+              s = s.replace('import { getSendatrackSnapshot } from "../../../lib/sendatrack";\n', 'import { getSendatrackSnapshot } from "../../../lib/sendatrack";\nimport { isUnassignedVehicle } from "../../../lib/delivery-vehicle-choice";\n', 1)
+          marker = '  const snapshot = await getSendatrackSnapshot(session.credentials);\n'
+          guard = '''  const deliveries = await store.listForCompany(session.companyId);\n  const existingDelivery = deliveries.find((item) => item.id === deliveryId) ?? null;\n  if (!existingDelivery) return Response.json({ error: "delivery_not_found" }, { status: 404 });\n  if (isUnassignedVehicle(existingDelivery)) {\n    return Response.json({ error: "trip_assignment_required" }, { status: 409 });\n  }\n\n'''
+          if 'trip_assignment_required' not in s:
+              if marker not in s: raise SystemExit('link route marker missing')
+              s = s.replace(marker, guard + marker, 1)
+          p.write_text(s)
+
+          p = Path('app/page.tsx'); s = p.read_text()
+          if 'Affectez d’abord ce colis à un voyage planifié ci-dessous.' not in s:
+              old = '''              {selected.gpsSource !== "sendatrack" && <div style={{ marginTop: 10 }}>\n                {integration.connected && integration.vehicles.length ? <>\n                  {!vehicleLinkOpen ? <button className="copy-link" onClick={() => { setVehicleLinkOpen(true); setVehicleLinkSearch(selected.truck); setVehicleLinkChoice(""); }}>\n                    {locale === "fr" ? "Associer un véhicule" : locale === "nl" ? "Voertuig koppelen" : "Link a vehicle"}\n                  </button> : <div style={{ display: "grid", gap: 8 }}>'''
+              new = '''              {selected.gpsSource !== "sendatrack" && <div style={{ marginTop: 10 }}>\n                {isUnassignedVehicle(selected) ? <small>{locale === "fr" ? "Affectez d’abord ce colis à un voyage planifié ci-dessous." : locale === "nl" ? "Wijs deze zending eerst toe aan een geplande rit hieronder." : "Assign this parcel to a planned trip below first."}</small> : integration.connected && integration.vehicles.length ? <>\n                  {!vehicleLinkOpen ? <button className="copy-link" onClick={() => { setVehicleLinkOpen(true); setVehicleLinkSearch(selected.truck); setVehicleLinkChoice(""); }}>\n                    {locale === "fr" ? "Associer le GPS du véhicule" : locale === "nl" ? "GPS van voertuig koppelen" : "Link vehicle GPS"}\n                  </button> : <div style={{ display: "grid", gap: 8 }}>'''
+              if old not in s: raise SystemExit('popover marker missing')
+              s = s.replace(old, new, 1)
+          if 'Choisir un autre camion' in s:
+              old = '''<button type="button" className="copy-link" onClick={() => { setSelectedId(delivery.id); setShowPopover(true); setVehicleLinkOpen(true); setVehicleLinkSearch(suggestion?.truck ?? ""); setVehicleLinkChoice(""); }}>{locale === "fr" ? "Choisir un autre camion" : locale === "nl" ? "Ander voertuig kiezen" : "Choose another truck"}</button>'''
+              new = '''<button type="button" className="copy-link" onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }}>{locale === "fr" ? "Voir le colis" : locale === "nl" ? "Zending bekijken" : "View parcel"}</button>'''
+              if old not in s: raise SystemExit('queue secondary action marker missing')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          Path('tests/unassigned-direct-link-guard.test.mjs').write_text('''import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst api = fs.readFileSync(new URL("../app/api/deliveries/link-vehicle/route.ts", import.meta.url), "utf8");\nconst page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");\n\ntest("unassigned parcels cannot bypass trip assignment through vehicle linking", () => {\n  assert.match(api, /isUnassignedVehicle\\(existingDelivery\\)/);\n  assert.match(api, /trip_assignment_required/);\n  assert.match(api, /status: 409/);\n});\n\ntest("dashboard directs unassigned parcels to planned trips instead of direct GPS linking", () => {\n  assert.match(page, /Affectez d’abord ce colis à un voyage planifié/);\n  assert.match(page, /Confirmer ce voyage/);\n  assert.doesNotMatch(page, /Choisir un autre camion/);\n  assert.match(page, /Associer le GPS du véhicule/);\n});\n''')
+
+          p = Path('tests/assignment-queue-ui.test.mjs'); s = p.read_text()
+          s = s.replace('test("operator can still choose another truck instead of accepting the suggestion", () => {\n  assert.match(page, /Choisir un autre camion/);\n  assert.match(page, /setVehicleLinkOpen\\(true\\)/);\n});', 'test("unassigned parcels cannot bypass trip selection by choosing a truck directly", () => {\n  assert.doesNotMatch(page, /Choisir un autre camion/);\n  assert.match(page, /Voir le colis/);\n  assert.match(page, /Affectez d’abord ce colis à un voyage planifié/);\n});')
+          p.write_text(s)
+
+          p = Path('package.json'); s = p.read_text()
+          marker = '    "test:planned-trip-assignment-contract": "node --test tests/planned-trip-assignment-contract.test.mjs",\n'
+          if 'test:unassigned-direct-link-guard' not in s:
+              if marker not in s: raise SystemExit('package marker missing')
+              s = s.replace(marker, marker + '    "test:unassigned-direct-link-guard": "node --test tests/unassigned-direct-link-guard.test.mjs",\n', 1)
+          p.write_text(s)
+          PY
+      - run: pnpm install --no-frozen-lockfile
+      - name: Verify
+        run: |
+          pnpm run test:unassigned-direct-link-guard
+          pnpm run test:trip-assignment
+          pnpm run test:planned-trip-assignment-contract
+          pnpm run test:assignment-queue-ui
+          pnpm run test:vehicle-linking
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit product files
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/api/deliveries/link-vehicle/route.ts app/page.tsx tests/unassigned-direct-link-guard.test.mjs tests/assignment-queue-ui.test.mjs package.json
+          git commit -m "require trip assignment before vehicle linking"
+          git push
