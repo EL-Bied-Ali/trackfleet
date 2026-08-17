@@ -17,6 +17,7 @@
     "test:tracking-access": "node --experimental-strip-types --test tests/tracking-access.test.mjs",
     "test:customer-contact": "node --experimental-strip-types --test tests/customer-contact.test.mjs",
     "test:login-error": "node --experimental-strip-types --test tests/login-error.test.mjs",
+    "test:origin-preference": "node --experimental-strip-types --test tests/origin-preference.test.mjs",
     "test:tenant-isolation": "node --test tests/tenant-isolation.test.mjs",
     "test:known-sites": "node --experimental-strip-types --test tests/known-sites.test.mjs",
     "test:site-store": "node --experimental-strip-types --test tests/site-store.test.mjs",

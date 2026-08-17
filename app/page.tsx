@@ -5,6 +5,7 @@ import { localeOptions, translations, type Locale } from "./i18n";
 import InteractiveFleetMap from "./InteractiveFleetMap";
 import SiteManager from "./SiteManager";
 import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";
+import { originPreferenceKey, resolvePreferredOriginSite } from "./lib/origin-preference";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -138,6 +139,7 @@ export default function Home() {
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
   const [knownSites, setKnownSites] = useState<KnownSite[]>([]);
+  const [defaultOriginSiteId, setDefaultOriginSiteId] = useState("");
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
     { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
   ]);
@@ -197,6 +199,16 @@ export default function Home() {
     window.addEventListener("trackfleet-sites-changed", handleSitesChanged);
     return () => { active = false; window.removeEventListener("trackfleet-sites-changed", handleSitesChanged); };
   }, [authState]);
+
+  useEffect(() => {
+    if (!company || !knownSites.length) {
+      setDefaultOriginSiteId("");
+      return;
+    }
+    const originIds = knownSites.filter((site) => site.roles.includes("origin")).map((site) => site.id);
+    const saved = window.localStorage.getItem(originPreferenceKey(company));
+    setDefaultOriginSiteId((current) => resolvePreferredOriginSite(saved, originIds, current));
+  }, [company, knownSites]);
 
   useEffect(() => {
     const requestedLocale = new URLSearchParams(window.location.search).get("lang");
@@ -410,10 +422,15 @@ export default function Home() {
   async function createDelivery(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const selectedVehicleId = String(form.get("sendatrackVehicleId") ?? "");
+    const selectedVehicleId = String(form.get("sendatrackVehicleId") ?? "").trim();
+    const manualTruck = String(form.get("manualTruck") ?? "").trim();
     const liveVehicle = integration.vehicles.find((vehicle) => vehicle.id === selectedVehicleId);
-    const truck = liveVehicle?.name ?? selectedVehicleId;
+    const truck = liveVehicle?.name ?? (manualTruck || selectedVehicleId);
     const originSiteId = String(form.get("originSiteId") ?? "").trim();
+    if (company && originSiteId) {
+      window.localStorage.setItem(originPreferenceKey(company), originSiteId);
+      setDefaultOriginSiteId(originSiteId);
+    }
     const destinationSiteId = String(form.get("destinationSiteId") ?? "").trim();
     const selectedSite = knownSites.find((site) => site.id === destinationSiteId);
     const destination = selectedSite?.address ?? "";
@@ -672,13 +689,13 @@ export default function Home() {
           <div className="table-wrap">
             <table>
               <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{t.tableVehicle}</th><th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th><span className="sr-only">{t.tableActions}</span></th></tr></thead>
-              <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{delivery.destination}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.truck}</strong><span>{delivery.driver}</span></td><td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
+              <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{delivery.destination}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.truck}</strong><span>{delivery.gpsSource === "sendatrack" ? delivery.driver : (locale === "fr" ? "GPS en attente" : locale === "nl" ? "GPS in afwachting" : "Waiting for GPS")}</span></td><td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
             </table>
           </div>
         </div>
       </section>
 
-      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required defaultValue={knownSites.find((site) => site.roles.includes("origin"))?.id ?? ""}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={integration.vehicles[0]?.id ?? "TRK-005"}>{integration.vehicles.length ? integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>) : <><option>TRK-005</option><option>TRK-008</option><option>TRK-012</option><option>TRK-017</option></>}</select></label><label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
+      {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalOpen(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser."}</small></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row">{integration.connected && integration.vehicles.length ? <label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={integration.vehicles[0]?.id ?? ""}>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select></label> : <label>{t.assignTruck}<input name="manualTruck" required placeholder={locale === "fr" ? "Ex. TRK-005 / plaque" : locale === "nl" ? "Bijv. TRK-005 / nummerplaat" : "E.g. TRK-005 / plate"} /><small>{locale === "fr" ? "SENDATRACK hors ligne : le GPS sera rattaché automatiquement quand le camion réapparaîtra." : locale === "nl" ? "SENDATRACK offline: GPS wordt automatisch gekoppeld zodra de vrachtwagen terug verschijnt." : "SENDATRACK offline: GPS will attach automatically when the truck reappears."}</small></label>}<label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );
