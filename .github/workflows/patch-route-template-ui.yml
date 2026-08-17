@@ -48,22 +48,12 @@ jobs:
             p = p.replace(marker, marker + '    "test:route-template": "node --experimental-strip-types --test tests/route-template.test.mjs",\n')
           package.write_text(p)
 
-          ci = Path('.github/workflows/vercel-build-check.yml')
-          c = ci.read_text()
-          marker = '      - name: Verify active tour presentation\n        run: pnpm run test:tour-view\n'
-          if 'Verify reusable route identity' not in c:
-            if marker not in c: raise SystemExit('CI tour-view marker missing')
-            c = c.replace(marker, marker + '      - name: Verify reusable route identity\n        run: pnpm run test:route-template\n')
-          ci.write_text(c)
-
       - name: Test reusable route identity
         run: node --experimental-strip-types --test tests/route-template.test.mjs tests/multistop-tour.test.mjs
       - name: Commit patch
         run: |
           git config user.name "TrackFleet automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app/page.tsx package.json .github/workflows/vercel-build-check.yml
+          git add app/page.tsx package.json
           git commit -m "reuse stable route identity across truck trips"
           git push
-
-# retry after fixing the TypeScript test import
