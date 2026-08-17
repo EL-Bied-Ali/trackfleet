@@ -11,6 +11,8 @@ test("route learning remains collecting before any historical evidence", () => {
     unconfiguredStops: 0,
     etaHistoryReady: false,
     dwellHistoryReady: false,
+    medianEffectiveSpeedKmh: null,
+    medianDelayMinutes: null,
     stage: "collecting",
   });
 });
@@ -28,6 +30,18 @@ test("a stop without exact coordinates prevents false dwell readiness", () => {
   assert.equal(state.etaHistoryReady, true);
   assert.equal(state.dwellHistoryReady, false);
   assert.equal(state.stage, "partial");
+});
+
+test("historical route performance is rounded for presentation", () => {
+  const state = routeLearningState({
+    historicalTrips: 8,
+    learnedStops: 1,
+    futureStops: 1,
+    medianEffectiveSpeedKmh: 63.6,
+    medianDelayMinutes: 18.4,
+  });
+  assert.equal(state.medianEffectiveSpeedKmh, 64);
+  assert.equal(state.medianDelayMinutes, 18);
 });
 
 test("stable trip route id overrides the shortened active stop plan", () => {
