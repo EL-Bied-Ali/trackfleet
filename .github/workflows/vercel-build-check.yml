@@ -57,6 +57,10 @@ jobs:
         run: pnpm run test:planned-trip-assignment-contract
       - name: Verify unassigned direct vehicle link guard
         run: pnpm run test:unassigned-direct-link-guard
+      - name: Verify planned trip creation rules
+        run: pnpm run test:planned-trip-creation
+      - name: Verify planned trip creation API and UI
+        run: pnpm run test:create-trip-api-contract
       - name: Verify trip-aware dashboard keys
         run: pnpm run test:trip-ui-key-contract
       - name: Verify tenant isolation
