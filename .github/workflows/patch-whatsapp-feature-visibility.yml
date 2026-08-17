@@ -1,0 +1,75 @@
+name: Patch WhatsApp feature visibility
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-whatsapp-feature-visibility.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Hide WhatsApp demo unless server feature flag is enabled
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/api/deliveries/route.ts')
+          s = p.read_text()
+          if 'import { runtimeEnv } from "trackfleet-runtime-env";' not in s:
+            s = s.replace('import { store } from "trackfleet-delivery-store";\n', 'import { store } from "trackfleet-delivery-store";\nimport { runtimeEnv } from "trackfleet-runtime-env";\n', 1)
+          marker = '''      integration: {\n        configured: integration.configured,'''
+          replacement = '''      features: {\n        whatsappDemoEnabled: runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",\n      },\n      integration: {\n        configured: integration.configured,'''
+          if 'whatsappDemoEnabled: runtimeEnv.WHATSAPP_DEMO_ENABLED' not in s:
+            if marker not in s: raise SystemExit('deliveries feature response marker missing')
+            s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          p = Path('app/page.tsx')
+          s = p.read_text()
+          integration_type = 'type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };\n'
+          if 'type FeatureState =' not in s:
+            s = s.replace(integration_type, integration_type + 'type FeatureState = { whatsappDemoEnabled: boolean };\n')
+          state_marker = '  const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });\n'
+          if 'const [features, setFeatures]' not in s:
+            if state_marker not in s: raise SystemExit('feature state marker missing')
+            s = s.replace(state_marker, state_marker + '  const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false });\n', 1)
+          json_old = 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };'
+          json_new = 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };'
+          if json_old not in s: raise SystemExit('feature response type marker missing')
+          s = s.replace(json_old, json_new, 1)
+          set_marker = '        if (data.integration) setIntegration(data.integration);\n'
+          if 'if (data.features) setFeatures(data.features);' not in s:
+            s = s.replace(set_marker, set_marker + '        if (data.features) setFeatures(data.features);\n', 1)
+          old_panel = '{deliveries.length > 0 && <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">'
+          new_panel = '{features.whatsappDemoEnabled && deliveries.length > 0 && <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">'
+          if old_panel not in s: raise SystemExit('WhatsApp panel marker missing')
+          s = s.replace(old_panel, new_panel, 1)
+          p.write_text(s)
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build both targets
+        run: |
+          pnpm run test:whatsapp-readiness
+          pnpm run test:whatsapp-preview
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/api/deliveries/route.ts app/page.tsx
+          git commit -m "hide WhatsApp demo while feature flag is disabled"
+          git push
