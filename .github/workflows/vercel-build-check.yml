@@ -101,6 +101,8 @@ jobs:
         run: pnpm run test:trip-route-history-api
       - name: Verify completed route history dashboard
         run: pnpm run test:trip-route-history-ui
+      - name: Verify logout tenant state cleanup
+        run: pnpm run test:logout-state-cleanup
       - name: Verify automation storage safety
         run: pnpm run test:automation-readiness
       - name: Verify automation health diagnostics
