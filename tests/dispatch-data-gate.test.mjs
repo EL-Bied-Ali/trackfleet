@@ -9,8 +9,8 @@ test("authenticated dashboard is gated until real API data resolves", () => {
   assert.match(source, /setDispatchDataState\("ready"\)/);
 });
 
-test("delivery API failure clears displayed rows instead of leaving demo deliveries", () => {
-  assert.match(source, /setDeliveries\(\[\]\);\n\s+setStopPlans\(\[\]\);\n\s+setDispatchDataState\("error"\)/);
+test("delivery API failure clears displayed rows instead of leaving stale deliveries or trips", () => {
+  assert.match(source, /setDeliveries\(\[\]\);\n\s+setStopPlans\(\[\]\);\n\s+setTrips\(\[\]\);\n\s+setDispatchDataState\("error"\)/);
 });
 
 
