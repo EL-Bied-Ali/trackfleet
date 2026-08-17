@@ -250,6 +250,8 @@ export async function GET(request: Request) {
         learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,
         futureStops: futureStopIds.length,
         unconfiguredStops,
+        medianEffectiveSpeedKmh: history.medianEffectiveSpeedKmh,
+        medianDelayMinutes: history.medianDelayMinutes,
       });
       return { ...plan, routeTemplateId: stableRouteTemplateId, tripInstanceId: currentTripInstanceId, learning };
     }));

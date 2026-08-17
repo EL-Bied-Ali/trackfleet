@@ -62,7 +62,7 @@ type VehicleOption = { id: string; name: string; speed: number; updatedAt: numbe
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };
 type FeatureState = { whatsappDemoEnabled: boolean };
 type TourStop = { siteId: string; destination: string; plannedArrivalAt: string | null; deliveryIds: string[]; customers: string[] };
-type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; tripInstanceId?: string | null; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[]; learning?: { historicalTrips: number; requiredTrips: number; learnedStops: number; futureStops: number; unconfiguredStops: number; etaHistoryReady: boolean; dwellHistoryReady: boolean; stage: "collecting" | "partial" | "ready" } };
+type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; tripInstanceId?: string | null; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[]; learning?: { historicalTrips: number; requiredTrips: number; learnedStops: number; futureStops: number; unconfiguredStops: number; etaHistoryReady: boolean; dwellHistoryReady: boolean; medianEffectiveSpeedKmh: number | null; medianDelayMinutes: number | null; stage: "collecting" | "partial" | "ready" } };
 
 type MessageEvent = {
   id: string;
@@ -74,13 +74,17 @@ type MessageEvent = {
 type CompanyIdentity = { account: string; user: string };
 type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; geofenceReady: boolean };
 
-const initialDeliveries: Delivery[] = [
-  { id: "TF-2841", customer: "Atlas Home", destination: "Casablanca, MA", truck: "TRK-014", driver: "Youssef B.", status: "In transit", eta: "19 Aug · 14:00–18:00", progress: 68, color: "#16a272" },
-  { id: "TF-2839", customer: "Medina Import", destination: "Tangier, MA", truck: "TRK-007", driver: "Sophie L.", status: "Delayed", eta: "20 Aug · 09:00–13:00", progress: 55, color: "#f1a43c" },
-  { id: "TF-2837", customer: "Brussels Parts", destination: "Brussels, BE", truck: "TRK-019", driver: "Amine R.", status: "In transit", eta: "18 Aug · 16:00–20:00", progress: 82, color: "#4776e6" },
-  { id: "TF-2835", customer: "Rif Logistics", destination: "Antwerp, BE", truck: "TRK-003", driver: "Nora V.", status: "Loading", eta: "21 Aug · 10:00–14:00", progress: 8, color: "#916ed7" },
-  { id: "TF-2832", customer: "EuroMaghreb", destination: "Liège, BE", truck: "TRK-011", driver: "Marc D.", status: "Delivered", eta: "17 Aug · 17:32", progress: 100, color: "#6b7280" },
-];
+const emptyDelivery: Delivery = {
+  id: "",
+  customer: "",
+  destination: "",
+  truck: "",
+  driver: "",
+  status: "Loading",
+  eta: "",
+  progress: 0,
+  color: "#6b7280",
+};
 
 const statusClass: Record<DeliveryStatus, string> = {
   "In transit": "status transit",
@@ -129,8 +133,8 @@ function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Loca
 }
 
 export default function Home() {
-  const [deliveries, setDeliveries] = useState(initialDeliveries);
-  const [selectedId, setSelectedId] = useState("TF-2841");
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [selectedId, setSelectedId] = useState("");
   const [view, setView] = useState<"dispatch" | "customer">("dispatch");
   const [modalOpen, setModalOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -292,7 +296,7 @@ export default function Home() {
   // A newly connected company can have live GPS vehicles before its first
   // paper delivery has been entered in TrackFleet. Keep the dashboard usable
   // while that delivery list is empty instead of dereferencing `undefined`.
-  const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? initialDeliveries[0];
+  const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? emptyDelivery;
   const selectedEtaExplanation = etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips }, locale);
   const customerCopy = t.customerStatus[selected.status];
   const destinationSite = knownSites.find((site) => site.id === selected.destinationSiteId);
@@ -755,7 +759,7 @@ export default function Home() {
           <div className="panel-header"><div><h2>{locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}</h2><p>{locale === "fr" ? "La même séquence d’agences réutilise automatiquement la même route" : locale === "nl" ? "Dezelfde volgorde van locaties hergebruikt automatisch dezelfde route" : "The same stop sequence automatically reuses the same route"}</p></div><span className="tour-count">{stopPlans.length}</span></div>
           <div className="tour-list">
             {stopPlans.map((plan) => <article className="tour-card" key={plan.vehicleKey}>
-              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>{plan.learning && <div className="eta-explanation"><strong>{plan.learning.stage === "ready" ? (locale === "fr" ? "Route apprise" : locale === "nl" ? "Route geleerd" : "Route learned") : (locale === "fr" ? "Apprentissage de la route" : locale === "nl" ? "Route wordt geleerd" : "Learning route")}</strong><span>{plan.learning.historicalTrips}/{plan.learning.requiredTrips} {locale === "fr" ? "voyages" : locale === "nl" ? "ritten" : "trips"}{plan.learning.futureStops > 0 ? ` · ${plan.learning.learnedStops}/${plan.learning.futureStops} ${locale === "fr" ? "arrêts appris" : locale === "nl" ? "stops geleerd" : "stops learned"}` : ""}{plan.learning.unconfiguredStops > 0 ? ` · ${plan.learning.unconfiguredStops} ${locale === "fr" ? "sans coordonnées exactes" : locale === "nl" ? "zonder exacte coördinaten" : "missing exact coordinates"}` : ""}</span></div>}
+              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>{plan.learning && <div className="eta-explanation"><strong>{plan.learning.stage === "ready" ? (locale === "fr" ? "Route apprise" : locale === "nl" ? "Route geleerd" : "Route learned") : (locale === "fr" ? "Apprentissage de la route" : locale === "nl" ? "Route wordt geleerd" : "Learning route")}</strong><span>{plan.learning.historicalTrips}/{plan.learning.requiredTrips} {locale === "fr" ? "voyages" : locale === "nl" ? "ritten" : "trips"}{plan.learning.futureStops > 0 ? ` · ${plan.learning.learnedStops}/${plan.learning.futureStops} ${locale === "fr" ? "arrêts appris" : locale === "nl" ? "stops geleerd" : "stops learned"}` : ""}{plan.learning.unconfiguredStops > 0 ? ` · ${plan.learning.unconfiguredStops} ${locale === "fr" ? "sans coordonnées exactes" : locale === "nl" ? "zonder exacte coördinaten" : "missing exact coordinates"}` : ""}</span>{plan.learning.medianEffectiveSpeedKmh !== null && <span>{locale === "fr" ? "Vitesse médiane" : locale === "nl" ? "Mediane snelheid" : "Median speed"}: {plan.learning.medianEffectiveSpeedKmh} km/h{plan.learning.medianDelayMinutes !== null ? ` · ${locale === "fr" ? "retard médian" : locale === "nl" ? "mediane vertraging" : "median delay"}: ${plan.learning.medianDelayMinutes > 0 ? "+" : ""}${plan.learning.medianDelayMinutes} min` : ""}</span>}</div>}
               <div className="tour-stops">{stopSequence(plan).map((stop) => <button type="button" className="tour-stop" key={stop.siteId} onClick={() => { const firstDelivery = stop.deliveryIds.find((id) => deliveries.some((delivery) => delivery.id === id)); if (firstDelivery) { setSelectedId(firstDelivery); setShowPopover(true); } }}><i>{stop.sequence}</i><span><strong>{stop.destination}</strong><small>{stop.deliveryIds.length} {locale === "fr" ? "colis" : locale === "nl" ? "zending(en)" : "parcel(s)"}{stop.plannedArrivalAt ? ` · ${new Date(stop.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</small></span></button>)}</div>
             </article>)}
           </div>
