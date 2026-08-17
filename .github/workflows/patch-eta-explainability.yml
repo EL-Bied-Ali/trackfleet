@@ -1,0 +1,81 @@
+name: Patch ETA explainability UI
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-eta-explainability.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Expose ETA source and confidence
+        shell: python
+        run: |
+          from pathlib import Path
+
+          page = Path('app/page.tsx')
+          s = page.read_text()
+          import_marker = 'import { activeTourDisplayId, stopSequence, tourCustomerCount, tourDeliveryCount } from "./lib/tour-view";\n'
+          eta_import = 'import { etaExplanation } from "./lib/eta-display";\n'
+          if eta_import not in s:
+            if import_marker not in s: raise SystemExit('page import marker missing')
+            s = s.replace(import_marker, import_marker + eta_import)
+
+          s = s.replace('  etaSource?: "unavailable" | "baseline-model" | "observed-pace";\n', '  etaSource?: "unavailable" | "baseline-model" | "route-history" | "observed-pace";\n  etaHistoryTrips?: number;\n  etaHistoricalSpeedKmh?: number | null;\n')
+
+          marker = '  const selected = deliveries.find((delivery) => delivery.id === selectedId) ?? deliveries[0];\n'
+          replacement = marker + '  const selectedEtaExplanation = selected ? etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips }, locale) : null;\n'
+          if 'const selectedEtaExplanation =' not in s:
+            if marker not in s: raise SystemExit('selected delivery marker missing')
+            s = s.replace(marker, replacement, 1)
+
+          old = '<dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div></dl>'
+          new = old + '{selectedEtaExplanation && selected.estimatedArrivalAt && <div className="eta-explanation"><strong>{selectedEtaExplanation.sourceLabel}</strong><span>{selectedEtaExplanation.confidenceLabel}{selected.etaSource === "route-history" && selected.etaHistoricalSpeedKmh ? ` · ${selected.etaHistoricalSpeedKmh} km/h` : ""}</span></div>}'
+          if 'className="eta-explanation"' not in s:
+            if old not in s: raise SystemExit('delivery ETA detail marker missing')
+            s = s.replace(old, new, 1)
+          page.write_text(s)
+
+          package = Path('package.json')
+          p = package.read_text()
+          marker = '    "test:eta-observation": "node --experimental-strip-types --test tests/eta-observation.test.mjs",\n'
+          if 'test:eta-display' not in p:
+            if marker not in p: raise SystemExit('package ETA marker missing')
+            p = p.replace(marker, marker + '    "test:eta-display": "node --experimental-strip-types --test tests/eta-display.test.mjs",\n')
+          package.write_text(p)
+
+          ci = Path('.github/workflows/vercel-build-check.yml')
+          c = ci.read_text()
+          marker = '      - name: Verify ETA history observations\n        run: pnpm run test:eta-observation\n'
+          if 'Verify explainable ETA labels' not in c:
+            if marker not in c: raise SystemExit('CI ETA marker missing')
+            c = c.replace(marker, marker + '      - name: Verify explainable ETA labels\n        run: pnpm run test:eta-display\n')
+          ci.write_text(c)
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Test and build
+        run: |
+          pnpm run test:eta-display
+          pnpm run test:eta
+          pnpm run test:route-history
+          pnpm run build:vercel
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/page.tsx package.json
+          git commit -m "show explainable ETA source in delivery details"
+          git push
