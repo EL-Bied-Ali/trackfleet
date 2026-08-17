@@ -34,6 +34,7 @@
     "test:whatsapp-preview": "node --test tests/whatsapp-preview.test.mjs",
     "test:eta": "node --experimental-strip-types --test tests/eta-estimator.test.mjs",
     "test:eta-observation": "node --experimental-strip-types --test tests/eta-observation.test.mjs",
+    "test:eta-display": "node --experimental-strip-types --test tests/eta-display.test.mjs",
     "test:route-history": "node --experimental-strip-types --test tests/route-history.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",

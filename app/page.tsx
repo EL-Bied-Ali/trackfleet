@@ -8,6 +8,7 @@ import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";
 import { originPreferenceKey, resolvePreferredOriginSite } from "./lib/origin-preference";
 import { rankVehicleSuggestions } from "./lib/vehicle-linking";
 import { activeTourDisplayId, stopSequence, tourCustomerCount, tourDeliveryCount } from "./lib/tour-view";
+import { etaExplanation } from "./lib/eta-display";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -41,7 +42,9 @@ type Delivery = {
   estimatedArrivalAt?: string | null;
   etaDelayMinutes?: number | null;
   etaConfidence?: "none" | "low" | "medium";
-  etaSource?: "unavailable" | "baseline-model" | "observed-pace";
+  etaSource?: "unavailable" | "baseline-model" | "route-history" | "observed-pace";
+  etaHistoryTrips?: number;
+  etaHistoricalSpeedKmh?: number | null;
   effectiveSpeedKmh?: number | null;
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
@@ -280,6 +283,7 @@ export default function Home() {
   // paper delivery has been entered in TrackFleet. Keep the dashboard usable
   // while that delivery list is empty instead of dereferencing `undefined`.
   const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? initialDeliveries[0];
+  const selectedEtaExplanation = etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips }, locale);
   const customerCopy = t.customerStatus[selected.status];
   const destinationSite = knownSites.find((site) => site.id === selected.destinationSiteId);
   const headingToMorocco = destinationSite?.country === "MA" || selected.destination.toUpperCase().includes("MAROC") || selected.destination.endsWith(", MA");
@@ -697,7 +701,7 @@ export default function Home() {
             <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
             {showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
-              <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div></dl>
+              <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div></dl>{selected.estimatedArrivalAt && <div className="eta-explanation"><strong>{selectedEtaExplanation.sourceLabel}</strong><span>{selectedEtaExplanation.confidenceLabel}{selected.etaSource === "route-history" && selected.etaHistoricalSpeedKmh ? ` · ${selected.etaHistoricalSpeedKmh} km/h` : ""}</span></div>}
               {selected.gpsSource !== "sendatrack" && <div style={{ marginTop: 10 }}>
                 {integration.connected && integration.vehicles.length ? <>
                   {!vehicleLinkOpen ? <button className="copy-link" onClick={() => { setVehicleLinkOpen(true); setVehicleLinkSearch(selected.truck); setVehicleLinkChoice(""); }}>
