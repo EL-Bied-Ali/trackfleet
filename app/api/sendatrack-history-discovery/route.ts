@@ -115,6 +115,7 @@ export async function GET() {
     })));
   }
 
-  // Temporary discovery endpoint; response intentionally contains no credential or vehicle identifier.
+  // Temporary, read-only discovery endpoint. It intentionally returns only response metadata,
+  // never credentials, bearer tokens or the sampled vehicle identifier.
   return Response.json({ results }, { headers: { "cache-control": "no-store" } });
 }
