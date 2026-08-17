@@ -1,0 +1,129 @@
+name: Patch planned trip confirmation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-planned-trip-confirmation.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Add tenant-safe planned trip confirmation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/lib/trip-assignment.ts')
+          p.write_text('''import type { DeliveryRow } from "./delivery-store.types";\nimport { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";\nimport type { TripRecord } from "./trip-record";\n\nexport type TripAssignmentError = "delivery_not_unassigned" | "trip_not_planned" | "origin_mismatch" | "destination_not_on_trip";\n\nexport function validatePlannedTripAssignment(delivery: DeliveryRow, trip: TripRecord): TripAssignmentError | null {\n  if (delivery.tripId || !isUnassignedVehicle(delivery)) return "delivery_not_unassigned";\n  if (trip.status !== "planned") return "trip_not_planned";\n  if (delivery.originSiteId && trip.originSiteId !== delivery.originSiteId) return "origin_mismatch";\n  if (!delivery.destinationSiteId || !trip.stops.some((stop) => stop.siteId === delivery.destinationSiteId)) return "destination_not_on_trip";\n  return null;\n}\n''')
+
+          p = Path('app/lib/delivery-store.types.ts'); s = p.read_text()
+          marker = '  assignDeliveryTrip(deliveryId: string, companyId: string, tripId: string): Promise<boolean>;\n'
+          addition = marker + '  assignDeliveryToPlannedTrip(deliveryId: string, companyId: string, tripId: string, truck: string, sendatrackVehicleId: string): Promise<DeliveryRow | null>;\n'
+          if 'assignDeliveryToPlannedTrip' not in s:
+            if marker not in s: raise SystemExit('store interface marker missing')
+            s = s.replace(marker, addition, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.memory.ts'); s = p.read_text()
+          if 'isUnassignedVehicle' not in s:
+            s = s.replace('import { matchDeliveryVehicle } from "./vehicle-linking";\n', 'import { matchDeliveryVehicle } from "./vehicle-linking";\nimport { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";\n', 1)
+          s = s.replace('const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";', 'const firstLink = delivery.gpsSource !== "sendatrack";', 1)
+          marker = '  async listDeliveryIdsForTrip(companyId, tripId) {\n'
+          method = '''  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {\n    const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId) ?? null;\n    if (!delivery || delivery.status === "Delivered" || delivery.tripId || !isUnassignedVehicle(delivery)) return null;\n    const key = `${companyId}:${deliveryId}`;\n    if (deliveryTripAssignments.has(key)) return null;\n    deliveryTripAssignments.set(key, tripId);\n    Object.assign(delivery, { tripId, truck, sendatrackVehicleId });\n    return { ...delivery };\n  },\n'''
+          if 'async assignDeliveryToPlannedTrip' not in s:
+            if marker not in s: raise SystemExit('memory assignment insertion marker missing')
+            s = s.replace(marker, method + marker, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.postgres.ts'); s = p.read_text()
+          if 'UNASSIGNED_TRUCK' not in s:
+            s = s.replace('import { matchDeliveryVehicle } from "./vehicle-linking";\n', 'import { matchDeliveryVehicle } from "./vehicle-linking";\nimport { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";\n', 1)
+          s = s.replace('const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";', 'const firstLink = delivery.gpsSource !== "sendatrack";', 1)
+          marker = '  async listDeliveryIdsForTrip(companyId, tripId) {\n'
+          method = '''  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {\n    await ensureSchema();\n    const rows = await sql`UPDATE deliveries SET trip_id = ${tripId}, truck = ${truck}, sendatrack_vehicle_id = ${sendatrackVehicleId}\n      WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' AND trip_id IS NULL\n        AND truck = ${UNASSIGNED_TRUCK} AND (sendatrack_vehicle_id IS NULL OR sendatrack_vehicle_id = '')\n      RETURNING *` as RawDelivery[];\n    return rows[0] ? hydrate(rows[0]) : null;\n  },\n'''
+          if 'async assignDeliveryToPlannedTrip' not in s:
+            if marker not in s: raise SystemExit('postgres assignment insertion marker missing')
+            s = s.replace(marker, method + marker, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.cloudflare.ts'); s = p.read_text()
+          if 'UNASSIGNED_TRUCK' not in s:
+            s = s.replace('import { matchDeliveryVehicle } from "./vehicle-linking";\n', 'import { matchDeliveryVehicle } from "./vehicle-linking";\nimport { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";\n', 1)
+          s = s.replace('const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";', 'const firstLink = delivery.gpsSource !== "sendatrack";', 1)
+          marker = '  async listDeliveryIdsForTrip(companyId, tripId) {\n'
+          method = '''  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {\n    await ensureTable();\n    const result = await db().prepare("UPDATE deliveries SET trip_id = ?, truck = ?, sendatrack_vehicle_id = ? WHERE id = ? AND company_id = ? AND status != 'Delivered' AND trip_id IS NULL AND truck = ? AND sendatrack_vehicle_id = ''")\n      .bind(tripId, truck, sendatrackVehicleId, deliveryId, companyId, UNASSIGNED_TRUCK).run();\n    if (!result.meta?.changes) return null;\n    const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();\n    return updated ? hydrate(updated) : null;\n  },\n'''
+          if 'async assignDeliveryToPlannedTrip' not in s:
+            if marker not in s: raise SystemExit('D1 assignment insertion marker missing')
+            s = s.replace(marker, method + marker, 1)
+          p.write_text(s)
+
+          route = Path('app/api/deliveries/assign-trip/route.ts')
+          route.parent.mkdir(parents=True, exist_ok=True)
+          route.write_text('''import { store } from "trackfleet-delivery-store";\nimport { getCompanySession } from "../../../lib/company-auth";\nimport { validatePlannedTripAssignment } from "../../../lib/trip-assignment";\n\nconst errorStatus = {\n  delivery_not_unassigned: 409,\n  trip_not_planned: 409,\n  origin_mismatch: 409,\n  destination_not_on_trip: 409,\n} as const;\n\nexport async function POST(request: Request) {\n  const session = await getCompanySession(request);\n  if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });\n\n  const payload = await request.json() as Record<string, unknown>;\n  const deliveryId = String(payload.deliveryId ?? "").trim();\n  const tripId = String(payload.tripId ?? "").trim();\n  if (!deliveryId || !tripId) return Response.json({ error: "deliveryId and tripId are required" }, { status: 400 });\n\n  const [trip, deliveries] = await Promise.all([store.getTrip(session.companyId, tripId), store.listForCompany(session.companyId)]);\n  if (!trip) return Response.json({ error: "trip_not_found" }, { status: 404 });\n  const delivery = deliveries.find((item) => item.id === deliveryId) ?? null;\n  if (!delivery) return Response.json({ error: "delivery_not_found" }, { status: 404 });\n\n  const validationError = validatePlannedTripAssignment(delivery, trip);\n  if (validationError) return Response.json({ error: validationError }, { status: errorStatus[validationError] });\n\n  const updated = await store.assignDeliveryToPlannedTrip(delivery.id, session.companyId, trip.id, trip.truck, trip.sendatrackVehicleId);\n  if (!updated) return Response.json({ error: "assignment_conflict" }, { status: 409 });\n  return Response.json({ delivery: updated, trip: { id: trip.id, routeTemplateId: trip.routeTemplateId, truck: trip.truck } });\n}\n''')
+
+          p = Path('app/page.tsx'); s = p.read_text()
+          state_marker = '  const [vehicleLinkBusy, setVehicleLinkBusy] = useState(false);\n'
+          if 'tripAssignBusy' not in s:
+            if state_marker not in s: raise SystemExit('page busy state marker missing')
+            s = s.replace(state_marker, state_marker + '  const [tripAssignBusy, setTripAssignBusy] = useState<string | null>(null);\n', 1)
+          function_marker = '  async function createDelivery(event: React.FormEvent<HTMLFormElement>) {\n'
+          assignment_fn = '''  async function assignSuggestedTrip(deliveryId: string, tripId: string) {\n    setTripAssignBusy(deliveryId);\n    try {\n      const response = await fetch("/api/deliveries/assign-trip", {\n        method: "POST",\n        headers: { "content-type": "application/json" },\n        body: JSON.stringify({ deliveryId, tripId }),\n      });\n      if (!response.ok) throw new Error("trip_assignment_failed");\n      const data = await response.json() as { delivery: Delivery };\n      setDeliveries((items) => items.map((delivery) => delivery.id === data.delivery.id ? { ...delivery, ...data.delivery } : delivery));\n      setToast(locale === "fr" ? "Colis affecté au voyage planifié." : locale === "nl" ? "Zending aan de geplande rit toegewezen." : "Parcel assigned to the planned trip.");\n    } catch {\n      setToast(locale === "fr" ? "L’affectation n’est plus disponible. Actualisez la tournée." : locale === "nl" ? "Deze toewijzing is niet meer beschikbaar. Vernieuw de rit." : "This assignment is no longer available. Refresh the trip.");\n    } finally {\n      setTripAssignBusy(null);\n    }\n  }\n\n'''
+          if 'async function assignSuggestedTrip' not in s:
+            if function_marker not in s: raise SystemExit('createDelivery marker missing')
+            s = s.replace(function_marker, assignment_fn + function_marker, 1)
+
+          old = '''              const canPrepare = Boolean(suggestion?.sendatrackVehicleId && integration.vehicles.some((vehicle) => vehicle.id === suggestion.sendatrackVehicleId));\n              return <article className="tour-card" key={`assign-${delivery.id}`}>'''
+          new = '''              return <article className="tour-card" key={`assign-${delivery.id}`}>'''
+          if old not in s: raise SystemExit('queue canPrepare marker missing')
+          s = s.replace(old, new, 1)
+          old = '''                <div className="popover-actions"><button type="button" onClick={() => { setSelectedId(delivery.id); setShowPopover(true); setVehicleLinkOpen(true); setVehicleLinkSearch(suggestion?.truck ?? ""); setVehicleLinkChoice(canPrepare ? suggestion?.sendatrackVehicleId ?? "" : ""); }}>{suggestion && canPrepare ? (locale === "fr" ? "Vérifier l’affectation" : locale === "nl" ? "Toewijzing controleren" : "Review assignment") : (locale === "fr" ? "Choisir un camion" : locale === "nl" ? "Voertuig kiezen" : "Choose a truck")}</button></div>'''
+          new = '''                <div className="popover-actions">{suggestion && <button type="button" disabled={tripAssignBusy === delivery.id} onClick={() => void assignSuggestedTrip(delivery.id, suggestion.tripId)}>{tripAssignBusy === delivery.id ? (locale === "fr" ? "Affectation…" : locale === "nl" ? "Toewijzen…" : "Assigning…") : (locale === "fr" ? "Confirmer ce voyage" : locale === "nl" ? "Deze rit bevestigen" : "Confirm this trip")}</button>}<button type="button" className="copy-link" onClick={() => { setSelectedId(delivery.id); setShowPopover(true); setVehicleLinkOpen(true); setVehicleLinkSearch(suggestion?.truck ?? ""); setVehicleLinkChoice(""); }}>{locale === "fr" ? "Choisir un autre camion" : locale === "nl" ? "Ander voertuig kiezen" : "Choose another truck"}</button></div>'''
+          if old not in s: raise SystemExit('queue action marker missing')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          Path('tests/trip-assignment.test.mjs').write_text('''import assert from "node:assert/strict";\nimport test from "node:test";\nimport { UNASSIGNED_TRUCK } from "../app/lib/delivery-vehicle-choice.ts";\nimport { validatePlannedTripAssignment } from "../app/lib/trip-assignment.ts";\n\nconst delivery = { id: "D1", originSiteId: "brussels", destinationSiteId: "casablanca", truck: UNASSIGNED_TRUCK, sendatrackVehicleId: "", tripId: null };\nconst trip = { id: "T1", companyId: "c1", routeTemplateId: "R1", vehicleKey: "v1", truck: "TRK-1", sendatrackVehicleId: "gps-1", originSiteId: "brussels", stops: [{ siteId: "casablanca", destination: "Casablanca", sequence: 1, plannedArrivalAt: null }], status: "planned", createdAt: new Date(), updatedAt: new Date() };\n\ntest("accepts only a compatible planned trip for an unassigned parcel", () => {\n  assert.equal(validatePlannedTripAssignment(delivery, trip), null);\n  assert.equal(validatePlannedTripAssignment({ ...delivery, tripId: "OTHER" }, trip), "delivery_not_unassigned");\n  assert.equal(validatePlannedTripAssignment(delivery, { ...trip, status: "active" }), "trip_not_planned");\n  assert.equal(validatePlannedTripAssignment({ ...delivery, originSiteId: "sale" }, trip), "origin_mismatch");\n  assert.equal(validatePlannedTripAssignment({ ...delivery, destinationSiteId: "agadir" }, trip), "destination_not_on_trip");\n});\n''')
+
+          Path('tests/planned-trip-assignment-contract.test.mjs').write_text('''import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst api = fs.readFileSync(new URL("../app/api/deliveries/assign-trip/route.ts", import.meta.url), "utf8");\nconst pg = fs.readFileSync(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8");\nconst d1 = fs.readFileSync(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8");\nconst memory = fs.readFileSync(new URL("../app/lib/delivery-store.memory.ts", import.meta.url), "utf8");\n\ntest("planned trip assignment is tenant checked and conflict safe", () => {\n  assert.match(api, /getCompanySession/);\n  assert.match(api, /store\.getTrip\(session\.companyId, tripId\)/);\n  assert.match(api, /validatePlannedTripAssignment/);\n  assert.match(pg, /trip_id IS NULL/);\n  assert.match(pg, /truck = \$\{UNASSIGNED_TRUCK\}/);\n  assert.match(d1, /trip_id IS NULL AND truck = \?/);\n});\n\ntest("a known provider id still gets a GPS baseline on first real snapshot", () => {\n  assert.match(pg, /const firstLink = delivery\.gpsSource !== "sendatrack"/);\n  assert.match(d1, /const firstLink = delivery\.gpsSource !== "sendatrack"/);\n  assert.match(memory, /const firstLink = delivery\.gpsSource !== "sendatrack"/);\n});\n''')
+
+          p = Path('package.json'); s = p.read_text()
+          marker = '    "test:explicit-trip-membership": "node --experimental-strip-types --test tests/explicit-trip-membership.test.mjs",\n'
+          if marker not in s: raise SystemExit('package explicit trip marker missing')
+          if 'test:trip-assignment' not in s:
+            s = s.replace(marker, marker + '    "test:trip-assignment": "node --experimental-strip-types --test tests/trip-assignment.test.mjs",\n    "test:planned-trip-assignment-contract": "node --test tests/planned-trip-assignment-contract.test.mjs",\n', 1)
+          p.write_text(s)
+      - run: pnpm install --no-frozen-lockfile
+      - name: Verify
+        run: |
+          pnpm run test:trip-assignment
+          pnpm run test:planned-trip-assignment-contract
+          pnpm run test:explicit-trip-membership
+          pnpm run test:assignment-queue-ui
+          pnpm run test:vehicle-linking
+          pnpm run test:automation-trip-sync
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit product files
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app tests package.json
+          git commit -m "confirm parcels onto planned trips safely"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push
