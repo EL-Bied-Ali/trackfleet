@@ -26,6 +26,7 @@
     "test:delivery-persistence": "node --test tests/delivery-persistence-contract.test.mjs",
     "test:stop-plans": "node --experimental-strip-types --test tests/truck-stop-plan.test.mjs",
     "test:tour": "node --experimental-strip-types --test tests/multistop-tour.test.mjs",
+    "test:tour-view": "node --experimental-strip-types --test tests/tour-view.test.mjs",
     "test:automation-readiness": "node --experimental-strip-types --test tests/automation-readiness.test.mjs",
     "test:automation-health": "node --experimental-strip-types --test tests/automation-health.test.mjs",
     "test:whatsapp-readiness": "node --test tests/whatsapp-readiness.test.mjs",

@@ -7,6 +7,7 @@ import SiteManager from "./SiteManager";
 import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";
 import { originPreferenceKey, resolvePreferredOriginSite } from "./lib/origin-preference";
 import { rankVehicleSuggestions } from "./lib/vehicle-linking";
+import { activeTourDisplayId, stopSequence, tourCustomerCount, tourDeliveryCount } from "./lib/tour-view";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -56,6 +57,8 @@ type DeliveryEventRow = {
 
 type VehicleOption = { id: string; name: string; speed: number; updatedAt: number; latitude: number; longitude: number };
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };
+type TourStop = { siteId: string; destination: string; plannedArrivalAt: string | null; deliveryIds: string[]; customers: string[] };
+type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; source: "planned-arrival"; stops: TourStop[] };
 
 type MessageEvent = {
   id: string;
@@ -138,6 +141,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState<LoginErrorKind | "">("");
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
+  const [stopPlans, setStopPlans] = useState<TourPlan[]>([]);
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
   const [knownSites, setKnownSites] = useState<KnownSite[]>([]);
   const [defaultOriginSiteId, setDefaultOriginSiteId] = useState("");
@@ -235,7 +239,7 @@ export default function Home() {
         const endpoint = tracking ? `/api/deliveries?tracking=${encodeURIComponent(tracking)}` : "/api/deliveries";
         const response = await fetch(endpoint, { cache: "no-store" });
         if (!response.ok) throw new Error("Delivery service unavailable");
-        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[] };
+        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };
         if (!active) return;
         if (tracking && data.deliveries.length) {
           setDeliveries(data.deliveries);
@@ -247,6 +251,7 @@ export default function Home() {
           if (data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === selectedId)) setSelectedId(data.deliveries[0].id);
         }
         if (data.integration) setIntegration(data.integration);
+        if (!tracking) setStopPlans(data.stopPlans ?? []);
       } catch {
         if (new URLSearchParams(window.location.search).get("tracking")) setPublicTrackingState("error");
         if (active && !silent) setToast(t.cloudReconnecting);
@@ -726,6 +731,16 @@ export default function Home() {
             </div>
           </section>}
         </div>
+
+        {stopPlans.length > 0 && <section className="tours-panel" aria-label={locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}>
+          <div className="panel-header"><div><h2>{locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}</h2><p>{locale === "fr" ? "Un camion, plusieurs agences, dans l’ordre prévu" : locale === "nl" ? "Eén vrachtwagen, meerdere locaties, in geplande volgorde" : "One truck, multiple stops, in planned order"}</p></div><span className="tour-count">{stopPlans.length}</span></div>
+          <div className="tour-list">
+            {stopPlans.map((plan) => <article className="tour-card" key={plan.vehicleKey}>
+              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>
+              <div className="tour-stops">{stopSequence(plan).map((stop) => <button type="button" className="tour-stop" key={stop.siteId} onClick={() => { const firstDelivery = stop.deliveryIds.find((id) => deliveries.some((delivery) => delivery.id === id)); if (firstDelivery) { setSelectedId(firstDelivery); setShowPopover(true); } }}><i>{stop.sequence}</i><span><strong>{stop.destination}</strong><small>{stop.deliveryIds.length} {locale === "fr" ? "colis" : locale === "nl" ? "zending(en)" : "parcel(s)"}{stop.plannedArrivalAt ? ` · ${new Date(stop.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</small></span></button>)}</div>
+            </article>)}
+          </div>
+        </section>}
 
         <div className="deliveries-panel">
           <div className="panel-header delivery-head"><div><h2>{t.todaysDeliveries}</h2><p>{t.shownCompleted(visibleDeliveries.length, deliveries.filter((delivery) => delivery.status === "Delivered").length)}</p></div><div className="panel-actions"><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label={t.filterDeliveries}><option value="All deliveries">{t.allDeliveries}</option><option value="In transit">{t.statuses["In transit"]}</option><option value="Delayed">{t.statuses.Delayed}</option><option value="Loading">{t.statuses.Loading}</option><option value="Delivered">{t.statuses.Delivered}</option></select></div></div>
