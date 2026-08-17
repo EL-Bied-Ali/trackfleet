@@ -1,0 +1,37 @@
+name: Temporary Vercel deployment fallback
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_WZd3oMDdslVjYGT6KDgpAxr5
+      VERCEL_PROJECT_ID: prj_AjE9eca5Qkx9chWHizrbX99CEBY4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployment credential availability
+        shell: bash
+        run: |
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "VERCEL_TOKEN_UNAVAILABLE"
+            exit 2
+          fi
+          echo "VERCEL_TOKEN_AVAILABLE"
+      - name: Link project locally
+        shell: bash
+        run: |
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+      - name: Deploy validated main to production
+        shell: bash
+        run: npx --yes vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN"
