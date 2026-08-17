@@ -258,7 +258,7 @@ export default function Home() {
         } else if (!tracking) {
           setDeliveries(data.deliveries);
           setDispatchDataState("ready");
-          if (data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === selectedId)) setSelectedId(data.deliveries[0].id);
+          setSelectedId((current) => data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === current) ? data.deliveries[0].id : current);
         }
         if (data.integration) setIntegration(data.integration);
         if (data.features) setFeatures(data.features);
@@ -271,13 +271,13 @@ export default function Home() {
           setStopPlans([]);
           setDispatchDataState("error");
         }
-        if (active && !silent) setToast(t.cloudReconnecting);
+        if (active && !silent) setToast(translations[locale].cloudReconnecting);
       }
     }
     void refresh();
     const timer = window.setInterval(() => void refresh(true), 30_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [authState]);
+  }, [authState, locale]);
 
   useEffect(() => {
     function closeModalWithEscape(event: KeyboardEvent) {
