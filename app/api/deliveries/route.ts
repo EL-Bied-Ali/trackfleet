@@ -171,12 +171,9 @@ export async function GET(request: Request) {
 
       if (!publicTrackingIsActive(row)) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
 
-      const integration = await getSendatrackSnapshot();
-      if (integration.connected) {
-        const transitions = await store.applySendatrackSnapshot(integration, row.companyId);
-        await persistTransitionEvents(transitions);
-        row = await store.getPublic(tracking) ?? row;
-      }
+      // Public tracking has no tenant SENDATRACK credentials. Read only the
+      // tenant-scoped position already persisted by authenticated refreshes or automation.
+      // This avoids ever applying a server-default provider account to another company.
 
       const companyRows = await store.listForCompany(row.companyId);
       const routeContexts = buildEtaRouteContexts(companyRows);

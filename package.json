@@ -15,6 +15,7 @@
     "test:notifications": "node --experimental-strip-types --test tests/notification-queue.test.mjs",
     "test:notification-policy": "node --experimental-strip-types --test tests/notification-policy.test.mjs",
     "test:tracking-access": "node --experimental-strip-types --test tests/tracking-access.test.mjs",
+    "test:public-provider-isolation": "node --test tests/public-tracking-provider-isolation.test.mjs",
     "test:customer-contact": "node --experimental-strip-types --test tests/customer-contact.test.mjs",
     "test:login-error": "node --experimental-strip-types --test tests/login-error.test.mjs",
     "test:origin-preference": "node --experimental-strip-types --test tests/origin-preference.test.mjs",
