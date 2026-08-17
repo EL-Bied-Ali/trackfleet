@@ -6,14 +6,19 @@ const plan = {
   vehicleKey: "veh-TRK-014",
   truck: "TRK-014",
   sendatrackVehicleId: "veh-TRK-014",
+  tripInstanceId: "TRIP-ABC123",
   stops: [
     { siteId: "casa", destination: "Casablanca", plannedArrivalAt: "2026-08-17T12:00:00Z", deliveryIds: ["TF-1", "TF-2"], customers: ["A", "B"] },
     { siteId: "marrakech", destination: "Marrakech", plannedArrivalAt: "2026-08-17T17:00:00Z", deliveryIds: ["TF-3"], customers: ["B"] },
   ],
 };
 
-test("builds a compact stable display id from the active vehicle key", () => {
-  assert.equal(activeTourDisplayId(plan), "TOUR-EHTRK014");
+test("uses the real trip instance id when the server provides it", () => {
+  assert.equal(activeTourDisplayId(plan), "TRIP-ABC123");
+});
+
+test("falls back to a compact vehicle id before a trip instance exists", () => {
+  assert.equal(activeTourDisplayId({ ...plan, tripInstanceId: null }), "TOUR-EHTRK014");
 });
 
 test("counts deliveries and unique customers across a tour", () => {
