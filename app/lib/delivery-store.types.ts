@@ -102,7 +102,7 @@ export interface DeliveryStore {
   recordTripPosition(input: TripPositionInput): Promise<boolean>;
   listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
-  claimNotification(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
+  claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
   releaseNotification(deliveryId: string, type: DeliveryEventType): Promise<void>;
   create(input: CreateDeliveryInput): Promise<DeliveryRow>;
