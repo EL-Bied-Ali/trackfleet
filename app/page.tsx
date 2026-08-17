@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { localeOptions, translations, type Locale } from "./i18n";
 import InteractiveFleetMap from "./InteractiveFleetMap";
 import SiteManager from "./SiteManager";
+import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -95,11 +96,11 @@ function LanguageSwitcher({ locale, label, onChange }: { locale: Locale; label: 
   );
 }
 
-function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Locale; busy: boolean; error: string; onLocale: (locale: Locale) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Locale; busy: boolean; error: LoginErrorKind | ""; onLocale: (locale: Locale) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
   const copy = {
-    fr: { eyebrow: "ESPACE ENTREPRISE", title: "Connectez votre flotte SENDATRACK", body: "Utilisez les mêmes identifiants que dans l’application SENDATRACK. Votre espace TrackFleet sera reconnu automatiquement.", account: "Compte", user: "Utilisateur", password: "Mot de passe", submit: "Accéder à TrackFleet", loading: "Connexion…", error: "Identifiants incorrects ou service SENDATRACK indisponible.", privacy: "Connexion chiffrée côté TrackFleet · aucune donnée visible par vos clients" },
-    en: { eyebrow: "COMPANY PORTAL", title: "Connect your SENDATRACK fleet", body: "Use the same credentials as in the SENDATRACK app. Your TrackFleet workspace will be recognized automatically.", account: "Account", user: "User", password: "Password", submit: "Open TrackFleet", loading: "Connecting…", error: "Incorrect credentials or SENDATRACK is unavailable.", privacy: "Encrypted by TrackFleet · credentials are never visible to customers" },
-    nl: { eyebrow: "BEDRIJFSPORTAAL", title: "Koppel uw SENDATRACK-wagenpark", body: "Gebruik dezelfde gegevens als in de SENDATRACK-app. Uw TrackFleet-ruimte wordt automatisch herkend.", account: "Account", user: "Gebruiker", password: "Wachtwoord", submit: "TrackFleet openen", loading: "Verbinden…", error: "Onjuiste gegevens of SENDATRACK is niet beschikbaar.", privacy: "Versleuteld door TrackFleet · nooit zichtbaar voor klanten" },
+    fr: { eyebrow: "ESPACE ENTREPRISE", title: "Connectez votre flotte SENDATRACK", body: "Utilisez les mêmes identifiants que dans l’application SENDATRACK. Votre espace TrackFleet sera reconnu automatiquement.", account: "Compte", user: "Utilisateur", password: "Mot de passe", submit: "Accéder à TrackFleet", loading: "Connexion…", invalidCredentials: "Identifiants SENDATRACK incorrects.", serviceUnavailable: "SENDATRACK est temporairement indisponible. Réessayez dans quelques instants.", loginFailed: "Connexion impossible. Réessayez.", privacy: "Connexion chiffrée côté TrackFleet · aucune donnée visible par vos clients" },
+    en: { eyebrow: "COMPANY PORTAL", title: "Connect your SENDATRACK fleet", body: "Use the same credentials as in the SENDATRACK app. Your TrackFleet workspace will be recognized automatically.", account: "Account", user: "User", password: "Password", submit: "Open TrackFleet", loading: "Connecting…", invalidCredentials: "Incorrect SENDATRACK credentials.", serviceUnavailable: "SENDATRACK is temporarily unavailable. Please try again shortly.", loginFailed: "Unable to sign in. Please try again.", privacy: "Encrypted by TrackFleet · credentials are never visible to customers" },
+    nl: { eyebrow: "BEDRIJFSPORTAAL", title: "Koppel uw SENDATRACK-wagenpark", body: "Gebruik dezelfde gegevens als in de SENDATRACK-app. Uw TrackFleet-ruimte wordt automatisch herkend.", account: "Account", user: "Gebruiker", password: "Wachtwoord", submit: "TrackFleet openen", loading: "Verbinden…", invalidCredentials: "Onjuiste SENDATRACK-gegevens.", serviceUnavailable: "SENDATRACK is tijdelijk niet beschikbaar. Probeer het zo opnieuw.", loginFailed: "Aanmelden mislukt. Probeer opnieuw.", privacy: "Versleuteld door TrackFleet · nooit zichtbaar voor klanten" },
   }[locale];
   return <main className="login-page">
     <header className="login-header"><a className="brand brand-dark" href="/"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></a><LanguageSwitcher locale={locale} label="Language" onChange={onLocale} /></header>
@@ -110,7 +111,7 @@ function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Loca
         <label>{copy.account}<input name="accountID" autoComplete="organization" required placeholder="Compte SENDATRACK" /></label>
         <label>{copy.user}<input name="user" autoComplete="username" required placeholder="Utilisateur" /></label>
         <label>{copy.password}<input name="password" type="password" autoComplete="current-password" required placeholder="••••••••" /></label>
-        {error && <p className="login-error" role="alert">{copy.error}</p>}
+        {error && <p className="login-error" role="alert">{error === "invalid_credentials" ? copy.invalidCredentials : error === "service_unavailable" ? copy.serviceUnavailable : copy.loginFailed}</p>}
         <button className="login-submit" disabled={busy}>{busy ? copy.loading : copy.submit}<span>→</span></button>
         <p className="login-privacy">⌁ {copy.privacy}</p>
       </form>
@@ -132,7 +133,7 @@ export default function Home() {
   const [authState, setAuthState] = useState<"loading" | "anonymous" | "authenticated">("loading");
   const [company, setCompany] = useState<CompanyIdentity | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
-  const [loginError, setLoginError] = useState("");
+  const [loginError, setLoginError] = useState<LoginErrorKind | "">("");
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
@@ -382,8 +383,15 @@ export default function Home() {
     const form = new FormData(event.currentTarget);
     try {
       const response = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountID: form.get("accountID"), user: form.get("user"), password: form.get("password") }) });
-      if (!response.ok) throw new Error("login_failed");
-      const data = await response.json() as { company: CompanyIdentity };
+      const data = await response.json() as { company?: CompanyIdentity; error?: string };
+      if (!response.ok) {
+        setLoginError(classifyLoginError(response.status, data.error));
+        return;
+      }
+      if (!data.company) {
+        setLoginError("login_failed");
+        return;
+      }
       setCompany(data.company);
       setAuthState("authenticated");
     } catch {
