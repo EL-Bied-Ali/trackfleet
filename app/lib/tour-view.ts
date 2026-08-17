@@ -10,6 +10,7 @@ export type TourPlanLike = {
   vehicleKey: string;
   truck: string;
   sendatrackVehicleId: string;
+  tripInstanceId?: string | null;
   stops: TourStopLike[];
 };
 
@@ -17,7 +18,8 @@ function compactIdentity(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(-8) || "UNASSIGNED";
 }
 
-export function activeTourDisplayId(plan: Pick<TourPlanLike, "vehicleKey">) {
+export function activeTourDisplayId(plan: Pick<TourPlanLike, "vehicleKey" | "tripInstanceId">) {
+  if (plan.tripInstanceId?.trim()) return plan.tripInstanceId;
   return `TOUR-${compactIdentity(plan.vehicleKey)}`;
 }
 
