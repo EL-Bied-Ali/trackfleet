@@ -1,0 +1,128 @@
+name: Patch persistent trips
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-persistent-trips.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Add persistent trip snapshots
+        shell: python
+        run: |
+          from pathlib import Path
+
+          Path('app/lib/trip-record.ts').write_text('''export type TripStatus = "planned" | "active" | "completed";\n\nexport type TripStopSnapshot = {\n  siteId: string;\n  destination: string;\n  sequence: number;\n  plannedArrivalAt: Date | null;\n};\n\nexport type TripRecord = {\n  id: string;\n  companyId: string;\n  routeTemplateId: string;\n  vehicleKey: string;\n  truck: string;\n  sendatrackVehicleId: string;\n  originSiteId: string | null;\n  stops: TripStopSnapshot[];\n  status: TripStatus;\n  createdAt: Date;\n  updatedAt: Date;\n};\n\nexport type UpsertTripInput = Omit<TripRecord, "createdAt" | "updatedAt">;\n\nexport function tripStopsFromPlan(stops: Array<{ siteId: string; destination: string; plannedArrivalAt: Date | null }>): TripStopSnapshot[] {\n  return stops.map((stop, index) => ({\n    siteId: stop.siteId,\n    destination: stop.destination,\n    sequence: index + 1,\n    plannedArrivalAt: stop.plannedArrivalAt,\n  }));\n}\n''')
+
+          p = Path('app/lib/delivery-store.types.ts')
+          s = p.read_text()
+          s = s.replace('import type { SendatrackSnapshot, SendatrackVehicle } from "./sendatrack";\n', 'import type { SendatrackSnapshot, SendatrackVehicle } from "./sendatrack";\nimport type { TripRecord, UpsertTripInput } from "./trip-record";\n')
+          marker = '  listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;\n'
+          repl = marker + '  upsertTrip(input: UpsertTripInput): Promise<TripRecord>;\n  getTrip(companyId: string, tripId: string): Promise<TripRecord | null>;\n  listTrips(companyId: string, limit?: number): Promise<TripRecord[]>;\n'
+          if marker not in s: raise SystemExit('store trip position marker missing')
+          s = s.replace(marker, repl, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.memory.ts')
+          s = p.read_text()
+          s = s.replace('import { matchDeliveryVehicle } from "./vehicle-linking";\n', 'import { matchDeliveryVehicle } from "./vehicle-linking";\nimport type { TripRecord } from "./trip-record";\n')
+          s = s.replace('const tripPositions: TripPositionRow[] = [];\n', 'const tripPositions: TripPositionRow[] = [];\nconst trips: TripRecord[] = [];\n')
+          marker = '  async listPendingNotifications(companyId) {'
+          methods = '''  async upsertTrip(input) {\n    const existing = trips.find((trip) => trip.id === input.id && trip.companyId === input.companyId);\n    if (existing) {\n      existing.truck = input.truck;\n      existing.sendatrackVehicleId = input.sendatrackVehicleId;\n      existing.vehicleKey = input.vehicleKey;\n      existing.status = input.status;\n      existing.updatedAt = new Date();\n      return { ...existing, stops: existing.stops.map((stop) => ({ ...stop })) };\n    }\n    const now = new Date();\n    const trip: TripRecord = { ...input, stops: input.stops.map((stop) => ({ ...stop })), createdAt: now, updatedAt: now };\n    trips.push(trip);\n    return { ...trip, stops: trip.stops.map((stop) => ({ ...stop })) };\n  },\n  async getTrip(companyId, tripId) {\n    const trip = trips.find((item) => item.companyId === companyId && item.id === tripId);\n    return trip ? { ...trip, stops: trip.stops.map((stop) => ({ ...stop })) } : null;\n  },\n  async listTrips(companyId, limit = 100) {\n    return trips.filter((trip) => trip.companyId === companyId).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, Math.max(1, Math.min(1000, limit))).map((trip) => ({ ...trip, stops: trip.stops.map((stop) => ({ ...stop })) }));\n  },\n\n'''
+          if marker not in s: raise SystemExit('memory pending marker missing')
+          s = s.replace(marker, methods + marker, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.postgres.ts')
+          s = p.read_text()
+          s = s.replace('import { matchDeliveryVehicle } from "./vehicle-linking";\n', 'import { matchDeliveryVehicle } from "./vehicle-linking";\nimport type { TripRecord } from "./trip-record";\n')
+          schema_marker = '    await sql`CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)`;\n'
+          schema_add = schema_marker + '''    await sql`CREATE TABLE IF NOT EXISTS trips (\n      id text NOT NULL,\n      company_id text NOT NULL,\n      route_template_id text NOT NULL,\n      vehicle_key text NOT NULL,\n      truck text NOT NULL,\n      sendatrack_vehicle_id text NOT NULL DEFAULT '',\n      origin_site_id text,\n      stops_json text NOT NULL,\n      status text NOT NULL,\n      created_at timestamptz NOT NULL,\n      updated_at timestamptz NOT NULL,\n      PRIMARY KEY (company_id, id)\n    )`;\n    await sql`CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)`;\n'''
+          if schema_marker not in s: raise SystemExit('postgres schema marker missing')
+          s = s.replace(schema_marker, schema_add, 1)
+          marker = '  async listPendingNotifications(companyId) {'
+          methods = '''  async upsertTrip(input) {\n    await ensureSchema();\n    const existing = await sql`SELECT * FROM trips WHERE company_id = ${input.companyId} AND id = ${input.id} LIMIT 1` as Array<Record<string, unknown>>;\n    if (!existing.length) {\n      const now = new Date().toISOString();\n      await sql`INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at)\n        VALUES (${input.id}, ${input.companyId}, ${input.routeTemplateId}, ${input.vehicleKey}, ${input.truck}, ${input.sendatrackVehicleId}, ${input.originSiteId}, ${JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })))}, ${input.status}, ${now}, ${now})`;\n    } else {\n      await sql`UPDATE trips SET vehicle_key = ${input.vehicleKey}, truck = ${input.truck}, sendatrack_vehicle_id = ${input.sendatrackVehicleId}, status = ${input.status}, updated_at = ${new Date().toISOString()} WHERE company_id = ${input.companyId} AND id = ${input.id}`;\n    }\n    return (await this.getTrip(input.companyId, input.id))!;\n  },\n  async getTrip(companyId, tripId) {\n    await ensureSchema();\n    const rows = await sql`SELECT * FROM trips WHERE company_id = ${companyId} AND id = ${tripId} LIMIT 1` as Array<Record<string, unknown>>;\n    const row = rows[0];\n    if (!row) return null;\n    const rawStops = JSON.parse(String(row.stops_json)) as Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: string | null }>;\n    return { id: String(row.id), companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), vehicleKey: String(row.vehicle_key), truck: String(row.truck), sendatrackVehicleId: String(row.sendatrack_vehicle_id ?? ''), originSiteId: row.origin_site_id ? String(row.origin_site_id) : null, stops: rawStops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt ? new Date(stop.plannedArrivalAt) : null })), status: String(row.status) as TripRecord['status'], createdAt: new Date(String(row.created_at)), updatedAt: new Date(String(row.updated_at)) };\n  },\n  async listTrips(companyId, limit = 100) {\n    await ensureSchema();\n    const capped = Math.max(1, Math.min(1000, Math.round(limit)));\n    const rows = await sql`SELECT id FROM trips WHERE company_id = ${companyId} ORDER BY updated_at DESC LIMIT ${capped}` as Array<{ id: string }>;\n    return (await Promise.all(rows.map((row) => this.getTrip(companyId, row.id)))).filter((trip): trip is TripRecord => Boolean(trip));\n  },\n\n'''
+          if marker not in s: raise SystemExit('postgres pending marker missing')
+          s = s.replace(marker, methods + marker, 1)
+          p.write_text(s)
+
+          p = Path('app/lib/delivery-store.cloudflare.ts')
+          s = p.read_text()
+          s = s.replace('import { matchDeliveryVehicle } from "./vehicle-linking";\n', 'import { matchDeliveryVehicle } from "./vehicle-linking";\nimport type { TripRecord } from "./trip-record";\n')
+          schema_marker = '  await database.prepare(`CREATE TABLE IF NOT EXISTS trip_position_observations (\n    company_id text NOT NULL, route_template_id text NOT NULL, trip_instance_id text NOT NULL, vehicle_id text NOT NULL,\n    position_at integer NOT NULL, latitude real NOT NULL, longitude real NOT NULL, speed real NOT NULL, created_at integer NOT NULL,\n    PRIMARY KEY (company_id, trip_instance_id, position_at)\n  )`).run();\n'
+          schema_add = schema_marker + '''  await database.prepare(`CREATE TABLE IF NOT EXISTS trips (\n    id text NOT NULL, company_id text NOT NULL, route_template_id text NOT NULL, vehicle_key text NOT NULL, truck text NOT NULL,\n    sendatrack_vehicle_id text DEFAULT '' NOT NULL, origin_site_id text, stops_json text NOT NULL, status text NOT NULL,\n    created_at integer NOT NULL, updated_at integer NOT NULL, PRIMARY KEY (company_id, id)\n  )`).run();\n'''
+          if schema_marker not in s: raise SystemExit('cloudflare schema marker missing')
+          s = s.replace(schema_marker, schema_add, 1)
+          idx_marker = '    database.prepare("CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)"),\n'
+          if idx_marker not in s: raise SystemExit('cloudflare index marker missing')
+          s = s.replace(idx_marker, idx_marker + '    database.prepare("CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)"),\n', 1)
+          marker = '  async listPendingNotifications(companyId) {'
+          methods = '''  async upsertTrip(input) {\n    await ensureTable();\n    const existing = await db().prepare("SELECT id FROM trips WHERE company_id = ? AND id = ? LIMIT 1").bind(input.companyId, input.id).first<{ id: string }>();\n    if (!existing) {\n      const now = Date.now();\n      const stopsJson = JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.getTime() ?? null })));\n      await db().prepare("INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(input.id, input.companyId, input.routeTemplateId, input.vehicleKey, input.truck, input.sendatrackVehicleId, input.originSiteId, stopsJson, input.status, now, now).run();\n    } else {\n      await db().prepare("UPDATE trips SET vehicle_key = ?, truck = ?, sendatrack_vehicle_id = ?, status = ?, updated_at = ? WHERE company_id = ? AND id = ?").bind(input.vehicleKey, input.truck, input.sendatrackVehicleId, input.status, Date.now(), input.companyId, input.id).run();\n    }\n    return (await this.getTrip(input.companyId, input.id))!;\n  },\n  async getTrip(companyId, tripId) {\n    await ensureTable();\n    const row = await db().prepare("SELECT * FROM trips WHERE company_id = ? AND id = ? LIMIT 1").bind(companyId, tripId).first<Record<string, unknown>>();\n    if (!row) return null;\n    const rawStops = JSON.parse(String(row.stops_json)) as Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: number | null }>;\n    return { id: String(row.id), companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), vehicleKey: String(row.vehicle_key), truck: String(row.truck), sendatrackVehicleId: String(row.sendatrack_vehicle_id ?? ''), originSiteId: row.origin_site_id ? String(row.origin_site_id) : null, stops: rawStops.map((stop) => ({ ...stop, plannedArrivalAt: typeof stop.plannedArrivalAt === 'number' ? new Date(stop.plannedArrivalAt) : null })), status: String(row.status) as TripRecord['status'], createdAt: new Date(Number(row.created_at)), updatedAt: new Date(Number(row.updated_at)) };\n  },\n  async listTrips(companyId, limit = 100) {\n    await ensureTable();\n    const capped = Math.max(1, Math.min(1000, Math.round(limit)));\n    const result = await db().prepare("SELECT id FROM trips WHERE company_id = ? ORDER BY updated_at DESC LIMIT ?").bind(companyId, capped).all<{ id: string }>();\n    return (await Promise.all((result.results ?? []).map((row) => this.getTrip(companyId, row.id)))).filter((trip): trip is TripRecord => Boolean(trip));\n  },\n\n'''
+          if marker not in s: raise SystemExit('cloudflare pending marker missing')
+          s = s.replace(marker, methods + marker, 1)
+          p.write_text(s)
+
+          p = Path('db/schema.ts')
+          s = p.read_text()
+          s += '''\n\nexport const trips = sqliteTable("trips", {\n  id: text("id").notNull(),\n  companyId: text("company_id").notNull(),\n  routeTemplateId: text("route_template_id").notNull(),\n  vehicleKey: text("vehicle_key").notNull(),\n  truck: text("truck").notNull(),\n  sendatrackVehicleId: text("sendatrack_vehicle_id").notNull().default(""),\n  originSiteId: text("origin_site_id"),\n  stopsJson: text("stops_json").notNull(),\n  status: text("status", { enum: ["planned", "active", "completed"] }).notNull(),\n  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),\n  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),\n}, (table) => [\n  primaryKey({ columns: [table.companyId, table.id] }),\n  index("idx_trips_company_updated").on(table.companyId, table.updatedAt),\n]);\n'''
+          p.write_text(s)
+
+          p = Path('app/api/deliveries/route.ts')
+          s = p.read_text()
+          s = s.replace('import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";\n', 'import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";\nimport { tripStopsFromPlan } from "../../lib/trip-record";\n')
+          old = '      return { ...plan, routeTemplateId: stableRouteTemplateId, tripInstanceId: currentTripInstanceId, learning };\n    }));\n    await processPendingNotifications(session.companyId, requestUrl.origin);'
+          new = '''      if (!currentTripInstanceId) return { ...plan, routeTemplateId: stableRouteTemplateId, tripInstanceId: currentTripInstanceId, learning };\n      const persistedTrip = await store.upsertTrip({\n        id: currentTripInstanceId,\n        companyId: session.companyId,\n        routeTemplateId: stableRouteTemplateId,\n        vehicleKey: plan.vehicleKey,\n        truck: plan.truck,\n        sendatrackVehicleId: plan.sendatrackVehicleId,\n        originSiteId: plan.originSiteId,\n        stops: tripStopsFromPlan(plan.stops),\n        status: plan.stops.some((stop) => stop.deliveryIds.some((id) => rows.find((row) => row.id === id)?.status === "In transit" || rows.find((row) => row.id === id)?.status === "Delayed")) ? "active" : "planned",\n      });\n      return { ...plan, routeTemplateId: persistedTrip.routeTemplateId, tripInstanceId: persistedTrip.id, learning };\n    }));\n    await processPendingNotifications(session.companyId, requestUrl.origin);'''
+          if old not in s: raise SystemExit('route trip persistence marker missing')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          Path('tests/trip-record.test.mjs').write_text('''import assert from "node:assert/strict";\nimport test from "node:test";\nimport { tripStopsFromPlan } from "../app/lib/trip-record.ts";\n\ntest("trip snapshot freezes an ordered route independently from delivery state", () => {\n  const stops = tripStopsFromPlan([\n    { siteId: "tanger", destination: "Tanger", plannedArrivalAt: new Date("2026-08-20T10:00:00Z") },\n    { siteId: "casa", destination: "Casablanca", plannedArrivalAt: new Date("2026-08-20T15:00:00Z") },\n  ]);\n  assert.deepEqual(stops.map((stop) => [stop.sequence, stop.siteId]), [[1, "tanger"], [2, "casa"]]);\n});\n''')
+
+          p = Path('package.json')
+          s = p.read_text()
+          marker = '    "test:route-template": "node --experimental-strip-types --test tests/route-template.test.mjs",\n'
+          if marker not in s: raise SystemExit('package route template marker missing')
+          s = s.replace(marker, marker + '    "test:trip-record": "node --experimental-strip-types --test tests/trip-record.test.mjs",\n', 1)
+          p.write_text(s)
+
+          p = Path('.github/workflows/vercel-build-check.yml')
+          s = p.read_text()
+          marker = '      - name: Verify reusable route identity\n        run: pnpm run test:route-template\n'
+          if marker not in s: raise SystemExit('CI route template marker missing')
+          s = s.replace(marker, marker + '      - name: Verify persistent trip snapshot model\n        run: pnpm run test:trip-record\n', 1)
+          p.write_text(s)
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify trip model and full quality gates
+        run: |
+          pnpm run test:trip-record
+          pnpm run test:route-template
+          pnpm run test:tour
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit product files
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app db tests package.json .github/workflows/vercel-build-check.yml
+          git commit -m "persist stable trip snapshots"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push
