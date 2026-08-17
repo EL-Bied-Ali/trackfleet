@@ -33,6 +33,8 @@ jobs:
         run: pnpm run test:tracking-access
       - name: Verify customer contact normalization
         run: pnpm run test:customer-contact
+      - name: Verify SENDATRACK login error classification
+        run: pnpm run test:login-error
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
