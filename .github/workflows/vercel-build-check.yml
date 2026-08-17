@@ -37,6 +37,8 @@ jobs:
         run: pnpm run test:login-error
       - name: Verify remembered origin preference
         run: pnpm run test:origin-preference
+      - name: Verify safe vehicle linking
+        run: pnpm run test:vehicle-linking
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
