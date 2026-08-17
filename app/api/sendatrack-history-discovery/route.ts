@@ -1,5 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { normalizeSendatrackFleet } from "../../../lib/sendatrack-normalize";
+import { normalizeSendatrackFleet } from "../../lib/sendatrack-normalize";
 
 export const dynamic = "force-dynamic";
 const base = "http://backend2.sendatrack.com/sendatrack/public/api/";
