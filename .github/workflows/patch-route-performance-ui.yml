@@ -51,7 +51,7 @@ jobs:
           s = s.replace('const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? initialDeliveries[0];', 'const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? emptyDelivery;', 1)
 
           needle = '</span></div>}\n              <div className="tour-stops">'
-          perf = '{plan.learning.medianEffectiveSpeedKmh !== null && <span>{locale === "fr" ? "Vitesse médiane" : locale === "nl" ? "Mediane snelheid" : "Median speed"}: {plan.learning.medianEffectiveSpeedKmh} km/h{plan.learning.medianDelayMinutes !== null ? ` · ${locale === "fr" ? "retard médian" : locale === "nl" ? "mediane vertraging" : "median delay"}: ${plan.learning.medianDelayMinutes > 0 ? "+" : ""}${plan.learning.medianDelayMinutes} min` : ""}</span>}</div>}\n              <div className="tour-stops">'
+          perf = '</span>{plan.learning.medianEffectiveSpeedKmh !== null && <span>{locale === "fr" ? "Vitesse médiane" : locale === "nl" ? "Mediane snelheid" : "Median speed"}: {plan.learning.medianEffectiveSpeedKmh} km/h{plan.learning.medianDelayMinutes !== null ? ` · ${locale === "fr" ? "retard médian" : locale === "nl" ? "mediane vertraging" : "median delay"}: ${plan.learning.medianDelayMinutes > 0 ? "+" : ""}${plan.learning.medianDelayMinutes} min` : ""}</span>}</div>}\n              <div className="tour-stops">'
           if needle not in s: raise SystemExit('tour learning UI marker missing')
           s = s.replace(needle, perf, 1)
           p.write_text(s)
