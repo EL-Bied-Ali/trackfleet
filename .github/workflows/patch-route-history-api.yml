@@ -13,6 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
       - name: Use route history in ETA API
         shell: python
         run: |
@@ -55,9 +62,9 @@ jobs:
 
       - name: Build and test
         run: |
-          npm install --ignore-scripts
+          pnpm install --no-frozen-lockfile
           node --experimental-strip-types --test tests/route-history.test.mjs tests/eta-observation.test.mjs tests/eta-estimator.test.mjs
-          npm run build:vercel
+          pnpm run build:vercel
       - name: Commit patch
         run: |
           git config user.name "TrackFleet automation"
