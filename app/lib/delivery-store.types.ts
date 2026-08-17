@@ -1,5 +1,5 @@
 import type { DeliveryEventType } from "./delivery-events";
-import type { SendatrackSnapshot } from "./sendatrack";
+import type { SendatrackSnapshot, SendatrackVehicle } from "./sendatrack";
 
 export type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 
@@ -58,6 +58,7 @@ export interface DeliveryStore {
   getPublic(tracking: string): Promise<DeliveryRow | null>;
   listForCompany(companyId: string): Promise<DeliveryRow[]>;
   applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string): Promise<DeliveryTransition[]>;
+  linkVehicle(deliveryId: string, companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow | null>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;

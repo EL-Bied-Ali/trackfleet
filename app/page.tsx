@@ -6,6 +6,7 @@ import InteractiveFleetMap from "./InteractiveFleetMap";
 import SiteManager from "./SiteManager";
 import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";
 import { originPreferenceKey, resolvePreferredOriginSite } from "./lib/origin-preference";
+import { rankVehicleSuggestions } from "./lib/vehicle-linking";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
@@ -140,6 +141,10 @@ export default function Home() {
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
   const [knownSites, setKnownSites] = useState<KnownSite[]>([]);
   const [defaultOriginSiteId, setDefaultOriginSiteId] = useState("");
+  const [vehicleLinkOpen, setVehicleLinkOpen] = useState(false);
+  const [vehicleLinkSearch, setVehicleLinkSearch] = useState("");
+  const [vehicleLinkChoice, setVehicleLinkChoice] = useState("");
+  const [vehicleLinkBusy, setVehicleLinkBusy] = useState(false);
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([
     { id: "demo-tracking", deliveryId: "TF-2841", kind: "tracking", time: "13:06" },
   ]);
@@ -286,6 +291,7 @@ export default function Home() {
     ? Math.round((completedWithPlan.filter((delivery) => (delivery.etaDelayMinutes ?? 0) <= 0).length / completedWithPlan.length) * 1000) / 10
     : null;
   const delayedCount = deliveries.filter((delivery) => delivery.status !== "Delivered" && (delivery.status === "Delayed" || (delivery.etaDelayMinutes ?? 0) >= 60)).length;
+  const vehicleLinkSuggestions = rankVehicleSuggestions(vehicleLinkSearch || selected?.truck || "", integration.vehicles);
   const liveKpiCopy = {
     fr: { completed: "terminées", noHistory: "Pas encore d'historique", onTimeBody: "Basé sur les livraisons suivies et terminées", onTimeEmpty: "Disponible après les premières livraisons terminées", noDelay: "Aucun retard ETA important détecté" },
     en: { completed: "completed", noHistory: "No history yet", onTimeBody: "Based on completed tracked deliveries", onTimeEmpty: "Available after the first completed deliveries", noDelay: "No material ETA delay detected" },
@@ -417,6 +423,29 @@ export default function Home() {
     await fetch("/api/auth/session", { method: "DELETE" });
     setCompany(null);
     setAuthState("anonymous");
+  }
+
+  async function linkSelectedVehicle() {
+    if (!vehicleLinkChoice) return;
+    setVehicleLinkBusy(true);
+    try {
+      const response = await fetch("/api/deliveries/link-vehicle", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: selected.id, vehicleId: vehicleLinkChoice }),
+      });
+      if (!response.ok) throw new Error("vehicle_link_failed");
+      const data = await response.json() as { delivery: Delivery };
+      setDeliveries((items) => items.map((delivery) => delivery.id === data.delivery.id ? { ...delivery, ...data.delivery } : delivery));
+      setVehicleLinkOpen(false);
+      setVehicleLinkSearch("");
+      setVehicleLinkChoice("");
+      setToast(locale === "fr" ? "Véhicule SENDATRACK associé." : locale === "nl" ? "SENDATRACK-voertuig gekoppeld." : "SENDATRACK vehicle linked.");
+    } catch {
+      setToast(locale === "fr" ? "Impossible d’associer ce véhicule." : locale === "nl" ? "Voertuig koppelen mislukt." : "Could not link this vehicle.");
+    } finally {
+      setVehicleLinkBusy(false);
+    }
   }
 
   async function createDelivery(event: React.FormEvent<HTMLFormElement>) {
@@ -664,6 +693,20 @@ export default function Home() {
             {showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p><strong>{selected.truck}</strong><small>{selected.driver}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
               <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div></dl>
+              {selected.gpsSource !== "sendatrack" && <div style={{ marginTop: 10 }}>
+                {integration.connected && integration.vehicles.length ? <>
+                  {!vehicleLinkOpen ? <button className="copy-link" onClick={() => { setVehicleLinkOpen(true); setVehicleLinkSearch(selected.truck); setVehicleLinkChoice(""); }}>
+                    {locale === "fr" ? "Associer un véhicule" : locale === "nl" ? "Voertuig koppelen" : "Link a vehicle"}
+                  </button> : <div style={{ display: "grid", gap: 8 }}>
+                    <input value={vehicleLinkSearch} onChange={(event) => { setVehicleLinkSearch(event.target.value); setVehicleLinkChoice(""); }} placeholder={locale === "fr" ? "Rechercher nom / plaque" : locale === "nl" ? "Zoek naam / nummerplaat" : "Search name / plate"} />
+                    <select value={vehicleLinkChoice} onChange={(event) => setVehicleLinkChoice(event.target.value)}>
+                      <option value="">{locale === "fr" ? "Choisir le véhicule SENDATRACK" : locale === "nl" ? "Kies SENDATRACK-voertuig" : "Choose SENDATRACK vehicle"}</option>
+                      {vehicleLinkSuggestions.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}
+                    </select>
+                    <div className="popover-actions"><button disabled={!vehicleLinkChoice || vehicleLinkBusy} onClick={() => void linkSelectedVehicle()}>{vehicleLinkBusy ? (locale === "fr" ? "Association…" : "Linking…") : (locale === "fr" ? "Confirmer" : locale === "nl" ? "Bevestigen" : "Confirm")}</button><button className="copy-link" onClick={() => setVehicleLinkOpen(false)}>{t.cancel}</button></div>
+                  </div>}
+                </> : <small>{locale === "fr" ? "GPS en attente · SENDATRACK indisponible" : locale === "nl" ? "GPS in afwachting · SENDATRACK niet beschikbaar" : "Waiting for GPS · SENDATRACK unavailable"}</small>}
+              </div>}
               <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
             </div>}
           </div>

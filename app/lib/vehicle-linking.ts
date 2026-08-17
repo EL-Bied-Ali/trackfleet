@@ -33,3 +33,26 @@ export function matchDeliveryVehicle(
   if (candidates.length > 1) return { vehicle: null, reason: "ambiguous", candidates };
   return { vehicle: null, reason: "none", candidates: [] };
 }
+
+export function vehicleSearchIdentity(value: string) {
+  return normalizeVehicleIdentity(value).replace(/\d+/g, (digits) => String(Number(digits)));
+}
+
+export function rankVehicleSuggestions(query: string, vehicles: SendatrackVehicle[]) {
+  const strict = normalizeVehicleIdentity(query);
+  const tolerant = vehicleSearchIdentity(query);
+  return [...vehicles]
+    .map((vehicle) => {
+      const vehicleStrict = normalizeVehicleIdentity(vehicle.name);
+      const vehicleTolerant = vehicleSearchIdentity(vehicle.name);
+      const score = !strict ? 3
+        : vehicleStrict === strict ? 0
+        : tolerant && vehicleTolerant === tolerant ? 1
+        : vehicleStrict.includes(strict) || (tolerant && vehicleTolerant.includes(tolerant)) ? 2
+        : 3;
+      return { vehicle, score };
+    })
+    .filter((entry) => !strict || entry.score < 3)
+    .sort((a, b) => a.score - b.score || a.vehicle.name.localeCompare(b.vehicle.name))
+    .map((entry) => entry.vehicle);
+}

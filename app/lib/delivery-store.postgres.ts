@@ -240,6 +240,20 @@ export const postgresStore: DeliveryStore = {
     return transitions;
   },
 
+  async linkVehicle(deliveryId, companyId, vehicle) {
+    await ensureSchema();
+    const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];
+    const delivery = rows[0] ? hydrate(rows[0]) : null;
+    if (!delivery) return null;
+    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+    await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${metrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
+    await sql`UPDATE deliveries SET
+      sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
+      speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'
+      WHERE id = ${delivery.id} AND company_id = ${companyId}`;
+    const updated = await sql`SELECT * FROM deliveries WHERE id = ${delivery.id} AND company_id = ${companyId} LIMIT 1` as RawDelivery[];
+    return updated[0] ? hydrate(updated[0]) : null;
+  },
   async recordEvent(deliveryId, type, progress) {
     await ensureSchema();
     const rows = await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at)

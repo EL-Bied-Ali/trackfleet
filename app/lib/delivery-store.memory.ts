@@ -56,6 +56,19 @@ export const memoryStore: DeliveryStore = {
     }
     return transitions;
   },
+  async linkVehicle(deliveryId, companyId, vehicle) {
+    const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId) ?? null;
+    if (!delivery || delivery.status === "Delivered") return null;
+    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+    if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
+      deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
+    }
+    Object.assign(delivery, {
+      sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude,
+      speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", status: "Loading",
+    });
+    return { ...delivery };
+  },
   async recordEvent(deliveryId, type, progress) {
     if (deliveryEvents.some((event) => event.deliveryId === deliveryId && event.type === type)) return false;
     deliveryEvents.push({ deliveryId, type, progress, createdAt: new Date() });
