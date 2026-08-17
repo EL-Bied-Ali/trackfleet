@@ -45,6 +45,10 @@ jobs:
         run: pnpm run test:delivery-vehicle-choice
       - name: Verify unassigned delivery trip safety
         run: pnpm run test:unassigned-trip-safety
+      - name: Verify planned trip suggestions
+        run: pnpm run test:trip-suggestion
+      - name: Verify parcel assignment queue UI
+        run: pnpm run test:assignment-queue-ui
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
