@@ -27,20 +27,8 @@ jobs:
 
           p = Path('app/api/deliveries/route.ts')
           s = p.read_text()
-          old = '''      const learning = routeLearningState({
-        historicalTrips: history.tripCount,
-        learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,
-        futureStops: futureStopIds.length,
-        unconfiguredStops,
-      });'''
-          new = '''      const learning = routeLearningState({
-        historicalTrips: history.tripCount,
-        learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,
-        futureStops: futureStopIds.length,
-        unconfiguredStops,
-        medianEffectiveSpeedKmh: history.medianEffectiveSpeedKmh,
-        medianDelayMinutes: history.medianDelayMinutes,
-      });'''
+          old = '      const learning = routeLearningState({\n        historicalTrips: history.tripCount,\n        learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,\n        futureStops: futureStopIds.length,\n        unconfiguredStops,\n      });'
+          new = '      const learning = routeLearningState({\n        historicalTrips: history.tripCount,\n        learnedStops: futureStopIds.filter((siteId) => learnedDwell.has(siteId)).length,\n        futureStops: futureStopIds.length,\n        unconfiguredStops,\n        medianEffectiveSpeedKmh: history.medianEffectiveSpeedKmh,\n        medianDelayMinutes: history.medianDelayMinutes,\n      });'
           if old not in s: raise SystemExit('route learning API marker missing')
           s = s.replace(old, new, 1)
           p.write_text(s)
@@ -52,32 +40,20 @@ jobs:
           if old_type not in s: raise SystemExit('TourPlan type marker missing')
           s = s.replace(old_type, new_type, 1)
 
-          old_seed_start = 'const initialDeliveries: Delivery[] = ['
-          seed_start = s.find(old_seed_start)
+          seed_start = s.find('const initialDeliveries: Delivery[] = [')
           if seed_start == -1: raise SystemExit('demo seed start missing')
           seed_end = s.find('];\n\nconst statusClass', seed_start)
           if seed_end == -1: raise SystemExit('demo seed end missing')
-          s = s[:seed_start] + '''const emptyDelivery: Delivery = {
-  id: "",
-  customer: "",
-  destination: "",
-  truck: "",
-  driver: "",
-  status: "Loading",
-  eta: "",
-  progress: 0,
-  color: "#6b7280",
-};
-
-''' + s[seed_end + 4:]
+          empty = 'const emptyDelivery: Delivery = {\n  id: "",\n  customer: "",\n  destination: "",\n  truck: "",\n  driver: "",\n  status: "Loading",\n  eta: "",\n  progress: 0,\n  color: "#6b7280",\n};\n\n'
+          s = s[:seed_start] + empty + s[seed_end + 4:]
           s = s.replace('const [deliveries, setDeliveries] = useState(initialDeliveries);', 'const [deliveries, setDeliveries] = useState<Delivery[]>([]);', 1)
           s = s.replace('const [selectedId, setSelectedId] = useState("TF-2841");', 'const [selectedId, setSelectedId] = useState("");', 1)
           s = s.replace('const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? initialDeliveries[0];', 'const selected = deliveries.find((item) => item.id === selectedId) ?? deliveries[0] ?? emptyDelivery;', 1)
 
-          old_learning = '''<div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>{plan.learning && <div className="eta-explanation"><strong>{plan.learning.stage === "ready" ? (locale === "fr" ? "Route apprise" : locale === "nl" ? "Route geleerd" : "Route learned") : (locale === "fr" ? "Apprentissage de la route" : locale === "nl" ? "Route wordt geleerd" : "Learning route")}</strong><span>{plan.learning.historicalTrips}/{plan.learning.requiredTrips} {locale === "fr" ? "voyages" : locale === "nl" ? "ritten" : "trips"}{plan.learning.futureStops > 0 ? ` · ${plan.learning.learnedStops}/${plan.learning.futureStops} ${locale === "fr" ? "arrêts appris" : locale === "nl" ? "stops geleerd" : "stops learned"}` : ""}{plan.learning.unconfiguredStops > 0 ? ` · ${plan.learning.unconfiguredStops} ${locale === "fr" ? "sans coordonnées exactes" : locale === "nl" ? "zonder exacte coördinaten" : "missing exact coordinates"}` : ""}</span></div>}'''
-          new_learning = '''<div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>{plan.learning && <div className="eta-explanation"><strong>{plan.learning.stage === "ready" ? (locale === "fr" ? "Route apprise" : locale === "nl" ? "Route geleerd" : "Route learned") : (locale === "fr" ? "Apprentissage de la route" : locale === "nl" ? "Route wordt geleerd" : "Learning route")}</strong><span>{plan.learning.historicalTrips}/{plan.learning.requiredTrips} {locale === "fr" ? "voyages" : locale === "nl" ? "ritten" : "trips"}{plan.learning.futureStops > 0 ? ` · ${plan.learning.learnedStops}/${plan.learning.futureStops} ${locale === "fr" ? "arrêts appris" : locale === "nl" ? "stops geleerd" : "stops learned"}` : ""}{plan.learning.unconfiguredStops > 0 ? ` · ${plan.learning.unconfiguredStops} ${locale === "fr" ? "sans coordonnées exactes" : locale === "nl" ? "zonder exacte coördinaten" : "missing exact coordinates"}` : ""}</span>{plan.learning.medianEffectiveSpeedKmh !== null && <span>{locale === "fr" ? "Vitesse médiane" : locale === "nl" ? "Mediane snelheid" : "Median speed"}: {plan.learning.medianEffectiveSpeedKmh} km/h{plan.learning.medianDelayMinutes !== null ? ` · ${locale === "fr" ? "retard médian" : locale === "nl" ? "mediane vertraging" : "median delay"}: ${plan.learning.medianDelayMinutes > 0 ? "+" : ""}${plan.learning.medianDelayMinutes} min` : ""}</span>}</div>}'''
-          if old_learning not in s: raise SystemExit('tour learning UI marker missing')
-          s = s.replace(old_learning, new_learning, 1)
+          needle = '</span></div>}\n              <div className="tour-stops">'
+          perf = '{plan.learning.medianEffectiveSpeedKmh !== null && <span>{locale === "fr" ? "Vitesse médiane" : locale === "nl" ? "Mediane snelheid" : "Median speed"}: {plan.learning.medianEffectiveSpeedKmh} km/h{plan.learning.medianDelayMinutes !== null ? ` · ${locale === "fr" ? "retard médian" : locale === "nl" ? "mediane vertraging" : "median delay"}: ${plan.learning.medianDelayMinutes > 0 ? "+" : ""}${plan.learning.medianDelayMinutes} min` : ""}</span>}</div>}\n              <div className="tour-stops">'
+          if needle not in s: raise SystemExit('tour learning UI marker missing')
+          s = s.replace(needle, perf, 1)
           p.write_text(s)
 
       - name: Install dependencies
