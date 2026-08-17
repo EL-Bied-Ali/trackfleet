@@ -1,7 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { normalizeSendatrackFleet } from "../../../lib/sendatrack-normalize";
 
 export const dynamic = "force-dynamic";
-
 const base = "http://backend2.sendatrack.com/sendatrack/public/api/";
 
 function findToken(value: unknown, depth = 0): string | null {
@@ -25,33 +25,30 @@ function findToken(value: unknown, depth = 0): string | null {
   return null;
 }
 
-const candidates = [
-  "history", "histories", "historique", "historiqueTrajet", "historique-trajet",
-  "trip", "trips", "tripHistory", "trip-history", "trajectory", "trajectories",
-  "route", "routes", "routeHistory", "route-history", "dailyRoute", "daily-route",
-  "itinerary", "itineraries", "itineraire", "itineraireJournalier",
-  "events", "event", "eventData", "event-data", "positions", "positionHistory", "position-history",
-  "deviceHistory", "device-history", "vehicleHistory", "vehicle-history", "trackingHistory", "tracking-history",
-  "reports", "report", "journey", "journeys", "movement", "movements", "stops", "stopHistory"
-];
-
-async function probe(path: string, token: string) {
+async function inspect(url: URL, token: string) {
   try {
-    const response = await fetch(new URL(path, base), {
+    const response = await fetch(url, {
       headers: { authorization: `Bearer ${token}`, accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(7000),
     });
-    let keys: string[] = [];
     const contentType = response.headers.get("content-type") ?? "";
-    if (response.status !== 404 && contentType.includes("json")) {
+    let message = "";
+    let keys: string[] = [];
+    let arrayLength: number | null = null;
+    if (contentType.includes("json")) {
       try {
-        const payload = await response.clone().json() as unknown;
-        if (payload && typeof payload === "object" && !Array.isArray(payload)) keys = Object.keys(payload as Record<string, unknown>).slice(0, 12);
+        const payload = await response.json() as unknown;
+        if (Array.isArray(payload)) arrayLength = payload.length;
+        else if (payload && typeof payload === "object") {
+          const record = payload as Record<string, unknown>;
+          keys = Object.keys(record).slice(0, 15);
+          if (typeof record.message === "string") message = record.message.slice(0, 200);
+        }
       } catch {}
     }
-    return { path, status: response.status, contentType: contentType.split(";")[0], keys };
+    return { status: response.status, contentType: contentType.split(";")[0], keys, arrayLength, message };
   } catch (error) {
-    return { path, status: 0, contentType: "", keys: [], error: error instanceof Error ? error.name : "error" };
+    return { status: 0, contentType: "", keys: [], arrayLength: null, message: error instanceof Error ? error.name : "error" };
   }
 }
 
@@ -71,13 +68,50 @@ export async function GET() {
   const token = findToken(await loginResponse.json() as unknown);
   if (!token) return Response.json({ error: "missing_token" }, { status: 502 });
 
-  const results: Awaited<ReturnType<typeof probe>>[] = [];
-  for (let i = 0; i < candidates.length; i += 6) {
-    results.push(...await Promise.all(candidates.slice(i, i + 6).map((path) => probe(path, token))));
+  const fleetResponse = await fetch(new URL("list?", base), {
+    headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!fleetResponse.ok) return Response.json({ error: "fleet_failed", status: fleetResponse.status }, { status: 502 });
+  const fleetPayload = await fleetResponse.json() as unknown;
+  const vehicle = normalizeSendatrackFleet(fleetPayload).vehicles[0];
+  if (!vehicle) return Response.json({ error: "no_vehicle" }, { status: 502 });
+
+  const end = new Date();
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  const isoStart = start.toISOString();
+  const isoEnd = end.toISOString();
+  const dateStart = isoStart.slice(0, 10);
+  const dateEnd = isoEnd.slice(0, 10);
+  const unixStart = Math.floor(start.getTime() / 1000);
+  const unixEnd = Math.floor(end.getTime() / 1000);
+
+  const variants: Array<[string, Record<string, string>]> = [
+    ["bare", {}],
+    ["device", { device: vehicle.id }],
+    ["deviceId", { deviceId: vehicle.id }],
+    ["Device", { Device: vehicle.id }],
+    ["id", { id: vehicle.id }],
+    ["vehicle", { vehicle: vehicle.id }],
+    ["vehicleId", { vehicleId: vehicle.id }],
+    ["device_from_to_iso", { device: vehicle.id, from: isoStart, to: isoEnd }],
+    ["device_start_end_iso", { device: vehicle.id, start: isoStart, end: isoEnd }],
+    ["device_dateFrom_dateTo", { device: vehicle.id, dateFrom: isoStart, dateTo: isoEnd }],
+    ["device_from_to_date", { device: vehicle.id, from: dateStart, to: dateEnd }],
+    ["device_from_to_unix", { device: vehicle.id, from: String(unixStart), to: String(unixEnd) }],
+    ["Device_startDate_endDate", { Device: vehicle.id, startDate: isoStart, endDate: isoEnd }],
+    ["vehicleId_startDate_endDate", { vehicleId: vehicle.id, startDate: isoStart, endDate: isoEnd }],
+  ];
+
+  const results = [] as Array<{ variant: string; status: number; contentType: string; keys: string[]; arrayLength: number | null; message: string }>;
+  for (let i = 0; i < variants.length; i += 4) {
+    const batch = variants.slice(i, i + 4);
+    results.push(...await Promise.all(batch.map(async ([variant, params]) => {
+      const url = new URL("events", base);
+      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+      return { variant, ...await inspect(url, token) };
+    })));
   }
-  return Response.json({
-    tested: results.length,
-    interesting: results.filter((item) => item.status !== 404),
-    notFound: results.filter((item) => item.status === 404).length,
-  }, { headers: { "cache-control": "no-store" } });
+
+  return Response.json({ results }, { headers: { "cache-control": "no-store" } });
 }
