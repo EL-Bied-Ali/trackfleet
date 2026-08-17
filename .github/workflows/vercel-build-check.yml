@@ -71,6 +71,8 @@ jobs:
         run: pnpm run test:trip-record
       - name: Verify delivery trip persistence
         run: pnpm run test:trip-persistence
+      - name: Verify persistent completed trip history
+        run: pnpm run test:trip-history
       - name: Verify automation storage safety
         run: pnpm run test:automation-readiness
       - name: Verify automation health diagnostics
@@ -93,6 +95,8 @@ jobs:
         run: pnpm run test:delay
       - name: Verify autonomous delay detection
         run: pnpm run test:automation-delay
+      - name: Verify autonomous trip synchronization
+        run: pnpm run test:automation-trip-sync
 
   build-vercel:
     runs-on: ubuntu-latest
