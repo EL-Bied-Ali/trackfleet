@@ -6,8 +6,14 @@ export type RouteLearningState = {
   unconfiguredStops: number;
   etaHistoryReady: boolean;
   dwellHistoryReady: boolean;
+  medianEffectiveSpeedKmh: number | null;
+  medianDelayMinutes: number | null;
   stage: "collecting" | "partial" | "ready";
 };
+
+function optionalRoundedMetric(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
+}
 
 export function routeLearningState(input: {
   historicalTrips: number;
@@ -15,6 +21,8 @@ export function routeLearningState(input: {
   futureStops: number;
   unconfiguredStops?: number;
   requiredTrips?: number;
+  medianEffectiveSpeedKmh?: number | null;
+  medianDelayMinutes?: number | null;
 }): RouteLearningState {
   const requiredTrips = Math.max(1, Math.round(input.requiredTrips ?? 5));
   const historicalTrips = Math.max(0, Math.round(input.historicalTrips));
@@ -31,6 +39,8 @@ export function routeLearningState(input: {
     unconfiguredStops,
     etaHistoryReady,
     dwellHistoryReady,
+    medianEffectiveSpeedKmh: optionalRoundedMetric(input.medianEffectiveSpeedKmh),
+    medianDelayMinutes: optionalRoundedMetric(input.medianDelayMinutes),
     stage: etaHistoryReady && dwellHistoryReady ? "ready" : historicalTrips > 0 || learnedStops > 0 ? "partial" : "collecting",
   };
 }
