@@ -81,3 +81,21 @@ export const sessions = sqliteTable("sessions", {
   index("idx_sessions_company_id").on(table.companyId),
   index("idx_sessions_expires_at").on(table.expiresAt),
 ]);
+
+
+export const trips = sqliteTable("trips", {
+  id: text("id").notNull(),
+  companyId: text("company_id").notNull(),
+  routeTemplateId: text("route_template_id").notNull(),
+  vehicleKey: text("vehicle_key").notNull(),
+  truck: text("truck").notNull(),
+  sendatrackVehicleId: text("sendatrack_vehicle_id").notNull().default(""),
+  originSiteId: text("origin_site_id"),
+  stopsJson: text("stops_json").notNull(),
+  status: text("status", { enum: ["planned", "active", "completed"] }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.companyId, table.id] }),
+  index("idx_trips_company_updated").on(table.companyId, table.updatedAt),
+]);

@@ -5,6 +5,7 @@ import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
+import type { TripRecord } from "./trip-record";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the Postgres delivery store");
@@ -183,6 +184,21 @@ async function ensureSchema() {
       PRIMARY KEY (company_id, trip_instance_id, position_at)
     )`;
     await sql`CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)`;
+    await sql`CREATE TABLE IF NOT EXISTS trips (
+      id text NOT NULL,
+      company_id text NOT NULL,
+      route_template_id text NOT NULL,
+      vehicle_key text NOT NULL,
+      truck text NOT NULL,
+      sendatrack_vehicle_id text NOT NULL DEFAULT '',
+      origin_site_id text,
+      stops_json text NOT NULL,
+      status text NOT NULL,
+      created_at timestamptz NOT NULL,
+      updated_at timestamptz NOT NULL,
+      PRIMARY KEY (company_id, id)
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)`;
 
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
@@ -354,6 +370,33 @@ export const postgresStore: DeliveryStore = {
       companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), tripInstanceId: String(row.trip_instance_id), vehicleId: String(row.vehicle_id),
       positionAt: new Date(String(row.position_at)), latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), createdAt: new Date(String(row.created_at)),
     }));
+  },
+
+  async upsertTrip(input) {
+    await ensureSchema();
+    const existing = await sql`SELECT * FROM trips WHERE company_id = ${input.companyId} AND id = ${input.id} LIMIT 1` as Array<Record<string, unknown>>;
+    if (!existing.length) {
+      const now = new Date().toISOString();
+      await sql`INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at)
+        VALUES (${input.id}, ${input.companyId}, ${input.routeTemplateId}, ${input.vehicleKey}, ${input.truck}, ${input.sendatrackVehicleId}, ${input.originSiteId}, ${JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })))}, ${input.status}, ${now}, ${now})`;
+    } else {
+      await sql`UPDATE trips SET vehicle_key = ${input.vehicleKey}, truck = ${input.truck}, sendatrack_vehicle_id = ${input.sendatrackVehicleId}, status = ${input.status}, updated_at = ${new Date().toISOString()} WHERE company_id = ${input.companyId} AND id = ${input.id}`;
+    }
+    return (await this.getTrip(input.companyId, input.id))!;
+  },
+  async getTrip(companyId, tripId) {
+    await ensureSchema();
+    const rows = await sql`SELECT * FROM trips WHERE company_id = ${companyId} AND id = ${tripId} LIMIT 1` as Array<Record<string, unknown>>;
+    const row = rows[0];
+    if (!row) return null;
+    const rawStops = JSON.parse(String(row.stops_json)) as Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: string | null }>;
+    return { id: String(row.id), companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), vehicleKey: String(row.vehicle_key), truck: String(row.truck), sendatrackVehicleId: String(row.sendatrack_vehicle_id ?? ''), originSiteId: row.origin_site_id ? String(row.origin_site_id) : null, stops: rawStops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt ? new Date(stop.plannedArrivalAt) : null })), status: String(row.status) as TripRecord['status'], createdAt: new Date(String(row.created_at)), updatedAt: new Date(String(row.updated_at)) };
+  },
+  async listTrips(companyId, limit = 100) {
+    await ensureSchema();
+    const capped = Math.max(1, Math.min(1000, Math.round(limit)));
+    const rows = await sql`SELECT id FROM trips WHERE company_id = ${companyId} ORDER BY updated_at DESC LIMIT ${capped}` as Array<{ id: string }>;
+    return (await Promise.all(rows.map((row) => this.getTrip(companyId, row.id)))).filter((trip): trip is TripRecord => Boolean(trip));
   },
 
   async listPendingNotifications(companyId) {

@@ -1,5 +1,6 @@
 import type { DeliveryEventType } from "./delivery-events";
 import type { SendatrackSnapshot, SendatrackVehicle } from "./sendatrack";
+import type { TripRecord, UpsertTripInput } from "./trip-record";
 
 export type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 
@@ -101,6 +102,9 @@ export interface DeliveryStore {
   listEtaObservationsForRoute(routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
   recordTripPosition(input: TripPositionInput): Promise<boolean>;
   listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;
+  upsertTrip(input: UpsertTripInput): Promise<TripRecord>;
+  getTrip(companyId: string, tripId: string): Promise<TripRecord | null>;
+  listTrips(companyId: string, limit?: number): Promise<TripRecord[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;

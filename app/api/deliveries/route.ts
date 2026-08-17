@@ -18,6 +18,7 @@ import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
 import { summarizeStopDwell } from "../../lib/stop-dwell";
 import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";
+import { tripStopsFromPlan } from "../../lib/trip-record";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -253,7 +254,19 @@ export async function GET(request: Request) {
         medianEffectiveSpeedKmh: history.medianEffectiveSpeedKmh,
         medianDelayMinutes: history.medianDelayMinutes,
       });
-      return { ...plan, routeTemplateId: stableRouteTemplateId, tripInstanceId: currentTripInstanceId, learning };
+      if (!currentTripInstanceId) return { ...plan, routeTemplateId: stableRouteTemplateId, tripInstanceId: currentTripInstanceId, learning };
+      const persistedTrip = await store.upsertTrip({
+        id: currentTripInstanceId,
+        companyId: session.companyId,
+        routeTemplateId: stableRouteTemplateId,
+        vehicleKey: plan.vehicleKey,
+        truck: plan.truck,
+        sendatrackVehicleId: plan.sendatrackVehicleId,
+        originSiteId: plan.originSiteId,
+        stops: tripStopsFromPlan(plan.stops),
+        status: plan.stops.some((stop) => stop.deliveryIds.some((id) => rows.find((row) => row.id === id)?.status === "In transit" || rows.find((row) => row.id === id)?.status === "Delayed")) ? "active" : "planned",
+      });
+      return { ...plan, routeTemplateId: persistedTrip.routeTemplateId, tripInstanceId: persistedTrip.id, learning };
     }));
     await processPendingNotifications(session.companyId, requestUrl.origin);
 

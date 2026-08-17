@@ -5,11 +5,13 @@ import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
+import type { TripRecord } from "./trip-record";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];
 const etaObservations: EtaObservationRow[] = [];
 const tripPositions: TripPositionRow[] = [];
+const trips: TripRecord[] = [];
 const notificationClaims = new NotificationClaimState();
 
 function notificationKey(deliveryId: string, type: DeliveryEventType) { return `${deliveryId}:${type}:whatsapp`; }
@@ -104,6 +106,29 @@ export const memoryStore: DeliveryStore = {
       .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
       .slice(0, Math.max(1, Math.min(20000, limit)));
   },
+  async upsertTrip(input) {
+    const existing = trips.find((trip) => trip.id === input.id && trip.companyId === input.companyId);
+    if (existing) {
+      existing.truck = input.truck;
+      existing.sendatrackVehicleId = input.sendatrackVehicleId;
+      existing.vehicleKey = input.vehicleKey;
+      existing.status = input.status;
+      existing.updatedAt = new Date();
+      return { ...existing, stops: existing.stops.map((stop) => ({ ...stop })) };
+    }
+    const now = new Date();
+    const trip: TripRecord = { ...input, stops: input.stops.map((stop) => ({ ...stop })), createdAt: now, updatedAt: now };
+    trips.push(trip);
+    return { ...trip, stops: trip.stops.map((stop) => ({ ...stop })) };
+  },
+  async getTrip(companyId, tripId) {
+    const trip = trips.find((item) => item.companyId === companyId && item.id === tripId);
+    return trip ? { ...trip, stops: trip.stops.map((stop) => ({ ...stop })) } : null;
+  },
+  async listTrips(companyId, limit = 100) {
+    return trips.filter((trip) => trip.companyId === companyId).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, Math.max(1, Math.min(1000, limit))).map((trip) => ({ ...trip, stops: trip.stops.map((stop) => ({ ...stop })) }));
+  },
+
   async listPendingNotifications(companyId) {
     return deliveryEvents.flatMap((event) => {
       if (!customerFacingEvent(event.type)) return [];
