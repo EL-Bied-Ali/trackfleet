@@ -42,6 +42,9 @@ export type DeliveryEventRow = {
 
 export type EtaObservationInput = {
   deliveryId: string;
+  routeTemplateId: string | null;
+  tripInstanceId: string | null;
+  destinationSiteId: string | null;
   positionAt: Date;
   estimatedArrivalAt: Date;
   plannedArrivalAt: Date | null;
@@ -50,7 +53,7 @@ export type EtaObservationInput = {
   remainingDistanceKm: number;
   progress: number;
   confidence: "none" | "low" | "medium";
-  source: "unavailable" | "baseline-model" | "observed-pace";
+  source: "unavailable" | "baseline-model" | "route-history" | "observed-pace";
 };
 
 export type EtaObservationRow = EtaObservationInput & {
@@ -80,6 +83,7 @@ export interface DeliveryStore {
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;
   listEtaObservations(deliveryId: string, limit?: number): Promise<EtaObservationRow[]>;
+  listEtaObservationsForRoute(routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
