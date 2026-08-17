@@ -140,6 +140,7 @@ export default function Home() {
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
   const [locale, setLocale] = useState<Locale>("en");
   const [authState, setAuthState] = useState<"loading" | "anonymous" | "authenticated">("loading");
+  const [dispatchDataState, setDispatchDataState] = useState<"loading" | "ready" | "error">("loading");
   const [company, setCompany] = useState<CompanyIdentity | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState<LoginErrorKind | "">("");
@@ -191,6 +192,7 @@ export default function Home() {
       if (!response.ok) { setAuthState("anonymous"); return; }
       const data = await response.json() as { company: CompanyIdentity };
       setCompany(data.company);
+      setDispatchDataState("loading");
       setAuthState("authenticated");
     }).catch(() => { if (active) setAuthState("anonymous"); });
     return () => { active = false; };
@@ -253,13 +255,20 @@ export default function Home() {
           setPublicTrackingState("ready");
         } else if (!tracking) {
           setDeliveries(data.deliveries);
+          setDispatchDataState("ready");
           if (data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === selectedId)) setSelectedId(data.deliveries[0].id);
         }
         if (data.integration) setIntegration(data.integration);
         if (data.features) setFeatures(data.features);
         if (!tracking) setStopPlans(data.stopPlans ?? []);
       } catch {
-        if (new URLSearchParams(window.location.search).get("tracking")) setPublicTrackingState("error");
+        const tracking = new URLSearchParams(window.location.search).get("tracking");
+        if (tracking) setPublicTrackingState("error");
+        if (active && !tracking) {
+          setDeliveries([]);
+          setStopPlans([]);
+          setDispatchDataState("error");
+        }
         if (active && !silent) setToast(t.cloudReconnecting);
       }
     }
@@ -434,6 +443,9 @@ export default function Home() {
   async function logout() {
     await fetch("/api/auth/session", { method: "DELETE" });
     setCompany(null);
+    setDeliveries([]);
+    setStopPlans([]);
+    setDispatchDataState("loading");
     setAuthState("anonymous");
   }
 
@@ -511,6 +523,8 @@ export default function Home() {
   if (view === "customer" && publicTrackingState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>Lien de suivi introuvable</h1><p>Vérifiez le lien reçu ou contactez l’entreprise qui vous l’a envoyé.</p></section></main>;
   if (view !== "customer" && authState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view !== "customer" && authState === "anonymous") return <LoginScreen locale={locale} busy={loginBusy} error={loginError} onLocale={changeLocale} onSubmit={login} />;
+  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
+  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Données temporairement indisponibles" : locale === "nl" ? "Gegevens tijdelijk niet beschikbaar" : "Data temporarily unavailable"}</h1><p>{locale === "fr" ? "TrackFleet n’affiche aucune donnée de démonstration à la place de vos données réelles." : locale === "nl" ? "TrackFleet toont geen demogegevens in plaats van uw echte gegevens." : "TrackFleet will not show demo data in place of your real data."}</p><button className="primary-button" onClick={() => window.location.reload()}>{locale === "fr" ? "Réessayer" : locale === "nl" ? "Opnieuw proberen" : "Retry"}</button></section></main>;
 
   if (view === "customer") {
     const copy = {
