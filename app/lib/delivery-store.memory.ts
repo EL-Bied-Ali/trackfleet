@@ -4,14 +4,12 @@ import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore,
 import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
+import { matchDeliveryVehicle } from "./vehicle-linking";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];
 const notificationClaims = new NotificationClaimState();
 
-function key(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
 function notificationKey(deliveryId: string, type: DeliveryEventType) { return `${deliveryId}:${type}:whatsapp`; }
 function baselineProgress(deliveryId: string) {
   return deliveryEvents.find((event) => event.deliveryId === deliveryId && event.type === "GPS_BASELINE")?.progress ?? 0;
@@ -39,16 +37,20 @@ export const memoryStore: DeliveryStore = {
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
     for (const delivery of deliveryStore) {
       if (delivery.status === "Delivered" || delivery.companyId !== companyId) continue;
-      const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId)
-        ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
+      const match = matchDeliveryVehicle(delivery, snapshot.vehicles);
+      const vehicle = match.vehicle;
       if (!vehicle) continue;
+      const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      if (firstLink && !deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
+        deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: absoluteMetrics.progress, createdAt: new Date() });
+      }
       const metrics = rebaseRouteMetrics(absoluteMetrics, explicitOrigin(delivery) ? 0 : baselineProgress(delivery.id));
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
-      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
-      const events = detectDeliveryEvents({ previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes });
+      const state = firstLink ? { status: "Loading" as const, progress: previousProgress } : deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
+      const events = firstLink ? [] : detectDeliveryEvents({ previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes });
       Object.assign(delivery, { sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude, speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", progress: state.progress, status: state.status });
       transitions.push({ delivery: { ...delivery }, events });
     }

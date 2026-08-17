@@ -4,12 +4,12 @@ import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } fro
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
+import { matchDeliveryVehicle } from "./vehicle-linking";
 
 function db() {
   if (!runtimeEnv.DB) throw new Error("Cloudflare D1 binding `DB` is unavailable");
   return runtimeEnv.DB;
 }
-function key(value: string) { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
 type RawDelivery = {
   id: string; customer: string; originSiteId: string | null; originLatitude: number | null; originLongitude: number | null; destinationSiteId: string | null; destination: string;
@@ -130,16 +130,19 @@ export const store: DeliveryStore = {
     const statements = [];
     for (const rawDelivery of result.results ?? []) {
       const delivery = hydrate(rawDelivery);
-      const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId) ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
+      const match = matchDeliveryVehicle(delivery, snapshot.vehicles);
+      const vehicle = match.vehicle;
       if (!vehicle) continue;
+      const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const origin = explicitOrigin(delivery);
       const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), origin);
-      const metrics = rebaseRouteMetrics(absoluteMetrics, origin ? 0 : await baselineProgress(delivery.id));
+      if (firstLink) statements.push(db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, absoluteMetrics.progress, Date.now()));
+      const metrics = rebaseRouteMetrics(absoluteMetrics, origin ? 0 : (firstLink ? absoluteMetrics.progress : await baselineProgress(delivery.id)));
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
-      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
-      const events = detectDeliveryEvents({ previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes });
+      const state = firstLink ? { status: "Loading" as const, progress: previousProgress } : deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
+      const events = firstLink ? [] : detectDeliveryEvents({ previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes });
       statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', progress = ?, status = ? WHERE id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, state.progress, state.status, delivery.id));
       transitions.push({ delivery: { ...delivery, sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude, speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", progress: state.progress, status: state.status }, events });
     }

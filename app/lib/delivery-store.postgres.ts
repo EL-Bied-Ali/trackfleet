@@ -4,6 +4,7 @@ import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } fro
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus, DeliveryStore, DeliveryTransition } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
+import { matchDeliveryVehicle } from "./vehicle-linking";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the Postgres delivery store");
@@ -96,7 +97,6 @@ function explicitOrigin(delivery: DeliveryRow): [number, number] | null {
     ? [delivery.originLongitude, delivery.originLatitude]
     : null;
 }
-function key(value: string) { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
 
 async function ensureSchema() {
   if (schemaPromise) return schemaPromise;
@@ -196,24 +196,23 @@ export const postgresStore: DeliveryStore = {
 
     for (const raw of rows) {
       const delivery = hydrate(raw);
-      const vehicle = snapshot.vehicles.find((item) => item.id === delivery.sendatrackVehicleId)
-        ?? snapshot.vehicles.find((item) => key(item.name) === key(delivery.truck));
+      const match = matchDeliveryVehicle(delivery, snapshot.vehicles);
+      const vehicle = match.vehicle;
       if (!vehicle) continue;
 
+      const firstLink = !delivery.sendatrackVehicleId && delivery.gpsSource !== "sendatrack";
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const origin = explicitOrigin(delivery);
       const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), origin);
+      if (firstLink) {
+        await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${absoluteMetrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
+      }
       const metrics = rebaseRouteMetrics(absoluteMetrics, origin ? 0 : await baselineProgress(delivery.id));
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
-      const state = deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
-      const events = detectDeliveryEvents({
-        previousStatus,
-        nextStatus: state.status,
-        previousProgress,
-        nextProgress: state.progress,
-        distanceToDestinationKm: metrics.distanceToDestinationKm,
-        positionAgeMinutes,
+      const state = firstLink ? { status: "Loading" as const, progress: previousProgress } : deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
+      const events = firstLink ? [] : detectDeliveryEvents({
+        previousStatus, nextStatus: state.status, previousProgress, nextProgress: state.progress, distanceToDestinationKm: metrics.distanceToDestinationKm, positionAgeMinutes,
       });
 
       await sql`UPDATE deliveries SET

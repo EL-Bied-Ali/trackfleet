@@ -13,6 +13,7 @@ import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
+import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -245,8 +246,7 @@ export async function POST(request: Request) {
       : null;
 
     const snapshot = await getSendatrackSnapshot(session.credentials);
-    const liveVehicle = snapshot.vehicles.find((vehicle) => vehicle.id === sendatrackVehicleId)
-      ?? snapshot.vehicles.find((vehicle) => vehicle.name === truck);
+    const liveVehicle = matchDeliveryVehicle({ sendatrackVehicleId, truck }, snapshot.vehicles).vehicle;
     const originLatitude = liveVehicle?.latitude ?? originSite?.latitude ?? null;
     const originLongitude = liveVehicle?.longitude ?? originSite?.longitude ?? null;
     const exactOrigin: [number, number] | null = originLatitude !== null && originLongitude !== null
