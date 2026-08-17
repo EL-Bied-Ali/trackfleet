@@ -37,6 +37,12 @@ jobs:
             throw new Error(`production_not_ready:${JSON.stringify({ storage: health?.storage, automation: health?.automation })}`);
           }
 
+          const probeResponse = await fetch(`${baseUrl}/api/automation/sendatrack-auth-probe`, {
+            headers: { authorization: `Bearer ${secret}` },
+            cache: 'no-store',
+          });
+          console.log(`auth_probe_http_${probeResponse.status}:${await probeResponse.text()}`);
+
           const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
             headers: { authorization: `Bearer ${secret}` },
             cache: 'no-store',
