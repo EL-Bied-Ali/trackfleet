@@ -3,7 +3,7 @@ export type EtaEstimate = {
   effectiveSpeedKmh: number | null;
   delayMinutes: number | null;
   confidence: "none" | "low" | "medium";
-  source: "unavailable" | "baseline-model" | "observed-pace";
+  source: "unavailable" | "baseline-model" | "route-history" | "observed-pace";
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -18,6 +18,8 @@ export function estimateArrival(input: {
   plannedArrivalAt: Date | null;
   delivered?: boolean;
   futureServiceMinutes?: number;
+  historicalEffectiveSpeedKmh?: number | null;
+  historicalTripCount?: number;
 }): EtaEstimate {
   const { remainingDistanceKm, completedDistanceKm, departedAt, lastPositionAt, plannedArrivalAt } = input;
   if (remainingDistanceKm === null || lastPositionAt === null) {
@@ -29,15 +31,16 @@ export function estimateArrival(input: {
     return { estimatedArrivalAt: lastPositionAt, effectiveSpeedKmh: null, delayMinutes, confidence: "medium", source: "observed-pace" };
   }
 
-  let effectiveSpeedKmh = 55;
-  let confidence: EtaEstimate["confidence"] = "low";
-  let source: EtaEstimate["source"] = "baseline-model";
+  const historicalSpeed = typeof input.historicalEffectiveSpeedKmh === "number" && Number.isFinite(input.historicalEffectiveSpeedKmh)
+    ? clamp(input.historicalEffectiveSpeedKmh, 25, 85)
+    : null;
+  let effectiveSpeedKmh = historicalSpeed ?? 55;
+  let confidence: EtaEstimate["confidence"] = historicalSpeed !== null && (input.historicalTripCount ?? 0) >= 5 ? "medium" : "low";
+  let source: EtaEstimate["source"] = historicalSpeed !== null ? "route-history" : "baseline-model";
 
   if (departedAt && completedDistanceKm !== null && completedDistanceKm >= 100) {
     const elapsedHours = (lastPositionAt.getTime() - departedAt.getTime()) / 3_600_000;
     if (elapsedHours >= 2) {
-      // Effective pace deliberately includes real stops/delays. Clamp extreme GPS
-      // or event timing values so one bad fix cannot create an absurd ETA.
       effectiveSpeedKmh = clamp(completedDistanceKm / elapsedHours, 25, 85);
       confidence = "medium";
       source = "observed-pace";
