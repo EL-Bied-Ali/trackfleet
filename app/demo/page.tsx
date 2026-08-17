@@ -24,86 +24,13 @@ type DemoDelivery = {
 };
 
 const deliveries: DemoDelivery[] = [
-  {
-    id: "TF-2841",
-    customer: "Atlas Distribution",
-    destination: "Casablanca, MA",
-    truck: "TR-17 · Mercedes Actros",
-    driver: "Youssef B.",
-    status: "In transit",
-    eta: "Demain · 14:20",
-    progress: 72,
-    latitude: 35.92,
-    longitude: -5.55,
-    destinationLatitude: 33.5731,
-    destinationLongitude: -7.5898,
-    sendatrackVehicleId: "demo-17",
-    speed: 74,
-    etaConfidence: "medium",
-    etaSource: "Historique de route + allure observée",
-  },
-  {
-    id: "TF-2839",
-    customer: "Maghreb Parts",
-    destination: "Tanger, MA",
-    truck: "TR-08 · Volvo FH",
-    driver: "Karim S.",
-    status: "Delayed",
-    eta: "Demain · 10:45",
-    progress: 54,
-    latitude: 40.4168,
-    longitude: -3.7038,
-    destinationLatitude: 35.7595,
-    destinationLongitude: -5.834,
-    sendatrackVehicleId: "demo-08",
-    speed: 61,
-    etaConfidence: "medium",
-    etaSource: "Historique de route",
-  },
-  {
-    id: "TF-2837",
-    customer: "EuroMed Textile",
-    destination: "Rabat, MA",
-    truck: "TR-22 · DAF XF",
-    driver: "Amine R.",
-    status: "In transit",
-    eta: "Mercredi · 08:30",
-    progress: 31,
-    latitude: 44.8378,
-    longitude: -0.5792,
-    destinationLatitude: 34.0209,
-    destinationLongitude: -6.8416,
-    sendatrackVehicleId: "demo-22",
-    speed: 82,
-    etaConfidence: "low",
-    etaSource: "Modèle de base",
-  },
-  {
-    id: "TF-2835",
-    customer: "Casa Market",
-    destination: "Bruxelles, BE",
-    truck: "TR-03 · Scania R",
-    driver: "Nabil E.",
-    status: "Loading",
-    eta: "Jeudi · 17:10",
-    progress: 4,
-    latitude: 33.5731,
-    longitude: -7.5898,
-    destinationLatitude: 50.8503,
-    destinationLongitude: 4.3517,
-    sendatrackVehicleId: "demo-03",
-    speed: 0,
-    etaConfidence: "low",
-    etaSource: "Planification initiale",
-  },
+  { id:"TF-2841", customer:"Atlas Distribution", destination:"Casablanca, MA", truck:"TR-17 · Mercedes Actros", driver:"Youssef B.", status:"In transit", eta:"Demain · 14:20", progress:72, latitude:35.92, longitude:-5.55, destinationLatitude:33.5731, destinationLongitude:-7.5898, sendatrackVehicleId:"demo-17", speed:74, etaConfidence:"medium", etaSource:"Historique de route + allure observée" },
+  { id:"TF-2839", customer:"Maghreb Parts", destination:"Tanger, MA", truck:"TR-08 · Volvo FH", driver:"Karim S.", status:"Delayed", eta:"Demain · 10:45", progress:54, latitude:40.4168, longitude:-3.7038, destinationLatitude:35.7595, destinationLongitude:-5.834, sendatrackVehicleId:"demo-08", speed:61, etaConfidence:"medium", etaSource:"Historique de route" },
+  { id:"TF-2837", customer:"EuroMed Textile", destination:"Rabat, MA", truck:"TR-22 · DAF XF", driver:"Amine R.", status:"In transit", eta:"Mercredi · 08:30", progress:31, latitude:44.8378, longitude:-0.5792, destinationLatitude:34.0209, destinationLongitude:-6.8416, sendatrackVehicleId:"demo-22", speed:82, etaConfidence:"low", etaSource:"Modèle de base" },
+  { id:"TF-2835", customer:"Casa Market", destination:"Bruxelles, BE", truck:"TR-03 · Scania R", driver:"Nabil E.", status:"Loading", eta:"Jeudi · 17:10", progress:4, latitude:33.5731, longitude:-7.5898, destinationLatitude:50.8503, destinationLongitude:4.3517, sendatrackVehicleId:"demo-03", speed:0, etaConfidence:"low", etaSource:"Planification initiale" },
 ];
 
-const statusLabel: Record<DemoDelivery["status"], string> = {
-  "In transit": "En transit",
-  Delayed: "Retard",
-  Loading: "Chargement",
-  Delivered: "Livré",
-};
+const statusLabel: Record<DemoDelivery["status"], string> = { "In transit":"En transit", Delayed:"Retard", Loading:"Chargement", Delivered:"Livré" };
 
 export default function DemoPage() {
   const [selectedId, setSelectedId] = useState(deliveries[0].id);
@@ -117,23 +44,15 @@ export default function DemoPage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <a href="/" className={styles.brand}><span className={styles.mark}>↗</span><span>TrackFleet</span></a>
-        <div className={styles.headerRight}>
-          <span className={styles.demoBadge}>MODE DÉMO · LECTURE SEULE</span>
-          <a href="/" className={styles.loginLink}>Connexion entreprise</a>
-        </div>
+        <nav className={styles.nav} aria-label="Demo sections">
+          <a href="#overview">Vue d'ensemble</a><a href="#deliveries">Livraisons</a><a href="#trips">Trajets</a><a href="#sites">Agences</a>
+        </nav>
+        <div className={styles.headerRight}><span className={styles.demoBadge}>MODE DÉMO · LECTURE SEULE</span><a href="/" className={styles.loginLink}>Connexion entreprise</a></div>
       </header>
 
-      <section className={styles.hero}>
-        <div>
-          <p className={styles.eyebrow}>CENTRE D'EXPLOITATION</p>
-          <h1>Vue flotte & livraisons</h1>
-          <p>Données fictives. Cette page permet de voir l'état visuel de TrackFleet même lorsque SENDATRACK est indisponible.</p>
-        </div>
-        <div className={styles.providerCard}>
-          <span className={styles.providerDot} />
-          <div><strong>SENDATRACK</strong><small>Service d'authentification indisponible</small></div>
-          <b>Mode dégradé</b>
-        </div>
+      <section className={styles.hero} id="overview">
+        <div><p className={styles.eyebrow}>CENTRE D'EXPLOITATION</p><h1>Dashboard TrackFleet</h1><p>Données fictives. Cette démo montre les principales vues de l'application sans dépendre de SENDATRACK.</p></div>
+        <div className={styles.providerCard}><span className={styles.providerDot}/><div><strong>SENDATRACK</strong><small>Service d'authentification indisponible</small></div><b>Mode dégradé</b></div>
       </section>
 
       <section className={styles.kpis}>
@@ -145,48 +64,39 @@ export default function DemoPage() {
 
       <section className={styles.workspace}>
         <div className={styles.mapCard}>
-          <div className={styles.sectionTitle}><div><p>FLOTTE</p><h2>Position des véhicules</h2></div><span>Démo géographique</span></div>
-          <div className={styles.mapWrap}>
-            <InteractiveFleetMap
-              deliveries={mapDeliveries}
-              selectedId={selectedId}
-              label="Carte de démonstration TrackFleet"
-              onSelect={setSelectedId}
-            />
-          </div>
+          <div className={styles.sectionTitle}><div><p>FLOTTE</p><h2>Position des véhicules</h2></div><span>Carte interactive</span></div>
+          <div className={styles.mapWrap}><InteractiveFleetMap deliveries={mapDeliveries} selectedId={selectedId} label="Carte de démonstration TrackFleet" onSelect={setSelectedId}/></div>
         </div>
-
         <aside className={styles.detailCard}>
           <div className={styles.detailTop}><span className={`${styles.status} ${selected.status === "Delayed" ? styles.delayed : selected.status === "Loading" ? styles.loading : styles.transit}`}>{statusLabel[selected.status]}</span><span>{selected.id}</span></div>
-          <h2>{selected.customer}</h2>
-          <p className={styles.route}>{selected.truck}</p>
-          <div className={styles.progressTrack}><i style={{ width: `${selected.progress}%` }} /></div>
-          <div className={styles.progressMeta}><span>{selected.progress}% du trajet</span><b>ETA {selected.eta}</b></div>
-          <dl>
-            <div><dt>Destination</dt><dd>{selected.destination}</dd></div>
-            <div><dt>Conducteur</dt><dd>{selected.driver}</dd></div>
-            <div><dt>Vitesse</dt><dd>{selected.speed} km/h</dd></div>
-            <div><dt>Confiance ETA</dt><dd>{selected.etaConfidence === "medium" ? "Moyenne" : "Faible"}</dd></div>
-            <div className={styles.fullRow}><dt>Calcul ETA</dt><dd>{selected.etaSource}</dd></div>
-          </dl>
-          <div className={styles.readOnlyNote}>Les actions d'exploitation sont désactivées dans la démo. Aucune donnée réelle n'est lue ou modifiée.</div>
+          <h2>{selected.customer}</h2><p className={styles.route}>{selected.truck}</p>
+          <div className={styles.progressTrack}><i style={{width:`${selected.progress}%`}}/></div><div className={styles.progressMeta}><span>{selected.progress}% du trajet</span><b>ETA {selected.eta}</b></div>
+          <dl><div><dt>Destination</dt><dd>{selected.destination}</dd></div><div><dt>Conducteur</dt><dd>{selected.driver}</dd></div><div><dt>Vitesse</dt><dd>{selected.speed} km/h</dd></div><div><dt>Confiance ETA</dt><dd>{selected.etaConfidence === "medium" ? "Moyenne" : "Faible"}</dd></div><div className={styles.fullRow}><dt>Calcul ETA</dt><dd>{selected.etaSource}</dd></div></dl>
+          <div className={styles.readOnlyNote}>Clique sur une livraison ou un véhicule pour changer la sélection. Les actions d'écriture sont désactivées en démo.</div>
         </aside>
       </section>
 
-      <section className={styles.tableCard}>
+      <section className={styles.tableCard} id="deliveries">
         <div className={styles.sectionTitle}><div><p>LIVRAISONS</p><h2>Dispatch du jour</h2></div><span>{deliveries.length} dossiers</span></div>
-        <div className={styles.tableWrap}>
-          <table>
-            <thead><tr><th>Référence</th><th>Client</th><th>Véhicule</th><th>Destination</th><th>Statut</th><th>ETA</th><th>Progression</th></tr></thead>
-            <tbody>{deliveries.map((delivery) => (
-              <tr key={delivery.id} onClick={() => setSelectedId(delivery.id)} className={delivery.id === selectedId ? styles.selectedRow : ""}>
-                <td><strong>{delivery.id}</strong></td><td>{delivery.customer}</td><td>{delivery.truck.split(" · ")[0]}</td><td>{delivery.destination}</td>
-                <td><span className={`${styles.status} ${delivery.status === "Delayed" ? styles.delayed : delivery.status === "Loading" ? styles.loading : styles.transit}`}>{statusLabel[delivery.status]}</span></td>
-                <td>{delivery.eta}</td><td>{delivery.progress}%</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
+        <div className={styles.tableWrap}><table><thead><tr><th>Référence</th><th>Client</th><th>Véhicule</th><th>Destination</th><th>Statut</th><th>ETA</th><th>Progression</th></tr></thead><tbody>{deliveries.map((delivery)=><tr key={delivery.id} onClick={()=>setSelectedId(delivery.id)} className={delivery.id===selectedId?styles.selectedRow:""}><td><strong>{delivery.id}</strong></td><td>{delivery.customer}</td><td>{delivery.truck.split(" · ")[0]}</td><td>{delivery.destination}</td><td><span className={`${styles.status} ${delivery.status === "Delayed" ? styles.delayed : delivery.status === "Loading" ? styles.loading : styles.transit}`}>{statusLabel[delivery.status]}</span></td><td>{delivery.eta}</td><td>{delivery.progress}%</td></tr>)}</tbody></table></div>
+      </section>
+
+      <section className={styles.operationsGrid} id="trips">
+        <article className={styles.opsCard}><div className={styles.sectionTitle}><div><p>TRAJETS</p><h2>Tournées planifiées</h2></div><span>3 actives</span></div><div className={styles.opsBody}>
+          <div className={styles.trip}><b>TR-17</b><span>Bruxelles → Tanger → Casablanca</span><em>2 colis · actif</em></div>
+          <div className={styles.trip}><b>TR-22</b><span>Bruxelles → Rabat</span><em>1 colis · actif</em></div>
+          <div className={styles.trip}><b>TR-03</b><span>Casablanca → Bruxelles</span><em>chargement</em></div>
+        </div></article>
+        <article className={styles.opsCard}><div className={styles.sectionTitle}><div><p>AUTOMATISATION</p><h2>ETA & détection</h2></div><span>Actif</span></div><div className={styles.opsBody}>
+          <div className={styles.automation}><span>ETA apprises sur l'historique</span><b>En apprentissage</b></div>
+          <div className={styles.automation}><span>Détection de retard</span><b>1 alerte</b></div>
+          <div className={styles.automation}><span>Synchronisation GPS</span><b className={styles.warningText}>Suspendue · SENDATRACK</b></div>
+        </div></article>
+      </section>
+
+      <section className={styles.sitesCard} id="sites">
+        <div className={styles.sectionTitle}><div><p>AGENCES & DESTINATIONS</p><h2>Sites connus</h2></div><span>Géofences prêtes</span></div>
+        <div className={styles.siteGrid}><div><b>Bruxelles</b><span>Agence départ · BE</span><small>50.8503, 4.3517</small></div><div><b>Tanger</b><span>Destination · MA</span><small>35.7595, -5.8340</small></div><div><b>Rabat</b><span>Destination · MA</span><small>34.0209, -6.8416</small></div><div><b>Casablanca</b><span>Hub & destination · MA</span><small>33.5731, -7.5898</small></div></div>
       </section>
 
       <footer className={styles.footer}>TrackFleet · Démonstration publique en lecture seule · Aucune donnée SENDATRACK réelle</footer>
