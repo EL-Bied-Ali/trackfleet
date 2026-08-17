@@ -1,0 +1,47 @@
+name: Patch customer ETA copy
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-customer-eta-copy.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Make customer ETA explanation source-aware
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/page.tsx')
+          s = p.read_text()
+          s = s.replace('import { etaExplanation } from "./lib/eta-display";', 'import { customerEtaNote, etaExplanation } from "./lib/eta-display";')
+          old = '''    const etaNote = selected.etaDelayMinutes != null && selected.etaDelayMinutes >= 60\n      ? `+${Math.round(selected.etaDelayMinutes / 60)} h`\n      : selected.etaConfidence === "medium"\n        ? (locale === "fr" ? "Estimation basée sur le trajet réel" : locale === "nl" ? "Schatting op basis van werkelijk traject" : "Estimate based on observed trip pace")\n        : (locale === "fr" ? "Estimation indicative" : locale === "nl" ? "Indicatieve schatting" : "Indicative estimate");'''
+          new = '''    const etaNote = customerEtaNote({\n      source: selected.etaSource,\n      delayMinutes: selected.etaDelayMinutes,\n      historyTrips: selected.etaHistoryTrips,\n    }, locale);'''
+          if old not in s: raise SystemExit('customer ETA note marker missing')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Test and build
+        run: |
+          pnpm run test:eta-display
+          pnpm run build:vercel
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/page.tsx
+          git commit -m "show accurate ETA source to tracking customers"
+          git push
