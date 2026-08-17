@@ -180,7 +180,6 @@ export async function GET(request: Request) {
       const routeEvents = await store.listEvents(row.id);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
-      stableContexts.set(row.id, routeContext);
       const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await learnedStopMinutes(row.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
@@ -230,6 +229,7 @@ export async function GET(request: Request) {
       const routeEvents = await store.listEvents(row.id);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
+      stableContexts.set(row.id, routeContext);
       const historyRows = routeContext ? await cachedEtaHistory(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await cachedLearnedDwell(routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
@@ -255,7 +255,7 @@ export async function GET(request: Request) {
         futureStops: futureStopIds.length,
         unconfiguredStops,
       });
-      return { ...plan, routeTemplateId: stableRouteTemplateId, learning };
+      return { ...plan, routeTemplateId: stableRouteTemplateId, tripInstanceId: currentTripInstanceId, learning };
     }));
     await processPendingNotifications(session.companyId, requestUrl.origin);
 

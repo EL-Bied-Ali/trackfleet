@@ -62,7 +62,7 @@ type VehicleOption = { id: string; name: string; speed: number; updatedAt: numbe
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };
 type FeatureState = { whatsappDemoEnabled: boolean };
 type TourStop = { siteId: string; destination: string; plannedArrivalAt: string | null; deliveryIds: string[]; customers: string[] };
-type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[]; learning?: { historicalTrips: number; requiredTrips: number; learnedStops: number; futureStops: number; unconfiguredStops: number; etaHistoryReady: boolean; dwellHistoryReady: boolean; stage: "collecting" | "partial" | "ready" } };
+type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; tripInstanceId?: string | null; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[]; learning?: { historicalTrips: number; requiredTrips: number; learnedStops: number; futureStops: number; unconfiguredStops: number; etaHistoryReady: boolean; dwellHistoryReady: boolean; stage: "collecting" | "partial" | "ready" } };
 
 type MessageEvent = {
   id: string;

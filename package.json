@@ -29,6 +29,7 @@
     "test:stop-dwell": "node --experimental-strip-types --test tests/stop-dwell.test.mjs",
     "test:tour": "node --experimental-strip-types --test tests/multistop-tour.test.mjs",
     "test:tour-view": "node --experimental-strip-types --test tests/tour-view.test.mjs",
+    "test:route-api-context-safety": "node --test tests/route-api-context-safety.test.mjs",
     "test:route-template": "node --experimental-strip-types --test tests/route-template.test.mjs",
     "test:automation-readiness": "node --experimental-strip-types --test tests/automation-readiness.test.mjs",
     "test:automation-health": "node --experimental-strip-types --test tests/automation-health.test.mjs",
