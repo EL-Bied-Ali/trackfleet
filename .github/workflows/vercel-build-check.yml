@@ -49,6 +49,14 @@ jobs:
         run: pnpm run test:trip-suggestion
       - name: Verify parcel assignment queue UI
         run: pnpm run test:assignment-queue-ui
+      - name: Verify explicit trip membership
+        run: pnpm run test:explicit-trip-membership
+      - name: Verify planned trip assignment rules
+        run: pnpm run test:trip-assignment
+      - name: Verify planned trip assignment persistence contract
+        run: pnpm run test:planned-trip-assignment-contract
+      - name: Verify trip-aware dashboard keys
+        run: pnpm run test:trip-ui-key-contract
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
