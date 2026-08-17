@@ -253,7 +253,8 @@ export const store: DeliveryStore = {
       const stopsJson = JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.getTime() ?? null })));
       await db().prepare("INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(input.id, input.companyId, input.routeTemplateId, input.vehicleKey, input.truck, input.sendatrackVehicleId, input.originSiteId, stopsJson, input.status, now, now).run();
     } else {
-      await db().prepare("UPDATE trips SET vehicle_key = ?, truck = ?, sendatrack_vehicle_id = ?, status = ?, updated_at = ? WHERE company_id = ? AND id = ?").bind(input.vehicleKey, input.truck, input.sendatrackVehicleId, input.status, Date.now(), input.companyId, input.id).run();
+      const stopsJson = JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.getTime() ?? null })));
+      await db().prepare("UPDATE trips SET route_template_id = ?, vehicle_key = ?, truck = ?, sendatrack_vehicle_id = ?, origin_site_id = ?, stops_json = ?, status = ?, updated_at = ? WHERE company_id = ? AND id = ?").bind(input.routeTemplateId, input.vehicleKey, input.truck, input.sendatrackVehicleId, input.originSiteId, stopsJson, input.status, Date.now(), input.companyId, input.id).run();
     }
     return (await this.getTrip(input.companyId, input.id))!;
   },

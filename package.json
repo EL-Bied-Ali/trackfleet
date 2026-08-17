@@ -2,7 +2,9 @@
   "name": "site-creator-vinext-starter",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
@@ -59,7 +61,8 @@
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
     "test:automation-trip-sync": "node --test tests/automation-trip-sync.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test:trip-upsert-refresh": "node --test tests/trip-upsert-refresh.test.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",

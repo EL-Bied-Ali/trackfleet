@@ -385,7 +385,7 @@ export const postgresStore: DeliveryStore = {
       await sql`INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at)
         VALUES (${input.id}, ${input.companyId}, ${input.routeTemplateId}, ${input.vehicleKey}, ${input.truck}, ${input.sendatrackVehicleId}, ${input.originSiteId}, ${JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })))}, ${input.status}, ${now}, ${now})`;
     } else {
-      await sql`UPDATE trips SET vehicle_key = ${input.vehicleKey}, truck = ${input.truck}, sendatrack_vehicle_id = ${input.sendatrackVehicleId}, status = ${input.status}, updated_at = ${new Date().toISOString()} WHERE company_id = ${input.companyId} AND id = ${input.id}`;
+      await sql`UPDATE trips SET route_template_id = ${input.routeTemplateId}, vehicle_key = ${input.vehicleKey}, truck = ${input.truck}, sendatrack_vehicle_id = ${input.sendatrackVehicleId}, origin_site_id = ${input.originSiteId}, stops_json = ${JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })))}, status = ${input.status}, updated_at = ${new Date().toISOString()} WHERE company_id = ${input.companyId} AND id = ${input.id}`;
     }
     return (await this.getTrip(input.companyId, input.id))!;
   },

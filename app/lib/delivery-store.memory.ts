@@ -111,9 +111,12 @@ export const memoryStore: DeliveryStore = {
   async upsertTrip(input) {
     const existing = trips.find((trip) => trip.id === input.id && trip.companyId === input.companyId);
     if (existing) {
+      existing.routeTemplateId = input.routeTemplateId;
+      existing.vehicleKey = input.vehicleKey;
       existing.truck = input.truck;
       existing.sendatrackVehicleId = input.sendatrackVehicleId;
-      existing.vehicleKey = input.vehicleKey;
+      existing.originSiteId = input.originSiteId;
+      existing.stops = input.stops.map((stop) => ({ ...stop }));
       existing.status = input.status;
       existing.updatedAt = new Date();
       return { ...existing, stops: existing.stops.map((stop) => ({ ...stop })) };
