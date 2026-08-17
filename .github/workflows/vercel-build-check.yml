@@ -95,6 +95,10 @@ jobs:
         run: pnpm run test:trip-upsert-refresh
       - name: Verify persistent completed trip history
         run: pnpm run test:trip-history
+      - name: Verify completed route history summaries
+        run: pnpm run test:trip-history-summary
+      - name: Verify completed route history API
+        run: pnpm run test:trip-route-history-api
       - name: Verify automation storage safety
         run: pnpm run test:automation-readiness
       - name: Verify automation health diagnostics
