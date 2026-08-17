@@ -468,6 +468,11 @@ export default function Home() {
     setCompany(null);
     setDeliveries([]);
     setStopPlans([]);
+    setTrips([]);
+    setRouteHistory([]);
+    setDeliveryEvents([]);
+    setKnownSites([]);
+    setIntegration({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
     setDispatchDataState("loading");
     setAuthState("anonymous");
   }
