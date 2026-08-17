@@ -55,14 +55,6 @@ jobs:
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           pkg.scripts['test:trip-upsert-refresh'] = 'node --test tests/trip-upsert-refresh.test.mjs';
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-
-          const workflowPath = '.github/workflows/vercel-build-check.yml';
-          const workflow = fs.readFileSync(workflowPath, 'utf8');
-          const anchor = `      - name: Verify delivery trip persistence\n        run: pnpm run test:trip-persistence\n`;
-          if (!workflow.includes(anchor)) throw new Error('CI anchor not found');
-          fs.writeFileSync(workflowPath, workflow.replace(anchor, anchor + `      - name: Verify complete trip snapshot refresh\n        run: pnpm run test:trip-upsert-refresh\n`));
-
-          fs.rmSync('.github/workflows/one-shot-trip-upsert-refresh.yml');
           NODE
 
           node --test tests/trip-upsert-refresh.test.mjs
@@ -70,6 +62,6 @@ jobs:
 
           git config user.name "TrackFleet automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts tests/trip-upsert-refresh.test.mjs package.json .github/workflows/vercel-build-check.yml .github/workflows/one-shot-trip-upsert-refresh.yml
+          git add app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts tests/trip-upsert-refresh.test.mjs package.json
           git commit -m "refresh persisted trip snapshots on upsert"
           git push origin HEAD:main
