@@ -61,10 +61,10 @@ export function buildEtaRouteContexts(deliveries: DeliveryRow[], plans = buildTr
   return contexts;
 }
 
-export function summarizeRouteHistory(observations: EtaObservationRow[], minimumTrips = 5): RouteHistoryStats {
+export function summarizeRouteHistory(observations: EtaObservationRow[], minimumTrips = 5, excludeTripInstanceId: string | null = null): RouteHistoryStats {
   const byTrip = new Map<string, EtaObservationRow[]>();
   for (const observation of observations) {
-    if (!observation.tripInstanceId) continue;
+    if (!observation.tripInstanceId || observation.tripInstanceId === excludeTripInstanceId) continue;
     const rows = byTrip.get(observation.tripInstanceId) ?? [];
     rows.push(observation);
     byTrip.set(observation.tripInstanceId, rows);
