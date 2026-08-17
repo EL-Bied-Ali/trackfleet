@@ -60,7 +60,7 @@ jobs:
           source = source.replace(uiAnchor, routePanel + uiAnchor);
           fs.writeFileSync(path, source);
 
-          const test = `import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");\n\ntest("dispatch dashboard consumes and renders completed route history", () => {\n  assert.match(page, /useState<RouteHistoryItem\[\]>\(\[\]\)/);\n  assert.match(page, /routeHistory\?: RouteHistoryItem\[\]/);\n  assert.match(page, /if \(!tracking\) setRouteHistory\(data\.routeHistory \?\? \[\]\)/);\n  assert.match(page, /routeHistory\.length > 0/);\n  assert.match(page, /Routes fréquentes/);\n  assert.match(page, /route\.destinations\.join\(" → "\)/);\n  assert.match(page, /route\.tripCount/);\n});\n`;
+          const test = `import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");\n\ntest("dispatch dashboard consumes and renders completed route history", () => {\n  assert.ok(page.includes('const [routeHistory, setRouteHistory] = useState<RouteHistoryItem[]>([]);'));\n  assert.ok(page.includes('routeHistory?: RouteHistoryItem[]'));\n  assert.ok(page.includes('if (!tracking) setRouteHistory(data.routeHistory ?? []);'));\n  assert.ok(page.includes('routeHistory.length > 0'));\n  assert.ok(page.includes('Routes fréquentes'));\n  assert.ok(page.includes('route.destinations.join(" → ")'));\n  assert.ok(page.includes('route.tripCount'));\n});\n`;
           fs.writeFileSync('tests/trip-route-history-ui.test.mjs', test);
 
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
