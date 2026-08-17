@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { etaExplanation } from "../app/lib/eta-display.ts";
+import { customerEtaNote, etaExplanation } from "../app/lib/eta-display.ts";
 
 test("explains route-history ETA with trip count", () => {
   const result = etaExplanation({ source: "route-history", confidence: "medium", historyTrips: 7 }, "fr");
@@ -18,4 +18,13 @@ test("falls back safely when ETA metadata is missing", () => {
   const result = etaExplanation({}, "nl");
   assert.equal(result.sourceLabel, "ETA niet beschikbaar");
   assert.equal(result.confidenceLabel, "Betrouwbaarheid niet beschikbaar");
+});
+
+test("customer copy distinguishes route history from live GPS pace", () => {
+  assert.equal(customerEtaNote({ source: "route-history", historyTrips: 7 }, "fr"), "Estimation basée sur 7 trajets précédents");
+  assert.equal(customerEtaNote({ source: "observed-pace", historyTrips: 7 }, "fr"), "Estimation basée sur le trajet réel");
+});
+
+test("material delay remains the primary customer ETA note", () => {
+  assert.equal(customerEtaNote({ source: "route-history", historyTrips: 7, delayMinutes: 125 }, "en"), "+2 h");
 });
