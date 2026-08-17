@@ -1,0 +1,52 @@
+name: Patch route history request cache
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-route-history-request-cache.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Cache route history reads per request
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/api/deliveries/route.ts')
+          s = p.read_text()
+          marker = '''    const rows = await store.listForCompany(session.companyId);\n    const stopPlans = buildTruckStopPlans(rows);\n    const routeContexts = buildEtaRouteContexts(rows, stopPlans);\n    const enrichedRows = await Promise.all(rows.map(async (row) => {'''
+          replacement = '''    const rows = await store.listForCompany(session.companyId);\n    const stopPlans = buildTruckStopPlans(rows);\n    const routeContexts = buildEtaRouteContexts(rows, stopPlans);\n    const etaHistoryCache = new Map<string, Promise<Awaited<ReturnType<typeof store.listEtaObservationsForRoute>>>>();\n    const dwellCache = new Map<string, Promise<Map<string, number>>>();\n    const cachedEtaHistory = (routeTemplateId: string, destinationSiteId: string) => {\n      const key = `${routeTemplateId}|${destinationSiteId}`;\n      let pending = etaHistoryCache.get(key);\n      if (!pending) {\n        pending = store.listEtaObservationsForRoute(routeTemplateId, destinationSiteId);\n        etaHistoryCache.set(key, pending);\n      }\n      return pending;\n    };\n    const cachedLearnedDwell = (routeTemplateId: string | null, tripInstanceId: string | null) => {\n      const key = `${routeTemplateId ?? "none"}|${tripInstanceId ?? "none"}`;\n      let pending = dwellCache.get(key);\n      if (!pending) {\n        pending = learnedStopMinutes(session.companyId, routeTemplateId, tripInstanceId);\n        dwellCache.set(key, pending);\n      }\n      return pending;\n    };\n    const enrichedRows = await Promise.all(rows.map(async (row) => {'''
+          if marker not in s: raise SystemExit('authenticated cache insertion marker missing')
+          s = s.replace(marker, replacement, 1)
+          old = '''      const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];\n      const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);\n      const learnedDwell = await learnedStopMinutes(session.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);'''
+          new = '''      const historyRows = routeContext ? await cachedEtaHistory(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];\n      const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);\n      const learnedDwell = await cachedLearnedDwell(routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);'''
+          if old not in s: raise SystemExit('authenticated cache usage marker missing')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Test and build
+        run: |
+          pnpm run test:stop-dwell
+          pnpm run test:route-history
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/api/deliveries/route.ts
+          git commit -m "cache route learning reads within dashboard requests"
+          git push
