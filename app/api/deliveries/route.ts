@@ -19,6 +19,7 @@ import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } f
 import { summarizeStopDwell } from "../../lib/stop-dwell";
 import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";
 import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/trip-record";
+import { summarizeCompletedTripRoutes } from "../../lib/trip-history-summary";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -286,7 +287,17 @@ export async function GET(request: Request) {
 
     await processPendingNotifications(session.companyId, requestUrl.origin);
 
-    const tripHistory = (await store.listTrips(session.companyId, 20)).map((trip) => ({
+    const allTripsForHistory = await store.listTrips(session.companyId, 500);
+    const routeHistory = summarizeCompletedTripRoutes(allTripsForHistory).map((route) => ({
+      routeTemplateId: route.routeTemplateId,
+      originSiteId: route.originSiteId,
+      destinationSiteIds: route.destinationSiteIds,
+      destinations: route.destinations,
+      tripCount: route.tripCount,
+      trucks: route.trucks,
+      lastCompletedAt: route.lastCompletedAt.toISOString(),
+    }));
+    const tripHistory = allTripsForHistory.slice(0, 20).map((trip) => ({
       id: trip.id,
       routeTemplateId: trip.routeTemplateId,
       vehicleKey: trip.vehicleKey,
@@ -303,6 +314,7 @@ export async function GET(request: Request) {
       deliveries: enrichedRows,
       stopPlans: stopPlansWithLearning,
       trips: tripHistory,
+      routeHistory,
       features: {
         whatsappDemoEnabled: runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",
       },
