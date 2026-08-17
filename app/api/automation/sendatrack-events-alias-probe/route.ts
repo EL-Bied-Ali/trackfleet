@@ -1,5 +1,4 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { normalizeSendatrackFleet } from "../../../lib/sendatrack-normalize";
 
 const base = "http://backend2.sendatrack.com/sendatrack/public/api/";
 
@@ -27,6 +26,33 @@ function findToken(value: unknown, depth = 0): string | null {
     if (token) return token;
   }
   return null;
+}
+
+function findFirstDeviceRecord(value: unknown, depth = 0): Record<string, unknown> | null {
+  if (depth > 5 || value == null) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        const record = item as Record<string, unknown>;
+        if ("Device" in record || "DeviceCode" in record) return record;
+      }
+      const nested = findFirstDeviceRecord(item, depth + 1);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.DeviceList)) return findFirstDeviceRecord(record.DeviceList, depth + 1);
+  for (const nested of Object.values(record)) {
+    const found = findFirstDeviceRecord(nested, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
 }
 
 async function inspect(url: URL, token: string) {
@@ -75,23 +101,33 @@ export async function GET(request: Request) {
     signal: AbortSignal.timeout(12000),
   });
   if (!fleetResponse.ok) return Response.json({ error: "fleet_failed", status: fleetResponse.status }, { status: 502 });
-  const vehicle = normalizeSendatrackFleet(await fleetResponse.json() as unknown).vehicles[0];
-  if (!vehicle) return Response.json({ error: "no_vehicle" }, { status: 502 });
+  const deviceRecord = findFirstDeviceRecord(await fleetResponse.json() as unknown);
+  if (!deviceRecord) return Response.json({ error: "no_device_record" }, { status: 502 });
+
+  const identities = [
+    ["Device", stringValue(deviceRecord.Device)],
+    ["DeviceCode", stringValue(deviceRecord.DeviceCode)],
+    ["Index", stringValue(deviceRecord.Index)],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]));
 
   const rt = Math.floor(Date.now() / 1000);
   const rf = rt - 24 * 60 * 60;
-  const variants = [
-    ["gts_short", { d: vehicle.id, rf: String(rf), rt: String(rt), l: "250" }],
-    ["gts_short_account", { a: accountID, d: vehicle.id, rf: String(rf), rt: String(rt), l: "250" }],
-  ] as const;
+  const seen = new Set<string>();
+  const variants: Array<[string, Record<string, string>]> = [];
+  for (const [field, value] of identities) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    variants.push([`d_${field}`, { d: value, rf: String(rf), rt: String(rt), l: "250" }]);
+    if (field === "Device") variants.push(["device_Device", { device: value, rf: String(rf), rt: String(rt), l: "250" }]);
+  }
 
   const results = [];
-  for (const [name, params] of variants) {
+  for (const [name, params] of variants.slice(0, 4)) {
     const url = new URL("events", base);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
     results.push({ name, ...(await inspect(url, token)) });
     if (results.at(-1)?.status === 429) break;
   }
 
-  return Response.json({ results }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ identityFields: identities.map(([field]) => field), results }, { headers: { "cache-control": "no-store" } });
 }
