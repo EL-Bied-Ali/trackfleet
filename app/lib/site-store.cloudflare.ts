@@ -25,18 +25,18 @@ async function ensureSchema() {
   )`).run();
 }
 
-function hydrate(row: any): CompanySite {
+function hydrate(row: Record<string, unknown>): CompanySite {
   return {
-    companyId: row.company_id,
-    id: row.id,
-    label: row.label,
-    city: row.city,
-    country: row.country,
-    address: row.address,
+    companyId: String(row.company_id),
+    id: String(row.id),
+    label: String(row.label),
+    city: String(row.city),
+    country: String(row.country) as "BE" | "MA",
+    address: String(row.address),
     latitude: row.latitude === null ? null : Number(row.latitude),
     longitude: row.longitude === null ? null : Number(row.longitude),
     arrivalRadiusKm: Number(row.arrival_radius_km),
-    roles: JSON.parse(row.roles),
+    roles: JSON.parse(String(row.roles)) as CompanySite["roles"],
     createdAt: new Date(Number(row.created_at)),
     updatedAt: new Date(Number(row.updated_at)),
   };
@@ -55,7 +55,7 @@ export const siteStore: SiteStore = {
   async listForCompany(companyId) {
     await seed(companyId);
     const result = await db().prepare("SELECT * FROM sites WHERE company_id=? ORDER BY label").bind(companyId).all();
-    return (result.results ?? []).map(hydrate);
+    return (result.results ?? []).map((row) => hydrate(row as Record<string, unknown>));
   },
   async upsert(input: CreateCompanySiteInput) {
     await ensureSchema();
@@ -66,6 +66,6 @@ export const siteStore: SiteStore = {
       .bind(input.companyId,input.id,input.label,input.city,input.country,input.address,input.latitude,input.longitude,input.arrivalRadiusKm,JSON.stringify(input.roles),now,now).run();
     const row = await db().prepare("SELECT * FROM sites WHERE company_id=? AND id=?").bind(input.companyId,input.id).first();
     if (!row) throw new Error("site_write_failed");
-    return hydrate(row);
+    return hydrate(row as Record<string, unknown>);
   },
 };

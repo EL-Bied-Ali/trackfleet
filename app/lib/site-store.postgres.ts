@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { knownSites, type KnownSite } from "./known-sites";
+import { knownSites } from "./known-sites";
 import type { CompanySite, CreateCompanySiteInput, SiteStore } from "./site-store.types";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -29,20 +29,20 @@ async function ensureSchema() {
   return schemaPromise;
 }
 
-function hydrate(row: any): CompanySite {
+function hydrate(row: Record<string, unknown>): CompanySite {
   return {
-    companyId: row.company_id,
-    id: row.id,
-    label: row.label,
-    city: row.city,
-    country: row.country,
-    address: row.address,
+    companyId: String(row.company_id),
+    id: String(row.id),
+    label: String(row.label),
+    city: String(row.city),
+    country: String(row.country) as "BE" | "MA",
+    address: String(row.address),
     latitude: row.latitude === null ? null : Number(row.latitude),
     longitude: row.longitude === null ? null : Number(row.longitude),
     arrivalRadiusKm: Number(row.arrival_radius_km),
-    roles: JSON.parse(row.roles),
-    createdAt: new Date(row.created_at),
-    updatedAt: new Date(row.updated_at),
+    roles: JSON.parse(String(row.roles)) as CompanySite["roles"],
+    createdAt: new Date(String(row.created_at)),
+    updatedAt: new Date(String(row.updated_at)),
   };
 }
 
@@ -59,7 +59,7 @@ export const postgresSiteStore: SiteStore = {
   async listForCompany(companyId) {
     await seed(companyId);
     const rows = await sql`SELECT * FROM sites WHERE company_id=${companyId} ORDER BY label`;
-    return rows.map(hydrate);
+    return rows.map((row) => hydrate(row as Record<string, unknown>));
   },
   async upsert(input: CreateCompanySiteInput) {
     await ensureSchema();
@@ -67,6 +67,6 @@ export const postgresSiteStore: SiteStore = {
       VALUES (${input.companyId},${input.id},${input.label},${input.city},${input.country},${input.address},${input.latitude},${input.longitude},${input.arrivalRadiusKm},${JSON.stringify(input.roles)},now())
       ON CONFLICT (company_id,id) DO UPDATE SET label=excluded.label,city=excluded.city,country=excluded.country,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,arrival_radius_km=excluded.arrival_radius_km,roles=excluded.roles,updated_at=now()
       RETURNING *`;
-    return hydrate(rows[0]);
+    return hydrate(rows[0] as Record<string, unknown>);
   },
 };

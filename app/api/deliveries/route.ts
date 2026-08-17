@@ -1,7 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { siteStore } from "trackfleet-site-store";
-import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
+import type { DeliveryTransition } from "../../lib/delivery-store.types";
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
@@ -134,10 +134,6 @@ function optionalNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
-function normalized(value: string) {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 async function learnedStopMinutes(companyId: string, routeTemplateId: string | null, currentTripInstanceId: string | null, prefetchedSites?: Awaited<ReturnType<typeof siteStore.listForCompany>>) {
   const learned = new Map<string, number>();
   if (!routeTemplateId) return learned;
@@ -166,7 +162,7 @@ export async function GET(request: Request) {
     const requestUrl = new URL(request.url);
     const tracking = requestUrl.searchParams.get("tracking")?.trim();
     if (tracking) {
-      let row = await store.getPublic(tracking);
+      const row = await store.getPublic(tracking);
       if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
 
       if (!publicTrackingIsActive(row)) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });

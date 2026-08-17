@@ -68,8 +68,8 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
 
   return <>
     <button className="secondary-button" type="button" onClick={() => setOpen(true)}>⌖ {copy.button}</button>
-    {open && <div className="modal-backdrop" role="presentation" onMouseDown={() => setOpen(false)}>
-      <section className="modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+    {open && <div className="modal-backdrop">
+      <section className="modal" role="dialog" aria-modal="true">
         <div className="modal-header"><div><p className="eyebrow">TRACKFLEET</p><h2>{copy.title}</h2><span>{sites.length} sites</span></div><button onClick={() => setOpen(false)} aria-label="Close">×</button></div>
         <div style={{ maxHeight: 220, overflow: "auto", marginBottom: 16 }}>
           {sites.map((site) => <div key={site.id} style={{ padding: "9px 0", borderBottom: "1px solid #e5e7eb" }}><strong>{site.label}</strong><div style={{ fontSize: 12, opacity: .7 }}>{site.address}</div></div>)}
