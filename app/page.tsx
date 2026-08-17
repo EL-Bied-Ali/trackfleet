@@ -58,7 +58,7 @@ type DeliveryEventRow = {
 type VehicleOption = { id: string; name: string; speed: number; updatedAt: number; latitude: number; longitude: number };
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };
 type TourStop = { siteId: string; destination: string; plannedArrivalAt: string | null; deliveryIds: string[]; customers: string[] };
-type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; source: "planned-arrival"; stops: TourStop[] };
+type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[] };
 
 type MessageEvent = {
   id: string;
@@ -733,10 +733,10 @@ export default function Home() {
         </div>
 
         {stopPlans.length > 0 && <section className="tours-panel" aria-label={locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}>
-          <div className="panel-header"><div><h2>{locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}</h2><p>{locale === "fr" ? "Un camion, plusieurs agences, dans l’ordre prévu" : locale === "nl" ? "Eén vrachtwagen, meerdere locaties, in geplande volgorde" : "One truck, multiple stops, in planned order"}</p></div><span className="tour-count">{stopPlans.length}</span></div>
+          <div className="panel-header"><div><h2>{locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}</h2><p>{locale === "fr" ? "La même séquence d’agences réutilise automatiquement la même route" : locale === "nl" ? "Dezelfde volgorde van locaties hergebruikt automatisch dezelfde route" : "The same stop sequence automatically reuses the same route"}</p></div><span className="tour-count">{stopPlans.length}</span></div>
           <div className="tour-list">
             {stopPlans.map((plan) => <article className="tour-card" key={plan.vehicleKey}>
-              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>
+              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>
               <div className="tour-stops">{stopSequence(plan).map((stop) => <button type="button" className="tour-stop" key={stop.siteId} onClick={() => { const firstDelivery = stop.deliveryIds.find((id) => deliveries.some((delivery) => delivery.id === id)); if (firstDelivery) { setSelectedId(firstDelivery); setShowPopover(true); } }}><i>{stop.sequence}</i><span><strong>{stop.destination}</strong><small>{stop.deliveryIds.length} {locale === "fr" ? "colis" : locale === "nl" ? "zending(en)" : "parcel(s)"}{stop.plannedArrivalAt ? ` · ${new Date(stop.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</small></span></button>)}</div>
             </article>)}
           </div>
