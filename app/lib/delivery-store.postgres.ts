@@ -166,6 +166,10 @@ async function ensureSchema() {
       PRIMARY KEY (delivery_id, position_at)
     )`;
     await sql`CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)`;
+    await sql`ALTER TABLE delivery_eta_observations ADD COLUMN IF NOT EXISTS route_template_id text`;
+    await sql`ALTER TABLE delivery_eta_observations ADD COLUMN IF NOT EXISTS trip_instance_id text`;
+    await sql`ALTER TABLE delivery_eta_observations ADD COLUMN IF NOT EXISTS destination_site_id text`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_eta_observations_route_destination ON delivery_eta_observations(route_template_id, destination_site_id, position_at DESC)`;
 
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
@@ -287,9 +291,9 @@ export const postgresStore: DeliveryStore = {
   async recordEtaObservation(input) {
     await ensureSchema();
     const rows = await sql`INSERT INTO delivery_eta_observations (
-      delivery_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
+      delivery_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
     ) VALUES (
-      ${input.deliveryId}, ${input.positionAt.toISOString()}, ${input.estimatedArrivalAt.toISOString()}, ${input.plannedArrivalAt?.toISOString() ?? null}, ${input.delayMinutes}, ${input.effectiveSpeedKmh}, ${input.remainingDistanceKm}, ${input.progress}, ${input.confidence}, ${input.source}, ${new Date().toISOString()}
+      ${input.deliveryId}, ${input.routeTemplateId}, ${input.tripInstanceId}, ${input.destinationSiteId}, ${input.positionAt.toISOString()}, ${input.estimatedArrivalAt.toISOString()}, ${input.plannedArrivalAt?.toISOString() ?? null}, ${input.delayMinutes}, ${input.effectiveSpeedKmh}, ${input.remainingDistanceKm}, ${input.progress}, ${input.confidence}, ${input.source}, ${new Date().toISOString()}
     ) ON CONFLICT (delivery_id, position_at) DO NOTHING RETURNING delivery_id` as Array<{ delivery_id: string }>;
     return rows.length > 0;
   },
@@ -297,10 +301,24 @@ export const postgresStore: DeliveryStore = {
   async listEtaObservations(deliveryId, limit = 200) {
     await ensureSchema();
     const capped = Math.max(1, Math.min(2000, Math.round(limit)));
-    const rows = await sql`SELECT delivery_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
+    const rows = await sql`SELECT delivery_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
       FROM delivery_eta_observations WHERE delivery_id = ${deliveryId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
     return rows.map((row) => ({
-      deliveryId: String(row.delivery_id), positionAt: new Date(String(row.position_at)), estimatedArrivalAt: new Date(String(row.estimated_arrival_at)),
+      deliveryId: String(row.delivery_id), routeTemplateId: row.route_template_id ? String(row.route_template_id) : null, tripInstanceId: row.trip_instance_id ? String(row.trip_instance_id) : null, destinationSiteId: row.destination_site_id ? String(row.destination_site_id) : null,
+      positionAt: new Date(String(row.position_at)), estimatedArrivalAt: new Date(String(row.estimated_arrival_at)),
+      plannedArrivalAt: row.planned_arrival_at ? new Date(String(row.planned_arrival_at)) : null, delayMinutes: row.delay_minutes === null ? null : Number(row.delay_minutes),
+      effectiveSpeedKmh: row.effective_speed_kmh === null ? null : Number(row.effective_speed_kmh), remainingDistanceKm: Number(row.remaining_distance_km), progress: Number(row.progress),
+      confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(String(row.created_at)),
+    }));
+  },
+  async listEtaObservationsForRoute(routeTemplateId, destinationSiteId, limit = 5000) {
+    await ensureSchema();
+    const capped = Math.max(1, Math.min(10000, Math.round(limit)));
+    const rows = await sql`SELECT delivery_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
+      FROM delivery_eta_observations WHERE route_template_id = ${routeTemplateId} AND destination_site_id = ${destinationSiteId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      deliveryId: String(row.delivery_id), routeTemplateId: row.route_template_id ? String(row.route_template_id) : null, tripInstanceId: row.trip_instance_id ? String(row.trip_instance_id) : null, destinationSiteId: row.destination_site_id ? String(row.destination_site_id) : null,
+      positionAt: new Date(String(row.position_at)), estimatedArrivalAt: new Date(String(row.estimated_arrival_at)),
       plannedArrivalAt: row.planned_arrival_at ? new Date(String(row.planned_arrival_at)) : null, delayMinutes: row.delay_minutes === null ? null : Number(row.delay_minutes),
       effectiveSpeedKmh: row.effective_speed_kmh === null ? null : Number(row.effective_speed_kmh), remainingDistanceKm: Number(row.remaining_distance_km), progress: Number(row.progress),
       confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(String(row.created_at)),
