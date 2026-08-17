@@ -1,0 +1,80 @@
+name: Patch offline delivery UX
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-offline-delivery.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Implement origin preference and offline truck entry
+        shell: python
+        run: |
+          from pathlib import Path
+
+          helper = Path("app/lib/origin-preference.ts")
+          helper.write_text('''export type OriginPreferenceCompany = { account: string; user: string };\n\nexport function originPreferenceKey(company: OriginPreferenceCompany) {\n  return `trackfleet-default-origin:${encodeURIComponent(company.account.toLowerCase())}:${encodeURIComponent(company.user.toLowerCase())}`;\n}\n\nexport function resolvePreferredOriginSite(saved: string | null, availableOriginIds: string[], current = "") {\n  if (saved && availableOriginIds.includes(saved)) return saved;\n  if (current && availableOriginIds.includes(current)) return current;\n  return availableOriginIds[0] ?? "";\n}\n''')
+
+          test = Path("tests/origin-preference.test.mjs")
+          test.write_text('''import assert from "node:assert/strict";\nimport test from "node:test";\nimport { originPreferenceKey, resolvePreferredOriginSite } from "../app/lib/origin-preference.ts";\n\ntest("origin preference is scoped by SENDATRACK account and user", () => {\n  assert.notEqual(\n    originPreferenceKey({ account: "ACME", user: "dispatcher-a" }),\n    originPreferenceKey({ account: "ACME", user: "dispatcher-b" }),\n  );\n});\n\ntest("saved origin wins when it still exists", () => {\n  assert.equal(resolvePreferredOriginSite("site-b", ["site-a", "site-b"]), "site-b");\n});\n\ntest("falls back safely when saved origin no longer exists", () => {\n  assert.equal(resolvePreferredOriginSite("removed", ["site-a", "site-b"]), "site-a");\n});\n''')
+
+          page = Path("app/page.tsx")
+          text = page.read_text()
+          import_marker = 'import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";\n'
+          if 'origin-preference' not in text:
+              text = text.replace(import_marker, import_marker + 'import { originPreferenceKey, resolvePreferredOriginSite } from "./lib/origin-preference";\n')
+
+          state_marker = '  const [knownSites, setKnownSites] = useState<KnownSite[]>([]);\n'
+          if 'defaultOriginSiteId' not in text:
+              text = text.replace(state_marker, state_marker + '  const [defaultOriginSiteId, setDefaultOriginSiteId] = useState("");\n')
+
+          sites_effect_end = '''  }, [authState]);\n\n  useEffect(() => {\n    const requestedLocale = new URLSearchParams(window.location.search).get("lang");\n'''
+          preference_effect = '''  }, [authState]);\n\n  useEffect(() => {\n    if (!company || !knownSites.length) {\n      setDefaultOriginSiteId("");\n      return;\n    }\n    const originIds = knownSites.filter((site) => site.roles.includes("origin")).map((site) => site.id);\n    const saved = window.localStorage.getItem(originPreferenceKey(company));\n    setDefaultOriginSiteId((current) => resolvePreferredOriginSite(saved, originIds, current));\n  }, [company, knownSites]);\n\n  useEffect(() => {\n    const requestedLocale = new URLSearchParams(window.location.search).get("lang");\n'''
+          if sites_effect_end not in text:
+              raise SystemExit("sites effect marker missing")
+          text = text.replace(sites_effect_end, preference_effect, 1)
+
+          create_marker = '''    const selectedVehicleId = String(form.get("sendatrackVehicleId") ?? "");\n    const liveVehicle = integration.vehicles.find((vehicle) => vehicle.id === selectedVehicleId);\n    const truck = liveVehicle?.name ?? selectedVehicleId;\n    const originSiteId = String(form.get("originSiteId") ?? "").trim();\n'''
+          create_replacement = '''    const selectedVehicleId = String(form.get("sendatrackVehicleId") ?? "").trim();\n    const manualTruck = String(form.get("manualTruck") ?? "").trim();\n    const liveVehicle = integration.vehicles.find((vehicle) => vehicle.id === selectedVehicleId);\n    const truck = liveVehicle?.name ?? manualTruck ?? selectedVehicleId;\n    const originSiteId = String(form.get("originSiteId") ?? "").trim();\n    if (company && originSiteId) {\n      window.localStorage.setItem(originPreferenceKey(company), originSiteId);\n      setDefaultOriginSiteId(originSiteId);\n    }\n'''
+          if create_marker not in text:
+              raise SystemExit("create delivery marker missing")
+          text = text.replace(create_marker, create_replacement, 1)
+
+          # Fix nullish chain so an empty manual truck can still fall back to selected id.
+          text = text.replace('const truck = liveVehicle?.name ?? manualTruck ?? selectedVehicleId;', 'const truck = liveVehicle?.name ?? (manualTruck || selectedVehicleId);')
+
+          old_form = '''<form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required defaultValue={knownSites.find((site) => site.roles.includes("origin"))?.id ?? ""}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row"><label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={integration.vehicles[0]?.id ?? "TRK-005"}>{integration.vehicles.length ? integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>) : <><option>TRK-005</option><option>TRK-008</option><option>TRK-012</option><option>TRK-017</option></>}</select></label><label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label>'''
+          new_form = '''<form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required autoFocus placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser."}</small></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row">{integration.connected && integration.vehicles.length ? <label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={integration.vehicles[0]?.id ?? ""}>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select></label> : <label>{t.assignTruck}<input name="manualTruck" required placeholder={locale === "fr" ? "Ex. TRK-005 / plaque" : locale === "nl" ? "Bijv. TRK-005 / nummerplaat" : "E.g. TRK-005 / plate"} /><small>{locale === "fr" ? "SENDATRACK hors ligne : le GPS sera rattaché automatiquement quand le camion réapparaîtra." : locale === "nl" ? "SENDATRACK offline: GPS wordt automatisch gekoppeld zodra de vrachtwagen terug verschijnt." : "SENDATRACK offline: GPS will attach automatically when the truck reappears."}</small></label>}<label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label>'''
+          if old_form not in text:
+              raise SystemExit("delivery form marker missing")
+          text = text.replace(old_form, new_form, 1)
+
+          # Show a useful state instead of implying a simulation when no real GPS has ever attached.
+          old_vehicle_cell = '''<td><strong>{delivery.truck}</strong><span>{delivery.driver}</span></td>'''
+          new_vehicle_cell = '''<td><strong>{delivery.truck}</strong><span>{delivery.gpsSource === "sendatrack" ? delivery.driver : (locale === "fr" ? "GPS en attente" : locale === "nl" ? "GPS in afwachting" : "Waiting for GPS")}</span></td>'''
+          if old_vehicle_cell not in text:
+              raise SystemExit("vehicle cell marker missing")
+          text = text.replace(old_vehicle_cell, new_vehicle_cell, 1)
+          page.write_text(text)
+
+          package = Path("package.json")
+          package_text = package.read_text()
+          marker = '    "test:login-error": "node --experimental-strip-types --test tests/login-error.test.mjs",\n'
+          if 'test:origin-preference' not in package_text:
+              package.write_text(package_text.replace(marker, marker + '    "test:origin-preference": "node --experimental-strip-types --test tests/origin-preference.test.mjs",\n'))
+
+      - name: Test preference helper
+        run: node --experimental-strip-types --test tests/origin-preference.test.mjs
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/page.tsx app/lib/origin-preference.ts tests/origin-preference.test.mjs package.json
+          git commit -m "support offline delivery creation and remembered origin"
+          git push
