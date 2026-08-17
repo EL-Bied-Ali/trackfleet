@@ -57,7 +57,8 @@ async function encryptionKey() {
     if (!fallbackSecret) throw new Error("server_not_configured");
     raw = await sha256Bytes(`trackfleet-session:${fallbackSecret}`);
   }
-  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+  const keyMaterial = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
+  return crypto.subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
 async function encryptPayload(payload: SessionPayload) {
@@ -122,21 +123,17 @@ export async function getCompanySession(request: Request): Promise<CompanySessio
       companyId: await sha256(`sendatrack-account:${payload.accountID.toLowerCase()}`),
       accountLabel: payload.accountID,
       userLabel: payload.user,
-      credentials: {
-        accountID: payload.accountID,
-        user: payload.user,
-        password: payload.password,
-      },
+      credentials: { accountID: payload.accountID, user: payload.user, password: payload.password },
     };
   } catch {
     return null;
   }
 }
 
-export async function deleteCompanySession(_request: Request) {
+export function clearCompanySessionCookie() {
   return `${cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
 export function createTrackingToken() {
-  return randomToken(18);
+  return randomToken(24);
 }
