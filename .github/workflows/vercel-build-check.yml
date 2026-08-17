@@ -104,6 +104,10 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+      - name: Lint application
+        run: pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+      - name: Typecheck Vercel app runtime
+        run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
       - name: Build Vercel output
         run: pnpm run build:vercel
 
