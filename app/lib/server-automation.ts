@@ -5,6 +5,7 @@ import { companyIdForAccount } from "./company-id";
 import { processPendingNotifications } from "./notification-runner";
 import { getSendatrackSnapshot } from "./sendatrack";
 import { buildEtaObservation } from "./eta-observation";
+import { buildEtaRouteContexts } from "./route-history";
 
 export type AutomationRunResult = {
   connected: boolean;
@@ -37,15 +38,12 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     }
   }
 
-  // Delay detection must run in the autonomous tick too. Otherwise ETA delays
-  // would only be discovered when a dispatcher or customer opens TrackFleet.
-  // Pass all company deliveries so future agency service time is identical to
-  // the ETA shown by the API/dashboard.
   const deliveries = await store.listForCompany(companyId);
+  const routeContexts = buildEtaRouteContexts(deliveries);
   let etaObservations = 0;
   for (const delivery of deliveries) {
     const events = await store.listEvents(delivery.id);
-    const etaObservation = buildEtaObservation(delivery, events, deliveries);
+    const etaObservation = buildEtaObservation(delivery, events, deliveries, routeContexts.get(delivery.id) ?? null);
     if (etaObservation && await store.recordEtaObservation(etaObservation)) etaObservations += 1;
     if (!shouldCreateDelayEvent(delivery, events, deliveries)) continue;
     if (await store.recordEvent(delivery.id, "DELAY_DETECTED", delivery.progress)) {
