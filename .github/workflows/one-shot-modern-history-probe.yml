@@ -1,0 +1,40 @@
+name: One-shot modern SENDATRACK history probe
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
+      CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
+    steps:
+      - name: Wait for deployment and run protected probe once
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const baseUrl = process.env.BASE_URL;
+          const secret = (process.env.CRON_SECRET || '').trim();
+          if (!secret) throw new Error('TRACKFLEET_CRON_SECRET is empty');
+          const url = `${baseUrl}/api/automation/sendatrack-modern-history-probe`;
+          for (let attempt = 1; attempt <= 45; attempt++) {
+            const response = await fetch(url, { headers: { authorization: `Bearer ${secret}` }, cache: 'no-store' }).catch(() => null);
+            if (response && response.status !== 404) {
+              const body = await response.text();
+              console.log(`MODERN_HISTORY_PROBE ${body}`);
+              if (!response.ok) throw new Error(`probe_http_${response.status}`);
+              process.exit(0);
+            }
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          }
+          throw new Error('probe_not_deployed');
+          NODE
