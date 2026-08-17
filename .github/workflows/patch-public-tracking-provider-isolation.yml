@@ -1,0 +1,56 @@
+name: Patch public tracking provider isolation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-public-tracking-provider-isolation.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Prevent unauthenticated provider refreshes
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/api/deliveries/route.ts')
+          s = p.read_text()
+          old = '''      const integration = await getSendatrackSnapshot();\n      if (integration.connected) {\n        const transitions = await store.applySendatrackSnapshot(integration, row.companyId);\n        await persistTransitionEvents(transitions);\n        row = await store.getPublic(tracking) ?? row;\n      }\n\n'''
+          if old not in s: raise SystemExit('public SENDATRACK refresh marker missing')
+          s = s.replace(old, '''      // Public tracking has no tenant SENDATRACK credentials. Read only the\n      // tenant-scoped position already persisted by authenticated refreshes or automation.\n      // This avoids ever applying a server-default provider account to another company.\n\n''', 1)
+          p.write_text(s)
+
+          p = Path('package.json')
+          s = p.read_text()
+          marker = '    "test:tracking-access": "node --experimental-strip-types --test tests/tracking-access.test.mjs",\n'
+          if 'test:public-provider-isolation' not in s:
+            if marker not in s: raise SystemExit('tracking test package marker missing')
+            s = s.replace(marker, marker + '    "test:public-provider-isolation": "node --test tests/public-tracking-provider-isolation.test.mjs",\n')
+          p.write_text(s)
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Test and build
+        run: |
+          pnpm run test:public-provider-isolation
+          pnpm run test:tenant-isolation
+          pnpm run test:tracking-access
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/api/deliveries/route.ts package.json
+          git commit -m "isolate public tracking from default SENDATRACK account"
+          git push
