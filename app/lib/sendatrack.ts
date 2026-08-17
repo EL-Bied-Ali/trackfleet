@@ -75,10 +75,25 @@ async function login(auth: SendatrackCredentials) {
     body: JSON.stringify({ ...auth, machin: "trackfleet-connector", remember: true, force: false }),
     signal: AbortSignal.timeout(12_000),
   });
-  if (!response.ok) throw new Error("authentication_failed");
+  if (!response.ok) {
+    console.error("[trackfleet:sendatrack] login rejected", {
+      status: response.status,
+      statusText: response.statusText,
+      contentType: response.headers.get("content-type"),
+      retryAfter: response.headers.get("retry-after"),
+    });
+    if (response.status === 429 || response.status >= 500) throw new Error("service_unavailable");
+    throw new Error("authentication_failed");
+  }
   const payload = await response.json() as unknown;
   const token = findToken(payload);
-  if (!token) throw new Error("authentication_failed");
+  if (!token) {
+    console.error("[trackfleet:sendatrack] login response missing token", {
+      status: response.status,
+      contentType: response.headers.get("content-type"),
+    });
+    throw new Error("unexpected_response");
+  }
   cachedTokens.set(key, { value: token, expiresAt: Date.now() + 45 * 60 * 1000 });
   return token;
 }
