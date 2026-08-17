@@ -22,10 +22,12 @@ export function summarizeStopDwell(
   positions: TripPositionRow[],
   site: { latitude: number; longitude: number; arrivalRadiusKm?: number },
   minimumTrips = 3,
+  excludeTripInstanceId: string | null = null,
 ): StopDwellStats {
   const radiusKm = Math.max(0.05, Math.min(10, site.arrivalRadiusKm ?? 0.5));
   const byTrip = new Map<string, TripPositionRow[]>();
   for (const position of positions) {
+    if (position.tripInstanceId === excludeTripInstanceId) continue;
     const rows = byTrip.get(position.tripInstanceId) ?? [];
     rows.push(position);
     byTrip.set(position.tripInstanceId, rows);
