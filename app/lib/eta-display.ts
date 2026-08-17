@@ -45,3 +45,35 @@ export function etaExplanation(input: {
 
   return { sourceLabel, confidenceLabel: copy.confidence[confidence] };
 }
+
+export function customerEtaNote(input: {
+  source?: EtaSource | null;
+  delayMinutes?: number | null;
+  historyTrips?: number | null;
+}, locale: EtaDisplayLocale) {
+  const delayMinutes = input.delayMinutes ?? null;
+  if (typeof delayMinutes === "number" && delayMinutes >= 60) return `+${Math.round(delayMinutes / 60)} h`;
+
+  const copy = {
+    fr: {
+      observed: "Estimation basée sur le trajet réel",
+      history: (count: number) => count > 0 ? `Estimation basée sur ${count} trajet${count > 1 ? "s" : ""} précédent${count > 1 ? "s" : ""}` : "Estimation basée sur l’historique de cette route",
+      baseline: "Estimation indicative",
+    },
+    en: {
+      observed: "Estimate based on current trip pace",
+      history: (count: number) => count > 0 ? `Estimate based on ${count} previous trip${count === 1 ? "" : "s"}` : "Estimate based on this route’s history",
+      baseline: "Indicative estimate",
+    },
+    nl: {
+      observed: "Schatting op basis van de huidige rit",
+      history: (count: number) => count > 0 ? `Schatting op basis van ${count} eerdere rit${count === 1 ? "" : "ten"}` : "Schatting op basis van de routehistoriek",
+      baseline: "Indicatieve schatting",
+    },
+  }[locale];
+
+  const count = Math.max(0, Math.round(input.historyTrips ?? 0));
+  if (input.source === "observed-pace") return copy.observed;
+  if (input.source === "route-history") return copy.history(count);
+  return copy.baseline;
+}
