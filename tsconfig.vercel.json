@@ -3,6 +3,7 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
+    "types": ["vite/client"],
     "paths": {
       "@/*": ["./*"],
       "trackfleet-runtime-env": ["./app/lib/runtime-env.vercel.ts"],
