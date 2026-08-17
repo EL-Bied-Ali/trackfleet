@@ -65,6 +65,8 @@ jobs:
         run: pnpm run test:whatsapp-preview
       - name: Verify ETA estimator
         run: pnpm run test:eta
+      - name: Verify ETA history observations
+        run: pnpm run test:eta-observation
       - name: Verify delay detection
         run: pnpm run test:delay
       - name: Verify autonomous delay detection
