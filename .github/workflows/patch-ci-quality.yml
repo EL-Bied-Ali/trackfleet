@@ -1,0 +1,69 @@
+name: Patch permanent quality gate
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-ci-quality.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync latest main
+        run: git pull --ff-only origin main
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Remove final Hook warning and add permanent quality gates
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/page.tsx')
+          s = p.read_text()
+          old = '          if (data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === selectedId)) setSelectedId(data.deliveries[0].id);'
+          new = '          setSelectedId((current) => data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === current) ? data.deliveries[0].id : current);'
+          if old not in s: raise SystemExit('selectedId refresh marker missing')
+          s = s.replace(old, new, 1)
+          old = '        if (active && !silent) setToast(t.cloudReconnecting);'
+          new = '        if (active && !silent) setToast(translations[locale].cloudReconnecting);'
+          if old not in s: raise SystemExit('reconnecting copy marker missing')
+          s = s.replace(old, new, 1)
+          old = '    return () => { active = false; window.clearInterval(timer); };\n  }, [authState]);'
+          new = '    return () => { active = false; window.clearInterval(timer); };\n  }, [authState, locale]);'
+          if old not in s: raise SystemExit('refresh effect dependency marker missing')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('.github/workflows/vercel-build-check.yml')
+          s = p.read_text()
+          marker = '      - name: Build Vercel output\n        run: pnpm run build:vercel\n'
+          quality = '      - name: Lint application\n        run: pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0\n      - name: Typecheck Vercel app runtime\n        run: pnpm exec tsc -p tsconfig.vercel.json --noEmit\n'
+          if 'Typecheck Vercel app runtime' not in s:
+            if marker not in s: raise SystemExit('Vercel build marker missing')
+            s = s.replace(marker, quality + marker, 1)
+          p.write_text(s)
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify zero-warning lint typecheck and builds
+        run: |
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit patch
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/page.tsx .github/workflows/vercel-build-check.yml
+          git commit -m "enforce zero-warning lint and Vercel typecheck"
+          git push
