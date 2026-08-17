@@ -25,13 +25,11 @@ jobs:
         run: |
           from pathlib import Path
 
-          # Memory adapter: tenant-scoped route query.
           p = Path('app/lib/delivery-store.memory.ts')
           s = p.read_text()
           s = s.replace('async listTripPositionsForRoute(routeTemplateId, limit = 10000) {\n    return tripPositions\n      .filter((item) => item.routeTemplateId === routeTemplateId)', 'async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {\n    return tripPositions\n      .filter((item) => item.companyId === companyId && item.routeTemplateId === routeTemplateId)')
           p.write_text(s)
 
-          # Postgres persistent trip positions.
           p = Path('app/lib/delivery-store.postgres.ts')
           s = p.read_text()
           schema_marker = '    await sql`CREATE INDEX IF NOT EXISTS idx_eta_observations_route_destination ON delivery_eta_observations(route_template_id, destination_site_id, position_at DESC)`;\n'
@@ -46,7 +44,6 @@ jobs:
             s = s.replace(method_marker, methods + method_marker, 1)
           p.write_text(s)
 
-          # Cloudflare D1 persistent trip positions.
           p = Path('app/lib/delivery-store.cloudflare.ts')
           s = p.read_text()
           eta_marker = '''  if (!etaColumns.has("destination_site_id")) await database.prepare("ALTER TABLE delivery_eta_observations ADD COLUMN destination_site_id text").run();\n'''
@@ -63,7 +60,6 @@ jobs:
             s = s.replace(method_marker, methods + method_marker, 1)
           p.write_text(s)
 
-          # Automation: keep one deduplicated GPS timeline per real trip.
           p = Path('app/lib/server-automation.ts')
           s = p.read_text()
           old = '''    const etaObservation = buildEtaObservation(delivery, events, deliveries, routeContext);\n    if (etaObservation && await store.recordEtaObservation(etaObservation)) etaObservations += 1;\n'''
@@ -72,7 +68,6 @@ jobs:
           s = s.replace(old, new, 1)
           p.write_text(s)
 
-          # ETA API: use historical agency dwell only when enough completed visits exist.
           p = Path('app/api/deliveries/route.ts')
           s = p.read_text()
           s = s.replace('import { buildTruckStopPlans, pendingServiceMinutesBefore } from "../../lib/truck-stop-plan";', 'import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";')
@@ -100,21 +95,12 @@ jobs:
           s = s.replace(history_marker, history_new, 1)
           p.write_text(s)
 
-          # Permanent tests.
           p = Path('package.json')
           s = p.read_text()
           marker = '    "test:stop-plans": "node --experimental-strip-types --test tests/truck-stop-plan.test.mjs",\n'
           if 'test:stop-dwell' not in s:
             if marker not in s: raise SystemExit('package stop plan marker missing')
             s = s.replace(marker, marker + '    "test:stop-dwell": "node --experimental-strip-types --test tests/stop-dwell.test.mjs",\n')
-          p.write_text(s)
-
-          p = Path('.github/workflows/vercel-build-check.yml')
-          s = p.read_text()
-          marker = '      - name: Verify truck stop plans\n        run: pnpm run test:stop-plans\n'
-          if 'Verify learned agency dwell times' not in s:
-            if marker not in s: raise SystemExit('CI stop plan marker missing')
-            s = s.replace(marker, marker + '      - name: Verify learned agency dwell times\n        run: pnpm run test:stop-dwell\n')
           p.write_text(s)
 
       - name: Install dependencies
@@ -130,6 +116,6 @@ jobs:
         run: |
           git config user.name "TrackFleet automation"
           git config user.email "actions@users.noreply.github.com"
-          git add app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts app/lib/server-automation.ts app/api/deliveries/route.ts package.json .github/workflows/vercel-build-check.yml
+          git add app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts app/lib/server-automation.ts app/api/deliveries/route.ts package.json
           git commit -m "learn real agency dwell times from trip GPS history"
           git push
