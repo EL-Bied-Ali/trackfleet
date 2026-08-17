@@ -22,7 +22,7 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
-      - name: TypeScript check (Vercel runtime)
+      - name: TypeScript check (Vercel app runtime)
         run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
       - name: ESLint check
         run: pnpm run lint
