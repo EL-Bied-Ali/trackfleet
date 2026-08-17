@@ -1,0 +1,56 @@
+name: Patch persistent trips product only
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-persistent-trips-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Reuse validated product patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import textwrap
+          source = Path('.github/workflows/patch-persistent-trips.yml').read_text()
+          start = source.index('      - name: Add persistent trip snapshots')
+          run_start = source.index('        run: |\n', start) + len('        run: |\n')
+          end = source.index('      - name: Install dependencies', run_start)
+          script = textwrap.dedent(source[run_start:end])
+          exec(compile(script, '<persistent-trip-patch>', 'exec'))
+          # The permanent workflow is updated separately through the GitHub connector.
+          Path('.github/workflows/vercel-build-check.yml').write_text(__import__('subprocess').check_output(['git', 'show', 'HEAD:.github/workflows/vercel-build-check.yml'], text=True))
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify
+        run: |
+          pnpm run test:trip-record
+          pnpm run test:route-template
+          pnpm run test:tour
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit product files
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app db tests package.json
+          git commit -m "persist stable trip snapshots"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push
