@@ -286,9 +286,23 @@ export async function GET(request: Request) {
 
     await processPendingNotifications(session.companyId, requestUrl.origin);
 
+    const tripHistory = (await store.listTrips(session.companyId, 20)).map((trip) => ({
+      id: trip.id,
+      routeTemplateId: trip.routeTemplateId,
+      vehicleKey: trip.vehicleKey,
+      truck: trip.truck,
+      sendatrackVehicleId: trip.sendatrackVehicleId,
+      originSiteId: trip.originSiteId,
+      stops: trip.stops,
+      status: trip.status,
+      createdAt: trip.createdAt,
+      updatedAt: trip.updatedAt,
+    }));
+
     return Response.json({
       deliveries: enrichedRows,
       stopPlans: stopPlansWithLearning,
+      trips: tripHistory,
       features: {
         whatsappDemoEnabled: runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",
       },
