@@ -113,5 +113,6 @@ export async function GET() {
     })));
   }
 
+  // Temporary discovery endpoint; response intentionally contains no credential or vehicle identifier.
   return Response.json({ results }, { headers: { "cache-control": "no-store" } });
 }
