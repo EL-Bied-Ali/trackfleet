@@ -8,6 +8,7 @@ test("route learning remains collecting before any historical evidence", () => {
     requiredTrips: 5,
     learnedStops: 0,
     futureStops: 2,
+    unconfiguredStops: 0,
     etaHistoryReady: false,
     dwellHistoryReady: false,
     stage: "collecting",
@@ -19,6 +20,14 @@ test("route learning is ready only when pace and future stop dwell are learned",
   assert.equal(state.etaHistoryReady, true);
   assert.equal(state.dwellHistoryReady, true);
   assert.equal(state.stage, "ready");
+});
+
+test("a stop without exact coordinates prevents false dwell readiness", () => {
+  const state = routeLearningState({ historicalTrips: 7, learnedStops: 1, futureStops: 2, unconfiguredStops: 1 });
+  assert.equal(state.unconfiguredStops, 1);
+  assert.equal(state.etaHistoryReady, true);
+  assert.equal(state.dwellHistoryReady, false);
+  assert.equal(state.stage, "partial");
 });
 
 test("stable trip route id overrides the shortened active stop plan", () => {
