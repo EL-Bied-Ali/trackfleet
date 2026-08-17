@@ -1,4 +1,4 @@
-import type { DeliveryRow, EtaObservationRow } from "./delivery-store.types.ts";
+import type { DeliveryEventRow, DeliveryRow, EtaObservationRow } from "./delivery-store.types.ts";
 import type { TruckStopPlan } from "./truck-stop-plan.ts";
 import { buildTruckStopPlans } from "./truck-stop-plan.ts";
 
@@ -59,6 +59,31 @@ export function buildEtaRouteContexts(deliveries: DeliveryRow[], plans = buildTr
     }
   }
   return contexts;
+}
+
+export function stableEtaRouteContext(
+  computed: EtaRouteContext | null,
+  observations: EtaObservationRow[],
+  events: DeliveryEventRow[],
+): EtaRouteContext | null {
+  const departedAt = events.find((event) => event.type === "DEPARTED")?.createdAt ?? null;
+  if (!departedAt) return computed;
+
+  const frozen = observations
+    .filter((observation) =>
+      observation.routeTemplateId &&
+      observation.tripInstanceId &&
+      observation.destinationSiteId &&
+      observation.positionAt.getTime() >= departedAt.getTime()
+    )
+    .sort((a, b) => a.positionAt.getTime() - b.positionAt.getTime())[0];
+
+  if (!frozen?.routeTemplateId || !frozen.tripInstanceId || !frozen.destinationSiteId) return computed;
+  return {
+    routeTemplateId: frozen.routeTemplateId,
+    tripInstanceId: frozen.tripInstanceId,
+    destinationSiteId: frozen.destinationSiteId,
+  };
 }
 
 export function summarizeRouteHistory(observations: EtaObservationRow[], minimumTrips = 5, excludeTripInstanceId: string | null = null): RouteHistoryStats {
