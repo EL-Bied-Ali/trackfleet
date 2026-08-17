@@ -1,4 +1,5 @@
 import type { DeliveryRow } from "./delivery-store.types";
+import { routeOriginSiteId, routeTemplateId } from "./route-template";
 
 export type TruckStop = {
   siteId: string;
@@ -12,6 +13,8 @@ export type TruckStopPlan = {
   vehicleKey: string;
   truck: string;
   sendatrackVehicleId: string;
+  routeTemplateId: string;
+  originSiteId: string | null;
   source: "planned-arrival";
   stops: TruckStop[];
 };
@@ -86,10 +89,13 @@ export function buildTruckStopPlans(deliveries: DeliveryRow[]): TruckStopPlan[] 
     }).sort((a, b) => timeValue(a.plannedArrivalAt) - timeValue(b.plannedArrivalAt));
 
     const first = rows[0];
+    const originSiteId = routeOriginSiteId(rows);
     return {
       vehicleKey: key,
       truck: first.truck,
       sendatrackVehicleId: first.sendatrackVehicleId,
+      routeTemplateId: routeTemplateId(originSiteId, stops.map((stop) => stop.siteId)),
+      originSiteId,
       source: "planned-arrival" as const,
       stops,
     };
