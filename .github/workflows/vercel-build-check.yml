@@ -59,6 +59,8 @@ jobs:
         run: pnpm run test:tour
       - name: Verify active tour presentation
         run: pnpm run test:tour-view
+      - name: Verify route API context safety
+        run: pnpm run test:route-api-context-safety
       - name: Verify reusable route identity
         run: pnpm run test:route-template
       - name: Verify automation storage safety
