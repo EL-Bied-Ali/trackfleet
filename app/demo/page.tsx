@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import InteractiveFleetMap from "../InteractiveFleetMap";
 import styles from "./demo.module.css";
@@ -43,16 +44,16 @@ export default function DemoPage() {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <a href="/" className={styles.brand}><span className={styles.mark}>↗</span><span>TrackFleet</span></a>
+        <Link href="/" className={styles.brand}><span className={styles.mark}>↗</span><span>TrackFleet</span></Link>
         <nav className={styles.nav} aria-label="Demo sections">
-          <a href="#overview">Vue d'ensemble</a><a href="#deliveries">Livraisons</a><a href="#trips">Trajets</a><a href="#sites">Agences</a>
+          <a href="#overview">Vue d’ensemble</a><a href="#deliveries">Livraisons</a><a href="#trips">Trajets</a><a href="#sites">Agences</a>
         </nav>
-        <div className={styles.headerRight}><span className={styles.demoBadge}>MODE DÉMO · LECTURE SEULE</span><a href="/" className={styles.loginLink}>Connexion entreprise</a></div>
+        <div className={styles.headerRight}><span className={styles.demoBadge}>MODE DÉMO · LECTURE SEULE</span><Link href="/" className={styles.loginLink}>Connexion entreprise</Link></div>
       </header>
 
       <section className={styles.hero} id="overview">
-        <div><p className={styles.eyebrow}>CENTRE D'EXPLOITATION</p><h1>Dashboard TrackFleet</h1><p>Données fictives. Cette démo montre les principales vues de l'application sans dépendre de SENDATRACK.</p></div>
-        <div className={styles.providerCard}><span className={styles.providerDot}/><div><strong>SENDATRACK</strong><small>Service d'authentification indisponible</small></div><b>Mode dégradé</b></div>
+        <div><p className={styles.eyebrow}>CENTRE D’EXPLOITATION</p><h1>Dashboard TrackFleet</h1><p>Données fictives. Cette démo montre les principales vues de l’application sans exposer les données SENDATRACK réelles.</p></div>
+        <div className={styles.providerCard}><span className={styles.providerDot}/><div><strong>SENDATRACK</strong><small>Connexion production disponible</small></div><b>Démo isolée</b></div>
       </section>
 
       <section className={styles.kpis}>
@@ -72,7 +73,7 @@ export default function DemoPage() {
           <h2>{selected.customer}</h2><p className={styles.route}>{selected.truck}</p>
           <div className={styles.progressTrack}><i style={{width:`${selected.progress}%`}}/></div><div className={styles.progressMeta}><span>{selected.progress}% du trajet</span><b>ETA {selected.eta}</b></div>
           <dl><div><dt>Destination</dt><dd>{selected.destination}</dd></div><div><dt>Conducteur</dt><dd>{selected.driver}</dd></div><div><dt>Vitesse</dt><dd>{selected.speed} km/h</dd></div><div><dt>Confiance ETA</dt><dd>{selected.etaConfidence === "medium" ? "Moyenne" : "Faible"}</dd></div><div className={styles.fullRow}><dt>Calcul ETA</dt><dd>{selected.etaSource}</dd></div></dl>
-          <div className={styles.readOnlyNote}>Clique sur une livraison ou un véhicule pour changer la sélection. Les actions d'écriture sont désactivées en démo.</div>
+          <div className={styles.readOnlyNote}>Clique sur une livraison ou un véhicule pour changer la sélection. Les actions d’écriture sont désactivées en démo.</div>
         </aside>
       </section>
 
@@ -88,9 +89,9 @@ export default function DemoPage() {
           <div className={styles.trip}><b>TR-03</b><span>Casablanca → Bruxelles</span><em>chargement</em></div>
         </div></article>
         <article className={styles.opsCard}><div className={styles.sectionTitle}><div><p>AUTOMATISATION</p><h2>ETA & détection</h2></div><span>Actif</span></div><div className={styles.opsBody}>
-          <div className={styles.automation}><span>ETA apprises sur l'historique</span><b>En apprentissage</b></div>
+          <div className={styles.automation}><span>ETA apprises sur l’historique</span><b>En apprentissage</b></div>
           <div className={styles.automation}><span>Détection de retard</span><b>1 alerte</b></div>
-          <div className={styles.automation}><span>Synchronisation GPS</span><b className={styles.warningText}>Suspendue · SENDATRACK</b></div>
+          <div className={styles.automation}><span>Synchronisation GPS</span><b>Connectée en production</b></div>
         </div></article>
       </section>
 
