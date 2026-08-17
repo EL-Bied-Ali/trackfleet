@@ -90,12 +90,18 @@ async function ensureTable() {
   if (!etaColumns.has("route_template_id")) await database.prepare("ALTER TABLE delivery_eta_observations ADD COLUMN route_template_id text").run();
   if (!etaColumns.has("trip_instance_id")) await database.prepare("ALTER TABLE delivery_eta_observations ADD COLUMN trip_instance_id text").run();
   if (!etaColumns.has("destination_site_id")) await database.prepare("ALTER TABLE delivery_eta_observations ADD COLUMN destination_site_id text").run();
+  await database.prepare(`CREATE TABLE IF NOT EXISTS trip_position_observations (
+    company_id text NOT NULL, route_template_id text NOT NULL, trip_instance_id text NOT NULL, vehicle_id text NOT NULL,
+    position_at integer NOT NULL, latitude real NOT NULL, longitude real NOT NULL, speed real NOT NULL, created_at integer NOT NULL,
+    PRIMARY KEY (company_id, trip_instance_id, position_at)
+  )`).run();
   await database.batch([
     database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)"),
     database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_route_destination ON delivery_eta_observations(route_template_id, destination_site_id, position_at DESC)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)"),
   ]);
   for (const delivery of seedDeliveries) {
     await database.prepare(`INSERT OR IGNORE INTO deliveries
@@ -212,6 +218,21 @@ export const store: DeliveryStore = {
       plannedArrivalAt: row.plannedArrivalAt == null ? null : new Date(Number(row.plannedArrivalAt)), delayMinutes: row.delayMinutes == null ? null : Number(row.delayMinutes),
       effectiveSpeedKmh: row.effectiveSpeedKmh == null ? null : Number(row.effectiveSpeedKmh), remainingDistanceKm: Number(row.remainingDistanceKm), progress: Number(row.progress),
       confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(Number(row.createdAt)),
+    }));
+  },
+  async recordTripPosition(input) {
+    await ensureTable();
+    const result = await db().prepare(`INSERT OR IGNORE INTO trip_position_observations
+      (company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(input.companyId, input.routeTemplateId, input.tripInstanceId, input.vehicleId, input.positionAt.getTime(), input.latitude, input.longitude, input.speed, Date.now()).run();
+    return Boolean(result.meta?.changes);
+  },
+  async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {
+    await ensureTable();
+    const capped = Math.max(1, Math.min(20000, Math.round(limit)));
+    const result = await db().prepare(`SELECT company_id AS companyId, route_template_id AS routeTemplateId, trip_instance_id AS tripInstanceId, vehicle_id AS vehicleId, position_at AS positionAt, latitude, longitude, speed, created_at AS createdAt FROM trip_position_observations WHERE company_id = ? AND route_template_id = ? ORDER BY position_at DESC LIMIT ?`).bind(companyId, routeTemplateId, capped).all<Record<string, unknown>>();
+    return (result.results ?? []).map((row) => ({
+      companyId: String(row.companyId), routeTemplateId: String(row.routeTemplateId), tripInstanceId: String(row.tripInstanceId), vehicleId: String(row.vehicleId), positionAt: new Date(Number(row.positionAt)), latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), createdAt: new Date(Number(row.createdAt)),
     }));
   },
   async listPendingNotifications(companyId) {

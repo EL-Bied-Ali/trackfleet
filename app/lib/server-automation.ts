@@ -47,6 +47,12 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     const routeContext = stableEtaRouteContext(routeContexts.get(delivery.id) ?? null, previousEtaObservations, events);
     const etaObservation = buildEtaObservation(delivery, events, deliveries, routeContext);
     if (etaObservation && await store.recordEtaObservation(etaObservation)) etaObservations += 1;
+    if (routeContext && delivery.gpsSource === "sendatrack" && delivery.sendatrackVehicleId && typeof delivery.latitude === "number" && typeof delivery.longitude === "number" && delivery.lastPositionAt) {
+      await store.recordTripPosition({
+        companyId, routeTemplateId: routeContext.routeTemplateId, tripInstanceId: routeContext.tripInstanceId, vehicleId: delivery.sendatrackVehicleId,
+        positionAt: delivery.lastPositionAt, latitude: delivery.latitude, longitude: delivery.longitude, speed: delivery.speed ?? 0,
+      });
+    }
     if (!shouldCreateDelayEvent(delivery, events, deliveries)) continue;
     if (await store.recordEvent(delivery.id, "DELAY_DETECTED", delivery.progress)) {
       newEvents += 1;

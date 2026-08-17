@@ -25,6 +25,7 @@
     "test:delivery-site-resolution": "node --experimental-strip-types --test tests/delivery-site-resolution.test.mjs",
     "test:delivery-persistence": "node --test tests/delivery-persistence-contract.test.mjs",
     "test:stop-plans": "node --experimental-strip-types --test tests/truck-stop-plan.test.mjs",
+    "test:stop-dwell": "node --experimental-strip-types --test tests/stop-dwell.test.mjs",
     "test:tour": "node --experimental-strip-types --test tests/multistop-tour.test.mjs",
     "test:tour-view": "node --experimental-strip-types --test tests/tour-view.test.mjs",
     "test:route-template": "node --experimental-strip-types --test tests/route-template.test.mjs",

@@ -8,13 +8,14 @@ import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
-import { buildTruckStopPlans, pendingServiceMinutesBefore } from "../../lib/truck-stop-plan";
+import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
+import { summarizeStopDwell } from "../../lib/stop-dwell";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -135,6 +136,21 @@ function normalized(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+async function learnedStopMinutes(companyId: string, routeTemplateId: string | null, currentTripInstanceId: string | null) {
+  const learned = new Map<string, number>();
+  if (!routeTemplateId) return learned;
+  const [positions, sites] = await Promise.all([
+    store.listTripPositionsForRoute(companyId, routeTemplateId, 20000),
+    siteStore.listForCompany(companyId),
+  ]);
+  for (const site of sites) {
+    if (typeof site.latitude !== "number" || typeof site.longitude !== "number") continue;
+    const stats = summarizeStopDwell(positions, { latitude: site.latitude, longitude: site.longitude, arrivalRadiusKm: site.arrivalRadiusKm }, 3, currentTripInstanceId);
+    if (stats.usableMinutes !== null) learned.set(site.id, stats.usableMinutes);
+  }
+  return learned;
+}
+
 async function persistTransitionEvents(transitions: DeliveryTransition[]) {
   for (const transition of transitions) {
     for (const type of transition.events) {
@@ -167,7 +183,8 @@ export async function GET(request: Request) {
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
       const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
-      const serviceMinutes = pendingServiceMinutesBefore(row, companyRows);
+      const learnedDwell = await learnedStopMinutes(row.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
+      const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, companyRows, learnedDwell);
       const enriched = await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount);
       await processPendingNotifications(row.companyId, requestUrl.origin);
       return Response.json({
@@ -187,12 +204,13 @@ export async function GET(request: Request) {
     const stopPlans = buildTruckStopPlans(rows);
     const routeContexts = buildEtaRouteContexts(rows, stopPlans);
     const enrichedRows = await Promise.all(rows.map(async (row) => {
-      const serviceMinutes = pendingServiceMinutesBefore(row, rows);
       const routeEvents = await store.listEvents(row.id);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
       const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
+      const learnedDwell = await learnedStopMinutes(session.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
+      const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, rows, learnedDwell);
       return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount)).delivery;
     }));
     await processPendingNotifications(session.companyId, requestUrl.origin);

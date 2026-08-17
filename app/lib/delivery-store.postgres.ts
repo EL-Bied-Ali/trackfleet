@@ -170,6 +170,19 @@ async function ensureSchema() {
     await sql`ALTER TABLE delivery_eta_observations ADD COLUMN IF NOT EXISTS trip_instance_id text`;
     await sql`ALTER TABLE delivery_eta_observations ADD COLUMN IF NOT EXISTS destination_site_id text`;
     await sql`CREATE INDEX IF NOT EXISTS idx_eta_observations_route_destination ON delivery_eta_observations(route_template_id, destination_site_id, position_at DESC)`;
+    await sql`CREATE TABLE IF NOT EXISTS trip_position_observations (
+      company_id text NOT NULL,
+      route_template_id text NOT NULL,
+      trip_instance_id text NOT NULL,
+      vehicle_id text NOT NULL,
+      position_at timestamptz NOT NULL,
+      latitude double precision NOT NULL,
+      longitude double precision NOT NULL,
+      speed double precision NOT NULL,
+      created_at timestamptz NOT NULL,
+      PRIMARY KEY (company_id, trip_instance_id, position_at)
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)`;
 
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
@@ -322,6 +335,24 @@ export const postgresStore: DeliveryStore = {
       plannedArrivalAt: row.planned_arrival_at ? new Date(String(row.planned_arrival_at)) : null, delayMinutes: row.delay_minutes === null ? null : Number(row.delay_minutes),
       effectiveSpeedKmh: row.effective_speed_kmh === null ? null : Number(row.effective_speed_kmh), remainingDistanceKm: Number(row.remaining_distance_km), progress: Number(row.progress),
       confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(String(row.created_at)),
+    }));
+  },
+
+  async recordTripPosition(input) {
+    await ensureSchema();
+    const rows = await sql`INSERT INTO trip_position_observations (company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at)
+      VALUES (${input.companyId}, ${input.routeTemplateId}, ${input.tripInstanceId}, ${input.vehicleId}, ${input.positionAt.toISOString()}, ${input.latitude}, ${input.longitude}, ${input.speed}, ${new Date().toISOString()})
+      ON CONFLICT (company_id, trip_instance_id, position_at) DO NOTHING RETURNING trip_instance_id` as Array<{ trip_instance_id: string }>;
+    return rows.length > 0;
+  },
+  async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {
+    await ensureSchema();
+    const capped = Math.max(1, Math.min(20000, Math.round(limit)));
+    const rows = await sql`SELECT company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
+      FROM trip_position_observations WHERE company_id = ${companyId} AND route_template_id = ${routeTemplateId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), tripInstanceId: String(row.trip_instance_id), vehicleId: String(row.vehicle_id),
+      positionAt: new Date(String(row.position_at)), latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), createdAt: new Date(String(row.created_at)),
     }));
   },
 

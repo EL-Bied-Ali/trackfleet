@@ -98,9 +98,9 @@ export const memoryStore: DeliveryStore = {
     tripPositions.push({ ...input, createdAt: new Date() });
     return true;
   },
-  async listTripPositionsForRoute(routeTemplateId, limit = 10000) {
+  async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {
     return tripPositions
-      .filter((item) => item.routeTemplateId === routeTemplateId)
+      .filter((item) => item.companyId === companyId && item.routeTemplateId === routeTemplateId)
       .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
       .slice(0, Math.max(1, Math.min(20000, limit)));
   },
