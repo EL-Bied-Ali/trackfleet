@@ -64,6 +64,10 @@ function credentialKey(auth: SendatrackCredentials) {
   return `${auth.accountID.trim().toLowerCase()}\u0000${auth.user.trim().toLowerCase()}`;
 }
 
+function providerUnavailableStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
 async function login(auth: SendatrackCredentials) {
   const key = credentialKey(auth);
   const cachedToken = cachedTokens.get(key);
@@ -82,7 +86,7 @@ async function login(auth: SendatrackCredentials) {
       contentType: response.headers.get("content-type"),
       retryAfter: response.headers.get("retry-after"),
     });
-    if (response.status === 429 || response.status >= 500) throw new Error("service_unavailable");
+    if (providerUnavailableStatus(response.status)) throw new Error("service_unavailable");
     throw new Error("authentication_failed");
   }
   const payload = await response.json() as unknown;
