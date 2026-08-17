@@ -203,13 +203,33 @@ export async function GET(request: Request) {
     const rows = await store.listForCompany(session.companyId);
     const stopPlans = buildTruckStopPlans(rows);
     const routeContexts = buildEtaRouteContexts(rows, stopPlans);
+    const etaHistoryCache = new Map<string, Promise<Awaited<ReturnType<typeof store.listEtaObservationsForRoute>>>>();
+    const dwellCache = new Map<string, Promise<Map<string, number>>>();
+    const cachedEtaHistory = (routeTemplateId: string, destinationSiteId: string) => {
+      const key = `${routeTemplateId}|${destinationSiteId}`;
+      let pending = etaHistoryCache.get(key);
+      if (!pending) {
+        pending = store.listEtaObservationsForRoute(routeTemplateId, destinationSiteId);
+        etaHistoryCache.set(key, pending);
+      }
+      return pending;
+    };
+    const cachedLearnedDwell = (routeTemplateId: string | null, tripInstanceId: string | null) => {
+      const key = `${routeTemplateId ?? "none"}|${tripInstanceId ?? "none"}`;
+      let pending = dwellCache.get(key);
+      if (!pending) {
+        pending = learnedStopMinutes(session.companyId, routeTemplateId, tripInstanceId);
+        dwellCache.set(key, pending);
+      }
+      return pending;
+    };
     const enrichedRows = await Promise.all(rows.map(async (row) => {
       const routeEvents = await store.listEvents(row.id);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
-      const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
+      const historyRows = routeContext ? await cachedEtaHistory(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
-      const learnedDwell = await learnedStopMinutes(session.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
+      const learnedDwell = await cachedLearnedDwell(routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, rows, learnedDwell);
       return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount)).delivery;
     }));
