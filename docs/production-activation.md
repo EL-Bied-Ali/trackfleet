@@ -9,8 +9,11 @@ Configure:
 - `DATABASE_URL`: Neon Postgres connection string.
 - `CRON_SECRET`: a strong random secret used only for `/api/automation/tick`.
 - `WHATSAPP_AUTOMATION_ENABLED=false` until Meta WhatsApp configuration is complete.
+- `SENDATRACK_ACCOUNT_ID`: the SENDATRACK company/account identifier.
+- `SENDATRACK_USER`: the SENDATRACK automation user.
+- `SENDATRACK_PASSWORD`: the current SENDATRACK password used by server-side fleet synchronization.
 
-SENDATRACK credentials must remain configured as they are today.
+Keep SENDATRACK credentials only in Vercel environment variables; never commit them to the repository.
 
 Keep `CRON_SECRET` and the matching GitHub Actions secret on a single line with no surrounding whitespace.
 
