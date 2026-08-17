@@ -165,6 +165,10 @@ export default function Home() {
   const [vehicleLinkChoice, setVehicleLinkChoice] = useState("");
   const [vehicleLinkBusy, setVehicleLinkBusy] = useState(false);
   const [tripAssignBusy, setTripAssignBusy] = useState<string | null>(null);
+  const [tripCreateDeliveryId, setTripCreateDeliveryId] = useState<string | null>(null);
+  const [tripCreateVehicleId, setTripCreateVehicleId] = useState("");
+  const [tripCreateManualTruck, setTripCreateManualTruck] = useState("");
+  const [tripCreateBusy, setTripCreateBusy] = useState(false);
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([]);
   const t = translations[locale];
 
@@ -506,6 +510,30 @@ export default function Home() {
     }
   }
 
+  async function createPlannedTrip(deliveryId: string) {
+    const manualTruck = tripCreateManualTruck.trim();
+    if (!tripCreateVehicleId && !manualTruck) {
+      setToast(locale === "fr" ? "Choisissez un camion ou saisissez son nom / sa plaque." : locale === "nl" ? "Kies een voertuig of voer naam / nummerplaat in." : "Choose a vehicle or enter its name / plate.");
+      return;
+    }
+    setTripCreateBusy(true);
+    try {
+      const response = await fetch("/api/deliveries/create-trip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ deliveryId, vehicleId: tripCreateVehicleId, manualTruck }) });
+      if (!response.ok) throw new Error("trip_creation_failed");
+      const data = await response.json() as { delivery: Delivery; trip: TripHistoryItem };
+      setDeliveries((items) => items.map((delivery) => delivery.id === data.delivery.id ? { ...delivery, ...data.delivery } : delivery));
+      setTrips((items) => [data.trip, ...items.filter((trip) => trip.id !== data.trip.id)]);
+      setTripCreateDeliveryId(null);
+      setTripCreateVehicleId("");
+      setTripCreateManualTruck("");
+      setToast(locale === "fr" ? "Voyage planifié créé et colis affecté." : locale === "nl" ? "Geplande rit aangemaakt en zending toegewezen." : "Planned trip created and parcel assigned.");
+    } catch {
+      setToast(locale === "fr" ? "Impossible de créer ce voyage planifié." : locale === "nl" ? "Geplande rit kon niet worden aangemaakt." : "Could not create this planned trip.");
+    } finally {
+      setTripCreateBusy(false);
+    }
+  }
+
   async function createDelivery(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -795,7 +823,15 @@ export default function Home() {
               return <article className="tour-card" key={`assign-${delivery.id}`}>
                 <div className="tour-card-head"><div><strong>{delivery.customer}</strong><span>{delivery.id} · {delivery.destination}</span></div><small>{locale === "fr" ? "À affecter" : locale === "nl" ? "Toe te wijzen" : "To assign"}</small></div>
                 {suggestion ? <div className="eta-explanation"><strong>{locale === "fr" ? "Voyage compatible proposé" : locale === "nl" ? "Voorgestelde compatibele rit" : "Suggested compatible trip"}</strong><span>{suggestion.truck} · {suggestion.tripId} · {locale === "fr" ? `arrêt ${suggestion.stopSequence}` : locale === "nl" ? `stop ${suggestion.stopSequence}` : `stop ${suggestion.stopSequence}`}</span>{suggestion.plannedArrivalAt && <span>{new Date(suggestion.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>}</div> : <div className="eta-explanation"><strong>{locale === "fr" ? "Aucune suggestion sûre" : locale === "nl" ? "Geen veilige suggestie" : "No safe suggestion"}</strong><span>{locale === "fr" ? "Le colis reste simplement en attente d’affectation." : locale === "nl" ? "De zending blijft gewoon wachten op toewijzing." : "The parcel simply remains waiting for assignment."}</span></div>}
-                <div className="popover-actions">{suggestion && <button type="button" disabled={tripAssignBusy === delivery.id} onClick={() => void assignSuggestedTrip(delivery.id, suggestion.tripId)}>{tripAssignBusy === delivery.id ? (locale === "fr" ? "Affectation…" : locale === "nl" ? "Toewijzen…" : "Assigning…") : (locale === "fr" ? "Confirmer ce voyage" : locale === "nl" ? "Deze rit bevestigen" : "Confirm this trip")}</button>}<button type="button" className="copy-link" onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }}>{locale === "fr" ? "Voir le colis" : locale === "nl" ? "Zending bekijken" : "View parcel"}</button></div>
+                {tripCreateDeliveryId === delivery.id ? <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                  {integration.connected && integration.vehicles.length > 0 && <select value={tripCreateVehicleId} onChange={(event) => { setTripCreateVehicleId(event.target.value); if (event.target.value) setTripCreateManualTruck(""); }}>
+                    <option value="">{locale === "fr" ? "Choisir un camion SENDATRACK" : locale === "nl" ? "Kies SENDATRACK-voertuig" : "Choose SENDATRACK vehicle"}</option>
+                    {integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}
+                  </select>}
+                  <input value={tripCreateManualTruck} disabled={Boolean(tripCreateVehicleId)} onChange={(event) => setTripCreateManualTruck(event.target.value)} placeholder={locale === "fr" ? "Ou nom / plaque du camion" : locale === "nl" ? "Of naam / nummerplaat" : "Or truck name / plate"} />
+                  <small>{locale === "fr" ? "Ce colis devient le premier arrêt explicite du nouveau voyage." : locale === "nl" ? "Deze zending wordt de eerste expliciete stop van de nieuwe rit." : "This parcel becomes the first explicit stop of the new trip."}</small>
+                  <div className="popover-actions"><button type="button" disabled={tripCreateBusy} onClick={() => void createPlannedTrip(delivery.id)}>{tripCreateBusy ? (locale === "fr" ? "Création…" : locale === "nl" ? "Aanmaken…" : "Creating…") : (locale === "fr" ? "Créer et affecter" : locale === "nl" ? "Aanmaken en toewijzen" : "Create and assign")}</button><button type="button" className="copy-link" onClick={() => { setTripCreateDeliveryId(null); setTripCreateVehicleId(""); setTripCreateManualTruck(""); }}>{t.cancel}</button></div>
+                </div> : <div className="popover-actions">{suggestion ? <button type="button" disabled={tripAssignBusy === delivery.id} onClick={() => void assignSuggestedTrip(delivery.id, suggestion.tripId)}>{tripAssignBusy === delivery.id ? (locale === "fr" ? "Affectation…" : locale === "nl" ? "Toewijzen…" : "Assigning…") : (locale === "fr" ? "Confirmer ce voyage" : locale === "nl" ? "Deze rit bevestigen" : "Confirm this trip")}</button> : <button type="button" onClick={() => { setTripCreateDeliveryId(delivery.id); setTripCreateVehicleId(""); setTripCreateManualTruck(""); }}>{locale === "fr" ? "Créer un voyage planifié" : locale === "nl" ? "Geplande rit maken" : "Create planned trip"}</button>}<button type="button" className="copy-link" onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }}>{locale === "fr" ? "Voir le colis" : locale === "nl" ? "Zending bekijken" : "View parcel"}</button></div>}
               </article>;
             })}
           </div>

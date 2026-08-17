@@ -27,6 +27,8 @@
     "test:trip-assignment": "node --experimental-strip-types --test tests/trip-assignment.test.mjs",
     "test:planned-trip-assignment-contract": "node --test tests/planned-trip-assignment-contract.test.mjs",
     "test:unassigned-direct-link-guard": "node --test tests/unassigned-direct-link-guard.test.mjs",
+    "test:planned-trip-creation": "node --experimental-strip-types --test tests/planned-trip-creation.test.mjs",
+    "test:create-trip-api-contract": "node --test tests/create-trip-api-contract.test.mjs",
     "test:assignment-queue-ui": "node --test tests/assignment-queue-ui.test.mjs",
     "test:tenant-isolation": "node --test tests/tenant-isolation.test.mjs",
     "test:known-sites": "node --experimental-strip-types --test tests/known-sites.test.mjs",
