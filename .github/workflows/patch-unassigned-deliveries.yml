@@ -32,8 +32,8 @@ jobs:
           s = p.read_text()
           if 'isUnassignedVehicle' not in s:
             s = s.replace('import type { SendatrackVehicle } from "./sendatrack";\n', 'import type { SendatrackVehicle } from "./sendatrack";\nimport { isUnassignedVehicle } from "./delivery-vehicle-choice";\n', 1)
-            marker = ') : VehicleLinkMatch {\n  const knownId = delivery.sendatrackVehicleId?.trim();\n'
-            replacement = ') : VehicleLinkMatch {\n  if (isUnassignedVehicle(delivery)) return { vehicle: null, reason: "none", candidates: [] };\n  const knownId = delivery.sendatrackVehicleId?.trim();\n'
+            marker = '): VehicleLinkMatch {\n  const knownId = delivery.sendatrackVehicleId?.trim();\n'
+            replacement = '): VehicleLinkMatch {\n  if (isUnassignedVehicle(delivery)) return { vehicle: null, reason: "none", candidates: [] };\n  const knownId = delivery.sendatrackVehicleId?.trim();\n'
             if marker not in s: raise SystemExit('vehicle linking marker missing')
             s = s.replace(marker, replacement, 1)
           p.write_text(s)
@@ -66,9 +66,7 @@ jobs:
           offline_new = '<input name="manualTruck" placeholder={locale === "fr" ? "Optionnel · Ex. TRK-005 / plaque" : locale === "nl" ? "Optioneel · Bijv. TRK-005 / nummerplaat" : "Optional · E.g. TRK-005 / plate"} />'
           if offline_old not in s: raise SystemExit('offline manual truck marker missing')
           s = s.replace(offline_old, offline_new, 1)
-          offline_help_old = 'SENDATRACK hors ligne : le GPS sera rattaché automatiquement quand le camion réapparaîtra.'
-          offline_help_new = 'Laissez vide si le camion n’est pas encore connu. Vous pourrez l’affecter plus tard.'
-          s = s.replace(offline_help_old, offline_help_new, 1)
+          s = s.replace('SENDATRACK hors ligne : le GPS sera rattaché automatiquement quand le camion réapparaîtra.', 'Laissez vide si le camion n’est pas encore connu. Vous pourrez l’affecter plus tard.', 1)
           s = s.replace('SENDATRACK offline: GPS wordt automatisch gekoppeld zodra de vrachtwagen terug verschijnt.', 'Laat leeg als het voertuig nog niet bekend is. U kunt het later toewijzen.', 1)
           s = s.replace('SENDATRACK offline: GPS will attach automatically when the truck reappears.', 'Leave blank if the truck is not known yet. You can assign it later.', 1)
           p.write_text(s)
