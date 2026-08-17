@@ -67,6 +67,8 @@ jobs:
         run: pnpm run test:dispatch-data-gate
       - name: Verify reusable route identity
         run: pnpm run test:route-template
+      - name: Verify persistent trip snapshot model
+        run: pnpm run test:trip-record
       - name: Verify automation storage safety
         run: pnpm run test:automation-readiness
       - name: Verify automation health diagnostics
