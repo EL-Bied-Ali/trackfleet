@@ -1,7 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
@@ -80,10 +80,16 @@ async function ensureTable() {
     attempted_at integer NOT NULL, sent_at integer,
     PRIMARY KEY (delivery_id, event_type, channel)
   )`).run();
+  await database.prepare(`CREATE TABLE IF NOT EXISTS delivery_eta_observations (
+    delivery_id text NOT NULL, position_at integer NOT NULL, estimated_arrival_at integer NOT NULL, planned_arrival_at integer,
+    delay_minutes integer, effective_speed_kmh real, remaining_distance_km real NOT NULL, progress integer NOT NULL,
+    confidence text NOT NULL, source text NOT NULL, created_at integer NOT NULL, PRIMARY KEY (delivery_id, position_at)
+  )`).run();
   await database.batch([
     database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)"),
     database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)"),
   ]);
   for (const delivery of seedDeliveries) {
     await database.prepare(`INSERT OR IGNORE INTO deliveries
@@ -171,6 +177,25 @@ export const store: DeliveryStore = {
     await ensureTable();
     const result = await db().prepare(`SELECT delivery_id AS deliveryId, type, progress, created_at AS createdAt FROM delivery_events WHERE delivery_id = ? ORDER BY created_at ASC`).bind(deliveryId).all<RawDeliveryEvent>();
     return (result.results ?? []).map(hydrateEvent);
+  },
+  async recordEtaObservation(input) {
+    await ensureTable();
+    const result = await db().prepare(`INSERT OR IGNORE INTO delivery_eta_observations
+      (delivery_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(input.deliveryId, input.positionAt.getTime(), input.estimatedArrivalAt.getTime(), input.plannedArrivalAt?.getTime() ?? null, input.delayMinutes, input.effectiveSpeedKmh, input.remainingDistanceKm, input.progress, input.confidence, input.source, Date.now()).run();
+    return Boolean(result.meta?.changes);
+  },
+  async listEtaObservations(deliveryId, limit = 200) {
+    await ensureTable();
+    const capped = Math.max(1, Math.min(2000, Math.round(limit)));
+    const result = await db().prepare(`SELECT delivery_id AS deliveryId, position_at AS positionAt, estimated_arrival_at AS estimatedArrivalAt, planned_arrival_at AS plannedArrivalAt, delay_minutes AS delayMinutes, effective_speed_kmh AS effectiveSpeedKmh, remaining_distance_km AS remainingDistanceKm, progress, confidence, source, created_at AS createdAt FROM delivery_eta_observations WHERE delivery_id = ? ORDER BY position_at DESC LIMIT ?`).bind(deliveryId, capped).all<Record<string, unknown>>();
+    return (result.results ?? []).map((row) => ({
+      deliveryId: String(row.deliveryId), positionAt: new Date(Number(row.positionAt)), estimatedArrivalAt: new Date(Number(row.estimatedArrivalAt)),
+      plannedArrivalAt: row.plannedArrivalAt == null ? null : new Date(Number(row.plannedArrivalAt)), delayMinutes: row.delayMinutes == null ? null : Number(row.delayMinutes),
+      effectiveSpeedKmh: row.effectiveSpeedKmh == null ? null : Number(row.effectiveSpeedKmh), remainingDistanceKm: Number(row.remainingDistanceKm), progress: Number(row.progress),
+      confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(Number(row.createdAt)),
+    }));
   },
   async listPendingNotifications(companyId) {
     await ensureTable();

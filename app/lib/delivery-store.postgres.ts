@@ -1,7 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus, DeliveryStore, DeliveryTransition } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
@@ -151,6 +151,21 @@ async function ensureSchema() {
       sent_at timestamptz,
       PRIMARY KEY (delivery_id, event_type, channel)
     )`;
+    await sql`CREATE TABLE IF NOT EXISTS delivery_eta_observations (
+      delivery_id text NOT NULL,
+      position_at timestamptz NOT NULL,
+      estimated_arrival_at timestamptz NOT NULL,
+      planned_arrival_at timestamptz,
+      delay_minutes integer,
+      effective_speed_kmh double precision,
+      remaining_distance_km double precision NOT NULL,
+      progress integer NOT NULL,
+      confidence text NOT NULL,
+      source text NOT NULL,
+      created_at timestamptz NOT NULL,
+      PRIMARY KEY (delivery_id, position_at)
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)`;
 
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
@@ -267,6 +282,29 @@ export const postgresStore: DeliveryStore = {
     await ensureSchema();
     const rows = await sql`SELECT delivery_id, type, progress, created_at FROM delivery_events WHERE delivery_id = ${deliveryId} ORDER BY created_at ASC` as RawEvent[];
     return rows.map(hydrateEvent);
+  },
+
+  async recordEtaObservation(input) {
+    await ensureSchema();
+    const rows = await sql`INSERT INTO delivery_eta_observations (
+      delivery_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
+    ) VALUES (
+      ${input.deliveryId}, ${input.positionAt.toISOString()}, ${input.estimatedArrivalAt.toISOString()}, ${input.plannedArrivalAt?.toISOString() ?? null}, ${input.delayMinutes}, ${input.effectiveSpeedKmh}, ${input.remainingDistanceKm}, ${input.progress}, ${input.confidence}, ${input.source}, ${new Date().toISOString()}
+    ) ON CONFLICT (delivery_id, position_at) DO NOTHING RETURNING delivery_id` as Array<{ delivery_id: string }>;
+    return rows.length > 0;
+  },
+
+  async listEtaObservations(deliveryId, limit = 200) {
+    await ensureSchema();
+    const capped = Math.max(1, Math.min(2000, Math.round(limit)));
+    const rows = await sql`SELECT delivery_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
+      FROM delivery_eta_observations WHERE delivery_id = ${deliveryId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      deliveryId: String(row.delivery_id), positionAt: new Date(String(row.position_at)), estimatedArrivalAt: new Date(String(row.estimated_arrival_at)),
+      plannedArrivalAt: row.planned_arrival_at ? new Date(String(row.planned_arrival_at)) : null, delayMinutes: row.delay_minutes === null ? null : Number(row.delay_minutes),
+      effectiveSpeedKmh: row.effective_speed_kmh === null ? null : Number(row.effective_speed_kmh), remainingDistanceKm: Number(row.remaining_distance_km), progress: Number(row.progress),
+      confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(String(row.created_at)),
+    }));
   },
 
   async listPendingNotifications(companyId) {

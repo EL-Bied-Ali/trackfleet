@@ -32,6 +32,7 @@
     "test:whatsapp-readiness": "node --test tests/whatsapp-readiness.test.mjs",
     "test:whatsapp-preview": "node --test tests/whatsapp-preview.test.mjs",
     "test:eta": "node --experimental-strip-types --test tests/eta-estimator.test.mjs",
+    "test:eta-observation": "node --experimental-strip-types --test tests/eta-observation.test.mjs",
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",

@@ -1,6 +1,6 @@
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
@@ -8,6 +8,7 @@ import { matchDeliveryVehicle } from "./vehicle-linking";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];
+const etaObservations: EtaObservationRow[] = [];
 const notificationClaims = new NotificationClaimState();
 
 function notificationKey(deliveryId: string, type: DeliveryEventType) { return `${deliveryId}:${type}:whatsapp`; }
@@ -76,6 +77,14 @@ export const memoryStore: DeliveryStore = {
   },
   async listEvents(deliveryId) {
     return deliveryEvents.filter((event) => event.deliveryId === deliveryId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  },
+  async recordEtaObservation(input) {
+    if (etaObservations.some((item) => item.deliveryId === input.deliveryId && item.positionAt.getTime() === input.positionAt.getTime())) return false;
+    etaObservations.push({ ...input, createdAt: new Date() });
+    return true;
+  },
+  async listEtaObservations(deliveryId, limit = 200) {
+    return etaObservations.filter((item) => item.deliveryId === deliveryId).sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime()).slice(0, Math.max(1, Math.min(2000, limit)));
   },
   async listPendingNotifications(companyId) {
     return deliveryEvents.flatMap((event) => {

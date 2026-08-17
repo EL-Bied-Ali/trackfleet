@@ -4,6 +4,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
 import { processPendingNotifications } from "./notification-runner";
 import { getSendatrackSnapshot } from "./sendatrack";
+import { buildEtaObservation } from "./eta-observation";
 
 export type AutomationRunResult = {
   connected: boolean;
@@ -13,6 +14,7 @@ export type AutomationRunResult = {
   delayEvents: number;
   notificationsSent: number;
   notificationFailures: number;
+  etaObservations: number;
 };
 
 export async function runFleetAutomation(origin: string): Promise<AutomationRunResult> {
@@ -21,7 +23,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
 
   const snapshot = await getSendatrackSnapshot();
   if (!snapshot.connected) {
-    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0 };
+    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0 };
   }
 
   const companyId = await companyIdForAccount(accountID);
@@ -40,8 +42,11 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   // Pass all company deliveries so future agency service time is identical to
   // the ETA shown by the API/dashboard.
   const deliveries = await store.listForCompany(companyId);
+  let etaObservations = 0;
   for (const delivery of deliveries) {
     const events = await store.listEvents(delivery.id);
+    const etaObservation = buildEtaObservation(delivery, events, deliveries);
+    if (etaObservation && await store.recordEtaObservation(etaObservation)) etaObservations += 1;
     if (!shouldCreateDelayEvent(delivery, events, deliveries)) continue;
     if (await store.recordEvent(delivery.id, "DELAY_DETECTED", delivery.progress)) {
       newEvents += 1;
@@ -57,6 +62,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     delayEvents,
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
+    etaObservations,
   });
 
   return {
@@ -67,5 +73,6 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     delayEvents,
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
+    etaObservations,
   };
 }
