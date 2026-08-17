@@ -35,6 +35,8 @@ jobs:
         run: pnpm run test:customer-contact
       - name: Verify SENDATRACK login error classification
         run: pnpm run test:login-error
+      - name: Verify remembered origin preference
+        run: pnpm run test:origin-preference
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
