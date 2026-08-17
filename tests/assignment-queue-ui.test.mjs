@@ -16,7 +16,8 @@ test("planned trip suggestion requires explicit operator confirmation", () => {
   assert.match(page, /\/api\/deliveries\/assign-trip/);
 });
 
-test("operator can still choose another truck instead of accepting the suggestion", () => {
-  assert.match(page, /Choisir un autre camion/);
-  assert.match(page, /setVehicleLinkOpen\(true\)/);
+test("unassigned parcels cannot bypass trip selection by choosing a truck directly", () => {
+  assert.doesNotMatch(page, /Choisir un autre camion/);
+  assert.match(page, /Voir le colis/);
+  assert.match(page, /Affectez d’abord ce colis à un voyage planifié/);
 });
