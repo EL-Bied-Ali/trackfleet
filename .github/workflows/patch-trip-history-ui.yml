@@ -1,0 +1,89 @@
+name: Patch persistent trip history UI
+
+on:
+  push:
+    paths:
+      - ".github/workflows/patch-trip-history-ui.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Expose safe trip history and render completed trips
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('app/api/deliveries/route.ts')
+          s = p.read_text()
+          marker = '    await processPendingNotifications(session.companyId, requestUrl.origin);\n\n    return Response.json({\n      deliveries: enrichedRows,\n      stopPlans: stopPlansWithLearning,\n'
+          replacement = '''    await processPendingNotifications(session.companyId, requestUrl.origin);\n\n    const tripHistory = (await store.listTrips(session.companyId, 20)).map((trip) => ({\n      id: trip.id,\n      routeTemplateId: trip.routeTemplateId,\n      vehicleKey: trip.vehicleKey,\n      truck: trip.truck,\n      sendatrackVehicleId: trip.sendatrackVehicleId,\n      originSiteId: trip.originSiteId,\n      stops: trip.stops,\n      status: trip.status,\n      createdAt: trip.createdAt,\n      updatedAt: trip.updatedAt,\n    }));\n\n    return Response.json({\n      deliveries: enrichedRows,\n      stopPlans: stopPlansWithLearning,\n      trips: tripHistory,\n'''
+          if marker not in s: raise SystemExit('API response marker missing')
+          s = s.replace(marker, replacement, 1)
+          p.write_text(s)
+
+          p = Path('app/page.tsx')
+          s = p.read_text()
+          type_marker = 'type TourPlan = { vehicleKey: string; truck: string; sendatrackVehicleId: string; routeTemplateId: string; tripInstanceId?: string | null; originSiteId: string | null; source: "planned-arrival"; stops: TourStop[]; learning?: { historicalTrips: number; requiredTrips: number; learnedStops: number; futureStops: number; unconfiguredStops: number; etaHistoryReady: boolean; dwellHistoryReady: boolean; medianEffectiveSpeedKmh: number | null; medianDelayMinutes: number | null; stage: "collecting" | "partial" | "ready" } };\n'
+          trip_type = type_marker + 'type TripHistoryItem = { id: string; routeTemplateId: string; vehicleKey: string; truck: string; sendatrackVehicleId: string; originSiteId: string | null; stops: Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: string | null }>; status: "planned" | "active" | "completed"; createdAt: string; updatedAt: string };\n'
+          if type_marker not in s: raise SystemExit('TourPlan type marker missing')
+          s = s.replace(type_marker, trip_type, 1)
+          state_marker = '  const [stopPlans, setStopPlans] = useState<TourPlan[]>([]);\n'
+          if state_marker not in s: raise SystemExit('stopPlans state marker missing')
+          s = s.replace(state_marker, state_marker + '  const [trips, setTrips] = useState<TripHistoryItem[]>([]);\n', 1)
+          response_type = 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[] };'
+          if response_type not in s: raise SystemExit('response type marker missing')
+          s = s.replace(response_type, 'const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; stopPlans?: TourPlan[]; trips?: TripHistoryItem[] };', 1)
+          set_marker = '        if (!tracking) setStopPlans(data.stopPlans ?? []);\n'
+          if set_marker not in s: raise SystemExit('stopPlans setter marker missing')
+          s = s.replace(set_marker, set_marker + '        if (!tracking) setTrips(data.trips ?? []);\n', 1)
+          error_marker = '          setStopPlans([]);\n          setDispatchDataState("error");\n'
+          if error_marker not in s: raise SystemExit('error clear marker missing')
+          s = s.replace(error_marker, '          setStopPlans([]);\n          setTrips([]);\n          setDispatchDataState("error");\n', 1)
+
+          panel_marker = '        <div className="deliveries-panel">\n'
+          recent_panel = '''        {trips.some((trip) => trip.status === "completed") && <section className="tours-panel" aria-label={locale === "fr" ? "Voyages récents" : locale === "nl" ? "Recente ritten" : "Recent trips"}>\n          <div className="panel-header"><div><h2>{locale === "fr" ? "Voyages récents" : locale === "nl" ? "Recente ritten" : "Recent trips"}</h2><p>{locale === "fr" ? "Historique conservé après la fin des livraisons" : locale === "nl" ? "Geschiedenis blijft bewaard na de leveringen" : "History remains available after deliveries finish"}</p></div></div>\n          <div className="tour-list">\n            {trips.filter((trip) => trip.status === "completed").slice(0, 6).map((trip) => <article className="tour-card" key={trip.id}>\n              <div className="tour-card-head"><div><strong>{trip.truck}</strong><span>{trip.id} · {trip.routeTemplateId}</span></div><small>{locale === "fr" ? "Terminé" : locale === "nl" ? "Voltooid" : "Completed"} · {new Date(trip.updatedAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</small></div>\n              <div className="tour-stops">{trip.stops.map((stop) => <div className="tour-stop" key={`${trip.id}-${stop.siteId}`}><i>{stop.sequence}</i><span><strong>{stop.destination}</strong><small>{stop.plannedArrivalAt ? new Date(stop.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</small></span></div>)}</div>\n            </article>)}\n          </div>\n        </section>}\n\n'''
+          if panel_marker not in s: raise SystemExit('deliveries panel marker missing')
+          s = s.replace(panel_marker, recent_panel + panel_marker, 1)
+          p.write_text(s)
+
+          Path('tests/trip-history-api.test.mjs').write_text('''import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst route = fs.readFileSync(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8");\nconst page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");\n\ntest("dashboard trip history omits tenant id and keeps completed trips visible", () => {\n  assert.match(route, /trips: tripHistory/);\n  assert.doesNotMatch(route, /companyId: trip\.companyId,[\\s\\S]{0,250}trips: tripHistory/);\n  assert.match(page, /trip\.status === "completed"/);\n  assert.match(page, /Voyages récents/);\n});\n''')
+
+          p = Path('package.json')
+          s = p.read_text()
+          marker = '    "test:trip-persistence": "node --test tests/trip-persistence-contract.test.mjs",\n'
+          if marker not in s: raise SystemExit('trip persistence package marker missing')
+          s = s.replace(marker, marker + '    "test:trip-history": "node --test tests/trip-history-api.test.mjs",\n', 1)
+          p.write_text(s)
+
+      - run: pnpm install --no-frozen-lockfile
+      - name: Verify
+        run: |
+          pnpm run test:trip-history
+          pnpm run test:trip-record
+          pnpm run test:trip-persistence
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          pnpm run build:vercel
+          pnpm run build
+      - name: Commit product files
+        run: |
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app tests package.json
+          git commit -m "show persistent completed trip history"
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push
