@@ -86,6 +86,12 @@ export const memoryStore: DeliveryStore = {
   async listEtaObservations(deliveryId, limit = 200) {
     return etaObservations.filter((item) => item.deliveryId === deliveryId).sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime()).slice(0, Math.max(1, Math.min(2000, limit)));
   },
+  async listEtaObservationsForRoute(routeTemplateId, destinationSiteId, limit = 5000) {
+    return etaObservations
+      .filter((item) => item.routeTemplateId === routeTemplateId && item.destinationSiteId === destinationSiteId)
+      .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
+      .slice(0, Math.max(1, Math.min(10000, limit)));
+  },
   async listPendingNotifications(companyId) {
     return deliveryEvents.flatMap((event) => {
       if (!customerFacingEvent(event.type)) return [];
