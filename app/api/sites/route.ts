@@ -1,7 +1,10 @@
 import { getCompanySession } from "../../lib/company-auth";
 import { siteStore } from "trackfleet-site-store";
 
-const allowedRoles = new Set(["origin", "dropoff", "replenishment", "destination"] as const);
+type SiteRole = "origin" | "dropoff" | "replenishment" | "destination";
+
+const allowedRoles = new Set<SiteRole>(["origin", "dropoff", "replenishment", "destination"]);
+const defaultRoles: SiteRole[] = ["origin", "dropoff", "replenishment", "destination"];
 
 function slug(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
@@ -40,9 +43,9 @@ export async function POST(request: Request) {
   const country = String(payload.country ?? "").trim().toUpperCase();
   const requestedId = String(payload.id ?? "").trim();
   const id = requestedId || slug(`${city}-${address}`);
-  const roles = Array.isArray(payload.roles)
-    ? [...new Set(payload.roles.map(String).filter((role): role is "origin" | "dropoff" | "replenishment" | "destination" => allowedRoles.has(role as any)))]
-    : ["origin", "dropoff", "replenishment", "destination"];
+  const roles: SiteRole[] = Array.isArray(payload.roles)
+    ? [...new Set(payload.roles.map(String).filter((role): role is SiteRole => allowedRoles.has(role as SiteRole)))]
+    : [...defaultRoles];
   const latitude = payload.latitude === null || payload.latitude === undefined || payload.latitude === "" ? null : Number(payload.latitude);
   const longitude = payload.longitude === null || payload.longitude === undefined || payload.longitude === "" ? null : Number(payload.longitude);
   const requestedRadius = Number(payload.arrivalRadiusKm ?? 0.5);
