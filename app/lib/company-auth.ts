@@ -123,17 +123,21 @@ export async function getCompanySession(request: Request): Promise<CompanySessio
       companyId: await sha256(`sendatrack-account:${payload.accountID.toLowerCase()}`),
       accountLabel: payload.accountID,
       userLabel: payload.user,
-      credentials: { accountID: payload.accountID, user: payload.user, password: payload.password },
+      credentials: {
+        accountID: payload.accountID,
+        user: payload.user,
+        password: payload.password,
+      },
     };
   } catch {
     return null;
   }
 }
 
-export function clearCompanySessionCookie() {
+export async function deleteCompanySession(_request: Request) {
   return `${cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
 export function createTrackingToken() {
-  return randomToken(24);
+  return randomToken(18);
 }
