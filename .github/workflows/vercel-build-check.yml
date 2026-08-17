@@ -21,6 +21,8 @@ jobs:
         run: pnpm install --no-frozen-lockfile
       - name: Verify SENDATRACK normalization
         run: pnpm run test:sendatrack
+      - name: Verify SENDATRACK historical event parsing
+        run: node --experimental-strip-types --test tests/sendatrack-history.test.mjs
       - name: Verify GPS route progress
         run: pnpm run test:route-progress
       - name: Verify delivery event detection
