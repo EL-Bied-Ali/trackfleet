@@ -1,6 +1,6 @@
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, TripPositionRow } from "./delivery-store.types";
 import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
@@ -9,6 +9,7 @@ import { matchDeliveryVehicle } from "./vehicle-linking";
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];
 const etaObservations: EtaObservationRow[] = [];
+const tripPositions: TripPositionRow[] = [];
 const notificationClaims = new NotificationClaimState();
 
 function notificationKey(deliveryId: string, type: DeliveryEventType) { return `${deliveryId}:${type}:whatsapp`; }
@@ -91,6 +92,17 @@ export const memoryStore: DeliveryStore = {
       .filter((item) => item.routeTemplateId === routeTemplateId && item.destinationSiteId === destinationSiteId)
       .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
       .slice(0, Math.max(1, Math.min(10000, limit)));
+  },
+  async recordTripPosition(input) {
+    if (tripPositions.some((item) => item.tripInstanceId === input.tripInstanceId && item.positionAt.getTime() === input.positionAt.getTime())) return false;
+    tripPositions.push({ ...input, createdAt: new Date() });
+    return true;
+  },
+  async listTripPositionsForRoute(routeTemplateId, limit = 10000) {
+    return tripPositions
+      .filter((item) => item.routeTemplateId === routeTemplateId)
+      .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
+      .slice(0, Math.max(1, Math.min(20000, limit)));
   },
   async listPendingNotifications(companyId) {
     return deliveryEvents.flatMap((event) => {
