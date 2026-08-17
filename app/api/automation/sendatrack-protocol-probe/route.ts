@@ -61,5 +61,5 @@ export async function GET(request: Request) {
   results.push(await probe("https_json_minimal", httpsUrl, JSON.stringify(minimal), "application/json"));
   results.push(await probe("https_form_minimal", httpsUrl, new URLSearchParams(minimal), "application/x-www-form-urlencoded"));
 
-  return Response.json({ results }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ identity: { accountID, user }, results }, { headers: { "cache-control": "no-store" } });
 }
