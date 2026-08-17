@@ -38,7 +38,7 @@ export function vehicleSearchIdentity(value: string) {
   return normalizeVehicleIdentity(value).replace(/\d+/g, (digits) => String(Number(digits)));
 }
 
-export function rankVehicleSuggestions(query: string, vehicles: SendatrackVehicle[]) {
+export function rankVehicleSuggestions<T extends Pick<SendatrackVehicle, "id" | "name">>(query: string, vehicles: T[]): T[] {
   const strict = normalizeVehicleIdentity(query);
   const tolerant = vehicleSearchIdentity(query);
   return [...vehicles]
