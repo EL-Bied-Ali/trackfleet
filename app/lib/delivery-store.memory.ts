@@ -1,5 +1,6 @@
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
+import { createDeliveryId } from "./delivery-id";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types";
 import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
@@ -190,7 +191,7 @@ export const memoryStore: DeliveryStore = {
     notificationClaims.release(notificationKey(deliveryId, type));
   },
   async create(input: CreateDeliveryInput) {
-    const delivery: DeliveryRow = { ...input, id: `TF-${String(Date.now()).slice(-6)}`, createdAt: new Date() };
+    const delivery: DeliveryRow = { ...input, id: createDeliveryId(), createdAt: new Date() };
     deliveryStore.push(delivery);
     return delivery;
   },
