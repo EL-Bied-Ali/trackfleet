@@ -29,6 +29,7 @@ test("WhatsApp readiness endpoint is authenticated", () => {
 test("WhatsApp readiness performs read-only provider checks", () => {
   assert.match(readinessHelper, /display_phone_number,verified_name/);
   assert.match(readinessHelper, /message_templates/);
+  assert.match(readinessHelper, /fields=name,status,language,components/);
   assert.doesNotMatch(readinessHelper, /\/messages/);
   assert.doesNotMatch(readinessHelper, /method:\s*["']POST["']/);
 });
@@ -52,9 +53,17 @@ test("template language is shared by demo, automation, preview readiness and bot
 });
 
 test("provider verification requires the approved template in the configured language", () => {
-  assert.match(readinessHelper, /template\.name === config\.templateName/);
-  assert.match(readinessHelper, /template\.status === ["']APPROVED["']/);
-  assert.match(readinessHelper, /template\.language === config\.templateLanguage/);
+  assert.match(readinessHelper, /candidate\.name === config\.templateName/);
+  assert.match(readinessHelper, /candidate\.status === ["']APPROVED["']/);
+  assert.match(readinessHelper, /candidate\.language === config\.templateLanguage/);
+});
+
+test("provider verification enforces the three-body-parameter TrackFleet template contract", () => {
+  assert.match(readinessHelper, /expectedTemplateBodyParameters = 3/);
+  assert.match(readinessHelper, /component\.type === ["']BODY["']/);
+  assert.match(readinessHelper, /body\.matchAll/);
+  assert.match(readinessHelper, /templateBodyParameters === expectedTemplateBodyParameters/);
+  assert.match(readinessHelper, /expectedTemplateBodyParameters/);
 });
 
 test("both runtimes support optional WABA id and explicit demo flag", () => {
