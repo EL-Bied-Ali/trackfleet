@@ -26,6 +26,12 @@ test("WhatsApp readiness endpoint is authenticated", () => {
   assert.match(readinessRoute, /verifyWhatsAppProvider\(\)/);
 });
 
+test("unexpected readiness failures are logged but sanitized for callers", () => {
+  assert.match(readinessRoute, /console\.error\("\[trackfleet:whatsapp\] readiness verification failed", \{ message \}\)/);
+  assert.match(readinessRoute, /error: "provider_verification_failed"/);
+  assert.doesNotMatch(readinessRoute, /error: error instanceof Error \? error\.message/);
+});
+
 test("WhatsApp readiness performs read-only provider checks", () => {
   assert.match(readinessHelper, /display_phone_number,verified_name/);
   assert.match(readinessHelper, /message_templates/);
