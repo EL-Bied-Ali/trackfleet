@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import * as maplibregl from "maplibre-gl";
-import type { GeoJSONSource, LngLatLike } from "maplibre-gl";
+import { useEffect, useRef, useState } from "react";
+import type { GeoJSONSource, LngLatLike, Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { belgiumMoroccoCorridor as corridor, destinationPointFor, routeForDestination } from "./lib/route-progress";
 
-maplibregl.setWorkerUrl(maplibreWorkerUrl);
+type MapLibreModule = typeof import("maplibre-gl");
 
 type MapDelivery = {
   id: string;
@@ -76,67 +75,83 @@ function compactVehicleLabel(name: string) {
 export default function InteractiveFleetMap({ deliveries, liveVehicles = [], selectedId, customerMode = false, label, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
-  const destinationMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const maplibreRef = useRef<MapLibreModule | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef<MapLibreMarker[]>([]);
+  const destinationMarkerRef = useRef<MapLibreMarker | null>(null);
+  const [mapRevision, setMapRevision] = useState(0);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      center: [-1.6, 42.6] as LngLatLike,
-      zoom: customerMode ? 3.2 : 3.1,
-      minZoom: 2.2,
-      maxZoom: 15,
-      attributionControl: { compact: true },
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "© OpenStreetMap contributors",
-          },
-        },
-        layers: [{ id: "osm", type: "raster", source: "osm" }],
-      },
-    });
-    mapRef.current = map;
+    let disposed = false;
+    let map: MapLibreMap | null = null;
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    map.on("load", () => {
-      map.addSource("corridor", {
-        type: "geojson",
-        data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: corridor } },
+    void (async () => {
+      const maplibregl = await import("maplibre-gl");
+      if (disposed || !containerRef.current) return;
+
+      maplibreRef.current = maplibregl;
+      maplibregl.setWorkerUrl(maplibreWorkerUrl);
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        center: [-1.6, 42.6] as LngLatLike,
+        zoom: customerMode ? 3.2 : 3.1,
+        minZoom: 2.2,
+        maxZoom: 15,
+        attributionControl: { compact: true },
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: "raster",
+              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              tileSize: 256,
+              attribution: "© OpenStreetMap contributors",
+            },
+          },
+          layers: [{ id: "osm", type: "raster", source: "osm" }],
+        },
       });
-      map.addLayer({ id: "corridor-casing", type: "line", source: "corridor", paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.9 } });
-      map.addLayer({ id: "corridor-line", type: "line", source: "corridor", paint: { "line-color": "#26755b", "line-width": 4, "line-dasharray": [2, 1] } });
-      map.addSource("ferry", {
-        type: "geojson",
-        data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [corridor[4], corridor[5]] } },
+      mapRef.current = map;
+
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      map.on("load", () => {
+        if (disposed || !map) return;
+        map.addSource("corridor", {
+          type: "geojson",
+          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: corridor } },
+        });
+        map.addLayer({ id: "corridor-casing", type: "line", source: "corridor", paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.9 } });
+        map.addLayer({ id: "corridor-line", type: "line", source: "corridor", paint: { "line-color": "#26755b", "line-width": 4, "line-dasharray": [2, 1] } });
+        map.addSource("ferry", {
+          type: "geojson",
+          data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [corridor[4], corridor[5]] } },
+        });
+        map.addLayer({ id: "ferry-line", type: "line", source: "ferry", paint: { "line-color": "#268f9b", "line-width": 5, "line-dasharray": [1, 1] } });
+        map.fitBounds([[-10.5, 29.5], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
+        setMapRevision((revision) => revision + 1);
       });
-      map.addLayer({ id: "ferry-line", type: "line", source: "ferry", paint: { "line-color": "#268f9b", "line-width": 5, "line-dasharray": [1, 1] } });
-      map.fitBounds([[-10.5, 29.5], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
-    });
+    })();
 
     return () => {
+      disposed = true;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       destinationMarkerRef.current?.remove();
       destinationMarkerRef.current = null;
       mapRef.current = null;
-      map.remove();
+      maplibreRef.current = null;
+      map?.remove();
     };
   }, [customerMode]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    const maplibregl = maplibreRef.current;
+    if (!map || !maplibregl) return;
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
     destinationMarkerRef.current?.remove();
@@ -188,7 +203,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
         .addTo(map);
     }
     markersRef.current = markers;
-  }, [customerMode, deliveries, liveVehicles, selectedId]);
+  }, [customerMode, deliveries, liveVehicles, mapRevision, selectedId]);
 
   return <div ref={containerRef} className="interactive-map-canvas" role="application" aria-label={label} />;
 }
