@@ -30,11 +30,12 @@ jobs:
           const healthResponse = await fetch(`${baseUrl}/api/health`, { cache: 'no-store' });
           if (!healthResponse.ok) throw new Error(`health_http_${healthResponse.status}`);
           const health = await healthResponse.json();
-          const ready = health?.storage?.persistent === true
-            && health?.storage?.connected === true
-            && health?.automation?.tickProtected === true;
-          if (!ready) {
-            throw new Error(`production_not_ready:${JSON.stringify({ storage: health?.storage, automation: health?.automation })}`);
+          if (health?.automation?.ready !== true) {
+            throw new Error(`production_not_ready:${JSON.stringify({
+              storage: health?.storage,
+              sendatrackConfigured: health?.sendatrackConfigured,
+              automation: health?.automation,
+            })}`);
           }
 
           const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
