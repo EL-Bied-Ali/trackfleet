@@ -73,6 +73,8 @@ jobs:
         run: pnpm run test:trip-ui-key-contract
       - name: Verify dashboard empty states and tracking link safety
         run: node --test tests/dashboard-polish.test.mjs
+      - name: Verify WhatsApp consent withdrawal
+        run: node --test tests/whatsapp-consent-withdrawal.test.mjs
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
