@@ -1,4 +1,5 @@
 import { createCompanySession } from "../../../lib/company-auth";
+import { publicLoginFailure } from "../../../lib/login-error";
 import { requestIsSameOrigin } from "../../../lib/request-origin";
 
 const loginWindowMs = 10 * 60_000;
@@ -59,8 +60,7 @@ export async function POST(request: Request) {
       headers: { "set-cookie": result.cookie, "cache-control": "no-store" },
     });
   } catch (error) {
-    const code = error instanceof Error ? error.message : "login_failed";
-    const status = code === "missing_credentials" ? 400 : code === "authentication_failed" ? 401 : 503;
-    return json({ error: code }, status);
+    const failure = publicLoginFailure(error);
+    return json({ error: failure.code }, failure.status);
   }
 }
