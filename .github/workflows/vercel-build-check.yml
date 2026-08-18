@@ -83,6 +83,8 @@ jobs:
         run: node --experimental-strip-types --test tests/request-origin-security.test.mjs
       - name: Verify malformed JSON and mutation input bounds
         run: node --experimental-strip-types --test tests/request-json-safety.test.mjs
+      - name: Verify Vercel and Cloudflare security header parity
+        run: node --test tests/security-headers-contract.test.mjs
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
