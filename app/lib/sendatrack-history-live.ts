@@ -1,4 +1,3 @@
-import { runtimeEnv } from "trackfleet-runtime-env";
 import { getSendatrackSnapshot } from "./sendatrack";
 import { buildSendatrackHistoryUrl, normalizeSendatrackHistory } from "./sendatrack-history";
 
@@ -14,6 +13,10 @@ export type SendatrackHistoryProbeResult = {
   error?: string;
 };
 
+function emptyResult(error: string): SendatrackHistoryProbeResult {
+  return { ok: false, status: 0, contentType: "", pointCount: 0, firstTimestamp: null, lastTimestamp: null, payloadKeys: [], error };
+}
+
 function safeProviderError(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
   const value = (payload as Record<string, unknown>).Error;
@@ -23,18 +26,21 @@ function safeProviderError(payload: unknown) {
 }
 
 export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHistoryProbeResult> {
-  const accountId = runtimeEnv.SENDATRACK_ACCOUNT_ID?.trim() ?? "";
-  if (!accountId) return { ok: false, status: 0, contentType: "", pointCount: 0, firstTimestamp: null, lastTimestamp: null, payloadKeys: [], error: "not_configured" };
-
   const snapshot = await getSendatrackSnapshot();
   const vehicle = snapshot.vehicles[0];
-  if (!snapshot.connected || !vehicle) {
-    return { ok: false, status: 0, contentType: "", pointCount: 0, firstTimestamp: null, lastTimestamp: null, payloadKeys: [], error: snapshot.error ?? "no_vehicle" };
-  }
+  if (!snapshot.connected || !vehicle) return emptyResult(snapshot.error ?? "no_vehicle");
+
+  // The legacy events7 endpoint uses OpenGTS identifiers returned by SENDATRACK's
+  // fleet payload. They are not necessarily the same account/device identifiers
+  // used by the newer backend2 login API.
+  const accountId = vehicle.providerAccountId;
+  const deviceId = vehicle.providerDeviceId;
+  if (!accountId) return emptyResult("missing_legacy_account");
+  if (!deviceId) return emptyResult("missing_legacy_device");
 
   const to = Date.now();
   const from = to - Math.max(1, Math.min(hours, 168)) * 60 * 60 * 1000;
-  const url = buildSendatrackHistoryUrl({ accountId, deviceId: vehicle.id, from, to });
+  const url = buildSendatrackHistoryUrl({ accountId, deviceId, from, to });
 
   try {
     const response = await fetch(url, {
@@ -45,14 +51,14 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
     const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
     const text = await response.text();
     if (!response.ok) {
-      return { ok: false, status: response.status, contentType, pointCount: 0, firstTimestamp: null, lastTimestamp: null, payloadKeys: [], error: `history_http_${response.status}` };
+      return { ...emptyResult(`history_http_${response.status}`), status: response.status, contentType };
     }
 
     let payload: unknown;
     try {
       payload = JSON.parse(text);
     } catch {
-      return { ok: false, status: response.status, contentType, pointCount: 0, firstTimestamp: null, lastTimestamp: null, payloadKeys: [], error: "history_invalid_json" };
+      return { ...emptyResult("history_invalid_json"), status: response.status, contentType };
     }
 
     const payloadKeys = payload && typeof payload === "object" && !Array.isArray(payload)
@@ -84,6 +90,6 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
       payloadKeys,
     };
   } catch (error) {
-    return { ok: false, status: 0, contentType: "", pointCount: 0, firstTimestamp: null, lastTimestamp: null, payloadKeys: [], error: error instanceof Error ? error.name : "history_fetch_failed" };
+    return emptyResult(error instanceof Error ? error.name : "history_fetch_failed");
   }
 }
