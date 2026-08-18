@@ -1,4 +1,5 @@
 import { getCompanySession } from "../../lib/company-auth";
+import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { siteStore } from "trackfleet-site-store";
 
@@ -36,9 +37,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
   const session = await getCompanySession(request);
-  if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
 
-  const payload = await request.json() as Record<string, unknown>;
+  const payload = await readJsonObject(request);
+  if (!payload) return invalidJsonResponse();
   const label = String(payload.label ?? "").trim();
   const city = String(payload.city ?? "").trim();
   const address = String(payload.address ?? "").trim();
