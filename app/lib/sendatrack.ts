@@ -104,6 +104,10 @@ function providerUnavailableStatus(status: number) {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
+function authenticationRejectedStatus(status: number) {
+  return status === 401 || status === 403;
+}
+
 async function login(auth: SendatrackCredentials) {
   const key = credentialKey(auth);
   const cachedToken = cachedTokens.get(key);
@@ -123,7 +127,8 @@ async function login(auth: SendatrackCredentials) {
       retryAfter: response.headers.get("retry-after"),
     });
     if (providerUnavailableStatus(response.status)) throw new Error("service_unavailable");
-    throw new Error("authentication_failed");
+    if (authenticationRejectedStatus(response.status)) throw new Error("authentication_failed");
+    throw new Error("unexpected_response");
   }
   const payload = await response.json() as unknown;
   const token = findToken(payload);
