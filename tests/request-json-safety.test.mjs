@@ -8,6 +8,7 @@ const routeUrls = [
   "../app/api/deliveries/create-trip/route.ts",
   "../app/api/deliveries/link-vehicle/route.ts",
   "../app/api/sites/route.ts",
+  "../app/api/whatsapp/route.ts",
 ];
 const routes = await Promise.all(routeUrls.map((url) => readFile(new URL(url, import.meta.url), "utf8")));
 
@@ -45,4 +46,11 @@ test("trip and vehicle mutation identifiers are bounded before storage or provid
   assert.match(routes[1], /manualTruck\.length > 160/);
   assert.match(routes[2], /deliveryId\.length > 100/);
   assert.match(routes[2], /vehicleId\.length > 160/);
+});
+
+test("WhatsApp demo uses the shared cross-site guard and exact-origin tracking URLs", () => {
+  const whatsappRoute = routes[4];
+  assert.match(whatsappRoute, /requestIsSameOrigin\(request\)/);
+  assert.doesNotMatch(whatsappRoute, /function sameOrigin/);
+  assert.match(whatsappRoute, /new URL\(trackingUrl\)\.origin !== requestUrl\.origin/);
 });
