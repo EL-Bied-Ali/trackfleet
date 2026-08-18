@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     accountSource: result.accountSource ?? null,
     endpointSource: result.endpointSource ?? null,
     usedUserId: result.usedUserId ?? null,
+    usedPassword: result.usedPassword ?? null,
     attempts: result.attempts?.map((attempt) => ({
       accountSource: attempt.accountSource,
       endpointSource: attempt.endpointSource,
