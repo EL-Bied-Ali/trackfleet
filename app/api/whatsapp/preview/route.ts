@@ -3,6 +3,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../../lib/company-auth";
 import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "../../../lib/notification-policy";
 import { buildAutomaticWhatsAppPayload } from "../../../lib/whatsapp-automation";
+import { whatsappTemplateLanguage } from "../../../lib/whatsapp-template";
 
 function maskRecipient(value: string) {
   if (value.length <= 4) return "****";
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
       reason: historical ? "historical" : built.reason,
       recipient: built.payload ? maskRecipient(built.payload.to) : null,
       templateName: built.payload?.template.name ?? runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim() ?? null,
-      language: built.payload?.template.language.code ?? "en_US",
+      language: built.payload?.template.language.code ?? whatsappTemplateLanguage(),
       parameters: built.payload?.template.components[0].parameters.map((parameter) => parameter.text) ?? [],
       trackingUrl: trackingUrl.toString(),
     };
@@ -54,6 +55,7 @@ export async function GET(request: Request) {
     dryRun: true,
     automationEnabled: runtimeEnv.WHATSAPP_AUTOMATION_ENABLED === "true",
     activationConfigured: Boolean(automationStartAt),
+    templateLanguage: whatsappTemplateLanguage(),
     pendingCount: pending.length,
     eligibleCount: eligible.length,
     ignoredCount,
