@@ -19,6 +19,8 @@ export const deliveries = sqliteTable("deliveries", {
   progress: integer("progress").notNull().default(0),
   color: text("color").notNull().default("#916ed7"),
   contact: text("contact").notNull().default(""),
+  whatsappOptIn: integer("whatsapp_opt_in", { mode: "boolean" }).notNull().default(false),
+  whatsappOptInAt: integer("whatsapp_opt_in_at", { mode: "timestamp_ms" }),
   sendatrackVehicleId: text("sendatrack_vehicle_id").notNull().default(""),
   latitude: real("latitude"),
   longitude: real("longitude"),
@@ -39,6 +41,7 @@ export const deliveryEvents = sqliteTable("delivery_events", {
   deliveryId: text("delivery_id").notNull(),
   type: text("type", { enum: [
     "GPS_BASELINE",
+    "REGISTERED",
     "DEPARTED",
     "PROGRESS_25",
     "PROGRESS_50",
