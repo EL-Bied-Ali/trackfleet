@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { automationMissingRequirements } from "../app/lib/automation-health.ts";
 
+const healthRoute = await readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8");
 const persistentStorage = { mode: "postgres", persistent: true, connected: true, error: null };
 
 test("health explains why production automation is not ready", () => {
@@ -35,4 +37,11 @@ test("enabled WhatsApp requires provider and activation boundary", () => {
     whatsappProviderConfigured: false,
     whatsappActivationConfigured: false,
   }), ["whatsapp_provider", "whatsapp_activation_start"]);
+});
+
+test("health provider readiness includes the explicit Meta template language", () => {
+  assert.match(healthRoute, /WHATSAPP_ACCESS_TOKEN/);
+  assert.match(healthRoute, /WHATSAPP_PHONE_NUMBER_ID/);
+  assert.match(healthRoute, /WHATSAPP_TEMPLATE_NAME/);
+  assert.match(healthRoute, /WHATSAPP_TEMPLATE_LANGUAGE/);
 });
