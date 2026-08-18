@@ -8,6 +8,7 @@ import { estimateArrival } from "../../lib/eta-estimator";
 import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { publicDeliveryView } from "../../lib/public-delivery-view";
+import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
@@ -339,11 +340,30 @@ export async function POST(request: Request) {
     const session = await getCompanySession(request);
     if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
 
-    const payload = (await request.json()) as Record<string, unknown>;
+    const payload = await readJsonObject(request);
+    if (!payload) return invalidJsonResponse();
     const customer = String(payload.customer ?? "").trim();
     const destinationInput = String(payload.destination ?? "").trim();
     const originSiteInput = String(payload.originSiteId ?? "").trim();
     const destinationSiteId = String(payload.destinationSiteId ?? "").trim();
+    const truck = String(payload.truck ?? "").trim();
+    const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
+    const eta = String(payload.eta ?? "").trim();
+    const plannedArrivalRaw = String(payload.plannedArrivalAt ?? "").trim();
+    const contactInput = String(payload.contact ?? "").trim();
+    if (
+      customer.length > 160
+      || destinationInput.length > 500
+      || originSiteInput.length > 100
+      || destinationSiteId.length > 100
+      || truck.length > 160
+      || sendatrackVehicleId.length > 160
+      || eta.length > 16
+      || plannedArrivalRaw.length > 64
+      || contactInput.length > 40
+    ) {
+      return Response.json({ error: "delivery fields exceed allowed length" }, { status: 400, headers: { "cache-control": "no-store" } });
+    }
     const companySites = await siteStore.listForCompany(session.companyId);
     const originSelection = resolveExplicitCompanySite(companySites, originSiteInput);
     if (originSelection.invalid) return Response.json({ error: "origin site is not available for this company" }, { status: 400 });
@@ -352,10 +372,6 @@ export async function POST(request: Request) {
     const originSite = originSelection.site;
     const site = destinationSelection.site ?? findCompanySiteByText(companySites, destinationInput) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
-    const truck = String(payload.truck ?? "").trim();
-    const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
-    const eta = String(payload.eta ?? "").trim();
-    const plannedArrivalRaw = String(payload.plannedArrivalAt ?? "").trim();
     const parsedPlannedArrival = plannedArrivalRaw ? new Date(plannedArrivalRaw) : null;
     const plannedArrivalAt = parsedPlannedArrival && Number.isFinite(parsedPlannedArrival.getTime()) ? parsedPlannedArrival : null;
     const validLegacyEta = /^\d{2}:\d{2}$/.test(eta);
@@ -363,7 +379,6 @@ export async function POST(request: Request) {
       return Response.json({ error: "customer, destination, truck, and a valid planned arrival are required" }, { status: 400 });
     }
 
-    const contactInput = String(payload.contact ?? "").trim();
     const contact = normalizeCustomerPhone(contactInput);
     if (contact === null) {
       return Response.json({ error: "contact must use an international phone format, for example +212... or +32..." }, { status: 400 });
