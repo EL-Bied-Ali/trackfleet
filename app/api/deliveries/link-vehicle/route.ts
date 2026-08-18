@@ -1,18 +1,22 @@
 import { store } from "trackfleet-delivery-store";
 import { getCompanySession } from "../../../lib/company-auth";
 import { isUnassignedVehicle } from "../../../lib/delivery-vehicle-choice";
+import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 import { getSendatrackSnapshot } from "../../../lib/sendatrack";
 
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
   const session = await getCompanySession(request);
-  if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
 
-  const payload = await request.json() as Record<string, unknown>;
+  const payload = await readJsonObject(request);
+  if (!payload) return invalidJsonResponse();
   const deliveryId = String(payload.deliveryId ?? "").trim();
   const vehicleId = String(payload.vehicleId ?? "").trim();
-  if (!deliveryId || !vehicleId) return Response.json({ error: "deliveryId and vehicleId are required" }, { status: 400 });
+  if (!deliveryId || !vehicleId || deliveryId.length > 100 || vehicleId.length > 160) {
+    return Response.json({ error: "invalid_delivery_or_vehicle_id" }, { status: 400, headers: { "cache-control": "no-store" } });
+  }
 
   const deliveries = await store.listForCompany(session.companyId);
   const existingDelivery = deliveries.find((item) => item.id === deliveryId) ?? null;
@@ -28,5 +32,5 @@ export async function POST(request: Request) {
 
   const delivery = await store.linkVehicle(deliveryId, session.companyId, vehicle);
   if (!delivery) return Response.json({ error: "delivery_not_found_or_not_linkable" }, { status: 404 });
-  return Response.json({ delivery });
+  return Response.json({ delivery }, { headers: { "cache-control": "no-store" } });
 }
