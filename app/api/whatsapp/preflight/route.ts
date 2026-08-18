@@ -2,6 +2,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../../lib/company-auth";
 import { sessionEncryptionKeyConfigured } from "../../../lib/session-encryption-key";
 import { isSendatrackConfigured } from "../../../lib/sendatrack";
+import { sendatrackTransportIsSecure } from "../../../lib/sendatrack-transport";
 import { getStorageHealth } from "../../../lib/storage-health";
 import { getWhatsAppConfigurationReadiness, verifyWhatsAppProvider } from "../../../lib/whatsapp-readiness";
 
@@ -42,6 +43,7 @@ export async function GET(request: Request) {
     persistentStorage: storage.persistent && storage.connected,
     sessionEncryptionConfigured: sessionEncryptionKeyConfigured(runtimeEnv.TRACKFLEET_ENCRYPTION_KEY),
     sendatrackConfigured: isSendatrackConfigured(),
+    sendatrackTransportSecure: sendatrackTransportIsSecure(),
     schedulerProtected: Boolean(runtimeEnv.CRON_SECRET?.trim()),
     providerConfigured: configuration.providerReady,
     businessAccountConfigured: configuration.businessAccountConfigured,
@@ -60,6 +62,7 @@ export async function GET(request: Request) {
   if (!checks.persistentStorage) nextAction = "configure_persistent_storage";
   else if (!checks.sessionEncryptionConfigured) nextAction = "configure_session_encryption_key";
   else if (!checks.sendatrackConfigured) nextAction = "configure_sendatrack";
+  else if (!checks.sendatrackTransportSecure) nextAction = "configure_sendatrack_https";
   else if (!checks.schedulerProtected) nextAction = "configure_cron_secret";
   else if (!checks.providerConfigured) nextAction = "configure_whatsapp_provider";
   else if (!checks.businessAccountConfigured) nextAction = "configure_whatsapp_business_account";
