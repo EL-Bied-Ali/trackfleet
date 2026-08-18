@@ -29,6 +29,6 @@ export async function GET(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "automation_failed";
     console.error("[trackfleet:automation] tick failed", { message });
-    return Response.json({ ok: false, error: message }, { status: 500, headers: { "cache-control": "no-store" } });
+    return Response.json({ ok: false, error: "automation_failed" }, { status: 500, headers: { "cache-control": "no-store" } });
   }
 }
