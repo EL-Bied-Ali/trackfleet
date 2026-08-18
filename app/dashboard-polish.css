@@ -104,6 +104,12 @@
   top: 37px;
 }
 
+@media (max-width: 920px) {
+  .maplibre-truck > em {
+    display: none;
+  }
+}
+
 .truck-popover {
   width: min(240px, calc(100% - 30px));
 }
@@ -146,7 +152,7 @@
 }
 
 .table-wrap:has(tbody:empty)::after {
-  content: "Aucune livraison pour le moment · utilisez « Nouvelle livraison » pour créer le premier suivi.";
+  content: "No deliveries yet · use New delivery to create the first tracking link.";
   position: absolute;
   inset: 44px 18px 12px;
   display: grid;
@@ -157,6 +163,15 @@
   line-height: 1.5;
   text-align: center;
   pointer-events: none;
+}
+
+html[lang="fr"] .table-wrap:has(tbody:empty)::after {
+  content: "Aucune livraison pour le moment · utilisez « Nouvelle livraison » pour créer le premier suivi.";
+}
+
+html[lang="nl-BE"] .table-wrap:has(tbody:empty)::after,
+html[lang="nl"] .table-wrap:has(tbody:empty)::after {
+  content: "Nog geen leveringen · gebruik Nieuwe levering om de eerste trackinglink te maken.";
 }
 
 @media (max-width: 1100px) {
