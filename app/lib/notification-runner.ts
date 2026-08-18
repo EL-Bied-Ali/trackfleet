@@ -63,7 +63,15 @@ export async function processPendingNotifications(companyId: string, origin: str
       if (result.sent) {
         await store.markNotificationSent(item.delivery.id, item.event.type);
         sent += 1;
+      } else if (result.reason === "recipient_missing" || result.reason === "internal_event") {
+        // Missing customer contact is permanent for this event and should not
+        // become a provider retry loop. The delivery remains perfectly usable
+        // through the dashboard/public tracking flow.
+        await store.markNotificationSent(item.delivery.id, item.event.type);
+        suppressed += 1;
       } else {
+        // Provider/configuration failures are retryable. Release the claim so a
+        // later scheduler tick can try again after the problem is corrected.
         await store.releaseNotification(item.delivery.id, item.event.type);
         failed += 1;
       }
