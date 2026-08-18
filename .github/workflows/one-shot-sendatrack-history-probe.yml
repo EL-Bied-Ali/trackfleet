@@ -45,4 +45,4 @@ jobs:
           echo "history summary probe endpoint did not become available"
           exit 1
 
-# Triggered after APK contract confirmation; no provider credentials are printed.
+# Rerun after legacy Account propagation reached production; no provider credentials are printed.
