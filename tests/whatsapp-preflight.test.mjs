@@ -27,6 +27,8 @@ test("WhatsApp production preflight verifies all launch-critical dependencies", 
   assert.match(route, /sessionEncryptionConfigured:/);
   assert.match(route, /sessionEncryptionKeyConfigured/);
   assert.match(route, /sendatrackConfigured:/);
+  assert.match(route, /sendatrackTransportSecure:/);
+  assert.match(route, /sendatrackTransportIsSecure/);
   assert.match(route, /schedulerProtected:/);
   assert.match(route, /providerConfigured:/);
   assert.match(route, /businessAccountConfigured:/);
@@ -41,6 +43,7 @@ test("WhatsApp production preflight verifies all launch-critical dependencies", 
 test("WhatsApp production preflight gives actionable infrastructure next steps", () => {
   assert.match(route, /configure_session_encryption_key/);
   assert.match(route, /configure_sendatrack/);
+  assert.match(route, /configure_sendatrack_https/);
   assert.match(route, /configure_cron_secret/);
 });
 
