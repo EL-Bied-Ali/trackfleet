@@ -8,6 +8,7 @@ export type SendatrackVehicle = {
   address: string;
   updatedAt: number;
   providerAccountId: string;
+  providerAccountDescription: string;
   providerDeviceId: string;
 };
 
@@ -118,6 +119,7 @@ export function normalizeSendatrackVehicle(value: unknown): SendatrackVehicle | 
     address: stringFrom(record.address, record.Address, event.Address, event.address),
     updatedAt: timestampFrom(record.timestamp, record.Timestamp, record.lastUpdate, event.Timestamp, event.timestamp),
     providerAccountId: stringFrom(record.Account, event.Account),
+    providerAccountDescription: stringFrom(record.Account_desc, event.Account_desc),
     providerDeviceId: stringFrom(record.DeviceCode, event.DeviceCode, record.Device, event.Device, id),
   };
 }
@@ -130,11 +132,6 @@ export function normalizeSendatrackFleet(payload: unknown) {
   const vehicles = groups.flatMap((group) => group.vehicles);
   const namedVehicles = vehicles.filter((vehicle) => !/^v\d+$/i.test(vehicle.name));
   const syntheticRows = vehicles.length - namedVehicles.length;
-
-  // SENDATRACK nests EventData objects under the real vehicle. Those rows can
-  // look like vehicles named v3/v4/v5 after normalization, but they are GPS
-  // events rather than fleet members. When real named rows exist, use them as
-  // the authoritative fleet list.
   const fleetRows = namedVehicles.length > 0 ? namedVehicles : vehicles;
 
   const newestByVehicle = new Map<string, SendatrackVehicle>();
@@ -144,13 +141,12 @@ export function normalizeSendatrackFleet(payload: unknown) {
     if (!existing || vehicle.updatedAt >= existing.updatedAt) newestByVehicle.set(vehicleKey, vehicle);
   }
 
-  // In live SENDATRACK responses Account may sit above DeviceList instead of on
-  // every device row. Carry that provider account into each normalized vehicle
-  // so legacy history calls can use the exact OpenGTS account identifier.
   const providerAccountId = findStringByKey(payload, "Account");
+  const providerAccountDescription = findStringByKey(payload, "Account_desc");
   const result = [...newestByVehicle.values()].map((vehicle) => ({
     ...vehicle,
     providerAccountId: vehicle.providerAccountId || providerAccountId,
+    providerAccountDescription: vehicle.providerAccountDescription || providerAccountDescription,
   }));
   const diagnostics: SendatrackNormalizationDiagnostics = {
     candidateArrays: groups.length,
