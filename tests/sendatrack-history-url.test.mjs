@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { buildSendatrackHistoryUrl, SENDATRACK_HISTORY_BASE_URL } from "../app/lib/sendatrack-history.ts";
 
-test("SENDATRACK history URL uses APK-derived events7 contract", () => {
+test("SENDATRACK history URL uses bounded APK-derived events7 contract", () => {
   const url = new URL(buildSendatrackHistoryUrl({
     accountId: " account-1 ",
     deviceId: " truck-17 ",
@@ -12,23 +12,27 @@ test("SENDATRACK history URL uses APK-derived events7 contract", () => {
   }));
 
   assert.equal(`${url.origin}${url.pathname}`, SENDATRACK_HISTORY_BASE_URL);
-  assert.deepEqual([...url.searchParams.keys()], ["a", "dId", "rf", "rt"]);
+  assert.deepEqual([...url.searchParams.keys()], ["a", "dId", "rf", "rt", "l", "at"]);
   assert.equal(url.searchParams.get("a"), "account-1");
   assert.equal(url.searchParams.get("dId"), "truck-17");
   assert.equal(url.searchParams.get("rf"), "1786960800");
   assert.equal(url.searchParams.get("rt"), "1786968000");
+  assert.equal(url.searchParams.get("l"), "10000");
+  assert.equal(url.searchParams.get("at"), "true");
 });
 
-test("SENDATRACK history URL includes APK uId between account and device when provided", () => {
+test("SENDATRACK history URL includes APK user/password auth fields only when provided", () => {
   const url = new URL(buildSendatrackHistoryUrl({
     accountId: "account-1",
     userId: " user-7 ",
+    password: "secret-value",
     deviceId: "truck-17",
     from: Date.parse("2026-08-17T10:00:00.000Z"),
     to: Date.parse("2026-08-17T10:05:00.000Z"),
   }));
-  assert.deepEqual([...url.searchParams.keys()], ["a", "uId", "dId", "rf", "rt"]);
+  assert.deepEqual([...url.searchParams.keys()], ["a", "uId", "p", "dId", "rf", "rt", "l", "at"]);
   assert.equal(url.searchParams.get("uId"), "user-7");
+  assert.equal(url.searchParams.get("p"), "secret-value");
 });
 
 test("SENDATRACK history URL accepts millisecond timestamps and converts them to epoch seconds", () => {
