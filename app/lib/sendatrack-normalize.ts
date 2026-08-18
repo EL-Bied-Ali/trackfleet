@@ -120,7 +120,10 @@ export function normalizeSendatrackVehicle(value: unknown): SendatrackVehicle | 
     updatedAt: timestampFrom(record.timestamp, record.Timestamp, record.lastUpdate, event.Timestamp, event.timestamp),
     providerAccountId: stringFrom(record.Account, event.Account),
     providerAccountDescription: stringFrom(record.Account_desc, event.Account_desc),
-    providerDeviceId: stringFrom(record.DeviceCode, event.DeviceCode, record.Device, event.Device, id),
+    // The legacy OpenGTS history service expects the logical Device value (for
+    // example v11) in `d=`, not the hardware/model DeviceCode. Keep the regular
+    // normalized `id` unchanged so existing fleet linking remains stable.
+    providerDeviceId: stringFrom(record.Device, event.Device, record.DeviceCode, event.DeviceCode, id),
   };
 }
 
