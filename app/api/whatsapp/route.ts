@@ -1,6 +1,8 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../lib/company-auth";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
+import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
+import { requestIsSameOrigin } from "../../lib/request-origin";
 import { whatsappTemplateLanguage } from "../../lib/whatsapp-template";
 
 type WhatsAppKind = "tracking" | "arrival";
@@ -17,16 +19,6 @@ function cleanText(value: unknown, maxLength: number) {
   return String(value ?? "").trim().slice(0, maxLength);
 }
 
-function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try {
-    return new URL(origin).host === new URL(request.url).host;
-  } catch {
-    return false;
-  }
-}
-
 async function enforceRateLimit(deliveryId: string, kind: WhatsAppKind) {
   const now = Date.now();
   const oneHourAgo = now - 60 * 60 * 1000;
@@ -40,10 +32,10 @@ async function enforceRateLimit(deliveryId: string, kind: WhatsAppKind) {
 
 export async function POST(request: Request) {
   try {
+    if (!requestIsSameOrigin(request)) return json({ error: "origin_not_allowed" }, 403);
     const session = await getCompanySession(request);
     if (!session) return json({ error: "authentication_required" }, 401);
     if (runtimeEnv.WHATSAPP_DEMO_ENABLED !== "true") return json({ error: "whatsapp_demo_disabled" }, 403);
-    if (!sameOrigin(request)) return json({ error: "origin_not_allowed" }, 403);
 
     const requestUrl = new URL(request.url);
     const token = runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim();
@@ -53,7 +45,8 @@ export async function POST(request: Request) {
     const templateLanguage = runtimeEnv.WHATSAPP_TEMPLATE_LANGUAGE?.trim();
     if (!token || !phoneNumberId || !recipient || !templateName || !templateLanguage) return json({ error: "WhatsApp demo is not configured" }, 503);
 
-    const payload = (await request.json()) as Record<string, unknown>;
+    const payload = await readJsonObject(request);
+    if (!payload) return invalidJsonResponse();
     const deliveryId = cleanText(payload.deliveryId, 32);
     const customer = cleanText(payload.customer, 80) || "TrackFleet customer";
     const destination = cleanText(payload.destination, 100);
@@ -63,7 +56,7 @@ export async function POST(request: Request) {
 
     if (kind === "tracking") {
       try {
-        if (new URL(trackingUrl).host !== requestUrl.host) throw new Error("Unexpected host");
+        if (new URL(trackingUrl).origin !== requestUrl.origin) throw new Error("Unexpected origin");
       } catch {
         return json({ error: "Invalid tracking URL" }, 400);
       }
