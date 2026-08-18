@@ -114,6 +114,11 @@ export async function createCompanySession(credentials: SendatrackCredentials) {
 }
 
 export async function getCompanySession(request: Request): Promise<CompanySession | null> {
+  // Authenticated API reads can also refresh fleet state. Browsers identify
+  // cross-site requests with Sec-Fetch-Site; never allow an existing session
+  // cookie to authorize such a request.
+  if (request.headers.get("sec-fetch-site")?.toLowerCase() === "cross-site") return null;
+
   const token = cookieValue(request);
   if (!token) return null;
   try {
