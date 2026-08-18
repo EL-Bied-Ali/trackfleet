@@ -4,7 +4,10 @@ import { readFile } from "node:fs/promises";
 import { automationMissingRequirements } from "../app/lib/automation-health.ts";
 import { decodeSessionEncryptionKey, sessionEncryptionKeyConfigured } from "../app/lib/session-encryption-key.ts";
 
-const healthRoute = await readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8");
+const [healthRoute, sendatrackTransport] = await Promise.all([
+  readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/sendatrack-transport.ts", import.meta.url), "utf8"),
+]);
 const persistentStorage = { mode: "postgres", persistent: true, connected: true, error: null };
 
 test("health explains why production automation is not ready", () => {
@@ -44,6 +47,12 @@ test("insecure SENDATRACK transport blocks a production-ready status", () => {
     whatsappProviderConfigured: false,
     whatsappActivationConfigured: false,
   }), ["sendatrack_https"]);
+});
+
+test("SENDATRACK transport readiness requires HTTPS on the expected provider host", () => {
+  assert.match(sendatrackTransport, /target\.protocol === "https:"/);
+  assert.match(sendatrackTransport, /target\.hostname === EXPECTED_SENDATRACK_HOST/);
+  assert.match(sendatrackTransport, /EXPECTED_SENDATRACK_HOST = "backend2\.sendatrack\.com"/);
 });
 
 test("session encryption readiness accepts only a 32-byte Base64 key", () => {
