@@ -22,15 +22,23 @@ test("WhatsApp production preflight verifies all launch-critical dependencies", 
   assert.match(route, /providerConfigured:/);
   assert.match(route, /businessAccountConfigured:/);
   assert.match(route, /phoneNumberVerified:/);
+  assert.match(route, /templateApiAccessible:/);
   assert.match(route, /templateApproved:/);
   assert.match(route, /templateContractMatches:/);
   assert.match(route, /readyToEnable/);
   assert.match(route, /readyToRun/);
 });
 
+test("WhatsApp production preflight distinguishes API access, approval and template shape", () => {
+  assert.match(route, /provider\?\.templateApproved === true/);
+  assert.match(route, /verify_whatsapp_template_access/);
+  assert.match(route, /wait_for_approved_template/);
+  assert.match(route, /fix_template_body_parameters/);
+  assert.match(route, /observedBodyParameters/);
+});
+
 test("WhatsApp production preflight keeps activation separate from provider verification", () => {
   assert.match(route, /activationConfigured/);
   assert.match(route, /set_automation_start_at/);
   assert.match(route, /enable_automation/);
-  assert.match(route, /wait_for_approved_template/);
 });
