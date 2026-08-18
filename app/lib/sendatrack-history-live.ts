@@ -1,9 +1,9 @@
 import { getSendatrackLegacyHistoryIdentities, type SendatrackLegacyHistoryIdentity } from "./sendatrack";
-import { buildSendatrackHistoryUrl, normalizeSendatrackHistory } from "./sendatrack-history";
+import { buildSendatrackHistoryUrl, normalizeSendatrackHistory, type SendatrackHistoryEndpoint } from "./sendatrack-history";
 
 export type SendatrackHistoryProbeAttempt = {
   accountSource: SendatrackLegacyHistoryIdentity["accountSource"];
-  endpointSource: "events7" | "eventsApp";
+  endpointSource: SendatrackHistoryEndpoint;
   status: number;
   pointCount: number;
   providerError: string | null;
@@ -19,7 +19,7 @@ export type SendatrackHistoryProbeResult = {
   lastTimestamp: number | null;
   payloadKeys: string[];
   accountSource?: "account_desc" | "account" | "configured";
-  endpointSource?: "events7" | "eventsApp";
+  endpointSource?: SendatrackHistoryEndpoint;
   usedUserId?: boolean;
   usedPassword?: boolean;
   attempts?: SendatrackHistoryProbeAttempt[];
@@ -33,13 +33,16 @@ function emptyResult(error: string): SendatrackHistoryProbeResult {
 
 function safeProviderError(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
-  const value = (payload as Record<string, unknown>).Error;
-  if (typeof value === "string") return value.slice(0, 240);
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  const record = payload as Record<string, unknown>;
+  for (const key of ["Error", "error", "message"]) {
+    const value = record[key];
+    if (typeof value === "string") return value.slice(0, 240);
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+  }
   return "";
 }
 
-async function fetchHistoryUrl(url: string, identity: SendatrackLegacyHistoryIdentity, endpointSource: "events7" | "eventsApp") {
+async function fetchHistoryUrl(url: string, identity: SendatrackLegacyHistoryIdentity, endpointSource: SendatrackHistoryEndpoint) {
   try {
     const response = await fetch(url, {
       headers: { accept: "application/json,text/plain,*/*" },
@@ -109,7 +112,7 @@ async function fetchHistoryUrl(url: string, identity: SendatrackLegacyHistoryIde
 function asAttempt(result: SendatrackHistoryProbeResult): SendatrackHistoryProbeAttempt {
   return {
     accountSource: result.accountSource ?? "configured",
-    endpointSource: result.endpointSource ?? "events7",
+    endpointSource: result.endpointSource ?? "eventsApp2",
     status: result.status,
     pointCount: result.pointCount,
     providerError: result.providerError ?? null,
@@ -124,25 +127,38 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
   const to = Date.now();
   const from = to - Math.max(1, Math.min(hours, 168)) * 60 * 60 * 1000;
   const attempts: SendatrackHistoryProbeAttempt[] = [];
+  const endpoints: SendatrackHistoryEndpoint[] = ["eventsApp2", "events7", "eventsApp"];
 
+  // Bound discovery to values obtained from the already-authenticated account.
+  // Never log URLs: legacy URLs contain p=<password> in their query string.
   for (const identity of identities.slice(0, 3)) {
-    const events7Url = buildSendatrackHistoryUrl({
-      accountId: identity.accountId,
-      userId: identity.userId,
-      password: identity.password,
-      deviceId: identity.deviceId,
-      from,
-      to,
-    });
-    let result = await fetchHistoryUrl(events7Url, identity, "events7");
-    attempts.push(asAttempt(result));
-    if (result.ok) return { ...result, attempts };
-
-    if (/\(account\)/i.test(result.providerError ?? "") || /authorization/i.test(result.providerError ?? "")) {
-      const eventsAppUrl = events7Url.replace("/events7/", "/eventsApp/");
-      result = await fetchHistoryUrl(eventsAppUrl, identity, "eventsApp");
+    for (const endpoint of endpoints) {
+      const url = buildSendatrackHistoryUrl({
+        accountId: identity.accountId,
+        userId: identity.userId,
+        password: identity.password,
+        deviceId: identity.deviceId,
+        from,
+        to,
+        endpoint,
+      });
+      const result = await fetchHistoryUrl(url, identity, endpoint);
       attempts.push(asAttempt(result));
       if (result.ok) return { ...result, attempts };
+
+      // Respect provider throttling instead of multiplying attempts.
+      if (result.status === 429) {
+        return {
+          ...emptyResult("history_rate_limited"),
+          status: result.status,
+          accountSource: result.accountSource,
+          endpointSource: result.endpointSource,
+          usedUserId: result.usedUserId,
+          usedPassword: result.usedPassword,
+          attempts,
+          providerError: result.providerError,
+        };
+      }
     }
   }
 
