@@ -6,14 +6,14 @@ const sendatrackSource = fs.readFileSync(new URL("../app/lib/sendatrack.ts", imp
 const historySource = fs.readFileSync(new URL("../app/lib/sendatrack-history-live.ts", import.meta.url), "utf8");
 const probeRouteSource = fs.readFileSync(new URL("../app/api/automation/sendatrack-history-probe-v2/route.ts", import.meta.url), "utf8");
 
-test("legacy history account candidates are provider-bounded and ordered", () => {
+test("legacy history account candidates are provider-bounded and prefer the OpenGTS account key", () => {
+  const accountIndex = sendatrackSource.indexOf('add(vehicle.providerAccountId, "account")');
+  const configuredIndex = sendatrackSource.indexOf('add(auth.accountID, "configured")');
   const descIndex = sendatrackSource.indexOf('add(findStringByKey(payload, "Account_desc"), "account_desc")');
-  const accountFallbackIndex = sendatrackSource.indexOf('add(vehicle.providerAccountId, "account")');
-  const configuredFallbackIndex = sendatrackSource.indexOf('add(auth.accountID, "configured")');
 
-  assert.ok(descIndex >= 0, "Account_desc candidate must be read from the authenticated fleet payload");
-  assert.ok(accountFallbackIndex > descIndex, "Account must remain after Account_desc");
-  assert.ok(configuredFallbackIndex > accountFallbackIndex, "configured accountID must remain the final candidate");
+  assert.ok(accountIndex >= 0, "provider Account must be considered");
+  assert.ok(configuredIndex > accountIndex, "configured accountID must be the second candidate");
+  assert.ok(descIndex > configuredIndex, "human-readable Account_desc must remain the last candidate");
   assert.match(sendatrackSource, /seen\.has\(normalized\)/, "duplicate account values must be deduplicated");
 });
 
