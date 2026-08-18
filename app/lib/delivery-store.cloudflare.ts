@@ -1,6 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
+import { createDeliveryId } from "./delivery-id";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
@@ -359,7 +360,7 @@ export const store: DeliveryStore = {
       ...input,
       whatsappOptIn: input.whatsappOptIn === true,
       whatsappOptInAt: input.whatsappOptIn === true ? (input.whatsappOptInAt ?? new Date()) : null,
-      id: `TF-${String(Date.now()).slice(-6)}`,
+      id: createDeliveryId(),
       createdAt: new Date(),
     };
     await db().prepare(`INSERT INTO deliveries
