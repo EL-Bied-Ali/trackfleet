@@ -18,7 +18,7 @@ jobs:
       BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
       CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
     steps:
-      - name: Wait for protected history summary probe and run once
+      - name: Run protected history summary probe once on the deployed v2 route
         shell: bash
         run: |
           set -euo pipefail
