@@ -1,7 +1,8 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { normalizeCustomerPhone } from "./customer-contact";
-import { customerFacingEvent, type DeliveryEventType } from "./delivery-events";
+import type { DeliveryEventType } from "./delivery-events";
 import type { DeliveryRow } from "./delivery-store.types";
+import { isAutomaticWhatsAppEvent } from "./notification-policy";
 import { whatsappTemplateLanguage } from "./whatsapp-template";
 
 function recipientFrom(delivery: DeliveryRow) {
@@ -58,7 +59,7 @@ export function buildAutomaticWhatsAppPayload(
   delivery: DeliveryRow,
   trackingUrl: string,
 ): { payload: AutomaticWhatsAppPayload | null; reason: AutomaticPayloadBuildReason } {
-  if (!customerFacingEvent(event)) return { payload: null, reason: "internal_event" };
+  if (!isAutomaticWhatsAppEvent(event)) return { payload: null, reason: "internal_event" };
   if (delivery.whatsappOptIn !== true) return { payload: null, reason: "consent_missing" };
 
   const recipient = recipientFrom(delivery);
