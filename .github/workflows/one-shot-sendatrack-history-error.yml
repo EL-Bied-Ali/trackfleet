@@ -17,7 +17,7 @@ jobs:
       BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
       CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
     steps:
-      - name: Probe history once with provider identifiers
+      - name: Probe history once after parent account propagation
         shell: bash
         run: |
           set -euo pipefail
