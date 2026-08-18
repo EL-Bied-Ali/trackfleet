@@ -34,12 +34,14 @@ function emptyResult(error: string): SendatrackHistoryProbeResult {
 function safeProviderError(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
   const record = payload as Record<string, unknown>;
-  for (const key of ["Error", "error", "message"]) {
-    const value = record[key];
-    if (typeof value === "string") return value.slice(0, 240);
-    if (typeof value === "number" || typeof value === "boolean") return String(value);
-  }
-  return "";
+  const raw = [record.Error, record.error, record.message].find((value) => typeof value === "string");
+  if (typeof raw !== "string" || !raw.trim()) return "";
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("too many") || normalized.includes("rate")) return "rate_limited";
+  if (normalized.includes("authorization") || normalized.includes("authorisation") || normalized.includes("password")) return "invalid_authorization";
+  if (normalized.includes("account")) return "account_error";
+  if (normalized.includes("device")) return "device_error";
+  return "provider_error";
 }
 
 async function fetchHistoryUrl(url: string, identity: SendatrackLegacyHistoryIdentity, endpointSource: SendatrackHistoryEndpoint) {
@@ -147,7 +149,7 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
       if (result.ok) return { ...result, attempts };
 
       // Respect provider throttling instead of multiplying attempts.
-      if (result.status === 429) {
+      if (result.status === 429 || result.providerError === "rate_limited") {
         return {
           ...emptyResult("history_rate_limited"),
           status: result.status,
