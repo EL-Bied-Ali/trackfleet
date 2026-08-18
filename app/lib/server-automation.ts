@@ -34,7 +34,10 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   const companyId = await companyIdForAccount(accountID);
   const fleetPositionResults = await Promise.all(snapshot.vehicles.map((vehicle) => store.recordFleetPosition({
     companyId,
-    vehicleId: vehicle.id,
+    // SENDATRACK's DeviceCode is a hardware model (for example fmb120) and is
+    // shared by multiple trucks. The logical Device value (v3, v4, ...) is the
+    // stable per-truck identity used by their web timeline, so prefer it here.
+    vehicleId: vehicle.providerDeviceId || vehicle.id,
     vehicleName: vehicle.name,
     positionAt: new Date(vehicle.updatedAt),
     latitude: vehicle.latitude,
