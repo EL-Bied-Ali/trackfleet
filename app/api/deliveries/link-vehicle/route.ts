@@ -1,9 +1,11 @@
 import { store } from "trackfleet-delivery-store";
 import { getCompanySession } from "../../../lib/company-auth";
-import { getSendatrackSnapshot } from "../../../lib/sendatrack";
 import { isUnassignedVehicle } from "../../../lib/delivery-vehicle-choice";
+import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
+import { getSendatrackSnapshot } from "../../../lib/sendatrack";
 
 export async function POST(request: Request) {
+  if (!requestIsSameOrigin(request)) return originRejectedResponse();
   const session = await getCompanySession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
 
