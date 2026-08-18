@@ -7,6 +7,8 @@ export type SendatrackVehicle = {
   heading: number | null;
   address: string;
   updatedAt: number;
+  providerAccountId: string;
+  providerDeviceId: string;
 };
 
 export type SendatrackNormalizationDiagnostics = {
@@ -93,6 +95,8 @@ export function normalizeSendatrackVehicle(value: unknown): SendatrackVehicle | 
     heading: numberFrom(record.heading, record.Heading, event.Heading, event.heading),
     address: stringFrom(record.address, record.Address, event.Address, event.address),
     updatedAt: timestampFrom(record.timestamp, record.Timestamp, record.lastUpdate, event.Timestamp, event.timestamp),
+    providerAccountId: stringFrom(record.Account, event.Account),
+    providerDeviceId: stringFrom(record.DeviceCode, event.DeviceCode, record.Device, event.Device, id),
   };
 }
 
