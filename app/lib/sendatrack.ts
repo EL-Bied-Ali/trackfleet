@@ -174,9 +174,9 @@ export async function getSendatrackLegacyHistoryIdentities(): Promise<Sendatrack
   const vehicle = vehicles[0];
   if (!vehicle?.providerDeviceId) return [];
 
-  // These are the only three account candidates exposed by the authenticated
-  // SENDATRACK context. Password is retained only in server memory for the
-  // APK/OpenGTS history request and is never returned or logged.
+  // OpenGTS uses the account key (not its human-readable description) for `a=`.
+  // Keep discovery bounded to the three values already present in the authenticated
+  // SENDATRACK context. Password never leaves server memory except in the provider request.
   const candidates: SendatrackLegacyHistoryIdentity[] = [];
   const seen = new Set<string>();
   const add = (accountId: string, accountSource: SendatrackLegacyHistoryIdentity["accountSource"]) => {
@@ -186,9 +186,9 @@ export async function getSendatrackLegacyHistoryIdentities(): Promise<Sendatrack
     candidates.push({ accountId: normalized, userId: auth.user, password: auth.password, deviceId: vehicle.providerDeviceId, accountSource });
   };
 
-  add(findStringByKey(payload, "Account_desc"), "account_desc");
   add(vehicle.providerAccountId, "account");
   add(auth.accountID, "configured");
+  add(findStringByKey(payload, "Account_desc"), "account_desc");
   return candidates;
 }
 
