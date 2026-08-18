@@ -1,0 +1,92 @@
+.page {
+  min-height: 100vh;
+  background: #f7f8fb;
+  color: #171a21;
+  padding: 48px 20px 72px;
+}
+
+.shell {
+  width: min(860px, 100%);
+  margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 36px;
+  box-shadow: 0 16px 40px rgba(17, 24, 39, 0.06);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #171a21;
+  text-decoration: none;
+  margin-bottom: 28px;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.updated {
+  margin: 12px 0 30px;
+  color: #687082;
+  font-size: 0.95rem;
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.section h2 {
+  margin: 0 0 10px;
+  font-size: 1.18rem;
+}
+
+.section p,
+.section li {
+  color: #3f4756;
+  line-height: 1.7;
+}
+
+.section ul {
+  padding-left: 22px;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 34px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.links a {
+  color: #4f46e5;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.note {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f4f5f7;
+  color: #4b5563;
+}
+
+@media (max-width: 620px) {
+  .page {
+    padding: 20px 12px 40px;
+  }
+
+  .shell {
+    padding: 24px 20px;
+    border-radius: 14px;
+  }
+}
