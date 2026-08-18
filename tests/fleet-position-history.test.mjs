@@ -25,6 +25,7 @@ test("automation records every live vehicle before delivery-specific processing"
   const deliveryAt = automation.indexOf('store.applySendatrackSnapshot');
   assert.ok(recordAt >= 0, 'fleet snapshot recorder missing');
   assert.ok(deliveryAt > recordAt, 'fleet history must not depend on parcel assignment');
+  assert.match(automation, /vehicleId: vehicle\.providerDeviceId \|\| vehicle\.id/);
   assert.match(automation, /fleetPositions: number/);
   assert.match(automation, /fleetPositions = fleetPositionResults\.filter\(Boolean\)\.length/);
 });
