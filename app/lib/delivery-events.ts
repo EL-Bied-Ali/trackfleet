@@ -1,5 +1,6 @@
 export type DeliveryEventType =
   | "GPS_BASELINE"
+  | "REGISTERED"
   | "DEPARTED"
   | "PROGRESS_25"
   | "PROGRESS_50"
