@@ -33,6 +33,15 @@ test("WhatsApp readiness performs read-only provider checks", () => {
   assert.doesNotMatch(readinessHelper, /method:\s*["']POST["']/);
 });
 
+test("provider readiness can be verified before automation activation", () => {
+  assert.match(readinessHelper, /providerMissing/);
+  assert.match(readinessHelper, /automationMissing/);
+  assert.match(readinessHelper, /configurationReady: config\.providerMissing\.length === 0/);
+  assert.match(readinessHelper, /automationReady: config\.automationMissing\.length === 0/);
+  assert.match(readinessHelper, /automationMissing\.push\(["']activation_start_at["']\)/);
+  assert.doesNotMatch(readinessHelper, /providerMissing\.push\(["']activation_start_at["']\)/);
+});
+
 test("template language is shared by demo, automation, preview readiness and both runtimes", () => {
   assert.match(vercelEnv, /WHATSAPP_TEMPLATE_LANGUAGE/);
   assert.match(cloudflareEnv, /WHATSAPP_TEMPLATE_LANGUAGE/);

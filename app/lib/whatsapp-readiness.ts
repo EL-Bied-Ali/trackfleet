@@ -25,39 +25,56 @@ function configuredValues() {
   const demoRecipient = normalizeCustomerPhone(runtimeEnv.WHATSAPP_DEMO_RECIPIENT ?? "") ?? "";
   const activationConfigured = Boolean(parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT));
 
-  const missing: string[] = [];
-  if (!token) missing.push("access_token");
-  if (!phoneNumberId) missing.push("phone_number_id");
-  if (!templateName) missing.push("template_name");
-  if (!activationConfigured) missing.push("activation_start_at");
+  const providerMissing: string[] = [];
+  if (!token) providerMissing.push("access_token");
+  if (!phoneNumberId) providerMissing.push("phone_number_id");
+  if (!templateName) providerMissing.push("template_name");
 
-  return { token, phoneNumberId, businessAccountId, templateName, templateLanguage, demoRecipient, activationConfigured, missing };
+  const automationMissing = [...providerMissing];
+  if (!activationConfigured) automationMissing.push("activation_start_at");
+
+  return {
+    token,
+    phoneNumberId,
+    businessAccountId,
+    templateName,
+    templateLanguage,
+    demoRecipient,
+    activationConfigured,
+    providerMissing,
+    automationMissing,
+  };
 }
 
 export function getWhatsAppConfigurationReadiness() {
   const config = configuredValues();
   return {
-    configurationReady: config.missing.length === 0,
-    demoReady: config.missing.filter((item) => item !== "activation_start_at").length === 0 && Boolean(config.demoRecipient),
+    // Provider checks are intentionally independent from the automation
+    // activation boundary, so Meta can be verified while sending is disabled.
+    configurationReady: config.providerMissing.length === 0,
+    providerReady: config.providerMissing.length === 0,
+    automationReady: config.automationMissing.length === 0,
+    demoReady: config.providerMissing.length === 0 && Boolean(config.demoRecipient),
     businessAccountConfigured: Boolean(config.businessAccountId),
     activationConfigured: config.activationConfigured,
     demoRecipientConfigured: Boolean(config.demoRecipient),
     templateName: config.templateName || null,
     templateLanguage: config.templateLanguage,
-    missing: config.missing,
+    missing: config.providerMissing,
+    automationMissing: config.automationMissing,
   };
 }
 
 export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): Promise<ProviderVerification> {
   const config = configuredValues();
-  if (config.missing.some((item) => item === "access_token" || item === "phone_number_id" || item === "template_name")) {
+  if (config.providerMissing.length > 0) {
     return {
       configurationReady: false,
       providerVerified: false,
       templateVerified: null,
       templateName: config.templateName,
       templateLanguage: config.templateLanguage,
-      missing: config.missing,
+      missing: config.providerMissing,
     };
   }
 
@@ -66,12 +83,12 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
   });
   if (!phoneResponse.ok) {
     return {
-      configurationReady: config.missing.length === 0,
+      configurationReady: true,
       providerVerified: false,
       templateVerified: null,
       templateName: config.templateName,
       templateLanguage: config.templateLanguage,
-      missing: config.missing,
+      missing: config.providerMissing,
       error: `phone_number_verification_failed:${phoneResponse.status}`,
     };
   }
@@ -85,12 +102,12 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
     });
     if (!templatesResponse.ok) {
       return {
-        configurationReady: config.missing.length === 0,
+        configurationReady: true,
         providerVerified: true,
         templateVerified: false,
         templateName: config.templateName,
         templateLanguage: config.templateLanguage,
-        missing: config.missing,
+        missing: config.providerMissing,
         phoneNumber: { id: phone.id ?? config.phoneNumberId, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name },
         error: `template_verification_failed:${templatesResponse.status}`,
       };
@@ -104,12 +121,12 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
   }
 
   return {
-    configurationReady: config.missing.length === 0,
+    configurationReady: true,
     providerVerified: true,
     templateVerified,
     templateName: config.templateName,
     templateLanguage: config.templateLanguage,
-    missing: config.missing,
+    missing: config.providerMissing,
     phoneNumber: { id: phone.id ?? config.phoneNumberId, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name },
   };
 }
