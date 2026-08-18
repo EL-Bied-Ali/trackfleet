@@ -43,6 +43,7 @@ npm run build
 - Persistent trips and route learning are company-scoped.
 - Public tracking never receives SENDATRACK credentials.
 - Production validation builds are triggered through the GitHub-to-Vercel integration.
+- Production deployments require a dedicated `TRACKFLEET_ENCRYPTION_KEY`; do not reuse the SENDATRACK password as the long-term session-encryption secret.
 
 ## Learn More
 
