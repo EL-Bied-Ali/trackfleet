@@ -7,67 +7,67 @@ TAP version 13
 # Subtest: MVP WhatsApp pushes only high-value customer states
 ok 1 - MVP WhatsApp pushes only high-value customer states
   ---
-  duration_ms: 1.03126
+  duration_ms: 1.449795
   type: 'test'
   ...
 # Subtest: automatic payload builder uses the same strict event policy
 ok 2 - automatic payload builder uses the same strict event policy
   ---
-  duration_ms: 0.260409
+  duration_ms: 0.403186
   type: 'test'
   ...
 # Subtest: registration is a first-class delivery event and visible in every UI language
 ok 3 - registration is a first-class delivery event and visible in every UI language
   ---
-  duration_ms: 0.306408
+  duration_ms: 0.440608
   type: 'test'
   ...
 # Subtest: new parcel creation immediately queues registration and processes notifications
 ok 4 - new parcel creation immediately queues registration and processes notifications
   ---
-  duration_ms: 0.19425
+  duration_ms: 0.30333
   type: 'test'
   ...
 # Subtest: WhatsApp consent is explicit, voluntary and persisted on parcel creation
 ok 5 - WhatsApp consent is explicit, voluntary and persisted on parcel creation
   ---
-  duration_ms: 0.451575
+  duration_ms: 0.658765
   type: 'test'
   ...
 # Subtest: automatic WhatsApp payload refuses missing consent
 ok 6 - automatic WhatsApp payload refuses missing consent
   ---
-  duration_ms: 0.194681
+  duration_ms: 1.302122
   type: 'test'
   ...
 # Subtest: scheduler provides a safe registration fallback without messaging historical parcels
 ok 7 - scheduler provides a safe registration fallback without messaging historical parcels
   ---
-  duration_ms: 1.049328
+  duration_ms: 0.354166
   type: 'test'
   ...
 # Subtest: notification runner filters low-value progress events before newest-event compaction
 ok 8 - notification runner filters low-value progress events before newest-event compaction
   ---
-  duration_ms: 0.176333
+  duration_ms: 0.27483
   type: 'test'
   ...
 # Subtest: missing consent and missing customer phone are suppressed instead of retried forever
 ok 9 - missing consent and missing customer phone are suppressed instead of retried forever
   ---
-  duration_ms: 0.382972
+  duration_ms: 0.56095
   type: 'test'
   ...
 # Subtest: public tracking uses an explicit allowlist and never returns internal consent/contact fields
 ok 10 - public tracking uses an explicit allowlist and never returns internal consent/contact fields
   ---
-  duration_ms: 0.518826
+  duration_ms: 0.730851
   type: 'test'
   ...
 # Subtest: registration, departure and delay copy direct customers to self-service tracking
 ok 11 - registration, departure and delay copy direct customers to self-service tracking
   ---
-  duration_ms: 0.23419
+  duration_ms: 0.36036
   type: 'test'
   ...
 1..11
@@ -78,7 +78,7 @@ ok 11 - registration, departure and delay copy direct customers to self-service 
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 112.914388
+# duration_ms 141.609361
 RESULT whatsapp_mvp=0
 --- notification_policy ---
 
@@ -89,25 +89,25 @@ TAP version 13
 # Subtest: parses a valid automation activation timestamp
 ok 1 - parses a valid automation activation timestamp
   ---
-  duration_ms: 2.026949
+  duration_ms: 2.544098
   type: 'test'
   ...
 # Subtest: rejects missing or invalid activation timestamps
 ok 2 - rejects missing or invalid activation timestamps
   ---
-  duration_ms: 0.139719
+  duration_ms: 0.159972
   type: 'test'
   ...
 # Subtest: suppresses events created before activation but keeps new events eligible
 ok 3 - suppresses events created before activation but keeps new events eligible
   ---
-  duration_ms: 0.139068
+  duration_ms: 0.131549
   type: 'test'
   ...
 # Subtest: keeps only the newest pending event per delivery
 ok 4 - keeps only the newest pending event per delivery
   ---
-  duration_ms: 1.041376
+  duration_ms: 0.822277
   type: 'test'
   ...
 1..4
@@ -118,7 +118,7 @@ ok 4 - keeps only the newest pending event per delivery
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 108.072282
+# duration_ms 101.030498
 RESULT notification_policy=0
 --- notification_queue ---
 
@@ -129,13 +129,13 @@ TAP version 13
 # Subtest: notification claim is deduplicated, retryable, then final after success
 ok 1 - notification claim is deduplicated, retryable, then final after success
   ---
-  duration_ms: 1.815693
+  duration_ms: 1.958205
   type: 'test'
   ...
 # Subtest: an abandoned claim becomes retryable after the timeout
 ok 2 - an abandoned claim becomes retryable after the timeout
   ---
-  duration_ms: 0.186759
+  duration_ms: 0.220823
   type: 'test'
   ...
 1..2
@@ -146,7 +146,7 @@ ok 2 - an abandoned claim becomes retryable after the timeout
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 97.726023
+# duration_ms 92.346992
 RESULT notification_queue=0
 --- whatsapp_preview ---
 
@@ -157,31 +157,31 @@ TAP version 13
 # Subtest: WhatsApp preview requires an authenticated company session
 ok 1 - WhatsApp preview requires an authenticated company session
   ---
-  duration_ms: 0.901867
+  duration_ms: 0.847838
   type: 'test'
   ...
 # Subtest: WhatsApp preview is a read-only dry run
 ok 2 - WhatsApp preview is a read-only dry run
   ---
-  duration_ms: 0.304485
+  duration_ms: 0.283902
   type: 'test'
   ...
 # Subtest: preview and real sending use the same payload builder
 ok 3 - preview and real sending use the same payload builder
   ---
-  duration_ms: 0.194771
+  duration_ms: 0.155194
   type: 'test'
   ...
 # Subtest: preview reports the same configured template language as real sending
 ok 4 - preview reports the same configured template language as real sending
   ---
-  duration_ms: 0.870521
+  duration_ms: 0.894634
   type: 'test'
   ...
 # Subtest: preview masks customer phone numbers
 ok 5 - preview masks customer phone numbers
   ---
-  duration_ms: 0.262802
+  duration_ms: 0.252336
   type: 'test'
   ...
 1..5
@@ -192,7 +192,7 @@ ok 5 - preview masks customer phone numbers
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 68.407805
+# duration_ms 56.323111
 RESULT whatsapp_preview=0
 --- whatsapp_readiness ---
 
@@ -203,37 +203,37 @@ TAP version 13
 # Subtest: manual WhatsApp demo requires auth, explicit opt-in and explicit template
 ok 1 - manual WhatsApp demo requires auth, explicit opt-in and explicit template
   ---
-  duration_ms: 0.854016
+  duration_ms: 0.825977
   type: 'test'
   ...
 # Subtest: WhatsApp readiness endpoint is authenticated
 ok 2 - WhatsApp readiness endpoint is authenticated
   ---
-  duration_ms: 0.155052
+  duration_ms: 0.135381
   type: 'test'
   ...
 # Subtest: WhatsApp readiness performs read-only provider checks
 ok 3 - WhatsApp readiness performs read-only provider checks
   ---
-  duration_ms: 0.230895
+  duration_ms: 0.252153
   type: 'test'
   ...
 # Subtest: template language is shared by demo, automation, preview readiness and both runtimes
 ok 4 - template language is shared by demo, automation, preview readiness and both runtimes
   ---
-  duration_ms: 0.169384
+  duration_ms: 0.161454
   type: 'test'
   ...
 # Subtest: provider verification requires the approved template in the configured language
 ok 5 - provider verification requires the approved template in the configured language
   ---
-  duration_ms: 0.163744
+  duration_ms: 0.153985
   type: 'test'
   ...
 # Subtest: both runtimes support optional WABA id and explicit demo flag
 ok 6 - both runtimes support optional WABA id and explicit demo flag
   ---
-  duration_ms: 0.188551
+  duration_ms: 0.151597
   type: 'test'
   ...
 1..6
@@ -244,7 +244,7 @@ ok 6 - both runtimes support optional WABA id and explicit demo flag
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 62.638605
+# duration_ms 60.133799
 RESULT whatsapp_readiness=0
 --- typecheck ---
 RESULT typecheck=0
