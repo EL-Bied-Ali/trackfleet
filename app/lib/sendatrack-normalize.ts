@@ -52,6 +52,28 @@ function timestampFrom(...values: unknown[]) {
   return Date.now();
 }
 
+function findStringByKey(value: unknown, key: string, depth = 0): string {
+  if (depth > 4 || value == null) return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findStringByKey(item, key, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+  const record = asRecord(value);
+  if (!record) return "";
+  if (key in record) {
+    const found = stringFrom(record[key]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(record)) {
+    const found = findStringByKey(nested, key, depth + 1);
+    if (found) return found;
+  }
+  return "";
+}
+
 function candidateArrays(value: unknown, depth = 0): Array<{ items: unknown[]; depth: number }> {
   if (depth > 4) return [];
   if (Array.isArray(value)) return [{ items: value, depth }, ...value.flatMap((item) => candidateArrays(item, depth + 1))];
@@ -122,7 +144,14 @@ export function normalizeSendatrackFleet(payload: unknown) {
     if (!existing || vehicle.updatedAt >= existing.updatedAt) newestByVehicle.set(vehicleKey, vehicle);
   }
 
-  const result = [...newestByVehicle.values()];
+  // In live SENDATRACK responses Account may sit above DeviceList instead of on
+  // every device row. Carry that provider account into each normalized vehicle
+  // so legacy history calls can use the exact OpenGTS account identifier.
+  const providerAccountId = findStringByKey(payload, "Account");
+  const result = [...newestByVehicle.values()].map((vehicle) => ({
+    ...vehicle,
+    providerAccountId: vehicle.providerAccountId || providerAccountId,
+  }));
   const diagnostics: SendatrackNormalizationDiagnostics = {
     candidateArrays: groups.length,
     normalizedRows: vehicles.length,
