@@ -67,6 +67,12 @@ function keepMarkerMapPositioning(element: HTMLElement) {
   element.style.position = "absolute";
 }
 
+function compactVehicleLabel(name: string) {
+  const normalized = name.trim();
+  if (!normalized) return "Vehicle";
+  return normalized.length > 14 ? `${normalized.slice(0, 12)}…` : normalized;
+}
+
 export default function InteractiveFleetMap({ deliveries, liveVehicles = [], selectedId, customerMode = false, label, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
@@ -148,7 +154,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
       button.className = `maplibre-truck ${delivery.id === selectedId ? "selected" : ""}`;
       keepMarkerMapPositioning(button);
       button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}`);
-      button.innerHTML = `<span>▰</span><b>${delivery.truck.replace("TRK-0", "")}</b>`;
+      button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
       return new maplibregl.Marker({ element: button, anchor: "bottom" }).setLngLat(positionFor(delivery, index)).addTo(map);
     });
@@ -166,7 +172,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
         keepMarkerMapPositioning(marker);
         marker.setAttribute("role", "img");
         marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);
-        marker.innerHTML = `<span>▰</span><b>GPS</b><em>${vehicle.name}</em>`;
+        marker.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(vehicle.name)}</em>`;
         markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom" }).setLngLat([vehicle.longitude, vehicle.latitude]).addTo(map));
       }
     }
