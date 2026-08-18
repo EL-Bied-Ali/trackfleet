@@ -1,20 +1,56 @@
 import type { DeliveryRow } from "./delivery-store.types";
 
-const privateDeliveryFields = new Set([
-  "companyId",
-  "contact",
-  "trackingToken",
-  "whatsappOptIn",
-  "whatsappOptInAt",
-]);
+type PublicDeliverySource = DeliveryRow & {
+  routeDistanceKm?: number | null;
+  remainingDistanceKm?: number | null;
+  distanceToDestinationKm?: number | null;
+  positionAgeMinutes?: number | null;
+  gpsFresh?: boolean;
+  estimatedArrivalAt?: string | null;
+  etaDelayMinutes?: number | null;
+  etaConfidence?: "none" | "low" | "medium";
+  etaSource?: "unavailable" | "baseline-model" | "route-history" | "observed-pace";
+  effectiveSpeedKmh?: number | null;
+  pendingStopServiceMinutes?: number;
+  etaHistoryTrips?: number;
+  etaHistoricalSpeedKmh?: number | null;
+  trackingExpiresAt?: string | null;
+};
 
 /**
- * Public tracking is deliberately a projection, not a serialized DeliveryRow.
- * Keeping the privacy boundary here makes it easy to audit which sensitive
- * parcel fields are never exposed through a public tracking URL.
+ * A public tracking URL receives only fields needed to render the customer
+ * experience. Operational/tenant/customer-contact fields are omitted by
+ * construction instead of relying on a deny-list.
  */
-export function publicDeliveryView<T extends DeliveryRow>(delivery: T) {
-  return Object.fromEntries(
-    Object.entries(delivery).filter(([key]) => !privateDeliveryFields.has(key)),
-  );
+export function publicDeliveryView(delivery: PublicDeliverySource) {
+  return {
+    id: delivery.id,
+    customer: delivery.customer,
+    destination: delivery.destination,
+    destinationLatitude: delivery.destinationLatitude,
+    destinationLongitude: delivery.destinationLongitude,
+    arrivalRadiusKm: delivery.arrivalRadiusKm,
+    truck: delivery.truck,
+    status: delivery.status,
+    eta: delivery.eta,
+    plannedArrivalAt: delivery.plannedArrivalAt,
+    progress: delivery.progress,
+    latitude: delivery.latitude,
+    longitude: delivery.longitude,
+    speed: delivery.speed,
+    lastPositionAt: delivery.lastPositionAt,
+    routeDistanceKm: delivery.routeDistanceKm ?? null,
+    remainingDistanceKm: delivery.remainingDistanceKm ?? null,
+    distanceToDestinationKm: delivery.distanceToDestinationKm ?? null,
+    positionAgeMinutes: delivery.positionAgeMinutes ?? null,
+    gpsFresh: delivery.gpsFresh ?? false,
+    estimatedArrivalAt: delivery.estimatedArrivalAt ?? null,
+    etaDelayMinutes: delivery.etaDelayMinutes ?? null,
+    etaConfidence: delivery.etaConfidence ?? "none",
+    etaSource: delivery.etaSource ?? "unavailable",
+    effectiveSpeedKmh: delivery.effectiveSpeedKmh ?? null,
+    etaHistoryTrips: delivery.etaHistoryTrips ?? 0,
+    etaHistoricalSpeedKmh: delivery.etaHistoricalSpeedKmh ?? null,
+    trackingExpiresAt: delivery.trackingExpiresAt ?? null,
+  };
 }
