@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { isAutomaticWhatsAppEvent } from "../app/lib/notification-policy.ts";
 
-const [deliveryEvents, deliveryRoute, automation, runner, whatsapp, page, publicView, postgresStore, cloudflareStore] = await Promise.all([
+const [deliveryEvents, deliveryRoute, automation, runner, whatsapp, page, publicView, postgresStore, cloudflareStore, schema] = await Promise.all([
   readFile(new URL("../app/lib/delivery-events.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8"),
@@ -13,6 +13,7 @@ const [deliveryEvents, deliveryRoute, automation, runner, whatsapp, page, public
   readFile(new URL("../app/lib/public-delivery-view.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8"),
+  readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
 ]);
 
 test("MVP WhatsApp pushes only high-value customer states", () => {
@@ -35,6 +36,7 @@ test("registration is a first-class delivery event and visible in every UI langu
   assert.match(page, /REGISTERED: ["']Colis enregistré["']/);
   assert.match(page, /REGISTERED: ["']Parcel registered["']/);
   assert.match(page, /REGISTERED: ["']Zending geregistreerd["']/);
+  assert.match(schema, /["']REGISTERED["']/);
 });
 
 test("new parcel creation immediately queues registration and processes notifications", () => {
@@ -53,6 +55,8 @@ test("WhatsApp consent is explicit, voluntary and persisted on parcel creation",
   assert.match(postgresStore, /whatsapp_opt_in_at timestamptz/);
   assert.match(cloudflareStore, /whatsapp_opt_in integer DEFAULT 0 NOT NULL/);
   assert.match(cloudflareStore, /whatsapp_opt_in_at integer/);
+  assert.match(schema, /whatsappOptIn: integer\(["']whatsapp_opt_in["']/);
+  assert.match(schema, /whatsappOptInAt: integer\(["']whatsapp_opt_in_at["']/);
 });
 
 test("automatic WhatsApp payload refuses missing consent", () => {
@@ -76,14 +80,14 @@ test("notification runner filters low-value progress events before newest-event 
 test("missing consent and missing customer phone are suppressed instead of retried forever", () => {
   assert.match(runner, /result\.reason === ["']consent_missing["']/);
   assert.match(runner, /result\.reason === ["']recipient_missing["']/);
-  const suppressionBranch = runner.indexOf('result.reason === "consent_missing"');
-  const markSent = runner.indexOf("markNotificationSent", suppressionBranch);
-  const continueIndex = runner.indexOf("continue;", markSent);
-  const releaseClaim = runner.indexOf("releaseNotification", suppressionBranch);
-  assert.ok(suppressionBranch >= 0);
-  assert.ok(markSent > suppressionBranch);
-  assert.ok(continueIndex > markSent);
-  assert.ok(releaseClaim === -1 || releaseClaim > continueIndex);
+  const suppressionStart = runner.indexOf('result.reason === "consent_missing"');
+  const retryStart = runner.indexOf("await store.releaseNotification", suppressionStart);
+  assert.ok(suppressionStart >= 0);
+  assert.ok(retryStart > suppressionStart);
+  const suppressionBranch = runner.slice(suppressionStart, retryStart);
+  assert.match(suppressionBranch, /markNotificationSent/);
+  assert.match(suppressionBranch, /suppressed \+= 1/);
+  assert.doesNotMatch(suppressionBranch, /releaseNotification/);
 });
 
 test("public tracking uses an explicit allowlist and never returns internal consent/contact fields", () => {
