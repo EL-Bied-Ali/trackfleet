@@ -34,7 +34,7 @@ jobs:
               node - <<'NODE'
           const fs = require('node:fs');
           const body = JSON.parse(fs.readFileSync('/tmp/history.json', 'utf8'));
-          console.log(JSON.stringify({ ok: body.ok, status: body.status, contentType: body.contentType, pointCount: body.pointCount, firstTimestamp: body.firstTimestamp, lastTimestamp: body.lastTimestamp, payloadKeys: body.payloadKeys, accountSource: body.accountSource ?? null, providerError: body.providerError ?? null, error: body.error ?? null }));
+          console.log(JSON.stringify({ ok: body.ok, status: body.status, contentType: body.contentType, pointCount: body.pointCount, firstTimestamp: body.firstTimestamp, lastTimestamp: body.lastTimestamp, payloadKeys: body.payloadKeys, accountSource: body.accountSource ?? null, usedUserId: body.usedUserId ?? null, providerError: body.providerError ?? null, error: body.error ?? null }));
           if (body.ok !== true) process.exit(3);
           NODE
               exit 0
@@ -45,4 +45,4 @@ jobs:
           echo "history summary probe endpoint did not become available"
           exit 1
 
-# Rerun specifically against Account_desc candidate; no provider credentials are printed.
+# Rerun after APK-derived uId support reached production; no provider credentials are printed.
