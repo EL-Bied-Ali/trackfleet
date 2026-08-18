@@ -61,16 +61,16 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   }
 
   const copy = locale === "fr"
-    ? { button: "Agences", title: "Agences et dépôts", add: "Ajouter un site", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon arrivée (km)", save: "Enregistrer", saving: "Enregistrement…", error: "Impossible d’enregistrer ce site." }
+    ? { button: "Agences", title: "Agences et dépôts", count: (value: number) => `${value} site${value > 1 ? "s" : ""}`, add: "Ajouter un site", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon d’arrivée (km)", save: "Enregistrer", saving: "Enregistrement…", close: "Fermer", error: "Impossible d’enregistrer ce site." }
     : locale === "nl"
-      ? { button: "Locaties", title: "Agentschappen en depots", add: "Locatie toevoegen", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", save: "Opslaan", saving: "Opslaan…", error: "Locatie kon niet worden opgeslagen." }
-      : { button: "Sites", title: "Agencies and depots", add: "Add site", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", save: "Save", saving: "Saving…", error: "Could not save this site." };
+      ? { button: "Locaties", title: "Agentschappen en depots", count: (value: number) => `${value} locatie${value === 1 ? "" : "s"}`, add: "Locatie toevoegen", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", save: "Opslaan", saving: "Opslaan…", close: "Sluiten", error: "Locatie kon niet worden opgeslagen." }
+      : { button: "Sites", title: "Agencies and depots", count: (value: number) => `${value} site${value === 1 ? "" : "s"}`, add: "Add site", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", save: "Save", saving: "Saving…", close: "Close", error: "Could not save this site." };
 
   return <>
-    <button className="secondary-button" type="button" onClick={() => setOpen(true)}>⌖ {copy.button}</button>
+    <button className="secondary-button" type="button" onClick={() => setOpen(true)}><span aria-hidden="true">▦</span> {copy.button}</button>
     {open && <div className="modal-backdrop">
-      <section className="modal" role="dialog" aria-modal="true">
-        <div className="modal-header"><div><p className="eyebrow">TRACKFLEET</p><h2>{copy.title}</h2><span>{sites.length} sites</span></div><button onClick={() => setOpen(false)} aria-label="Close">×</button></div>
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="sites-title">
+        <div className="modal-header"><div><p className="eyebrow">TRACKFLEET</p><h2 id="sites-title">{copy.title}</h2><span>{copy.count(sites.length)}</span></div><button onClick={() => setOpen(false)} aria-label={copy.close}>×</button></div>
         <div style={{ maxHeight: 220, overflow: "auto", marginBottom: 16 }}>
           {sites.map((site) => <div key={site.id} style={{ padding: "9px 0", borderBottom: "1px solid #e5e7eb" }}><strong>{site.label}</strong><div style={{ fontSize: 12, opacity: .7 }}>{site.address}</div></div>)}
         </div>
@@ -81,7 +81,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
           <div className="form-row"><label>{copy.country}<select name="country" defaultValue="MA"><option value="MA">Maroc</option><option value="BE">Belgique</option></select></label><label>{copy.radius}<input name="arrivalRadiusKm" type="number" min="0.05" max="10" step="0.05" defaultValue="0.5" /></label></div>
           <div className="form-row"><label>{copy.lat}<input name="latitude" type="number" step="any" /></label><label>{copy.lon}<input name="longitude" type="number" step="any" /></label></div>
           {error && <p className="login-error">{copy.error}</p>}
-          <div className="modal-footer"><button type="button" onClick={() => setOpen(false)}>×</button><button className="primary-button" disabled={saving}>{saving ? copy.saving : copy.save}</button></div>
+          <div className="modal-footer"><button type="button" onClick={() => setOpen(false)}>{copy.close}</button><button className="primary-button" disabled={saving}>{saving ? copy.saving : copy.save}</button></div>
         </form>
       </section>
     </div>}
