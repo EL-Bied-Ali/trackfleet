@@ -50,17 +50,21 @@ export type AutomaticWhatsAppPayload = {
   };
 };
 
+type AutomaticPayloadBuildReason = "ok" | "internal_event" | "recipient_missing" | "not_configured";
+
 export function buildAutomaticWhatsAppPayload(
   event: DeliveryEventType,
   delivery: DeliveryRow,
   trackingUrl: string,
-): { payload: AutomaticWhatsAppPayload | null; reason: "ok" | "internal_event" | "not_configured" } {
+): { payload: AutomaticWhatsAppPayload | null; reason: AutomaticPayloadBuildReason } {
   if (!customerFacingEvent(event)) return { payload: null, reason: "internal_event" };
 
   const recipient = recipientFrom(delivery);
+  if (!recipient) return { payload: null, reason: "recipient_missing" };
+
   const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
   const message = automaticWhatsAppMessage(event, delivery, trackingUrl);
-  if (!templateName || !recipient || !message) return { payload: null, reason: "not_configured" };
+  if (!templateName || !message) return { payload: null, reason: "not_configured" };
 
   return {
     reason: "ok",
