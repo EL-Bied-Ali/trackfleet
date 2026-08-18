@@ -1,6 +1,6 @@
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, TripPositionRow } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types";
 import { NotificationClaimState } from "./notification-claim-state";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
@@ -12,6 +12,7 @@ const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];
 const etaObservations: EtaObservationRow[] = [];
 const tripPositions: TripPositionRow[] = [];
+const fleetPositions: FleetPositionRow[] = [];
 const trips: TripRecord[] = [];
 const deliveryTripAssignments = new Map<string, string>();
 const notificationClaims = new NotificationClaimState();
@@ -107,6 +108,17 @@ export const memoryStore: DeliveryStore = {
       .filter((item) => item.companyId === companyId && item.routeTemplateId === routeTemplateId)
       .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
       .slice(0, Math.max(1, Math.min(20000, limit)));
+  },
+  async recordFleetPosition(input) {
+    if (fleetPositions.some((item) => item.companyId === input.companyId && item.vehicleId === input.vehicleId && item.positionAt.getTime() === input.positionAt.getTime())) return false;
+    fleetPositions.push({ ...input, createdAt: new Date() });
+    return true;
+  },
+  async listFleetPositions(companyId, vehicleId, limit = 20000) {
+    return fleetPositions
+      .filter((item) => item.companyId === companyId && item.vehicleId === vehicleId)
+      .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
+      .slice(0, Math.max(1, Math.min(50000, limit)));
   },
   async upsertTrip(input) {
     const existing = trips.find((trip) => trip.id === input.id && trip.companyId === input.companyId);

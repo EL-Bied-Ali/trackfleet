@@ -85,6 +85,22 @@ export const sessions = sqliteTable("sessions", {
 ]);
 
 
+export const fleetPositionObservations = sqliteTable("fleet_position_observations", {
+  companyId: text("company_id").notNull(),
+  vehicleId: text("vehicle_id").notNull(),
+  vehicleName: text("vehicle_name").notNull(),
+  positionAt: integer("position_at", { mode: "timestamp_ms" }).notNull(),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  speed: real("speed").notNull(),
+  heading: real("heading"),
+  address: text("address").notNull().default(""),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.companyId, table.vehicleId, table.positionAt] }),
+  index("idx_fleet_positions_company_vehicle").on(table.companyId, table.vehicleId, table.positionAt),
+]);
+
 export const trips = sqliteTable("trips", {
   id: text("id").notNull(),
   companyId: text("company_id").notNull(),

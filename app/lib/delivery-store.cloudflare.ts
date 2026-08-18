@@ -98,6 +98,11 @@ async function ensureTable() {
     position_at integer NOT NULL, latitude real NOT NULL, longitude real NOT NULL, speed real NOT NULL, created_at integer NOT NULL,
     PRIMARY KEY (company_id, trip_instance_id, position_at)
   )`).run();
+  await database.prepare(`CREATE TABLE IF NOT EXISTS fleet_position_observations (
+    company_id text NOT NULL, vehicle_id text NOT NULL, vehicle_name text NOT NULL, position_at integer NOT NULL,
+    latitude real NOT NULL, longitude real NOT NULL, speed real NOT NULL, heading real, address text DEFAULT '' NOT NULL, created_at integer NOT NULL,
+    PRIMARY KEY (company_id, vehicle_id, position_at)
+  )`).run();
   await database.prepare(`CREATE TABLE IF NOT EXISTS trips (
     id text NOT NULL, company_id text NOT NULL, route_template_id text NOT NULL, vehicle_key text NOT NULL, truck text NOT NULL,
     sendatrack_vehicle_id text DEFAULT '' NOT NULL, origin_site_id text, stops_json text NOT NULL, status text NOT NULL,
@@ -111,6 +116,7 @@ async function ensureTable() {
     database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_route_destination ON delivery_eta_observations(route_template_id, destination_site_id, position_at DESC)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)"),
+    database.prepare("CREATE INDEX IF NOT EXISTS idx_fleet_positions_company_vehicle ON fleet_position_observations(company_id, vehicle_id, position_at DESC)"),
     database.prepare("CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)"),
   ]);
   for (const delivery of seedDeliveries) {
@@ -243,6 +249,22 @@ export const store: DeliveryStore = {
     const result = await db().prepare(`SELECT company_id AS companyId, route_template_id AS routeTemplateId, trip_instance_id AS tripInstanceId, vehicle_id AS vehicleId, position_at AS positionAt, latitude, longitude, speed, created_at AS createdAt FROM trip_position_observations WHERE company_id = ? AND route_template_id = ? ORDER BY position_at DESC LIMIT ?`).bind(companyId, routeTemplateId, capped).all<Record<string, unknown>>();
     return (result.results ?? []).map((row) => ({
       companyId: String(row.companyId), routeTemplateId: String(row.routeTemplateId), tripInstanceId: String(row.tripInstanceId), vehicleId: String(row.vehicleId), positionAt: new Date(Number(row.positionAt)), latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), createdAt: new Date(Number(row.createdAt)),
+    }));
+  },
+  async recordFleetPosition(input) {
+    await ensureTable();
+    const result = await db().prepare(`INSERT OR IGNORE INTO fleet_position_observations
+      (company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(input.companyId, input.vehicleId, input.vehicleName, input.positionAt.getTime(), input.latitude, input.longitude, input.speed, input.heading, input.address, Date.now()).run();
+    return Boolean(result.meta?.changes);
+  },
+  async listFleetPositions(companyId, vehicleId, limit = 20000) {
+    await ensureTable();
+    const capped = Math.max(1, Math.min(50000, Math.round(limit)));
+    const result = await db().prepare(`SELECT company_id AS companyId, vehicle_id AS vehicleId, vehicle_name AS vehicleName, position_at AS positionAt, latitude, longitude, speed, heading, address, created_at AS createdAt
+      FROM fleet_position_observations WHERE company_id = ? AND vehicle_id = ? ORDER BY position_at DESC LIMIT ?`).bind(companyId, vehicleId, capped).all<Record<string, unknown>>();
+    return (result.results ?? []).map((row) => ({
+      companyId: String(row.companyId), vehicleId: String(row.vehicleId), vehicleName: String(row.vehicleName), positionAt: new Date(Number(row.positionAt)), latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), heading: row.heading == null ? null : Number(row.heading), address: String(row.address ?? ''), createdAt: new Date(Number(row.createdAt)),
     }));
   },
   async upsertTrip(input) {

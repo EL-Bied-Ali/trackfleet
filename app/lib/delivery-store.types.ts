@@ -77,6 +77,22 @@ export type TripPositionRow = TripPositionInput & {
   createdAt: Date;
 };
 
+export type FleetPositionInput = {
+  companyId: string;
+  vehicleId: string;
+  vehicleName: string;
+  positionAt: Date;
+  latitude: number;
+  longitude: number;
+  speed: number;
+  heading: number | null;
+  address: string;
+};
+
+export type FleetPositionRow = FleetPositionInput & {
+  createdAt: Date;
+};
+
 export type DeliveryTransition = {
   delivery: DeliveryRow;
   events: DeliveryEventType[];
@@ -103,6 +119,8 @@ export interface DeliveryStore {
   listEtaObservationsForRoute(routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
   recordTripPosition(input: TripPositionInput): Promise<boolean>;
   listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;
+  recordFleetPosition(input: FleetPositionInput): Promise<boolean>;
+  listFleetPositions(companyId: string, vehicleId: string, limit?: number): Promise<FleetPositionRow[]>;
   upsertTrip(input: UpsertTripInput): Promise<TripRecord>;
   getTrip(companyId: string, tripId: string): Promise<TripRecord | null>;
   listTrips(companyId: string, limit?: number): Promise<TripRecord[]>;

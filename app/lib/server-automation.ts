@@ -19,6 +19,7 @@ export type AutomationRunResult = {
   notificationsSent: number;
   notificationFailures: number;
   etaObservations: number;
+  fleetPositions: number;
 };
 
 export async function runFleetAutomation(origin: string): Promise<AutomationRunResult> {
@@ -27,10 +28,22 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
 
   const snapshot = await getSendatrackSnapshot();
   if (!snapshot.connected) {
-    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0 };
+    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0, fleetPositions: 0 };
   }
 
   const companyId = await companyIdForAccount(accountID);
+  const fleetPositionResults = await Promise.all(snapshot.vehicles.map((vehicle) => store.recordFleetPosition({
+    companyId,
+    vehicleId: vehicle.id,
+    vehicleName: vehicle.name,
+    positionAt: new Date(vehicle.updatedAt),
+    latitude: vehicle.latitude,
+    longitude: vehicle.longitude,
+    speed: vehicle.speed,
+    heading: vehicle.heading,
+    address: vehicle.address,
+  })));
+  const fleetPositions = fleetPositionResults.filter(Boolean).length;
   const transitions = await store.applySendatrackSnapshot(snapshot, companyId);
   let newEvents = 0;
   let delayEvents = 0;
@@ -109,6 +122,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
     etaObservations,
+    fleetPositions,
   });
 
   return {
@@ -120,5 +134,6 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
     etaObservations,
+    fleetPositions,
   };
 }

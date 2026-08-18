@@ -189,6 +189,20 @@ async function ensureSchema() {
       PRIMARY KEY (company_id, trip_instance_id, position_at)
     )`;
     await sql`CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)`;
+    await sql`CREATE TABLE IF NOT EXISTS fleet_position_observations (
+      company_id text NOT NULL,
+      vehicle_id text NOT NULL,
+      vehicle_name text NOT NULL,
+      position_at timestamptz NOT NULL,
+      latitude double precision NOT NULL,
+      longitude double precision NOT NULL,
+      speed double precision NOT NULL,
+      heading double precision,
+      address text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL,
+      PRIMARY KEY (company_id, vehicle_id, position_at)
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_fleet_positions_company_vehicle ON fleet_position_observations(company_id, vehicle_id, position_at DESC)`;
     await sql`CREATE TABLE IF NOT EXISTS trips (
       id text NOT NULL,
       company_id text NOT NULL,
@@ -374,6 +388,24 @@ export const postgresStore: DeliveryStore = {
     return rows.map((row) => ({
       companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), tripInstanceId: String(row.trip_instance_id), vehicleId: String(row.vehicle_id),
       positionAt: new Date(String(row.position_at)), latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), createdAt: new Date(String(row.created_at)),
+    }));
+  },
+
+  async recordFleetPosition(input) {
+    await ensureSchema();
+    const rows = await sql`INSERT INTO fleet_position_observations (company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at)
+      VALUES (${input.companyId}, ${input.vehicleId}, ${input.vehicleName}, ${input.positionAt.toISOString()}, ${input.latitude}, ${input.longitude}, ${input.speed}, ${input.heading}, ${input.address}, ${new Date().toISOString()})
+      ON CONFLICT (company_id, vehicle_id, position_at) DO NOTHING RETURNING vehicle_id` as Array<{ vehicle_id: string }>;
+    return rows.length > 0;
+  },
+  async listFleetPositions(companyId, vehicleId, limit = 20000) {
+    await ensureSchema();
+    const capped = Math.max(1, Math.min(50000, Math.round(limit)));
+    const rows = await sql`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
+      FROM fleet_position_observations WHERE company_id = ${companyId} AND vehicle_id = ${vehicleId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      companyId: String(row.company_id), vehicleId: String(row.vehicle_id), vehicleName: String(row.vehicle_name), positionAt: new Date(String(row.position_at)),
+      latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), heading: row.heading == null ? null : Number(row.heading), address: String(row.address ?? ''), createdAt: new Date(String(row.created_at)),
     }));
   },
 
