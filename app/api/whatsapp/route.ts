@@ -6,6 +6,7 @@ import { whatsappTemplateLanguage } from "../../lib/whatsapp-template";
 type WhatsAppKind = "tracking" | "arrival";
 
 const graphApiVersion = "v25.0";
+const metaRequestTimeoutMs = 10_000;
 const recentDemoEvents: Array<{ deliveryId: string; kind: WhatsAppKind; createdAt: number }> = [];
 
 function json(body: Record<string, unknown>, status = 200) {
@@ -14,6 +15,16 @@ function json(body: Record<string, unknown>, status = 200) {
 
 function cleanText(value: unknown, maxLength: number) {
   return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function sameOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === new URL(request.url).host;
+  } catch {
+    return false;
+  }
 }
 
 async function enforceRateLimit(deliveryId: string, kind: WhatsAppKind) {
@@ -32,16 +43,15 @@ export async function POST(request: Request) {
     const session = await getCompanySession(request);
     if (!session) return json({ error: "authentication_required" }, 401);
     if (runtimeEnv.WHATSAPP_DEMO_ENABLED !== "true") return json({ error: "whatsapp_demo_disabled" }, 403);
+    if (!sameOrigin(request)) return json({ error: "origin_not_allowed" }, 403);
 
     const requestUrl = new URL(request.url);
-    const origin = request.headers.get("origin");
-    if (origin && new URL(origin).host !== requestUrl.host) return json({ error: "Origin not allowed" }, 403);
-
     const token = runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim();
     const phoneNumberId = runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim();
     const recipient = normalizeCustomerPhone(runtimeEnv.WHATSAPP_DEMO_RECIPIENT ?? "");
     const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
-    if (!token || !phoneNumberId || !recipient || !templateName) return json({ error: "WhatsApp demo is not configured" }, 503);
+    const templateLanguage = runtimeEnv.WHATSAPP_TEMPLATE_LANGUAGE?.trim();
+    if (!token || !phoneNumberId || !recipient || !templateName || !templateLanguage) return json({ error: "WhatsApp demo is not configured" }, 503);
 
     const payload = (await request.json()) as Record<string, unknown>;
     const deliveryId = cleanText(payload.deliveryId, 32);
@@ -81,6 +91,7 @@ export async function POST(request: Request) {
           }],
         },
       }),
+      signal: AbortSignal.timeout(metaRequestTimeoutMs),
     });
     if (!response.ok) return json({ error: "Meta could not send the demo message" }, 502);
 
