@@ -1,0 +1,199 @@
+/* Dashboard-only polish. Kept separate from globals.css so the visual pass can be
+   reviewed and reverted independently from the product styles. */
+
+.workspace {
+  max-width: 1540px;
+  margin: 0 auto;
+}
+
+.topbar {
+  gap: 24px;
+}
+
+.top-actions {
+  padding: 4px;
+  border: 1px solid rgba(229, 235, 231, .75);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .55);
+}
+
+.stats-grid .stat-card {
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* The old copy says "Across 12 vehicles" even when the connected fleet has a
+   different size. Until this copy is driven by live data, do not display a
+   knowingly incorrect denominator. */
+.stats-grid .stat-card:first-child > p {
+  display: none;
+}
+
+.stats-grid .stat-card:first-child em.up {
+  display: none;
+}
+
+.stat-card > div:nth-child(2) {
+  min-height: 30px;
+}
+
+.map-panel {
+  border-radius: 14px;
+}
+
+.map-panel .panel-header {
+  min-height: 66px;
+}
+
+/* A delivery selector with zero options rendered as a blank control. Hide it
+   until there is actually a TrackFleet delivery to select. */
+.map-panel .panel-actions select:empty {
+  display: none;
+}
+
+.fleet-map {
+  height: clamp(330px, 39vh, 440px);
+}
+
+.map-status {
+  max-width: min(330px, calc(100% - 90px));
+  line-height: 1.35;
+}
+
+/* Map markers: one clear vehicle icon plus one compact label. Avoid the old
+   GPS badge + vehicle-name stack that overlapped at corridor zoom levels. */
+.maplibre-truck {
+  width: 34px;
+  height: 34px;
+  border-width: 2px;
+  box-shadow: 0 4px 13px rgba(29, 71, 57, .26);
+}
+
+.maplibre-truck > span {
+  font-size: 12px;
+}
+
+.maplibre-truck > em {
+  position: absolute;
+  left: 50%;
+  top: 37px;
+  max-width: 116px;
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid rgba(218, 228, 222, .9);
+  border-radius: 6px;
+  color: #28483c;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 2px 8px rgba(25, 55, 44, .12);
+  transform: translateX(-50%);
+  font-size: 7.5px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.maplibre-truck.gps-only {
+  background: #27745c;
+}
+
+.maplibre-truck.gps-only > em {
+  top: 37px;
+}
+
+.truck-popover {
+  width: min(240px, calc(100% - 30px));
+}
+
+/* The provider state matters, but it should not visually compete with the
+   operational dashboard. */
+.gps-card {
+  padding: 13px;
+  background: rgba(255, 255, 255, .035);
+}
+
+.gps-card .gps-icon {
+  display: none;
+}
+
+.gps-card p {
+  margin-bottom: 9px;
+}
+
+.gps-coming {
+  width: max-content;
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+
+.deliveries-panel {
+  min-height: 150px;
+  border-radius: 14px;
+}
+
+/* Give a useful visual empty state instead of leaving a large blank table. */
+.table-wrap:has(tbody:empty) {
+  position: relative;
+  min-height: 112px;
+  background: linear-gradient(180deg, #fbfcfb 0%, #f7faf8 100%);
+}
+
+.table-wrap:has(tbody:empty) table {
+  opacity: .55;
+}
+
+.table-wrap:has(tbody:empty)::after {
+  content: "Aucune livraison pour le moment · utilisez « Nouvelle livraison » pour créer le premier suivi.";
+  position: absolute;
+  inset: 44px 18px 12px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  color: #718078;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .topbar {
+    align-items: flex-start;
+  }
+
+  .top-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    flex-direction: column;
+  }
+
+  .top-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .fleet-map {
+    height: 360px;
+  }
+}
