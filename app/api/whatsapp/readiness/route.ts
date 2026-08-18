@@ -18,10 +18,12 @@ export async function GET(request: Request) {
     const provider = await verifyWhatsAppProvider();
     return json({ ok: true, configuration, provider });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "provider_verification_failed";
+    console.error("[trackfleet:whatsapp] readiness verification failed", { message });
     return json({
       ok: false,
       configuration,
-      provider: { providerVerified: false, error: error instanceof Error ? error.message : "provider_verification_failed" },
+      provider: { providerVerified: false, error: "provider_verification_failed" },
     }, 502);
   }
 }
