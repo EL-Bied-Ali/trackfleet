@@ -45,7 +45,19 @@ function safeProviderError(payload: unknown) {
 }
 
 async function fetchHistoryUrl(url: string, identity: SendatrackLegacyHistoryIdentity, endpointSource: SendatrackHistoryEndpoint) {
+  const common = {
+    accountSource: identity.accountSource,
+    usedUserId: Boolean(identity.userId),
+    usedPassword: Boolean(identity.password),
+    endpointSource,
+  };
+
   try {
+    const target = new URL(url);
+    if (identity.password && target.protocol !== "https:") {
+      return { ...emptyResult("history_insecure_transport_blocked"), ...common };
+    }
+
     const response = await fetch(url, {
       headers: { accept: "application/json,text/plain,*/*" },
       signal: AbortSignal.timeout(12_000),
@@ -53,12 +65,6 @@ async function fetchHistoryUrl(url: string, identity: SendatrackLegacyHistoryIde
     });
     const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
     const text = await response.text();
-    const common = {
-      accountSource: identity.accountSource,
-      usedUserId: Boolean(identity.userId),
-      usedPassword: Boolean(identity.password),
-      endpointSource,
-    };
     if (!response.ok) {
       return { ...emptyResult(`history_http_${response.status}`), status: response.status, contentType, ...common };
     }
@@ -103,10 +109,7 @@ async function fetchHistoryUrl(url: string, identity: SendatrackLegacyHistoryIde
   } catch (error) {
     return {
       ...emptyResult(error instanceof Error ? error.name : "history_fetch_failed"),
-      accountSource: identity.accountSource,
-      usedUserId: Boolean(identity.userId),
-      usedPassword: Boolean(identity.password),
-      endpointSource,
+      ...common,
     };
   }
 }
