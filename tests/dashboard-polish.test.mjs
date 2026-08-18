@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-const [mapSource, polish, layout, i18n] = await Promise.all([
+const [mapSource, polish, layout, i18n, page] = await Promise.all([
   readFile(new URL("../app/InteractiveFleetMap.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/dashboard-polish.css", import.meta.url), "utf8"),
   readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/i18n.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
 ]);
 
 test("live map markers use one compact vehicle label instead of a GPS badge stack", () => {
@@ -17,7 +18,9 @@ test("live map markers use one compact vehicle label instead of a GPS badge stac
 
 test("empty dashboard controls do not render as blank UI", () => {
   assert.match(polish, /\.map-panel \.panel-actions select:empty/);
-  assert.match(polish, /\.table-wrap:has\(tbody:empty\)::after/);
+  assert.match(page, /className="deliveries-empty"/);
+  assert.match(page, /setModalOpen\(true\)/);
+  assert.match(page, /setFilter\("All deliveries"\)/);
 });
 
 test("dashboard copy contains no stale demo person or fixed fleet totals", () => {
@@ -26,9 +29,19 @@ test("dashboard copy contains no stale demo person or fixed fleet totals", () =>
   assert.doesNotMatch(i18n, /20 vehicles reporting|20 véhicules connectés|20 voertuigen online/);
 });
 
-test("active delivery KPI does not add a redundant GPS badge", () => {
-  assert.match(polish, /\.stats-grid \.stat-card:first-child em\.up/);
-  assert.match(polish, /display:\s*none/);
+test("customer tracking links require private tracking tokens", () => {
+  assert.match(page, /if \(!delivery\?\.trackingToken\)/);
+  assert.match(page, /if \(!selected\.trackingToken\)/);
+  assert.match(page, /searchParams\.set\("tracking", delivery\.trackingToken\)/);
+  assert.match(page, /searchParams\.set\("tracking", selected\.trackingToken\)/);
+  assert.doesNotMatch(page, /trackingToken \|\| deliveryId/);
+  assert.doesNotMatch(page, /trackingToken \|\| selected\.id/);
+});
+
+test("fleet KPI counts vehicles rather than GPS devices", () => {
+  assert.match(page, /integration\.vehicleCount/);
+  assert.match(page, /"véhicules"/);
+  assert.doesNotMatch(page, /\$\{integration\.vehicleCount\} GPS/);
 });
 
 test("dashboard polish stylesheet is loaded after global styles", () => {
