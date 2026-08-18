@@ -23,6 +23,12 @@ test("scheduled automation requires a protected bearer secret", () => {
   assert.match(tickRoute, /Bearer \$\{secret\}/);
 });
 
+test("automation failures are logged server-side but not reflected to callers", () => {
+  assert.match(tickRoute, /console\.error\("\[trackfleet:automation\] tick failed", \{ message \}\)/);
+  assert.match(tickRoute, /error: "automation_failed"/);
+  assert.doesNotMatch(tickRoute, /error: message/);
+});
+
 test("scheduler refuses to tick until the complete health contract is ready", () => {
   assert.match(workflow, /health\?\.automation\?\.ready !== true/);
   assert.match(workflow, /sendatrackConfigured/);
