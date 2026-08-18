@@ -27,6 +27,13 @@ test("preview and real sending use the same payload builder", () => {
   assert.match(automation, /body:\s*JSON\.stringify\(built\.payload\)/);
 });
 
+test("preview reports the same configured template language as real sending", () => {
+  assert.match(previewRoute, /whatsappTemplateLanguage/);
+  assert.match(previewRoute, /templateLanguage:\s*whatsappTemplateLanguage\(\)/);
+  assert.match(automation, /language:\s*\{ code: whatsappTemplateLanguage\(\) \}/);
+  assert.doesNotMatch(previewRoute, /language:\s*built\.payload\?\.template\.language\.code \?\? ["']en_US["']/);
+});
+
 test("preview masks customer phone numbers", () => {
   assert.match(previewRoute, /maskRecipient/);
   assert.match(previewRoute, /value\.slice\(-4\)/);
