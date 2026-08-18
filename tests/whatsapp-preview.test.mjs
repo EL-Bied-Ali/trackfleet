@@ -39,3 +39,15 @@ test("preview masks customer phone numbers", () => {
   assert.match(previewRoute, /value\.slice\(-4\)/);
   assert.doesNotMatch(previewRoute, /recipient:\s*built\.payload\.to[,\n]/);
 });
+
+test("preview respects withdrawn consent", () => {
+  assert.match(previewRoute, /whatsappConsentWithdrawn/);
+  assert.match(previewRoute, /reason: "consent_withdrawn"/);
+  assert.match(previewRoute, /consentWithdrawn: withdrawn/);
+});
+
+test("preview never falls back to a predictable delivery id for tracking", () => {
+  assert.match(previewRoute, /hasPrivateTrackingToken/);
+  assert.match(previewRoute, /reason: "tracking_token_missing"/);
+  assert.doesNotMatch(previewRoute, /trackingToken \|\| item\.delivery\.id/);
+});
