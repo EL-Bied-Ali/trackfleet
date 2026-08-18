@@ -2,6 +2,7 @@ export const SENDATRACK_HISTORY_BASE_URL = "http://app.sendatrack.com:8080/event
 
 export type SendatrackHistoryQuery = {
   accountId: string;
+  userId?: string;
   deviceId: string;
   from: Date | number;
   to: Date | number;
@@ -40,6 +41,7 @@ function toEpochSeconds(value: Date | number) {
 
 export function buildSendatrackHistoryUrl(query: SendatrackHistoryQuery) {
   const accountId = query.accountId.trim();
+  const userId = query.userId?.trim() ?? "";
   const deviceId = query.deviceId.trim();
   if (!accountId) throw new Error("Missing SENDATRACK account id");
   if (!deviceId) throw new Error("Missing SENDATRACK device id");
@@ -50,6 +52,7 @@ export function buildSendatrackHistoryUrl(query: SendatrackHistoryQuery) {
 
   const url = new URL(SENDATRACK_HISTORY_BASE_URL);
   url.searchParams.set("a", accountId);
+  if (userId) url.searchParams.set("uId", userId);
   url.searchParams.set("dId", deviceId);
   url.searchParams.set("rf", String(from));
   url.searchParams.set("rt", String(to));
@@ -106,8 +109,6 @@ function normalizeEvent(device: Record<string, unknown>, value: unknown): Sendat
   if (latitude === null || longitude === null || timestamp === null) return null;
   if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
 
-  // The APK history endpoint calls this value dId. Prefer DeviceCode so history
-  // identity matches the live fleet normalizer and the provider's stable device key.
   const deviceId = stringFrom(event.DeviceCode, device.DeviceCode, event.Device, device.Device, device.id);
   if (!deviceId) return null;
 
