@@ -1,7 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../../lib/company-auth";
-import { isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "../../../lib/notification-policy";
+import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "../../../lib/notification-policy";
 import { buildAutomaticWhatsAppPayload } from "../../../lib/whatsapp-automation";
 
 function maskRecipient(value: string) {
@@ -20,7 +20,9 @@ export async function GET(request: Request) {
 
   const origin = new URL(request.url).origin;
   const pending = await store.listPendingNotifications(session.companyId);
-  const { actionable, superseded } = splitLatestPendingNotifications(pending);
+  const eligible = pending.filter((item) => isAutomaticWhatsAppEvent(item.event.type));
+  const ignoredCount = pending.length - eligible.length;
+  const { actionable, superseded } = splitLatestPendingNotifications(eligible);
   const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
 
   const previews = actionable.map((item) => {
@@ -53,6 +55,8 @@ export async function GET(request: Request) {
     automationEnabled: runtimeEnv.WHATSAPP_AUTOMATION_ENABLED === "true",
     activationConfigured: Boolean(automationStartAt),
     pendingCount: pending.length,
+    eligibleCount: eligible.length,
+    ignoredCount,
     actionableCount: actionable.length,
     supersededCount: superseded.length,
     previews,
