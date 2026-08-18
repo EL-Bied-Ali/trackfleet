@@ -52,17 +52,18 @@ test("template language is shared by demo, automation, preview readiness and bot
   assert.match(readinessHelper, /templateLanguage:\s*config\.templateLanguage/);
 });
 
-test("provider verification requires the approved template in the configured language", () => {
+test("provider verification finds the configured template language before checking approval", () => {
   assert.match(readinessHelper, /candidate\.name === config\.templateName/);
-  assert.match(readinessHelper, /candidate\.status === ["']APPROVED["']/);
   assert.match(readinessHelper, /candidate\.language === config\.templateLanguage/);
+  assert.match(readinessHelper, /template\.status === ["']APPROVED["']/);
+  assert.match(readinessHelper, /templateApproved/);
 });
 
 test("provider verification enforces the three-body-parameter TrackFleet template contract", () => {
   assert.match(readinessHelper, /expectedTemplateBodyParameters = 3/);
   assert.match(readinessHelper, /component\.type === ["']BODY["']/);
   assert.match(readinessHelper, /body\.matchAll/);
-  assert.match(readinessHelper, /templateBodyParameters === expectedTemplateBodyParameters/);
+  assert.match(readinessHelper, /templateApproved && templateBodyParameters === expectedTemplateBodyParameters/);
   assert.match(readinessHelper, /expectedTemplateBodyParameters/);
 });
 
