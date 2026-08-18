@@ -5,7 +5,6 @@ import test from "node:test";
 const sendatrackSource = fs.readFileSync(new URL("../app/lib/sendatrack.ts", import.meta.url), "utf8");
 const normalizeSource = fs.readFileSync(new URL("../app/lib/sendatrack-normalize.ts", import.meta.url), "utf8");
 const historySource = fs.readFileSync(new URL("../app/lib/sendatrack-history-live.ts", import.meta.url), "utf8");
-const probeRouteSource = fs.readFileSync(new URL("../app/api/automation/sendatrack-history-probe-v2/route.ts", import.meta.url), "utf8");
 
 test("legacy history account candidates are provider-bounded and prefer the OpenGTS account key", () => {
   const accountIndex = sendatrackSource.indexOf('add(vehicle.providerAccountId, "account")');
@@ -29,12 +28,15 @@ test("history identity uses logical Device and discovery stays bounded to confir
   assert.match(historySource, /attempts/);
 });
 
-test("history probe remains CRON_SECRET protected and never logs credential values", () => {
-  assert.match(probeRouteSource, /runtimeEnv\.CRON_SECRET/);
-  assert.match(probeRouteSource, /authorization/);
-  assert.match(probeRouteSource, /usedPassword/);
-  assert.equal(probeRouteSource.includes("result.password"), false);
-  assert.equal(probeRouteSource.includes("identity.password"), false);
-  assert.equal(probeRouteSource.includes("accountId"), false);
-  assert.equal(probeRouteSource.includes("userId"), false);
+test("legacy history never sends a password over plaintext HTTP", () => {
+  assert.match(historySource, /identity\.password && target\.protocol !== "https:"/);
+  assert.match(historySource, /history_insecure_transport_blocked/);
+  const guardIndex = historySource.indexOf('identity.password && target.protocol !== "https:"');
+  const fetchIndex = historySource.indexOf("const response = await fetch(url");
+  assert.ok(guardIndex >= 0 && fetchIndex > guardIndex, "transport guard must run before the network request");
+});
+
+test("legacy history diagnostics never log credential-bearing URLs", () => {
+  assert.doesNotMatch(historySource, /console\.(?:log|info|warn|error)\([^\n]*url/);
+  assert.doesNotMatch(historySource, /console\.(?:log|info|warn|error)\([^\n]*password/);
 });
