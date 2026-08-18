@@ -8,7 +8,8 @@ export type DeliveryEventType =
   | "NEAR_DESTINATION"
   | "DELAY_DETECTED"
   | "ARRIVED"
-  | "GPS_STALE";
+  | "GPS_STALE"
+  | "WHATSAPP_OPT_OUT";
 
 export type DeliveryEventInput = {
   previousStatus: "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -55,5 +56,9 @@ export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventTy
 }
 
 export function customerFacingEvent(event: DeliveryEventType) {
-  return event !== "GPS_STALE" && event !== "GPS_BASELINE";
+  return event !== "GPS_STALE" && event !== "GPS_BASELINE" && event !== "WHATSAPP_OPT_OUT";
+}
+
+export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {
+  return events.some((event) => event.type === "WHATSAPP_OPT_OUT");
 }
