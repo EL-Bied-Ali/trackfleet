@@ -90,6 +90,7 @@ These pages intentionally contain no integration secrets.
 - `configure_whatsapp_provider`
 - `configure_whatsapp_business_account`
 - `verify_whatsapp_phone_number`
+- `verify_whatsapp_template_access`
 - `wait_for_approved_template`
 - `fix_template_body_parameters`
 - `set_automation_start_at`
