@@ -10,10 +10,10 @@ const privateDeliveryFields = new Set([
 
 /**
  * Public tracking is deliberately a projection, not a serialized DeliveryRow.
- * Keeping the allow/deny boundary here prevents newly added operational fields
- * from accidentally exposing customer or tenant metadata in a tracking link.
+ * Keeping the privacy boundary here makes it easy to audit which sensitive
+ * parcel fields are never exposed through a public tracking URL.
  */
-export function publicDeliveryView<T extends DeliveryRow & Record<string, unknown>>(delivery: T) {
+export function publicDeliveryView<T extends DeliveryRow>(delivery: T) {
   return Object.fromEntries(
     Object.entries(delivery).filter(([key]) => !privateDeliveryFields.has(key)),
   );
