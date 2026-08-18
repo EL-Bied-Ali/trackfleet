@@ -4,6 +4,7 @@ import { parseAutomationStartAt } from "./notification-policy";
 import { whatsappTemplateLanguage } from "./whatsapp-template";
 
 const graphApiVersion = "v25.0";
+const expectedTemplateBodyParameters = 3;
 
 type ProviderVerification = {
   configurationReady: boolean;
@@ -11,10 +12,27 @@ type ProviderVerification = {
   templateVerified: boolean | null;
   templateName: string;
   templateLanguage: string;
+  templateBodyParameters: number | null;
+  expectedTemplateBodyParameters: number;
   missing: string[];
   phoneNumber?: { id: string; displayPhoneNumber?: string; verifiedName?: string };
   error?: string;
 };
+
+type MessageTemplate = {
+  name?: string;
+  status?: string;
+  language?: string;
+  components?: Array<{ type?: string; text?: string }>;
+};
+
+function countTemplateBodyParameters(template: MessageTemplate | undefined) {
+  const body = template?.components?.find((component) => component.type === "BODY")?.text ?? "";
+  const parameterIndexes = new Set(
+    [...body.matchAll(/{{\s*(\d+)\s*}}/g)].map((match) => Number(match[1])).filter(Number.isFinite),
+  );
+  return parameterIndexes.size;
+}
 
 function configuredValues() {
   const token = runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim() ?? "";
@@ -60,6 +78,7 @@ export function getWhatsAppConfigurationReadiness() {
     demoRecipientConfigured: Boolean(config.demoRecipient),
     templateName: config.templateName || null,
     templateLanguage: config.templateLanguage,
+    expectedTemplateBodyParameters,
     missing: config.providerMissing,
     automationMissing: config.automationMissing,
   };
@@ -74,6 +93,8 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
       templateVerified: null,
       templateName: config.templateName,
       templateLanguage: config.templateLanguage,
+      templateBodyParameters: null,
+      expectedTemplateBodyParameters,
       missing: config.providerMissing,
     };
   }
@@ -88,6 +109,8 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
       templateVerified: null,
       templateName: config.templateName,
       templateLanguage: config.templateLanguage,
+      templateBodyParameters: null,
+      expectedTemplateBodyParameters,
       missing: config.providerMissing,
       error: `phone_number_verification_failed:${phoneResponse.status}`,
     };
@@ -95,9 +118,10 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
 
   const phone = await phoneResponse.json() as { id?: string; display_phone_number?: string; verified_name?: string };
   let templateVerified: boolean | null = null;
+  let templateBodyParameters: number | null = null;
 
   if (config.businessAccountId) {
-    const templatesResponse = await fetchImpl(`https://graph.facebook.com/${graphApiVersion}/${encodeURIComponent(config.businessAccountId)}/message_templates?fields=name,status,language&limit=100`, {
+    const templatesResponse = await fetchImpl(`https://graph.facebook.com/${graphApiVersion}/${encodeURIComponent(config.businessAccountId)}/message_templates?fields=name,status,language,components&limit=100`, {
       headers: { authorization: `Bearer ${config.token}` },
     });
     if (!templatesResponse.ok) {
@@ -107,17 +131,21 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
         templateVerified: false,
         templateName: config.templateName,
         templateLanguage: config.templateLanguage,
+        templateBodyParameters: null,
+        expectedTemplateBodyParameters,
         missing: config.providerMissing,
         phoneNumber: { id: phone.id ?? config.phoneNumberId, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name },
         error: `template_verification_failed:${templatesResponse.status}`,
       };
     }
-    const templates = await templatesResponse.json() as { data?: Array<{ name?: string; status?: string; language?: string }> };
-    templateVerified = Boolean(templates.data?.some((template) =>
-      template.name === config.templateName
-      && template.status === "APPROVED"
-      && template.language === config.templateLanguage
-    ));
+    const templates = await templatesResponse.json() as { data?: MessageTemplate[] };
+    const template = templates.data?.find((candidate) =>
+      candidate.name === config.templateName
+      && candidate.status === "APPROVED"
+      && candidate.language === config.templateLanguage
+    );
+    templateBodyParameters = template ? countTemplateBodyParameters(template) : null;
+    templateVerified = Boolean(template && templateBodyParameters === expectedTemplateBodyParameters);
   }
 
   return {
@@ -126,6 +154,8 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
     templateVerified,
     templateName: config.templateName,
     templateLanguage: config.templateLanguage,
+    templateBodyParameters,
+    expectedTemplateBodyParameters,
     missing: config.providerMissing,
     phoneNumber: { id: phone.id ?? config.phoneNumberId, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name },
   };
