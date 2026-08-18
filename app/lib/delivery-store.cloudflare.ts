@@ -17,7 +17,7 @@ type RawDelivery = {
   id: string; customer: string; originSiteId: string | null; originLatitude: number | null; originLongitude: number | null; destinationSiteId: string | null; destination: string;
   destinationLatitude: number | null; destinationLongitude: number | null; arrivalRadiusKm: number | null;
   truck: string; driver: string; status: DeliveryStatus; eta: string; plannedArrivalAt: number | null;
-  progress: number; color: string; contact: string;
+  progress: number; color: string; contact: string; whatsappOptIn: number | null; whatsappOptInAt: number | null;
   sendatrackVehicleId: string; latitude: number | null; longitude: number | null; speed: number | null;
   lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; tripId: string | null; createdAt: number;
 };
@@ -33,6 +33,8 @@ function hydrate(row: RawDelivery): DeliveryRow {
     destinationLongitude: row.destinationLongitude ?? null,
     arrivalRadiusKm: row.arrivalRadiusKm ?? 0.5,
     plannedArrivalAt: row.plannedArrivalAt ? new Date(row.plannedArrivalAt) : null,
+    whatsappOptIn: row.whatsappOptIn === 1,
+    whatsappOptInAt: row.whatsappOptInAt ? new Date(row.whatsappOptInAt) : null,
     lastPositionAt: row.lastPositionAt ? new Date(row.lastPositionAt) : null,
     createdAt: new Date(row.createdAt),
   };
@@ -61,6 +63,8 @@ async function ensureDeliveryColumns() {
   if (!columns.has("arrival_radius_km")) await db().prepare("ALTER TABLE deliveries ADD COLUMN arrival_radius_km real DEFAULT 0.5 NOT NULL").run();
   if (!columns.has("planned_arrival_at")) await db().prepare("ALTER TABLE deliveries ADD COLUMN planned_arrival_at integer").run();
   if (!columns.has("trip_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN trip_id text").run();
+  if (!columns.has("whatsapp_opt_in")) await db().prepare("ALTER TABLE deliveries ADD COLUMN whatsapp_opt_in integer DEFAULT 0 NOT NULL").run();
+  if (!columns.has("whatsapp_opt_in_at")) await db().prepare("ALTER TABLE deliveries ADD COLUMN whatsapp_opt_in_at integer").run();
 }
 
 async function ensureTable() {
@@ -70,6 +74,7 @@ async function ensureTable() {
     destination_latitude real, destination_longitude real, arrival_radius_km real DEFAULT 0.5 NOT NULL,
     truck text NOT NULL, driver text NOT NULL, status text NOT NULL, eta text NOT NULL, planned_arrival_at integer,
     progress integer DEFAULT 0 NOT NULL, color text DEFAULT '#916ed7' NOT NULL, contact text DEFAULT '' NOT NULL,
+    whatsapp_opt_in integer DEFAULT 0 NOT NULL, whatsapp_opt_in_at integer,
     sendatrack_vehicle_id text DEFAULT '' NOT NULL, latitude real, longitude real, speed real, last_position_at integer,
     gps_source text DEFAULT 'simulation' NOT NULL, company_id text DEFAULT 'demo' NOT NULL, tracking_token text, created_at integer NOT NULL
   )`).run();
@@ -122,12 +127,12 @@ async function ensureTable() {
   for (const delivery of seedDeliveries) {
     await database.prepare(`INSERT OR IGNORE INTO deliveries
       (id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-       truck, driver, status, eta, planned_arrival_at, progress, color, contact, sendatrack_vehicle_id,
+       truck, driver, status, eta, planned_arrival_at, progress, color, contact, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.originLatitude, delivery.originLongitude, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
         delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
-        delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
+        delivery.progress, delivery.color, delivery.contact, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
         delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.createdAt.getTime()).run();
   }
@@ -136,6 +141,7 @@ async function ensureTable() {
 const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_latitude AS originLatitude, origin_longitude AS originLongitude, destination_site_id AS destinationSiteId, destination,
   destination_latitude AS destinationLatitude, destination_longitude AS destinationLongitude, arrival_radius_km AS arrivalRadiusKm,
   truck, driver, status, eta, planned_arrival_at AS plannedArrivalAt, progress, color, contact,
+  whatsapp_opt_in AS whatsappOptIn, whatsapp_opt_in_at AS whatsappOptInAt,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
   last_position_at AS lastPositionAt, gps_source AS gpsSource, company_id AS companyId,
   tracking_token AS trackingToken, trip_id AS tripId, created_at AS createdAt`;
@@ -349,15 +355,21 @@ export const store: DeliveryStore = {
   },
   async create(input: CreateDeliveryInput) {
     await ensureTable();
-    const delivery: DeliveryRow = { ...input, id: `TF-${String(Date.now()).slice(-6)}`, createdAt: new Date() };
+    const delivery: DeliveryRow = {
+      ...input,
+      whatsappOptIn: input.whatsappOptIn === true,
+      whatsappOptInAt: input.whatsappOptIn === true ? (input.whatsappOptInAt ?? new Date()) : null,
+      id: `TF-${String(Date.now()).slice(-6)}`,
+      createdAt: new Date(),
+    };
     await db().prepare(`INSERT INTO deliveries
       (id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-       truck, driver, status, eta, planned_arrival_at, progress, color, contact, sendatrack_vehicle_id,
+       truck, driver, status, eta, planned_arrival_at, progress, color, contact, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.originLatitude, delivery.originLongitude, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
         delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
-        delivery.progress, delivery.color, delivery.contact, delivery.sendatrackVehicleId,
+        delivery.progress, delivery.color, delivery.contact, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
         delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.createdAt.getTime()).run();
     return delivery;
