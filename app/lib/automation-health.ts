@@ -3,6 +3,7 @@ import type { StorageHealth } from "./storage-health.ts";
 export type AutomationHealthInput = {
   storage: StorageHealth;
   sendatrackConfigured: boolean;
+  sendatrackTransportSecure: boolean;
   sessionEncryptionConfigured: boolean;
   tickProtected: boolean;
   whatsappEnabled: boolean;
@@ -15,6 +16,7 @@ export function automationMissingRequirements(input: AutomationHealthInput) {
   if (!input.storage.persistent) missing.push("persistent_storage");
   if (!input.storage.connected) missing.push("storage_connection");
   if (!input.sendatrackConfigured) missing.push("sendatrack_credentials");
+  if (!input.sendatrackTransportSecure) missing.push("sendatrack_https");
   if (!input.sessionEncryptionConfigured) missing.push("session_encryption_key");
   if (!input.tickProtected) missing.push("cron_secret");
   if (input.whatsappEnabled && !input.whatsappProviderConfigured) missing.push("whatsapp_provider");
