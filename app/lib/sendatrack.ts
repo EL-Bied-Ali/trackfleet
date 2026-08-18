@@ -18,6 +18,7 @@ export type SendatrackSnapshot = {
 
 export type SendatrackLegacyHistoryIdentity = {
   accountId: string;
+  userId: string;
   deviceId: string;
   accountSource: "account_desc" | "account" | "configured";
 };
@@ -172,13 +173,10 @@ export async function getSendatrackLegacyHistoryIdentity(): Promise<SendatrackLe
   const vehicle = vehicles[0];
   if (!vehicle?.providerDeviceId) return null;
 
-  // The legacy APK builds events7/data.jsonx?a=... from its OpenGTS account.
-  // Account_desc is tested first because Account and the configured backend2
-  // account have both been rejected by the legacy endpoint in production.
   const accountDesc = findStringByKey(payload, "Account_desc");
-  if (accountDesc) return { accountId: accountDesc, deviceId: vehicle.providerDeviceId, accountSource: "account_desc" };
-  if (vehicle.providerAccountId) return { accountId: vehicle.providerAccountId, deviceId: vehicle.providerDeviceId, accountSource: "account" };
-  return { accountId: auth.accountID, deviceId: vehicle.providerDeviceId, accountSource: "configured" };
+  if (accountDesc) return { accountId: accountDesc, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource: "account_desc" };
+  if (vehicle.providerAccountId) return { accountId: vehicle.providerAccountId, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource: "account" };
+  return { accountId: auth.accountID, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource: "configured" };
 }
 
 export async function getSendatrackSnapshot(providedCredentials?: SendatrackCredentials): Promise<SendatrackSnapshot> {
