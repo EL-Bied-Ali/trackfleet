@@ -1,5 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { whatsappConsentWithdrawn } from "./delivery-events";
 import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
 import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
 
@@ -48,6 +49,16 @@ export async function processPendingNotifications(companyId: string, origin: str
   for (const item of actionable) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
+
+    // Consent can be withdrawn after parcel intake. The withdrawal is stored as
+    // an internal delivery event so the rule works identically across Postgres,
+    // D1/Cloudflare and the local memory store.
+    const deliveryEvents = await store.listEvents(item.delivery.id);
+    if (whatsappConsentWithdrawn(deliveryEvents)) {
+      await store.markNotificationSent(item.delivery.id, item.event.type);
+      suppressed += 1;
+      continue;
+    }
 
     if (isHistoricalNotification(item.event.createdAt, automationStartAt)) {
       await store.markNotificationSent(item.delivery.id, item.event.type);
