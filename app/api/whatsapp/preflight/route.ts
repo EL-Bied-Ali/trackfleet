@@ -33,14 +33,16 @@ export async function GET(request: Request) {
     }
   }
 
+  const providerDiagnosticError = providerError ?? provider?.error ?? null;
   const checks = {
     persistentStorage: storage.persistent && storage.connected,
     schedulerProtected: Boolean(runtimeEnv.CRON_SECRET?.trim()),
     providerConfigured: configuration.providerReady,
     businessAccountConfigured: configuration.businessAccountConfigured,
     phoneNumberVerified: provider?.providerVerified === true,
-    templateApproved: provider?.templateVerified === true,
-    templateContractMatches: provider?.templateVerified === true
+    templateApiAccessible: provider?.providerVerified === true && !provider?.error,
+    templateApproved: provider?.templateApproved === true,
+    templateContractMatches: provider?.templateApproved === true
       && provider.templateBodyParameters === provider.expectedTemplateBodyParameters,
   };
 
@@ -54,13 +56,14 @@ export async function GET(request: Request) {
   else if (!checks.providerConfigured) nextAction = "configure_whatsapp_provider";
   else if (!checks.businessAccountConfigured) nextAction = "configure_whatsapp_business_account";
   else if (!checks.phoneNumberVerified) nextAction = "verify_whatsapp_phone_number";
+  else if (!checks.templateApiAccessible) nextAction = "verify_whatsapp_template_access";
   else if (!checks.templateApproved) nextAction = "wait_for_approved_template";
   else if (!checks.templateContractMatches) nextAction = "fix_template_body_parameters";
   else if (!configuration.activationConfigured) nextAction = "set_automation_start_at";
   else if (!automationEnabled) nextAction = "enable_automation";
 
   return json({
-    ok: providerError === null,
+    ok: providerDiagnosticError === null,
     readyToEnable,
     readyToRun,
     nextAction,
@@ -72,11 +75,13 @@ export async function GET(request: Request) {
     template: {
       name: configuration.templateName,
       language: configuration.templateLanguage,
+      approved: provider?.templateApproved ?? null,
       expectedBodyParameters: configuration.expectedTemplateBodyParameters,
       observedBodyParameters: provider?.templateBodyParameters ?? null,
     },
     provider: provider ? {
       verified: provider.providerVerified,
+      templateApproved: provider.templateApproved,
       templateVerified: provider.templateVerified,
       phoneNumber: provider.phoneNumber ?? null,
       error: provider.error ?? null,
@@ -88,5 +93,5 @@ export async function GET(request: Request) {
       connected: storage.connected,
       error: storage.error,
     },
-  }, providerError ? 502 : 200);
+  }, providerDiagnosticError ? 502 : 200);
 }
