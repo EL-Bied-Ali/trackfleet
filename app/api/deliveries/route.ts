@@ -8,6 +8,7 @@ import { estimateArrival } from "../../lib/eta-estimator";
 import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { publicDeliveryView } from "../../lib/public-delivery-view";
+import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
@@ -23,8 +24,10 @@ import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/tri
 import { summarizeCompletedTripRoutes } from "../../lib/trip-history-summary";
 
 function errorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "Unexpected error";
-  return Response.json({ error: message }, { status: 500 });
+  console.error("[trackfleet:deliveries] request failed", {
+    message: error instanceof Error ? error.message : "unknown_error",
+  });
+  return Response.json({ error: "internal_error" }, { status: 500, headers: { "cache-control": "no-store" } });
 }
 
 function explicitDestination(row: { destinationLatitude?: number | null; destinationLongitude?: number | null }): [number, number] | null {
@@ -332,6 +335,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    if (!requestIsSameOrigin(request)) return originRejectedResponse();
     const session = await getCompanySession(request);
     if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
 
