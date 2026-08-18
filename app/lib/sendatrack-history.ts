@@ -3,6 +3,7 @@ export const SENDATRACK_HISTORY_BASE_URL = "http://app.sendatrack.com:8080/event
 export type SendatrackHistoryQuery = {
   accountId: string;
   userId?: string;
+  password?: string;
   deviceId: string;
   from: Date | number;
   to: Date | number;
@@ -42,6 +43,7 @@ function toEpochSeconds(value: Date | number) {
 export function buildSendatrackHistoryUrl(query: SendatrackHistoryQuery) {
   const accountId = query.accountId.trim();
   const userId = query.userId?.trim() ?? "";
+  const password = query.password ?? "";
   const deviceId = query.deviceId.trim();
   if (!accountId) throw new Error("Missing SENDATRACK account id");
   if (!deviceId) throw new Error("Missing SENDATRACK device id");
@@ -53,9 +55,14 @@ export function buildSendatrackHistoryUrl(query: SendatrackHistoryQuery) {
   const url = new URL(SENDATRACK_HISTORY_BASE_URL);
   url.searchParams.set("a", accountId);
   if (userId) url.searchParams.set("uId", userId);
+  if (password) url.searchParams.set("p", password);
   url.searchParams.set("dId", deviceId);
   url.searchParams.set("rf", String(from));
   url.searchParams.set("rt", String(to));
+  // Both fragments are present in the official APK. Keep the result bounded
+  // while requesting address/detail enrichment used for route reconstruction.
+  url.searchParams.set("l", "10000");
+  url.searchParams.set("at", "true");
   return url.toString();
 }
 
