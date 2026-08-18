@@ -9,7 +9,7 @@ export type CompanySession = {
 };
 
 const cookieName = "__Host-trackfleet_session";
-const sessionDurationSeconds = 30 * 24 * 60 * 60;
+const sessionDurationSeconds = 7 * 24 * 60 * 60;
 
 type SessionPayload = {
   accountID: string;
