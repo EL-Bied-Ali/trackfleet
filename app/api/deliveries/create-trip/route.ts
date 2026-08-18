@@ -1,18 +1,22 @@
 import { store } from "trackfleet-delivery-store";
 import { getCompanySession } from "../../../lib/company-auth";
 import { firstStopRouteTemplateId, manualTripVehicleKey, validateNewPlannedTrip } from "../../../lib/planned-trip-creation";
+import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 import { getSendatrackSnapshot } from "../../../lib/sendatrack";
 
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
   const session = await getCompanySession(request);
-  if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
-  const payload = await request.json() as Record<string, unknown>;
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
+  const payload = await readJsonObject(request);
+  if (!payload) return invalidJsonResponse();
   const deliveryId = String(payload.deliveryId ?? "").trim();
   const vehicleId = String(payload.vehicleId ?? "").trim();
   const manualTruck = String(payload.manualTruck ?? "").trim();
-  if (!deliveryId) return Response.json({ error: "deliveryId is required" }, { status: 400 });
+  if (!deliveryId || deliveryId.length > 100 || vehicleId.length > 160 || manualTruck.length > 160) {
+    return Response.json({ error: "invalid_trip_input" }, { status: 400, headers: { "cache-control": "no-store" } });
+  }
 
   const deliveries = await store.listForCompany(session.companyId);
   const delivery = deliveries.find((item) => item.id === deliveryId) ?? null;
@@ -42,5 +46,5 @@ export async function POST(request: Request) {
   });
   const updated = await store.assignDeliveryToPlannedTrip(delivery.id, session.companyId, trip.id, trip.truck, trip.sendatrackVehicleId);
   if (!updated) return Response.json({ error: "assignment_conflict" }, { status: 409 });
-  return Response.json({ delivery: updated, trip });
+  return Response.json({ delivery: updated, trip }, { headers: { "cache-control": "no-store" } });
 }
