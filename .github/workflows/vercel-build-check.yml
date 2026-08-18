@@ -75,6 +75,8 @@ jobs:
         run: node --test tests/dashboard-polish.test.mjs
       - name: Verify WhatsApp consent withdrawal
         run: node --test tests/whatsapp-consent-withdrawal.test.mjs
+      - name: Verify authenticated request origin safety
+        run: node --experimental-strip-types --test tests/request-origin-security.test.mjs
       - name: Verify tenant isolation
         run: pnpm run test:tenant-isolation
       - name: Verify agency site registry
