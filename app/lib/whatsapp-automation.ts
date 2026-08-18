@@ -5,6 +5,8 @@ import type { DeliveryRow } from "./delivery-store.types";
 import { isAutomaticWhatsAppEvent } from "./notification-policy";
 import { whatsappTemplateLanguage } from "./whatsapp-template";
 
+const metaRequestTimeoutMs = 10_000;
+
 function recipientFrom(delivery: DeliveryRow) {
   // Automatic customer notifications must only use the contact attached to
   // this delivery. Never fall back to the demo recipient in production logic.
@@ -66,8 +68,9 @@ export function buildAutomaticWhatsAppPayload(
   if (!recipient) return { payload: null, reason: "recipient_missing" };
 
   const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
+  const templateLanguage = runtimeEnv.WHATSAPP_TEMPLATE_LANGUAGE?.trim();
   const message = automaticWhatsAppMessage(event, delivery, trackingUrl);
-  if (!templateName || !message) return { payload: null, reason: "not_configured" };
+  if (!templateName || !templateLanguage || !message) return { payload: null, reason: "not_configured" };
 
   return {
     reason: "ok",
@@ -109,6 +112,7 @@ export async function sendAutomaticWhatsAppNotification(
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify(built.payload),
+    signal: AbortSignal.timeout(metaRequestTimeoutMs),
   });
 
   if (!response.ok) {
