@@ -51,7 +51,7 @@ export type AutomaticWhatsAppPayload = {
   };
 };
 
-type AutomaticPayloadBuildReason = "ok" | "internal_event" | "recipient_missing" | "not_configured";
+type AutomaticPayloadBuildReason = "ok" | "internal_event" | "consent_missing" | "recipient_missing" | "not_configured";
 
 export function buildAutomaticWhatsAppPayload(
   event: DeliveryEventType,
@@ -59,6 +59,7 @@ export function buildAutomaticWhatsAppPayload(
   trackingUrl: string,
 ): { payload: AutomaticWhatsAppPayload | null; reason: AutomaticPayloadBuildReason } {
   if (!customerFacingEvent(event)) return { payload: null, reason: "internal_event" };
+  if (delivery.whatsappOptIn !== true) return { payload: null, reason: "consent_missing" };
 
   const recipient = recipientFrom(delivery);
   if (!recipient) return { payload: null, reason: "recipient_missing" };
