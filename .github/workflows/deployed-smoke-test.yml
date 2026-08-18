@@ -2,9 +2,6 @@ name: Deployed site smoke test
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   smoke-test:
