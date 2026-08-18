@@ -42,6 +42,17 @@ test("notification runner filters low-value progress events before newest-event 
   assert.ok(splitIndex > eligibleIndex);
 });
 
+test("missing customer phone is suppressed instead of retried forever", () => {
+  assert.match(whatsapp, /reason: ["']recipient_missing["']/);
+  assert.match(runner, /result\.reason === ["']recipient_missing["']/);
+  const recipientBranch = runner.indexOf('result.reason === "recipient_missing"');
+  const markSent = runner.indexOf("markNotificationSent", recipientBranch);
+  const releaseClaim = runner.indexOf("releaseNotification", recipientBranch);
+  assert.ok(recipientBranch >= 0);
+  assert.ok(markSent > recipientBranch);
+  assert.ok(releaseClaim > markSent);
+});
+
 test("registration, departure and delay copy direct customers to self-service tracking", () => {
   assert.match(whatsapp, /case ["']REGISTERED["']/);
   assert.match(whatsapp, /estimation d'arrivée ici/);
