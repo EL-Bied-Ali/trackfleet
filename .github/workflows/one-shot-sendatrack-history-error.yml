@@ -1,0 +1,33 @@
+name: One-shot SENDATRACK history provider error
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/one-shot-sendatrack-history-error.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
+      CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
+    steps:
+      - name: Capture provider error once
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CRON_SECRET:-}"
+          curl --silent --show-error \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${BASE_URL}/api/automation/sendatrack-history-probe-v2" \
+            -o /tmp/history.json || true
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const body = JSON.parse(fs.readFileSync('/tmp/history.json', 'utf8'));
+          console.log(JSON.stringify({ ok: body.ok, status: body.status, pointCount: body.pointCount, payloadKeys: body.payloadKeys, providerError: body.providerError ?? null, error: body.error ?? null }));
+          NODE
