@@ -42,6 +42,7 @@ npm run build
 - Parcels may remain unassigned until a compatible planned trip or truck is confirmed.
 - Persistent trips and route learning are company-scoped.
 - Public tracking never receives SENDATRACK credentials.
+- Production validation builds are triggered through the GitHub-to-Vercel integration.
 
 ## Learn More
 
