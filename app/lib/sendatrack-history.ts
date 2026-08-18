@@ -1,3 +1,12 @@
+export const SENDATRACK_HISTORY_BASE_URL = "http://app.sendatrack.com:8080/events7/data.jsonx";
+
+export type SendatrackHistoryQuery = {
+  accountId: string;
+  deviceId: string;
+  from: Date | number;
+  to: Date | number;
+};
+
 export type SendatrackHistoryPoint = {
   deviceId: string;
   timestamp: number;
@@ -22,6 +31,30 @@ export type SendatrackHistoryTrip = {
 
 const START_STATUS_CODES = new Set([62465, 61714]);
 const STOP_STATUS_CODES = new Set([62467]);
+
+function toEpochSeconds(value: Date | number) {
+  const milliseconds = value instanceof Date ? value.getTime() : value;
+  if (!Number.isFinite(milliseconds)) throw new Error("Invalid SENDATRACK history timestamp");
+  return Math.floor(milliseconds / 1000);
+}
+
+export function buildSendatrackHistoryUrl(query: SendatrackHistoryQuery) {
+  const accountId = query.accountId.trim();
+  const deviceId = query.deviceId.trim();
+  if (!accountId) throw new Error("Missing SENDATRACK account id");
+  if (!deviceId) throw new Error("Missing SENDATRACK device id");
+
+  const from = toEpochSeconds(query.from);
+  const to = toEpochSeconds(query.to);
+  if (from > to) throw new Error("SENDATRACK history range is reversed");
+
+  const url = new URL(SENDATRACK_HISTORY_BASE_URL);
+  url.searchParams.set("a", accountId);
+  url.searchParams.set("dId", deviceId);
+  url.searchParams.set("rf", String(from));
+  url.searchParams.set("rt", String(to));
+  return url.toString();
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
