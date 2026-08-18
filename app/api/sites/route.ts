@@ -55,6 +55,9 @@ export async function POST(request: Request) {
   if (!id || !label || !city || !address || (country !== "BE" && country !== "MA") || roles.length === 0) {
     return Response.json({ error: "id, label, city, address, country BE/MA and at least one role are required" }, { status: 400 });
   }
+  if (id.length > 100 || label.length > 160 || city.length > 120 || address.length > 500) {
+    return Response.json({ error: "site fields exceed allowed length" }, { status: 400 });
+  }
   if ((latitude === null) !== (longitude === null)) return Response.json({ error: "latitude and longitude must be provided together" }, { status: 400 });
   if (latitude !== null && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude! < -180 || longitude! > 180)) {
     return Response.json({ error: "invalid coordinates" }, { status: 400 });
