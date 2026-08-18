@@ -10,6 +10,7 @@ test("health explains why production automation is not ready", () => {
   assert.deepEqual(automationMissingRequirements({
     storage: { mode: "memory", persistent: false, connected: true, error: null },
     sendatrackConfigured: true,
+    sessionEncryptionConfigured: true,
     tickProtected: false,
     whatsappEnabled: false,
     whatsappProviderConfigured: false,
@@ -17,10 +18,23 @@ test("health explains why production automation is not ready", () => {
   }), ["persistent_storage", "cron_secret"]);
 });
 
+test("dedicated session encryption key is required for production readiness", () => {
+  assert.deepEqual(automationMissingRequirements({
+    storage: persistentStorage,
+    sendatrackConfigured: true,
+    sessionEncryptionConfigured: false,
+    tickProtected: true,
+    whatsappEnabled: false,
+    whatsappProviderConfigured: false,
+    whatsappActivationConfigured: false,
+  }), ["session_encryption_key"]);
+});
+
 test("disabled WhatsApp does not block GPS automation readiness", () => {
   assert.deepEqual(automationMissingRequirements({
     storage: persistentStorage,
     sendatrackConfigured: true,
+    sessionEncryptionConfigured: true,
     tickProtected: true,
     whatsappEnabled: false,
     whatsappProviderConfigured: false,
@@ -32,6 +46,7 @@ test("enabled WhatsApp requires provider and activation boundary", () => {
   assert.deepEqual(automationMissingRequirements({
     storage: persistentStorage,
     sendatrackConfigured: true,
+    sessionEncryptionConfigured: true,
     tickProtected: true,
     whatsappEnabled: true,
     whatsappProviderConfigured: false,
@@ -39,7 +54,8 @@ test("enabled WhatsApp requires provider and activation boundary", () => {
   }), ["whatsapp_provider", "whatsapp_activation_start"]);
 });
 
-test("health provider readiness includes the explicit Meta template language", () => {
+test("health provider readiness includes explicit security and Meta requirements", () => {
+  assert.match(healthRoute, /TRACKFLEET_ENCRYPTION_KEY/);
   assert.match(healthRoute, /WHATSAPP_ACCESS_TOKEN/);
   assert.match(healthRoute, /WHATSAPP_PHONE_NUMBER_ID/);
   assert.match(healthRoute, /WHATSAPP_TEMPLATE_NAME/);
