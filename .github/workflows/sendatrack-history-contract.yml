@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
     paths:
+      - "app/lib/sendatrack.ts"
       - "app/lib/sendatrack-history.ts"
+      - "app/lib/sendatrack-history-live.ts"
       - "tests/sendatrack-history*.test.mjs"
       - "package.json"
       - ".github/workflows/sendatrack-history-contract.yml"
@@ -26,6 +28,8 @@ jobs:
         run: pnpm install --no-frozen-lockfile
       - name: Verify historical event normalization and trip segmentation
         run: node --experimental-strip-types --test tests/sendatrack-history.test.mjs
+      - name: Verify legacy history identity selection
+        run: node --test tests/sendatrack-history-identity.test.mjs
       - name: Verify APK-derived history URL contract
         run: pnpm run test:sendatrack-history-url
       - name: Typecheck Vercel runtime
