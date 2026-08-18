@@ -13,7 +13,7 @@ import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_VEHICLE_ID } fr
 import { suggestPlannedTrip } from "./lib/trip-suggestion";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
-type DeliveryEventType = "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
+type DeliveryEventType = "REGISTERED" | "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
 
 type Delivery = {
   id: string;
@@ -28,6 +28,8 @@ type Delivery = {
   progress: number;
   color: string;
   contact?: string;
+  whatsappOptIn?: boolean;
+  whatsappOptInAt?: string | null;
   sendatrackVehicleId?: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -560,6 +562,7 @@ export default function Home() {
     const destination = selectedSite?.address ?? "";
     const plannedArrivalInput = String(form.get("plannedArrivalAt") ?? "").trim();
     const plannedArrivalAt = plannedArrivalInput ? new Date(plannedArrivalInput).toISOString() : "";
+    const whatsappOptIn = form.get("whatsappOptIn") === "on";
     const draftDelivery = {
       customer: String(form.get("customer")),
       originSiteId,
@@ -572,13 +575,17 @@ export default function Home() {
       sendatrackVehicleId: vehicleChoice.sendatrackVehicleId,
       plannedArrivalAt,
       contact: String(form.get("contact")),
+      whatsappOptIn,
     };
     setCreating(true);
     try {
       const response = await fetch("/api/deliveries", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(draftDelivery) });
-      if (!response.ok) throw new Error("Could not save delivery");
-      const data = (await response.json()) as { delivery: Delivery };
-      setDeliveries((items) => [data.delivery, ...items.filter((item) => item.id !== data.delivery.id)]);
+      const data = (await response.json()) as { delivery?: Delivery; error?: string };
+      if (!response.ok || !data.delivery) {
+        setToast(data.error || t.createFailed);
+        return;
+      }
+      setDeliveries((items) => [data.delivery!, ...items.filter((item) => item.id !== data.delivery!.id)]);
       setSelectedId(data.delivery.id);
       setShowPopover(true);
       setModalOpen(false);
@@ -610,6 +617,7 @@ export default function Home() {
         currentDetail: (progress: number) => `${progress}% du trajet effectué`,
         destination: "Destination",
         events: {
+          REGISTERED: "Colis enregistré",
           DEPARTED: "Camion parti",
           PROGRESS_25: "25% du trajet effectué",
           PROGRESS_50: "Mi-parcours atteint",
@@ -631,6 +639,7 @@ export default function Home() {
         currentDetail: (progress: number) => `${progress}% of the trip completed`,
         destination: "Destination",
         events: {
+          REGISTERED: "Parcel registered",
           DEPARTED: "Truck departed",
           PROGRESS_25: "25% of the trip completed",
           PROGRESS_50: "Halfway point reached",
@@ -652,6 +661,7 @@ export default function Home() {
         currentDetail: (progress: number) => `${progress}% van het traject voltooid`,
         destination: "Bestemming",
         events: {
+          REGISTERED: "Zending geregistreerd",
           DEPARTED: "Vrachtwagen vertrokken",
           PROGRESS_25: "25% van het traject voltooid",
           PROGRESS_50: "Halverwege bereikt",
@@ -888,7 +898,7 @@ export default function Home() {
         </div>
       </section>
 
-      {modalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title"><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser."}</small></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row">{integration.connected && integration.vehicles.length ? <label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={UNASSIGNED_VEHICLE_ID}><option value={UNASSIGNED_VEHICLE_ID}>{locale === "fr" ? "À affecter plus tard (recommandé)" : locale === "nl" ? "Later toewijzen (aanbevolen)" : "Assign later (recommended)"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select><input name="manualTruck" placeholder={locale === "fr" ? "Camion absent ? Nom / plaque (optionnel)" : locale === "nl" ? "Voertuig ontbreekt? Naam / nummerplaat (optioneel)" : "Truck missing? Name / plate (optional)"} /><small>{locale === "fr" ? "Si vous saisissez un camion ici, il sera créé en attente GPS puis associé quand il apparaîtra dans SENDATRACK." : locale === "nl" ? "Als u hier een voertuig invoert, wordt het in afwachting van GPS aangemaakt en gekoppeld zodra het in SENDATRACK verschijnt." : "If you enter a truck here, it will be created waiting for GPS and linked when it appears in SENDATRACK."}</small></label> : <label>{t.assignTruck}<input name="manualTruck" placeholder={locale === "fr" ? "Optionnel · Ex. TRK-005 / plaque" : locale === "nl" ? "Optioneel · Bijv. TRK-005 / nummerplaat" : "Optional · E.g. TRK-005 / plate"} /><small>{locale === "fr" ? "Laissez vide si le camion n’est pas encore connu. Vous pourrez l’affecter plus tard." : locale === "nl" ? "Laat leeg als het voertuig nog niet bekend is. U kunt het later toewijzen." : "Leave blank if the truck is not known yet. You can assign it later."}</small></label>}<label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
+      {modalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title"><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser."}</small></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row">{integration.connected && integration.vehicles.length ? <label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={UNASSIGNED_VEHICLE_ID}><option value={UNASSIGNED_VEHICLE_ID}>{locale === "fr" ? "À affecter plus tard (recommandé)" : locale === "nl" ? "Later toewijzen (aanbevolen)" : "Assign later (recommended)"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select><input name="manualTruck" placeholder={locale === "fr" ? "Camion absent ? Nom / plaque (optionnel)" : locale === "nl" ? "Voertuig ontbreekt? Naam / nummerplaat (optioneel)" : "Truck missing? Name / plate (optional)"} /><small>{locale === "fr" ? "Si vous saisissez un camion ici, il sera créé en attente GPS puis associé quand il apparaîtra dans SENDATRACK." : locale === "nl" ? "Als u hier een voertuig invoert, wordt het in afwachting van GPS aangemaakt en gekoppeld zodra het in SENDATRACK verschijnt." : "If you enter a truck here, it will be created waiting for GPS and linked when it appears in SENDATRACK."}</small></label> : <label>{t.assignTruck}<input name="manualTruck" placeholder={locale === "fr" ? "Optionnel · Ex. TRK-005 / plaque" : locale === "nl" ? "Optioneel · Bijv. TRK-005 / nummerplaat" : "Optional · E.g. TRK-005 / plate"} /><small>{locale === "fr" ? "Laissez vide si le camion n’est pas encore connu. Vous pourrez l’affecter plus tard." : locale === "nl" ? "Laat leeg als het voertuig nog niet bekend is. U kunt het later toewijzen." : "Leave blank if the truck is not known yet. You can assign it later."}</small></label>}<label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}><input type="checkbox" name="whatsappOptIn" style={{ width: 18, height: 18, marginTop: 2, flex: "0 0 auto" }} /><span>{locale === "fr" ? "Le client accepte de recevoir les mises à jour de ce colis sur WhatsApp" : locale === "nl" ? "De klant stemt ermee in leveringsupdates via WhatsApp te ontvangen" : "The customer agrees to receive delivery updates on WhatsApp"}<small style={{ display: "block", marginTop: 4 }}>{locale === "fr" ? "TrackFleet enverra uniquement les informations importantes : enregistrement, départ, retard important, approche et arrivée." : locale === "nl" ? "TrackFleet stuurt alleen belangrijke updates: registratie, vertrek, belangrijke vertraging, nadering en aankomst." : "TrackFleet will send only important updates: registration, departure, significant delay, approach and arrival."}</small></span></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );
