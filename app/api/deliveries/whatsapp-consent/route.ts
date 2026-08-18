@@ -1,16 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { getCompanySession } from "../../../lib/company-auth";
 import { whatsappConsentWithdrawn } from "../../../lib/delivery-events";
-
-function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try {
-    return new URL(origin).origin === new URL(request.url).origin;
-  } catch {
-    return false;
-  }
-}
+import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 
 export async function GET(request: Request) {
   const session = await getCompanySession(request);
@@ -35,7 +26,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return Response.json({ error: "origin_not_allowed" }, { status: 403 });
+  if (!requestIsSameOrigin(request)) return originRejectedResponse();
 
   const session = await getCompanySession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
