@@ -55,8 +55,20 @@ export async function processPendingNotifications(companyId: string, origin: str
       continue;
     }
 
+    // Public customer tracking is token-only. Never fall back to a predictable
+    // delivery ID if an old/corrupt record is missing its private tracking token.
+    if (!item.delivery.trackingToken) {
+      await store.markNotificationSent(item.delivery.id, item.event.type);
+      suppressed += 1;
+      console.error("[trackfleet:notifications] suppressed notification without private tracking token", {
+        deliveryId: item.delivery.id,
+        event: item.event.type,
+      });
+      continue;
+    }
+
     const trackingUrl = new URL(origin);
-    trackingUrl.searchParams.set("tracking", item.delivery.trackingToken || item.delivery.id);
+    trackingUrl.searchParams.set("tracking", item.delivery.trackingToken);
 
     try {
       const result = await sendAutomaticWhatsAppNotification(item.event.type, item.delivery, trackingUrl.toString());
