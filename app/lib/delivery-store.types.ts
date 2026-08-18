@@ -23,6 +23,8 @@ export type DeliveryRow = {
   progress: number;
   color: string;
   contact: string;
+  whatsappOptIn?: boolean;
+  whatsappOptInAt?: Date | null;
   sendatrackVehicleId: string;
   latitude: number | null;
   longitude: number | null;
