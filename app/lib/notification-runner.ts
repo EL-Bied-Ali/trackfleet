@@ -1,6 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
+import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
 import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
 
 export async function processPendingNotifications(companyId: string, origin: string) {
@@ -22,10 +22,22 @@ export async function processPendingNotifications(companyId: string, origin: str
     return { pending: pending.length, sent, failed: pending.length, suppressed };
   }
 
-  // If several customer events accumulated for the same delivery while the
-  // provider/scheduler was unavailable, keep the full timeline but send only
-  // the newest useful state. Older pending messages are acknowledged silently.
-  const { actionable, superseded } = splitLatestPendingNotifications(pending);
+  // Progress milestones stay available in the tracking timeline, but the MVP
+  // deliberately does not push them to WhatsApp. The customer receives only
+  // operationally useful messages: registration, departure, delay, approach,
+  // and arrival.
+  const eligible = pending.filter((item) => isAutomaticWhatsAppEvent(item.event.type));
+  const ignored = pending.filter((item) => !isAutomaticWhatsAppEvent(item.event.type));
+  for (const item of ignored) {
+    const claimed = await store.claimNotification(item.delivery.id, item.event.type);
+    if (!claimed) continue;
+    await store.markNotificationSent(item.delivery.id, item.event.type);
+    suppressed += 1;
+  }
+
+  // If several useful customer events accumulated for the same delivery while
+  // the provider/scheduler was unavailable, send only the newest useful state.
+  const { actionable, superseded } = splitLatestPendingNotifications(eligible);
   for (const item of superseded) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
