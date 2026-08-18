@@ -14,11 +14,14 @@ export async function getStorageHealth(): Promise<StorageHealth> {
       await sql`SELECT 1 AS ok`;
       return { mode: "postgres", persistent: true, connected: true, error: null };
     } catch (error) {
+      console.error("[trackfleet:storage] postgres health check failed", {
+        message: error instanceof Error ? error.message : "Postgres unavailable",
+      });
       return {
         mode: "postgres",
         persistent: true,
         connected: false,
-        error: error instanceof Error ? error.message : "Postgres unavailable",
+        error: "postgres_unavailable",
       };
     }
   }
