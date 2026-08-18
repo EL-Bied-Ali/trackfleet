@@ -43,6 +43,13 @@ test("provider readiness can be verified before automation activation", () => {
   assert.doesNotMatch(readinessHelper, /providerMissing\.push\(["']activation_start_at["']\)/);
 });
 
+test("production readiness requires an explicit template language", () => {
+  assert.match(readinessHelper, /configuredTemplateLanguage/);
+  assert.match(readinessHelper, /providerMissing\.push\(["']template_language["']\)/);
+  assert.match(automation, /WHATSAPP_TEMPLATE_LANGUAGE\?\.trim\(\)/);
+  assert.match(automation, /!templateName \|\| !templateLanguage \|\| !message/);
+});
+
 test("template language is shared by demo, automation, preview readiness and both runtimes", () => {
   assert.match(vercelEnv, /WHATSAPP_TEMPLATE_LANGUAGE/);
   assert.match(cloudflareEnv, /WHATSAPP_TEMPLATE_LANGUAGE/);
@@ -65,6 +72,13 @@ test("provider verification enforces the three-body-parameter TrackFleet templat
   assert.match(readinessHelper, /body\.matchAll/);
   assert.match(readinessHelper, /templateApproved && templateBodyParameters === expectedTemplateBodyParameters/);
   assert.match(readinessHelper, /expectedTemplateBodyParameters/);
+});
+
+test("Meta calls have bounded request timeouts", () => {
+  assert.match(readinessHelper, /metaRequestTimeoutMs = 10_000/);
+  assert.match(readinessHelper, /AbortSignal\.timeout\(metaRequestTimeoutMs\)/);
+  assert.match(automation, /metaRequestTimeoutMs = 10_000/);
+  assert.match(automation, /AbortSignal\.timeout\(metaRequestTimeoutMs\)/);
 });
 
 test("both runtimes support optional WABA id and explicit demo flag", () => {
