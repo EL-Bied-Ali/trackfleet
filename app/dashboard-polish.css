@@ -24,13 +24,8 @@
   justify-content: space-between;
 }
 
-/* The old copy says "Across 12 vehicles" even when the connected fleet has a
-   different size. Until this copy is driven by live data, do not display a
-   knowingly incorrect denominator. */
-.stats-grid .stat-card:first-child > p {
-  display: none;
-}
-
+/* Active deliveries are already an operational KPI; a second "GPS" badge adds
+   no information and made the card look more technical than necessary. */
 .stats-grid .stat-card:first-child em.up {
   display: none;
 }
