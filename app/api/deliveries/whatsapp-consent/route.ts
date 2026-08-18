@@ -12,6 +12,28 @@ function sameOrigin(request: Request) {
   }
 }
 
+export async function GET(request: Request) {
+  const session = await getCompanySession(request);
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
+
+  const deliveries = await store.listForCompany(session.companyId);
+  const rows = await Promise.all(deliveries.map(async (delivery) => {
+    const events = await store.listEvents(delivery.id);
+    const withdrawn = whatsappConsentWithdrawn(events);
+    return {
+      deliveryId: delivery.id,
+      customer: delivery.customer,
+      contact: delivery.contact,
+      optedInAt: delivery.whatsappOptInAt?.toISOString() ?? null,
+      whatsappOptIn: delivery.whatsappOptIn === true && !withdrawn,
+      withdrawn,
+      status: delivery.status,
+    };
+  }));
+
+  return Response.json({ deliveries: rows }, { headers: { "cache-control": "no-store" } });
+}
+
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return Response.json({ error: "origin_not_allowed" }, { status: 403 });
 
