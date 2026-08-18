@@ -1,4 +1,5 @@
 import { createCompanySession } from "../../../lib/company-auth";
+import { requestIsSameOrigin } from "../../../lib/request-origin";
 
 const loginWindowMs = 10 * 60_000;
 const maxLoginAttempts = 8;
@@ -7,16 +8,6 @@ const recentLoginAttempts = new Map<string, number[]>();
 function clientKey(request: Request) {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
-function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  try {
-    return new URL(origin).host === new URL(request.url).host;
-  } catch {
-    return false;
-  }
 }
 
 function allowLoginAttempt(key: string) {
@@ -49,7 +40,7 @@ function json(body: Record<string, unknown>, status: number, headers: Record<str
 }
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return json({ error: "origin_not_allowed" }, 403);
+  if (!requestIsSameOrigin(request)) return json({ error: "origin_not_allowed" }, 403);
 
   const key = clientKey(request);
   if (!allowLoginAttempt(key)) {
