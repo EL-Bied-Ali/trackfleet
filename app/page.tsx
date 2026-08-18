@@ -343,11 +343,20 @@ export default function Home() {
     en: { completed: "completed", noHistory: "No history yet", onTimeBody: "Based on completed tracked deliveries", onTimeEmpty: "Available after the first completed deliveries", noDelay: "No material ETA delay detected" },
     nl: { completed: "voltooid", noHistory: "Nog geen historiek", onTimeBody: "Gebaseerd op voltooide gevolgde leveringen", onTimeEmpty: "Beschikbaar na de eerste voltooide leveringen", noDelay: "Geen belangrijke ETA-vertraging gedetecteerd" },
   }[locale];
+  const dashboardEmptyCopy = {
+    fr: { firstTitle: "Aucune livraison enregistrée", firstBody: "Créez la première livraison pour générer son suivi privé et commencer l’historique opérationnel.", firstAction: "Créer la première livraison", filteredTitle: "Aucune livraison dans ce filtre", filteredBody: "Les livraisons existent, mais aucune ne correspond au statut sélectionné.", reset: "Afficher toutes les livraisons", trackingUnavailable: "Lien de suivi indisponible pour cet ancien enregistrement." },
+    en: { firstTitle: "No deliveries yet", firstBody: "Create the first delivery to generate its private tracking link and start operational history.", firstAction: "Create first delivery", filteredTitle: "No deliveries in this filter", filteredBody: "Deliveries exist, but none match the selected status.", reset: "Show all deliveries", trackingUnavailable: "Tracking link unavailable for this legacy record." },
+    nl: { firstTitle: "Nog geen leveringen", firstBody: "Maak de eerste levering om de privé-trackinglink te genereren en de operationele historiek te starten.", firstAction: "Eerste levering maken", filteredTitle: "Geen leveringen in deze filter", filteredBody: "Er zijn leveringen, maar geen enkele komt overeen met de gekozen status.", reset: "Alle leveringen tonen", trackingUnavailable: "Trackinglink niet beschikbaar voor dit oudere record." },
+  }[locale];
 
   async function copyDeliveryLink(deliveryId: string) {
     const delivery = deliveries.find((item) => item.id === deliveryId);
+    if (!delivery?.trackingToken) {
+      setToast(dashboardEmptyCopy.trackingUnavailable);
+      return;
+    }
     const link = new URL(window.location.origin);
-    link.searchParams.set("tracking", delivery?.trackingToken || deliveryId);
+    link.searchParams.set("tracking", delivery.trackingToken);
     link.searchParams.set("lang", locale);
     const helper = document.createElement("textarea");
     helper.value = link.toString();
@@ -374,13 +383,19 @@ export default function Home() {
 
   function trackingUrl(deliveryId: string) {
     const delivery = deliveries.find((item) => item.id === deliveryId);
+    if (!delivery?.trackingToken) return "";
     const link = new URL(window.location.origin);
-    link.searchParams.set("tracking", delivery?.trackingToken || deliveryId);
+    link.searchParams.set("tracking", delivery.trackingToken);
     link.searchParams.set("lang", locale);
     return link.toString();
   }
 
   async function sendWhatsAppMessage(kind: "tracking" | "arrival") {
+    const customerTrackingUrl = trackingUrl(selected.id);
+    if (kind === "tracking" && !customerTrackingUrl) {
+      setToast(dashboardEmptyCopy.trackingUnavailable);
+      return false;
+    }
     setWhatsAppBusy(kind);
     try {
       const response = await fetch("/api/whatsapp", {
@@ -391,7 +406,7 @@ export default function Home() {
           deliveryId: selected.id,
           customer: selected.customer,
           destination: selected.destination,
-          trackingUrl: trackingUrl(selected.id),
+          trackingUrl: customerTrackingUrl,
         }),
       });
       if (!response.ok) throw new Error("WhatsApp demo send failed");
@@ -419,8 +434,12 @@ export default function Home() {
   }
 
   function openCustomerView() {
+    if (!selected.trackingToken) {
+      setToast(dashboardEmptyCopy.trackingUnavailable);
+      return;
+    }
     const link = new URL(window.location.origin);
-    link.searchParams.set("tracking", selected.trackingToken || selected.id);
+    link.searchParams.set("tracking", selected.trackingToken);
     link.searchParams.set("lang", locale);
     window.history.pushState({}, "", link);
     setView("customer");
@@ -786,10 +805,10 @@ export default function Home() {
         </header>
 
         <div className="stats-grid">
-          <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>{deliveries.filter((delivery) => delivery.status !== "Delivered").length}</strong><em className="up">GPS</em></div><p>{t.acrossVehicles}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>{deliveries.filter((delivery) => delivery.status !== "Delivered").length}</strong></div><p>{t.acrossVehicles}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} ${liveKpiCopy.completed}` : liveKpiCopy.noHistory}</em></div><p>{completedWithPlan.length ? liveKpiCopy.onTimeBody : liveKpiCopy.onTimeEmpty}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : liveKpiCopy.noDelay}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} GPS` : "—"}</strong><em className="neutral">{integration.connected ? t.sendatrack : (locale === "fr" ? "GPS indisponible" : locale === "nl" ? "GPS niet beschikbaar" : "GPS unavailable")}</em></div><p>{integration.connected ? t.positionsAutomatic : integration.configured ? t.gpsIssueBody : t.gpsPendingBody}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} ${locale === "fr" ? "véhicules" : locale === "nl" ? "voertuigen" : "vehicles"}` : "—"}</strong><em className="neutral">{integration.connected ? t.sendatrack : (locale === "fr" ? "GPS indisponible" : locale === "nl" ? "GPS niet beschikbaar" : "GPS unavailable")}</em></div><p>{integration.connected ? t.positionsAutomatic : integration.configured ? t.gpsIssueBody : t.gpsPendingBody}</p></article>
         </div>
 
         <div className="map-panel">
@@ -890,10 +909,14 @@ export default function Home() {
         <div className="deliveries-panel">
           <div className="panel-header delivery-head"><div><h2>{t.todaysDeliveries}</h2><p>{t.shownCompleted(visibleDeliveries.length, deliveries.filter((delivery) => delivery.status === "Delivered").length)}</p></div><div className="panel-actions"><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label={t.filterDeliveries}><option value="All deliveries">{t.allDeliveries}</option><option value="In transit">{t.statuses["In transit"]}</option><option value="Delayed">{t.statuses.Delayed}</option><option value="Loading">{t.statuses.Loading}</option><option value="Delivered">{t.statuses.Delivered}</option></select></div></div>
           <div className="table-wrap">
-            <table>
+            {visibleDeliveries.length === 0 ? <div className="deliveries-empty">
+              <div className="deliveries-empty-icon" aria-hidden="true">◇</div>
+              <div><strong>{deliveries.length === 0 ? dashboardEmptyCopy.firstTitle : dashboardEmptyCopy.filteredTitle}</strong><p>{deliveries.length === 0 ? dashboardEmptyCopy.firstBody : dashboardEmptyCopy.filteredBody}</p></div>
+              <button type="button" className="primary-button" onClick={() => deliveries.length === 0 ? setModalOpen(true) : setFilter("All deliveries")}>{deliveries.length === 0 ? dashboardEmptyCopy.firstAction : dashboardEmptyCopy.reset}</button>
+            </div> : <table>
               <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{t.tableVehicle}</th><th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th><span className="sr-only">{t.tableActions}</span></th></tr></thead>
               <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} role="button" tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{delivery.destination}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{vehicleLabel(delivery)}</strong><span>{isUnassignedVehicle(delivery) ? (locale === "fr" ? "En attente d’affectation" : locale === "nl" ? "Wacht op toewijzing" : "Waiting for assignment") : delivery.gpsSource === "sendatrack" ? delivery.driver : (locale === "fr" ? "GPS en attente" : locale === "nl" ? "GPS in afwachting" : "Waiting for GPS")}</span></td><td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
-            </table>
+            </table>}
           </div>
         </div>
       </section>
