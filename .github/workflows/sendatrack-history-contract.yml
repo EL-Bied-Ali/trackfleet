@@ -1,0 +1,32 @@
+name: SENDATRACK history contract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/lib/sendatrack-history.ts"
+      - "tests/sendatrack-history*.test.mjs"
+      - "package.json"
+      - ".github/workflows/sendatrack-history-contract.yml"
+  workflow_dispatch:
+
+jobs:
+  history-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify historical event normalization and trip segmentation
+        run: node --experimental-strip-types --test tests/sendatrack-history.test.mjs
+      - name: Verify APK-derived history URL contract
+        run: pnpm run test:sendatrack-history-url
+      - name: Typecheck Vercel runtime
+        run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
