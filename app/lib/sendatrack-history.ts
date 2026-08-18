@@ -106,7 +106,9 @@ function normalizeEvent(device: Record<string, unknown>, value: unknown): Sendat
   if (latitude === null || longitude === null || timestamp === null) return null;
   if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
 
-  const deviceId = stringFrom(event.Device, event.DeviceCode, device.Device, device.DeviceCode, device.id);
+  // The APK history endpoint calls this value dId. Prefer DeviceCode so history
+  // identity matches the live fleet normalizer and the provider's stable device key.
+  const deviceId = stringFrom(event.DeviceCode, device.DeviceCode, event.Device, device.Device, device.id);
   if (!deviceId) return null;
 
   return {
