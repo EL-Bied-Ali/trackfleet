@@ -1,3 +1,5 @@
+import type { DeliveryEventType } from "./delivery-events";
+
 export function parseAutomationStartAt(value: string | undefined) {
   if (!value?.trim()) return null;
   const date = new Date(value);
@@ -6,6 +8,18 @@ export function parseAutomationStartAt(value: string | undefined) {
 
 export function isHistoricalNotification(eventCreatedAt: Date, automationStartAt: Date) {
   return eventCreatedAt.getTime() < automationStartAt.getTime();
+}
+
+const automaticWhatsAppEvents = new Set<DeliveryEventType>([
+  "REGISTERED",
+  "DEPARTED",
+  "DELAY_DETECTED",
+  "NEAR_DESTINATION",
+  "ARRIVED",
+]);
+
+export function isAutomaticWhatsAppEvent(event: DeliveryEventType) {
+  return automaticWhatsAppEvents.has(event);
 }
 
 type PendingLike = {
