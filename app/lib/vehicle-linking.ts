@@ -21,15 +21,30 @@ export function matchDeliveryVehicle(
   if (isUnassignedVehicle(delivery)) return { vehicle: null, reason: "none", candidates: [] };
   const knownId = delivery.sendatrackVehicleId?.trim();
   if (knownId) {
-    const exact = vehicles.find((vehicle) => vehicle.id === knownId) ?? null;
-    return exact
-      ? { vehicle: exact, reason: "id", candidates: [exact] }
-      : { vehicle: null, reason: "none", candidates: [] };
+    const exactCandidates = vehicles.filter((vehicle) => vehicle.id === knownId);
+    if (exactCandidates.length === 1) return { vehicle: exactCandidates[0], reason: "id", candidates: exactCandidates };
+    if (exactCandidates.length > 1) return { vehicle: null, reason: "ambiguous", candidates: exactCandidates };
+
+    // Older TrackFleet rows may contain SENDATRACK DeviceCode values such as
+    // fmb120/fmb920. Those identify tracker models and can be shared by several
+    // trucks. Never pick one blindly: only use the old code together with the
+    // exact normalized truck name to migrate safely to the logical Device id.
+    const legacyCandidates = vehicles.filter((vehicle) => vehicle.providerDeviceCode === knownId);
+    if (legacyCandidates.length) {
+      const wanted = normalizeVehicleIdentity(delivery.truck ?? "");
+      const named = wanted
+        ? legacyCandidates.filter((vehicle) => normalizeVehicleIdentity(vehicle.name) === wanted)
+        : [];
+      if (named.length === 1) return { vehicle: named[0], reason: "normalized_name", candidates: named };
+      if (legacyCandidates.length > 1 || named.length > 1) return { vehicle: null, reason: "ambiguous", candidates: legacyCandidates };
+    }
+    // A stale provider id should not block a safe exact-name recovery. This is
+    // useful when SENDATRACK changes identifier representation but the plate/name
+    // is still unique in the current fleet snapshot.
   }
 
   const wanted = normalizeVehicleIdentity(delivery.truck ?? "");
   if (!wanted) return { vehicle: null, reason: "none", candidates: [] };
-
   const candidates = vehicles.filter((vehicle) => normalizeVehicleIdentity(vehicle.name) === wanted);
   if (candidates.length === 1) return { vehicle: candidates[0], reason: "normalized_name", candidates };
   if (candidates.length > 1) return { vehicle: null, reason: "ambiguous", candidates };
