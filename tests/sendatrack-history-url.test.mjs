@@ -19,6 +19,18 @@ test("SENDATRACK history URL uses APK-derived events7 contract", () => {
   assert.equal(url.searchParams.get("rt"), "1786968000");
 });
 
+test("SENDATRACK history URL includes APK uId between account and device when provided", () => {
+  const url = new URL(buildSendatrackHistoryUrl({
+    accountId: "account-1",
+    userId: " user-7 ",
+    deviceId: "truck-17",
+    from: Date.parse("2026-08-17T10:00:00.000Z"),
+    to: Date.parse("2026-08-17T10:05:00.000Z"),
+  }));
+  assert.deepEqual([...url.searchParams.keys()], ["a", "uId", "dId", "rf", "rt"]);
+  assert.equal(url.searchParams.get("uId"), "user-7");
+});
+
 test("SENDATRACK history URL accepts millisecond timestamps and converts them to epoch seconds", () => {
   const from = Date.parse("2026-08-17T10:00:00.000Z");
   const to = Date.parse("2026-08-17T10:05:00.000Z");
