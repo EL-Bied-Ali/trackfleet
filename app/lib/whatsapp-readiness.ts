@@ -9,6 +9,7 @@ const expectedTemplateBodyParameters = 3;
 type ProviderVerification = {
   configurationReady: boolean;
   providerVerified: boolean;
+  templateApproved: boolean | null;
   templateVerified: boolean | null;
   templateName: string;
   templateLanguage: string;
@@ -90,6 +91,7 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
     return {
       configurationReady: false,
       providerVerified: false,
+      templateApproved: null,
       templateVerified: null,
       templateName: config.templateName,
       templateLanguage: config.templateLanguage,
@@ -106,6 +108,7 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
     return {
       configurationReady: true,
       providerVerified: false,
+      templateApproved: null,
       templateVerified: null,
       templateName: config.templateName,
       templateLanguage: config.templateLanguage,
@@ -117,6 +120,7 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
   }
 
   const phone = await phoneResponse.json() as { id?: string; display_phone_number?: string; verified_name?: string };
+  let templateApproved: boolean | null = null;
   let templateVerified: boolean | null = null;
   let templateBodyParameters: number | null = null;
 
@@ -128,6 +132,7 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
       return {
         configurationReady: true,
         providerVerified: true,
+        templateApproved: null,
         templateVerified: false,
         templateName: config.templateName,
         templateLanguage: config.templateLanguage,
@@ -141,16 +146,17 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
     const templates = await templatesResponse.json() as { data?: MessageTemplate[] };
     const template = templates.data?.find((candidate) =>
       candidate.name === config.templateName
-      && candidate.status === "APPROVED"
       && candidate.language === config.templateLanguage
     );
+    templateApproved = template ? template.status === "APPROVED" : false;
     templateBodyParameters = template ? countTemplateBodyParameters(template) : null;
-    templateVerified = Boolean(template && templateBodyParameters === expectedTemplateBodyParameters);
+    templateVerified = Boolean(templateApproved && templateBodyParameters === expectedTemplateBodyParameters);
   }
 
   return {
     configurationReady: true,
     providerVerified: true,
+    templateApproved,
     templateVerified,
     templateName: config.templateName,
     templateLanguage: config.templateLanguage,
