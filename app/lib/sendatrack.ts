@@ -162,21 +162,36 @@ export function isSendatrackConfigured() {
   return Boolean(auth.accountID && auth.user && auth.password);
 }
 
-export async function getSendatrackLegacyHistoryIdentity(): Promise<SendatrackLegacyHistoryIdentity | null> {
+export async function getSendatrackLegacyHistoryIdentities(): Promise<SendatrackLegacyHistoryIdentity[]> {
   const auth = environmentCredentials();
-  if (!auth.accountID || !auth.user || !auth.password) return null;
+  if (!auth.accountID || !auth.user || !auth.password) return [];
   const token = await login(auth);
-  if (!token) return null;
+  if (!token) return [];
   const payload = await requestFleetPayload(token, auth);
   const { vehicles, diagnostics } = normalizeSendatrackFleet(payload);
   console.info("[trackfleet:sendatrack] fleet normalized", diagnostics);
   const vehicle = vehicles[0];
-  if (!vehicle?.providerDeviceId) return null;
+  if (!vehicle?.providerDeviceId) return [];
 
-  const accountDesc = findStringByKey(payload, "Account_desc");
-  if (accountDesc) return { accountId: accountDesc, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource: "account_desc" };
-  if (vehicle.providerAccountId) return { accountId: vehicle.providerAccountId, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource: "account" };
-  return { accountId: auth.accountID, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource: "configured" };
+  // These are the only three account candidates exposed by the authenticated
+  // SENDATRACK context. Keep labels for diagnostics but never log the values.
+  const candidates: SendatrackLegacyHistoryIdentity[] = [];
+  const seen = new Set<string>();
+  const add = (accountId: string, accountSource: SendatrackLegacyHistoryIdentity["accountSource"]) => {
+    const normalized = accountId.trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push({ accountId: normalized, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource });
+  };
+
+  add(findStringByKey(payload, "Account_desc"), "account_desc");
+  add(vehicle.providerAccountId, "account");
+  add(auth.accountID, "configured");
+  return candidates;
+}
+
+export async function getSendatrackLegacyHistoryIdentity(): Promise<SendatrackLegacyHistoryIdentity | null> {
+  return (await getSendatrackLegacyHistoryIdentities())[0] ?? null;
 }
 
 export async function getSendatrackSnapshot(providedCredentials?: SendatrackCredentials): Promise<SendatrackSnapshot> {
