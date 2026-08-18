@@ -1,5 +1,6 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../../lib/company-auth";
+import { sessionEncryptionKeyConfigured } from "../../../lib/session-encryption-key";
 import { isSendatrackConfigured } from "../../../lib/sendatrack";
 import { getStorageHealth } from "../../../lib/storage-health";
 import { getWhatsAppConfigurationReadiness, verifyWhatsAppProvider } from "../../../lib/whatsapp-readiness";
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
   const providerDiagnosticError = providerError ?? provider?.error ?? null;
   const checks = {
     persistentStorage: storage.persistent && storage.connected,
-    sessionEncryptionConfigured: Boolean(runtimeEnv.TRACKFLEET_ENCRYPTION_KEY?.trim()),
+    sessionEncryptionConfigured: sessionEncryptionKeyConfigured(runtimeEnv.TRACKFLEET_ENCRYPTION_KEY),
     sendatrackConfigured: isSendatrackConfigured(),
     schedulerProtected: Boolean(runtimeEnv.CRON_SECRET?.trim()),
     providerConfigured: configuration.providerReady,
