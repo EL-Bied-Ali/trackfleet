@@ -135,38 +135,46 @@
   border-radius: 14px;
 }
 
-/* Give a useful visual empty state instead of leaving a large blank table. */
-.table-wrap:has(tbody:empty) {
-  position: relative;
-  min-height: 112px;
-  background: linear-gradient(180deg, #fbfcfb 0%, #f7faf8 100%);
+.deliveries-empty {
+  min-height: 164px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 26px;
+  border-top: 1px solid var(--line);
+  background: linear-gradient(180deg, #fbfcfb 0%, #f5f9f7 100%);
 }
 
-.table-wrap:has(tbody:empty) table {
-  opacity: .55;
-}
-
-.table-wrap:has(tbody:empty)::after {
-  content: "No deliveries yet · use New delivery to create the first tracking link.";
-  position: absolute;
-  inset: 44px 18px 12px;
+.deliveries-empty-icon {
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
-  padding: 18px;
-  color: #718078;
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: center;
-  pointer-events: none;
+  border: 1px solid #cee0d6;
+  border-radius: 12px;
+  color: #2a725a;
+  background: #eaf5ef;
+  font-size: 21px;
 }
 
-html[lang="fr"] .table-wrap:has(tbody:empty)::after {
-  content: "Aucune livraison pour le moment · utilisez « Nouvelle livraison » pour créer le premier suivi.";
+.deliveries-empty strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #284238;
+  font-size: 13px;
 }
 
-html[lang="nl-BE"] .table-wrap:has(tbody:empty)::after,
-html[lang="nl"] .table-wrap:has(tbody:empty)::after {
-  content: "Nog geen leveringen · gebruik Nieuwe levering om de eerste trackinglink te maken.";
+.deliveries-empty p {
+  max-width: 620px;
+  margin: 0;
+  color: #77857e;
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.deliveries-empty .primary-button {
+  white-space: nowrap;
 }
 
 @media (max-width: 1100px) {
@@ -205,5 +213,15 @@ html[lang="nl"] .table-wrap:has(tbody:empty)::after {
 
   .fleet-map {
     height: 360px;
+  }
+
+  .deliveries-empty {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .deliveries-empty p {
+    max-width: 420px;
   }
 }
