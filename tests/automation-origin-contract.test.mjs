@@ -23,6 +23,12 @@ test("scheduled automation requires a protected bearer secret", () => {
   assert.match(tickRoute, /Bearer \$\{secret\}/);
 });
 
+test("scheduler refuses to tick until the complete health contract is ready", () => {
+  assert.match(workflow, /health\?\.automation\?\.ready !== true/);
+  assert.match(workflow, /sendatrackConfigured/);
+  assert.match(workflow, /production_not_ready/);
+});
+
 test("tracking links inherit the stable scheduler request origin and require private tokens", () => {
   assert.match(tickRoute, /runFleetAutomation\(new URL\(request\.url\)\.origin\)/);
   assert.match(runner, /const trackingUrl = new URL\(origin\)/);
