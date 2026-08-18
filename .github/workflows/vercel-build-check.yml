@@ -119,6 +119,8 @@ jobs:
         run: pnpm run test:whatsapp-readiness
       - name: Verify WhatsApp dry-run preview safety
         run: pnpm run test:whatsapp-preview
+      - name: Verify WhatsApp MVP customer flow
+        run: pnpm run test:whatsapp-mvp
       - name: Verify ETA estimator
         run: pnpm run test:eta
       - name: Verify ETA history observations
