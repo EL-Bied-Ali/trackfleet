@@ -14,7 +14,7 @@ import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progr
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
-import { publicTrackingIsActive, trackingExpiresAt } from "../../lib/tracking-access";
+import { publicTrackingIsActive, publicTrackingTokenIsValid, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
@@ -169,6 +169,9 @@ export async function GET(request: Request) {
     const requestUrl = new URL(request.url);
     const tracking = requestUrl.searchParams.get("tracking")?.trim();
     if (tracking) {
+      if (!publicTrackingTokenIsValid(tracking)) {
+        return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
+      }
       const row = await store.getPublic(tracking);
       if (!row) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
 
