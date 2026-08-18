@@ -50,6 +50,7 @@ export const deliveryEvents = sqliteTable("delivery_events", {
     "DELAY_DETECTED",
     "ARRIVED",
     "GPS_STALE",
+    "WHATSAPP_OPT_OUT",
   ] }).notNull(),
   progress: integer("progress").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
