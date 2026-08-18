@@ -20,6 +20,8 @@ export async function GET(request: Request) {
     lastTimestamp: result.lastTimestamp,
     payloadKeys: result.payloadKeys,
     accountSource: result.accountSource ?? null,
+    endpointSource: result.endpointSource ?? null,
+    usedUserId: result.usedUserId ?? null,
     providerError: result.providerError ?? null,
     error: result.error ?? null,
   });
