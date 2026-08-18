@@ -1,4 +1,5 @@
 import { getCompanySession } from "../../lib/company-auth";
+import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { siteStore } from "trackfleet-site-store";
 
 type SiteRole = "origin" | "dropoff" | "replenishment" | "destination";
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!requestIsSameOrigin(request)) return originRejectedResponse();
   const session = await getCompanySession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
 
