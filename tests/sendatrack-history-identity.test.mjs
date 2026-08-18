@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const sendatrackSource = fs.readFileSync(new URL("../app/lib/sendatrack.ts", import.meta.url), "utf8");
+const normalizeSource = fs.readFileSync(new URL("../app/lib/sendatrack-normalize.ts", import.meta.url), "utf8");
 const historySource = fs.readFileSync(new URL("../app/lib/sendatrack-history-live.ts", import.meta.url), "utf8");
 const probeRouteSource = fs.readFileSync(new URL("../app/api/automation/sendatrack-history-probe-v2/route.ts", import.meta.url), "utf8");
 
@@ -17,11 +18,14 @@ test("legacy history account candidates are provider-bounded and prefer the Open
   assert.match(sendatrackSource, /seen\.has\(normalized\)/, "duplicate account values must be deduplicated");
 });
 
-test("history discovery stays bounded and only falls back to APK-derived endpoints", () => {
+test("history identity uses logical Device and discovery stays bounded to confirmed endpoint family", () => {
+  assert.match(normalizeSource, /providerDeviceId: stringFrom\(record\.Device, event\.Device, record\.DeviceCode/);
   assert.match(historySource, /identities\.slice\(0, 3\)/);
-  assert.match(historySource, /replace\("\/events7\/", "\/eventsApp\/"\)/);
+  assert.match(historySource, /\["eventsApp2", "events7", "eventsApp"\]/);
   assert.match(historySource, /userId: identity\.userId/);
   assert.match(historySource, /password: identity\.password/);
+  assert.match(historySource, /deviceId: identity\.deviceId/);
+  assert.match(historySource, /result\.status === 429/);
   assert.match(historySource, /attempts/);
 });
 
