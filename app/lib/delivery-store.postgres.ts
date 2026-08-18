@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
+import { createDeliveryId } from "./delivery-id";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
@@ -520,7 +521,7 @@ export const postgresStore: DeliveryStore = {
       ...input,
       whatsappOptIn: input.whatsappOptIn === true,
       whatsappOptInAt: input.whatsappOptIn === true ? (input.whatsappOptInAt ?? new Date()) : null,
-      id: `TF-${String(Date.now()).slice(-6)}`,
+      id: createDeliveryId(),
       createdAt: new Date(),
     };
     await sql`INSERT INTO deliveries (
