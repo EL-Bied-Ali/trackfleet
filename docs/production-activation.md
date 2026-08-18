@@ -1,19 +1,20 @@
 # TrackFleet production activation
 
-TrackFleet must not run scheduled GPS automation until production storage is persistent and the tick endpoint is protected.
+TrackFleet must not run scheduled GPS or WhatsApp automation until production storage is persistent, sessions use a dedicated encryption key, SENDATRACK is configured, and the tick endpoint is protected.
 
 ## Vercel production environment
 
 Configure:
 
 - `DATABASE_URL`: Neon Postgres connection string.
+- `TRACKFLEET_ENCRYPTION_KEY`: dedicated 32-byte random key encoded as base64. Do not reuse a SENDATRACK password.
 - `CRON_SECRET`: a strong random secret used only for `/api/automation/tick`.
-- `WHATSAPP_AUTOMATION_ENABLED=false` until Meta WhatsApp configuration is complete.
 - `SENDATRACK_ACCOUNT_ID`: the SENDATRACK company/account identifier.
 - `SENDATRACK_USER`: the SENDATRACK automation user.
 - `SENDATRACK_PASSWORD`: the current SENDATRACK password used by server-side fleet synchronization.
+- `WHATSAPP_AUTOMATION_ENABLED=false` until Meta WhatsApp configuration is complete.
 
-Keep SENDATRACK credentials only in Vercel environment variables; never commit them to the repository.
+Keep all credentials and secrets only in protected environment variables; never commit them to the repository.
 
 Keep `CRON_SECRET` and the matching GitHub Actions secret on a single line with no surrounding whitespace.
 
@@ -24,10 +25,12 @@ After redeploying, `GET /api/health` must report:
 - `storage.mode = "postgres"`
 - `storage.persistent = true`
 - `storage.connected = true`
+- `sessionEncryptionConfigured = true`
+- `sendatrackConfigured = true`
 - `automation.tickProtected = true`
 - `automation.missing = []` while WhatsApp automation is disabled
 
-Do not enable the scheduler if health still reports `memory`, a disconnected database, or a missing cron secret.
+Do not enable the scheduler if health reports memory storage, a disconnected database, `session_encryption_key`, `sendatrack_credentials`, `cron_secret`, or any other missing requirement.
 
 ## GitHub Actions scheduler
 
@@ -43,4 +46,8 @@ Each scheduled run checks `/api/health` before calling `/api/automation/tick`. T
 
 ## WhatsApp activation
 
-Enable WhatsApp only after persistent storage and the scheduler are proven stable. Then configure the Meta provider credentials, approved template name, and `WHATSAPP_AUTOMATION_START_AT` before changing `WHATSAPP_AUTOMATION_ENABLED=true`.
+Keep `WHATSAPP_AUTOMATION_ENABLED=false` while the Meta template is under review. Configure the access token, phone-number ID, WhatsApp Business Account ID, exact approved template name and exact Meta language code.
+
+Before enabling WhatsApp, sign in to TrackFleet and call `GET /api/whatsapp/preflight`. It must report `readyToEnable=true`. This preflight verifies persistent storage, the session encryption key, SENDATRACK, cron protection, Meta provider access, the business account, phone number, template approval and the exact three-parameter template contract.
+
+Immediately before activation, set `WHATSAPP_AUTOMATION_START_AT` to the activation timestamp, then set `WHATSAPP_AUTOMATION_ENABLED=true` and deploy once. The activation boundary prevents historical queued events from being sent as catch-up messages.
