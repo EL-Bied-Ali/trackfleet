@@ -19,6 +19,7 @@ export type SendatrackSnapshot = {
 export type SendatrackLegacyHistoryIdentity = {
   accountId: string;
   userId: string;
+  password: string;
   deviceId: string;
   accountSource: "account_desc" | "account" | "configured";
 };
@@ -174,14 +175,15 @@ export async function getSendatrackLegacyHistoryIdentities(): Promise<Sendatrack
   if (!vehicle?.providerDeviceId) return [];
 
   // These are the only three account candidates exposed by the authenticated
-  // SENDATRACK context. Keep labels for diagnostics but never log the values.
+  // SENDATRACK context. Password is retained only in server memory for the
+  // APK/OpenGTS history request and is never returned or logged.
   const candidates: SendatrackLegacyHistoryIdentity[] = [];
   const seen = new Set<string>();
   const add = (accountId: string, accountSource: SendatrackLegacyHistoryIdentity["accountSource"]) => {
     const normalized = accountId.trim();
     if (!normalized || seen.has(normalized)) return;
     seen.add(normalized);
-    candidates.push({ accountId: normalized, userId: auth.user, deviceId: vehicle.providerDeviceId, accountSource });
+    candidates.push({ accountId: normalized, userId: auth.user, password: auth.password, deviceId: vehicle.providerDeviceId, accountSource });
   };
 
   add(findStringByKey(payload, "Account_desc"), "account_desc");
