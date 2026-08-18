@@ -90,8 +90,15 @@ test("missing consent and missing customer phone are suppressed instead of retri
   assert.doesNotMatch(suppressionBranch, /releaseNotification/);
 });
 
+test("automatic customer links require a private tracking token and never fall back to parcel id", () => {
+  assert.match(runner, /if \(!item\.delivery\.trackingToken\)/);
+  assert.match(runner, /markNotificationSent/);
+  assert.match(runner, /searchParams\.set\(["']tracking["'], item\.delivery\.trackingToken\)/);
+  assert.doesNotMatch(runner, /trackingToken \|\| item\.delivery\.id/);
+});
+
 test("public tracking uses an explicit allowlist and never returns internal consent/contact fields", () => {
-  assert.match(deliveryRoute, /publicDeliveryView\(enriched\.delivery\)/);
+  assert.match(deliveryRoute, /publicDeliveryView\(enriched\)/);
   for (const field of ["companyId", "contact", "trackingToken", "whatsappOptIn", "whatsappOptInAt"]) {
     assert.doesNotMatch(publicView, new RegExp(`\\b${field}\\s*:`), `${field} must not be projected publicly`);
   }
