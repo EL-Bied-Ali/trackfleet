@@ -37,6 +37,8 @@ jobs:
         run: pnpm run test:route-progress
       - name: Verify delivery event detection
         run: pnpm run test:delivery-events
+      - name: Verify collision-resistant delivery ids
+        run: node --experimental-strip-types --test tests/delivery-id.test.mjs
       - name: Verify notification retry queue
         run: pnpm run test:notifications
       - name: Verify notification activation policy
