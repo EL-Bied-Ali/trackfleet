@@ -18,7 +18,7 @@ jobs:
       BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
       CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
     steps:
-      - name: Run protected provider-error-aware history probe
+      - name: Run protected logical-Device history probe
         shell: bash
         run: |
           set -euo pipefail
@@ -26,23 +26,32 @@ jobs:
             echo "TRACKFLEET_CRON_SECRET is empty"
             exit 2
           fi
-          for attempt in $(seq 1 30); do
-            code=$(curl --silent --show-error --output /tmp/history.json --write-out '%{http_code}' \
-              -H "Authorization: Bearer ${CRON_SECRET}" \
-              "${BASE_URL}/api/automation/sendatrack-history-probe-v2" || true)
-            if [ "$code" = "200" ] || [ "$code" = "502" ]; then
-              node - <<'NODE'
+          code=$(curl --silent --show-error --output /tmp/history.json --write-out '%{http_code}' \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${BASE_URL}/api/automation/sendatrack-history-probe-v2" || true)
+          node - <<'NODE'
           const fs = require('node:fs');
           const body = JSON.parse(fs.readFileSync('/tmp/history.json', 'utf8'));
-          console.log(JSON.stringify({ ok: body.ok, status: body.status, contentType: body.contentType, pointCount: body.pointCount, firstTimestamp: body.firstTimestamp, lastTimestamp: body.lastTimestamp, payloadKeys: body.payloadKeys, accountSource: body.accountSource ?? null, endpointSource: body.endpointSource ?? null, usedUserId: body.usedUserId ?? null, providerError: body.providerError ?? null, error: body.error ?? null }));
-          if (body.ok !== true) process.exit(3);
+          const raw = String(body.providerError ?? '');
+          const providerError = /authori[sz]ation|password/i.test(raw) ? 'invalid_authorization'
+            : /account/i.test(raw) ? 'account_error'
+            : /device/i.test(raw) ? 'device_error'
+            : raw ? 'provider_error' : null;
+          console.log(JSON.stringify({
+            httpStatus: Number(process.env.HTTP_STATUS || 0),
+            ok: body.ok === true,
+            status: body.status,
+            pointCount: body.pointCount,
+            firstTimestamp: body.firstTimestamp,
+            lastTimestamp: body.lastTimestamp,
+            payloadKeys: body.payloadKeys,
+            accountSource: body.accountSource ?? null,
+            endpointSource: body.endpointSource ?? null,
+            usedUserId: body.usedUserId ?? null,
+            providerError,
+            error: body.error ?? null,
+          }));
           NODE
-              exit 0
-            fi
-            echo "attempt=$attempt http=$code"
-            sleep 5
-          done
-          echo "history summary probe endpoint did not become available"
-          exit 1
+          echo "probe_http_status=$code"
 
-# Probe current production events7/eventsApp APK-derived fallback; no provider credentials are printed.
+# One isolated request against production: corrected logical Device, old dId/uId contract.
