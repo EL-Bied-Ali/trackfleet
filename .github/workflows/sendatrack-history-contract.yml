@@ -5,9 +5,11 @@ on:
     branches: [main]
     paths:
       - "app/lib/sendatrack.ts"
+      - "app/lib/sendatrack-normalize.ts"
       - "app/lib/sendatrack-history.ts"
       - "app/lib/sendatrack-history-live.ts"
       - "tests/sendatrack-history*.test.mjs"
+      - "tests/sendatrack-normalize.test.mjs"
       - "package.json"
       - ".github/workflows/sendatrack-history-contract.yml"
   workflow_dispatch:
@@ -26,11 +28,13 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+      - name: Verify SENDATRACK fleet and legacy Device identity
+        run: pnpm run test:sendatrack
       - name: Verify historical event normalization and trip segmentation
         run: node --experimental-strip-types --test tests/sendatrack-history.test.mjs
       - name: Verify legacy history identity selection
         run: node --test tests/sendatrack-history-identity.test.mjs
-      - name: Verify APK-derived history URL contract
+      - name: Verify confirmed OpenGTS history URL contract
         run: pnpm run test:sendatrack-history-url
       - name: Typecheck Vercel runtime
         run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
