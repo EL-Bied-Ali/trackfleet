@@ -1,4 +1,5 @@
 import { deleteCompanySession, getCompanySession } from "../../../lib/company-auth";
+import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 
 export async function GET(request: Request) {
   const session = await getCompanySession(request);
@@ -7,5 +8,6 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!requestIsSameOrigin(request)) return originRejectedResponse();
   return Response.json({ authenticated: false }, { headers: { "set-cookie": await deleteCompanySession(request), "cache-control": "no-store" } });
 }
