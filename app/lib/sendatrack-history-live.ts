@@ -1,4 +1,4 @@
-import { getSendatrackSnapshot } from "./sendatrack";
+import { getSendatrackLegacyHistoryIdentity } from "./sendatrack";
 import { buildSendatrackHistoryUrl, normalizeSendatrackHistory } from "./sendatrack-history";
 
 export type SendatrackHistoryProbeResult = {
@@ -9,6 +9,7 @@ export type SendatrackHistoryProbeResult = {
   firstTimestamp: number | null;
   lastTimestamp: number | null;
   payloadKeys: string[];
+  accountSource?: "account_desc" | "account" | "configured";
   providerError?: string;
   error?: string;
 };
@@ -26,21 +27,13 @@ function safeProviderError(payload: unknown) {
 }
 
 export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHistoryProbeResult> {
-  const snapshot = await getSendatrackSnapshot();
-  const vehicle = snapshot.vehicles[0];
-  if (!snapshot.connected || !vehicle) return emptyResult(snapshot.error ?? "no_vehicle");
-
-  // The legacy events7 endpoint uses OpenGTS identifiers returned by SENDATRACK's
-  // fleet payload. They are not necessarily the same account/device identifiers
-  // used by the newer backend2 login API.
-  const accountId = vehicle.providerAccountId;
-  const deviceId = vehicle.providerDeviceId;
-  if (!accountId) return emptyResult("missing_legacy_account");
-  if (!deviceId) return emptyResult("missing_legacy_device");
+  const identity = await getSendatrackLegacyHistoryIdentity();
+  if (!identity?.accountId) return emptyResult("missing_legacy_account");
+  if (!identity.deviceId) return emptyResult("missing_legacy_device");
 
   const to = Date.now();
   const from = to - Math.max(1, Math.min(hours, 168)) * 60 * 60 * 1000;
-  const url = buildSendatrackHistoryUrl({ accountId, deviceId, from, to });
+  const url = buildSendatrackHistoryUrl({ accountId: identity.accountId, deviceId: identity.deviceId, from, to });
 
   try {
     const response = await fetch(url, {
@@ -51,14 +44,14 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
     const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
     const text = await response.text();
     if (!response.ok) {
-      return { ...emptyResult(`history_http_${response.status}`), status: response.status, contentType };
+      return { ...emptyResult(`history_http_${response.status}`), status: response.status, contentType, accountSource: identity.accountSource };
     }
 
     let payload: unknown;
     try {
       payload = JSON.parse(text);
     } catch {
-      return { ...emptyResult("history_invalid_json"), status: response.status, contentType };
+      return { ...emptyResult("history_invalid_json"), status: response.status, contentType, accountSource: identity.accountSource };
     }
 
     const payloadKeys = payload && typeof payload === "object" && !Array.isArray(payload)
@@ -74,6 +67,7 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
         firstTimestamp: null,
         lastTimestamp: null,
         payloadKeys,
+        accountSource: identity.accountSource,
         providerError,
         error: "history_provider_error",
       };
@@ -88,8 +82,9 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
       firstTimestamp: points[0]?.timestamp ?? null,
       lastTimestamp: points.at(-1)?.timestamp ?? null,
       payloadKeys,
+      accountSource: identity.accountSource,
     };
   } catch (error) {
-    return emptyResult(error instanceof Error ? error.name : "history_fetch_failed");
+    return { ...emptyResult(error instanceof Error ? error.name : "history_fetch_failed"), accountSource: identity.accountSource };
   }
 }
