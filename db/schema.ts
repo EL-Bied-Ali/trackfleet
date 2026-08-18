@@ -68,6 +68,27 @@ export const deliveryNotifications = sqliteTable("delivery_notifications", {
   primaryKey({ columns: [table.deliveryId, table.eventType, table.channel] }),
 ]);
 
+export const deliveryEtaObservations = sqliteTable("delivery_eta_observations", {
+  deliveryId: text("delivery_id").notNull(),
+  routeTemplateId: text("route_template_id"),
+  tripInstanceId: text("trip_instance_id"),
+  destinationSiteId: text("destination_site_id"),
+  positionAt: integer("position_at", { mode: "timestamp_ms" }).notNull(),
+  estimatedArrivalAt: integer("estimated_arrival_at", { mode: "timestamp_ms" }).notNull(),
+  plannedArrivalAt: integer("planned_arrival_at", { mode: "timestamp_ms" }),
+  delayMinutes: integer("delay_minutes"),
+  effectiveSpeedKmh: real("effective_speed_kmh"),
+  remainingDistanceKm: real("remaining_distance_km").notNull(),
+  progress: integer("progress").notNull(),
+  confidence: text("confidence", { enum: ["none", "low", "medium"] }).notNull(),
+  source: text("source", { enum: ["unavailable", "baseline-model", "route-history", "observed-pace"] }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.deliveryId, table.positionAt] }),
+  index("idx_eta_observations_delivery_position").on(table.deliveryId, table.positionAt),
+  index("idx_eta_observations_route_destination").on(table.routeTemplateId, table.destinationSiteId, table.positionAt),
+]);
+
 export const companies = sqliteTable("companies", {
   id: text("id").primaryKey(),
   accountLabel: text("account_label").notNull(),
@@ -87,6 +108,20 @@ export const sessions = sqliteTable("sessions", {
   index("idx_sessions_expires_at").on(table.expiresAt),
 ]);
 
+export const tripPositionObservations = sqliteTable("trip_position_observations", {
+  companyId: text("company_id").notNull(),
+  routeTemplateId: text("route_template_id").notNull(),
+  tripInstanceId: text("trip_instance_id").notNull(),
+  vehicleId: text("vehicle_id").notNull(),
+  positionAt: integer("position_at", { mode: "timestamp_ms" }).notNull(),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  speed: real("speed").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.companyId, table.tripInstanceId, table.positionAt] }),
+  index("idx_trip_positions_company_route").on(table.companyId, table.routeTemplateId, table.positionAt),
+]);
 
 export const fleetPositionObservations = sqliteTable("fleet_position_observations", {
   companyId: text("company_id").notNull(),
