@@ -18,9 +18,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Verify SENDATRACK normalization
         run: pnpm run test:sendatrack
+      - name: Verify SENDATRACK legacy history URL contract
+        run: pnpm run test:sendatrack-history-url
+      - name: Verify SENDATRACK legacy history identity and transport safety
+        run: node --test tests/sendatrack-history-identity.test.mjs
       - name: Verify full fleet GPS history storage
         run: pnpm run test:fleet-position-history
       - name: Verify fleet GPS trip reconstruction
@@ -165,7 +169,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Lint application
         run: pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
       - name: Typecheck Vercel app runtime
@@ -185,6 +189,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Build Cloudflare output
         run: pnpm run build
