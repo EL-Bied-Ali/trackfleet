@@ -213,6 +213,82 @@
   white-space: nowrap;
 }
 
+.consent-list {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px 24px 8px;
+}
+
+.consent-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(130px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.consent-row > div strong,
+.consent-row > div span {
+  display: block;
+}
+
+.consent-row > div strong {
+  font-size: 11px;
+}
+
+.consent-row > div span {
+  margin-top: 3px;
+  color: #87958e;
+  font-size: 9px;
+}
+
+.consent-status {
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.consent-status.active {
+  color: #176d51;
+  background: #e3f4ec;
+}
+
+.consent-status.withdrawn {
+  color: #6c7771;
+  background: #edf0ee;
+}
+
+.danger-button {
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid #ebc8c1;
+  border-radius: 7px;
+  color: #974438;
+  background: #fff8f6;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-button:hover {
+  background: #fff0ed;
+}
+
+.danger-button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+.consent-empty {
+  margin: 0;
+  padding: 34px 8px;
+  color: #7c8982;
+  font-size: 10.5px;
+  text-align: center;
+}
+
 @media (max-width: 1100px) {
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -251,7 +327,8 @@
     height: 360px;
   }
 
-  .deliveries-empty {
+  .deliveries-empty,
+  .consent-row {
     grid-template-columns: 1fr;
     justify-items: center;
     text-align: center;
