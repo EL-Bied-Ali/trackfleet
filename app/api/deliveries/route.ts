@@ -7,6 +7,7 @@ import { customerFacingEvent } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
+import { publicDeliveryView } from "../../lib/public-delivery-view";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
@@ -185,7 +186,7 @@ export async function GET(request: Request) {
       const enriched = await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount);
       await processPendingNotifications(row.companyId, requestUrl.origin);
       return Response.json({
-        deliveries: [enriched.delivery],
+        deliveries: [publicDeliveryView(enriched.delivery)],
         events: enriched.events.filter((event) => customerFacingEvent(event.type)),
         publicTracking: true,
       }, { headers: { "cache-control": "no-store" } });
@@ -365,6 +366,10 @@ export async function POST(request: Request) {
     if (contact === null) {
       return Response.json({ error: "contact must use an international phone format, for example +212... or +32..." }, { status: 400 });
     }
+    const whatsappOptIn = payload.whatsappOptIn === true;
+    if (whatsappOptIn && !contact) {
+      return Response.json({ error: "WhatsApp consent requires a valid customer phone number" }, { status: 400 });
+    }
 
     const requestedDestinationLatitude = optionalNumber(payload.destinationLatitude);
     const requestedDestinationLongitude = optionalNumber(payload.destinationLongitude);
@@ -407,6 +412,8 @@ export async function POST(request: Request) {
       eta: validLegacyEta ? eta : plannedArrivalAt!.toISOString().slice(11, 16),
       plannedArrivalAt,
       contact,
+      whatsappOptIn,
+      whatsappOptInAt: whatsappOptIn ? new Date() : null,
       sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
       companyId: session.companyId,
       trackingToken: createTrackingToken(),
