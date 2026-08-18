@@ -17,6 +17,32 @@
   background: rgba(255, 255, 255, .55);
 }
 
+.secondary-button {
+  height: 39px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: #52635b;
+  background: white;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  border-color: #c8d8d0;
+  background: #f8fbf9;
+}
+
+.secondary-button:focus-visible {
+  outline: 3px solid #e7f2ed;
+  outline-offset: 1px;
+}
+
 .stats-grid .stat-card {
   min-height: 112px;
   display: flex;
