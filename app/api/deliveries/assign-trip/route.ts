@@ -1,5 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { getCompanySession } from "../../../lib/company-auth";
+import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 import { validatePlannedTripAssignment } from "../../../lib/trip-assignment";
 
@@ -13,12 +14,15 @@ const errorStatus = {
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
   const session = await getCompanySession(request);
-  if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
 
-  const payload = await request.json() as Record<string, unknown>;
+  const payload = await readJsonObject(request);
+  if (!payload) return invalidJsonResponse();
   const deliveryId = String(payload.deliveryId ?? "").trim();
   const tripId = String(payload.tripId ?? "").trim();
-  if (!deliveryId || !tripId) return Response.json({ error: "deliveryId and tripId are required" }, { status: 400 });
+  if (!deliveryId || !tripId || deliveryId.length > 100 || tripId.length > 100) {
+    return Response.json({ error: "invalid_delivery_or_trip_id" }, { status: 400, headers: { "cache-control": "no-store" } });
+  }
 
   const [trip, deliveries] = await Promise.all([store.getTrip(session.companyId, tripId), store.listForCompany(session.companyId)]);
   if (!trip) return Response.json({ error: "trip_not_found" }, { status: 404 });
@@ -30,5 +34,5 @@ export async function POST(request: Request) {
 
   const updated = await store.assignDeliveryToPlannedTrip(delivery.id, session.companyId, trip.id, trip.truck, trip.sendatrackVehicleId);
   if (!updated) return Response.json({ error: "assignment_conflict" }, { status: 409 });
-  return Response.json({ delivery: updated, trip: { id: trip.id, routeTemplateId: trip.routeTemplateId, truck: trip.truck } });
+  return Response.json({ delivery: updated, trip: { id: trip.id, routeTemplateId: trip.routeTemplateId, truck: trip.truck } }, { headers: { "cache-control": "no-store" } });
 }
