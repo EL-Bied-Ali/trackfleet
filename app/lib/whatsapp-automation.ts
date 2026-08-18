@@ -9,22 +9,24 @@ function recipientFrom(delivery: DeliveryRow) {
   return normalizeCustomerPhone(delivery.contact) ?? "";
 }
 
-function eventText(event: DeliveryEventType, delivery: DeliveryRow, trackingUrl: string) {
+export function automaticWhatsAppMessage(event: DeliveryEventType, delivery: DeliveryRow, trackingUrl: string) {
   switch (event) {
+    case "REGISTERED":
+      return `Votre colis ${delivery.id} a bien été enregistré pour ${delivery.destination}. Consultez son suivi et l'estimation d'arrivée ici : ${trackingUrl}`;
     case "DEPARTED":
-      return `Your delivery has departed. Track it here: ${trackingUrl}`;
+      return `Votre colis ${delivery.id} est parti vers ${delivery.destination}. L'estimation d'arrivée est mise à jour ici : ${trackingUrl}`;
     case "PROGRESS_25":
-      return `Your delivery is about 25% complete. Track it here: ${trackingUrl}`;
+      return `Votre colis ${delivery.id} poursuit son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`;
     case "PROGRESS_50":
-      return `Your delivery is about halfway to ${delivery.destination}. Track it here: ${trackingUrl}`;
+      return `Votre colis ${delivery.id} poursuit son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`;
     case "PROGRESS_75":
-      return `Your delivery is about 75% complete. Track it here: ${trackingUrl}`;
+      return `Votre colis ${delivery.id} poursuit son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`;
     case "NEAR_DESTINATION":
-      return `Your delivery is approaching ${delivery.destination}. Track it here: ${trackingUrl}`;
+      return `Votre colis ${delivery.id} approche de ${delivery.destination}. Consultez les dernières informations ici : ${trackingUrl}`;
     case "DELAY_DETECTED":
-      return `Your delivery is running later than planned. The tracking page has the latest estimate: ${trackingUrl}`;
+      return `Le trajet de votre colis ${delivery.id} prend plus de temps que prévu. Consultez la nouvelle estimation ici : ${trackingUrl}`;
     case "ARRIVED":
-      return `Your delivery has arrived at ${delivery.destination}.`;
+      return `Votre colis ${delivery.id} est arrivé à ${delivery.destination}.`;
     default:
       return "";
   }
@@ -57,7 +59,7 @@ export function buildAutomaticWhatsAppPayload(
 
   const recipient = recipientFrom(delivery);
   const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
-  const message = eventText(event, delivery, trackingUrl);
+  const message = automaticWhatsAppMessage(event, delivery, trackingUrl);
   if (!templateName || !recipient || !message) return { payload: null, reason: "not_configured" };
 
   return {
