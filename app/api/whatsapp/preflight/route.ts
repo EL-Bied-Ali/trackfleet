@@ -31,7 +31,9 @@ export async function GET(request: Request) {
     try {
       provider = await verifyWhatsAppProvider();
     } catch (error) {
-      providerError = error instanceof Error ? error.message : "provider_verification_failed";
+      const message = error instanceof Error ? error.message : "provider_verification_failed";
+      console.error("[trackfleet:whatsapp] preflight verification failed", { message });
+      providerError = "provider_verification_failed";
     }
   }
 
