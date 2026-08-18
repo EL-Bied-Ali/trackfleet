@@ -63,10 +63,10 @@ export async function processPendingNotifications(companyId: string, origin: str
       if (result.sent) {
         await store.markNotificationSent(item.delivery.id, item.event.type);
         sent += 1;
-      } else if (result.reason === "recipient_missing" || result.reason === "internal_event") {
-        // Missing customer contact is permanent for this event and should not
-        // become a provider retry loop. The delivery remains perfectly usable
-        // through the dashboard/public tracking flow.
+      } else if (result.reason === "consent_missing" || result.reason === "recipient_missing" || result.reason === "internal_event") {
+        // Missing consent/contact is permanent for this queued event and must
+        // not become a five-minute retry loop. Only explicit opt-in at parcel
+        // intake allows an automatic customer message.
         await store.markNotificationSent(item.delivery.id, item.event.type);
         suppressed += 1;
       } else {
