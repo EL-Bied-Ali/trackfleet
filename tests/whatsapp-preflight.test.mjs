@@ -16,6 +16,12 @@ test("WhatsApp production preflight never returns provider secrets", () => {
   assert.match(route, /noindex, nofollow, noarchive/);
 });
 
+test("unexpected preflight failures are logged but sanitized for callers", () => {
+  assert.match(route, /console\.error\("\[trackfleet:whatsapp\] preflight verification failed", \{ message \}\)/);
+  assert.match(route, /providerError = "provider_verification_failed"/);
+  assert.doesNotMatch(route, /providerError = error instanceof Error \? error\.message/);
+});
+
 test("WhatsApp production preflight verifies all launch-critical dependencies", () => {
   assert.match(route, /persistentStorage:/);
   assert.match(route, /sessionEncryptionConfigured:/);
