@@ -16,6 +16,12 @@ export type SendatrackSnapshot = {
   error?: "not_configured" | "authentication_failed" | "service_unavailable" | "unexpected_response";
 };
 
+export type SendatrackLegacyHistoryIdentity = {
+  accountId: string;
+  deviceId: string;
+  accountSource: "account_desc" | "account" | "configured";
+};
+
 const defaultApiUrl = "http://backend2.sendatrack.com/sendatrack/public/api/";
 const cachedTokens = new Map<string, { value: string; expiresAt: number }>();
 
@@ -37,6 +43,34 @@ function apiUrl(path: string) {
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringFrom(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return "";
+}
+
+function findStringByKey(value: unknown, key: string, depth = 0): string {
+  if (depth > 5 || value == null) return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findStringByKey(item, key, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+  const record = asRecord(value);
+  if (!record) return "";
+  const direct = stringFrom(record[key]);
+  if (direct) return direct;
+  for (const nested of Object.values(record)) {
+    const found = findStringByKey(nested, key, depth + 1);
+    if (found) return found;
+  }
+  return "";
 }
 
 function findToken(value: unknown, depth = 0): string | null {
@@ -102,7 +136,7 @@ async function login(auth: SendatrackCredentials) {
   return token;
 }
 
-async function requestFleet(token: string, auth: SendatrackCredentials) {
+async function requestFleetPayload(token: string, auth: SendatrackCredentials) {
   const response = await fetch(apiUrl("list?"), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
@@ -112,8 +146,11 @@ async function requestFleet(token: string, auth: SendatrackCredentials) {
     throw new Error("authentication_failed");
   }
   if (!response.ok) throw new Error("service_unavailable");
+  return await response.json() as unknown;
+}
 
-  const payload = await response.json() as unknown;
+async function requestFleet(token: string, auth: SendatrackCredentials) {
+  const payload = await requestFleetPayload(token, auth);
   const { vehicles, diagnostics } = normalizeSendatrackFleet(payload);
   console.info("[trackfleet:sendatrack] fleet normalized", diagnostics);
   return vehicles;
@@ -122,6 +159,26 @@ async function requestFleet(token: string, auth: SendatrackCredentials) {
 export function isSendatrackConfigured() {
   const auth = environmentCredentials();
   return Boolean(auth.accountID && auth.user && auth.password);
+}
+
+export async function getSendatrackLegacyHistoryIdentity(): Promise<SendatrackLegacyHistoryIdentity | null> {
+  const auth = environmentCredentials();
+  if (!auth.accountID || !auth.user || !auth.password) return null;
+  const token = await login(auth);
+  if (!token) return null;
+  const payload = await requestFleetPayload(token, auth);
+  const { vehicles, diagnostics } = normalizeSendatrackFleet(payload);
+  console.info("[trackfleet:sendatrack] fleet normalized", diagnostics);
+  const vehicle = vehicles[0];
+  if (!vehicle?.providerDeviceId) return null;
+
+  // The legacy APK builds events7/data.jsonx?a=... from its OpenGTS account.
+  // Account_desc is tested first because Account and the configured backend2
+  // account have both been rejected by the legacy endpoint in production.
+  const accountDesc = findStringByKey(payload, "Account_desc");
+  if (accountDesc) return { accountId: accountDesc, deviceId: vehicle.providerDeviceId, accountSource: "account_desc" };
+  if (vehicle.providerAccountId) return { accountId: vehicle.providerAccountId, deviceId: vehicle.providerDeviceId, accountSource: "account" };
+  return { accountId: auth.accountID, deviceId: vehicle.providerDeviceId, accountSource: "configured" };
 }
 
 export async function getSendatrackSnapshot(providedCredentials?: SendatrackCredentials): Promise<SendatrackSnapshot> {
