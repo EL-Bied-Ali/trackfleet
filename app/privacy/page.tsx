@@ -13,7 +13,7 @@ export default function PrivacyPage() {
       <article className={styles.shell}>
         <Link className={styles.brand} href="/">TrackFleet</Link>
         <h1 className={styles.title}>Privacy Policy</h1>
-        <p className={styles.updated}>Last updated: 18 August 2026</p>
+        <p className={styles.updated}>Last updated: 19 August 2026</p>
 
         <section className={styles.section}>
           <h2>1. What TrackFleet does</h2>
@@ -66,8 +66,9 @@ export default function PrivacyPage() {
         <section className={styles.section}>
           <h2>6. Public tracking and credentials</h2>
           <p>
-            Customer tracking is accessed through a private tracking token. Integration credentials and business-only
-            configuration are server-side data and are not part of the public tracking response.
+            Customer tracking is accessed through a private tracking token. Provider credentials are never included in
+            public tracking responses. When company authentication is used, the authenticated session is stored in an
+            encrypted, HttpOnly and Secure session cookie so browser scripts cannot read the session contents directly.
           </p>
         </section>
 
@@ -91,9 +92,9 @@ export default function PrivacyPage() {
         <section className={styles.section}>
           <h2>9. Security</h2>
           <p>
-            TrackFleet is designed to separate public tracking data from authenticated company data, keep provider
-            credentials server-side and scope operational data to the company that owns it. No internet service can
-            guarantee absolute security.
+            TrackFleet is designed to separate public tracking data from authenticated company data, protect provider
+            credentials in authenticated session state and scope operational data to the company that owns it. No
+            internet service can guarantee absolute security.
           </p>
         </section>
 
