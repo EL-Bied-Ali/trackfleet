@@ -43,6 +43,15 @@
   outline-offset: 1px;
 }
 
+/* The MVP exposes only the overview. Disabled future navigation looked like
+   broken product functionality, so keep it out of sight until those sections
+   are actually implemented. */
+.sidebar .nav-item:disabled,
+.sidebar .sidebar-divider,
+.sidebar nav + .sidebar-divider + nav {
+  display: none;
+}
+
 .stats-grid .stat-card {
   min-height: 112px;
   display: flex;
