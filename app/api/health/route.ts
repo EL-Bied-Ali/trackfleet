@@ -1,13 +1,14 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { automationMissingRequirements } from "../../lib/automation-health";
 import { parseAutomationStartAt } from "../../lib/notification-policy";
+import { sessionEncryptionKeyConfigured } from "../../lib/session-encryption-key";
 import { isSendatrackConfigured } from "../../lib/sendatrack";
 import { getStorageHealth } from "../../lib/storage-health";
 
 export async function GET() {
   const storage = await getStorageHealth();
   const sendatrackConfigured = isSendatrackConfigured();
-  const sessionEncryptionConfigured = Boolean(runtimeEnv.TRACKFLEET_ENCRYPTION_KEY?.trim());
+  const sessionEncryptionConfigured = sessionEncryptionKeyConfigured(runtimeEnv.TRACKFLEET_ENCRYPTION_KEY);
   const tickProtected = Boolean(runtimeEnv.CRON_SECRET?.trim());
   const whatsappEnabled = runtimeEnv.WHATSAPP_AUTOMATION_ENABLED === "true";
   const whatsappProviderConfigured = Boolean(
