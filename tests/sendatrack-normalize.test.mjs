@@ -23,7 +23,7 @@ test("keeps six real vehicles and ignores nested v3/v4 GPS event rows", async ()
   assert.ok(diagnostics.normalizedRows >= 8);
 });
 
-test("preserves legacy Account and DeviceCode without changing the existing vehicle id", () => {
+test("preserves legacy Account and uses logical Device for history without changing the existing vehicle id", () => {
   const vehicle = normalizeSendatrackVehicle({
     id_Vehicle: 101,
     Account: "legacy-account",
@@ -38,10 +38,10 @@ test("preserves legacy Account and DeviceCode without changing the existing vehi
   assert.ok(vehicle);
   assert.equal(vehicle.id, "101");
   assert.equal(vehicle.providerAccountId, "legacy-account");
-  assert.equal(vehicle.providerDeviceId, "legacy-device-code");
+  assert.equal(vehicle.providerDeviceId, "v11");
 });
 
-test("propagates a parent Account to DeviceList vehicles when rows omit it", () => {
+test("propagates a parent Account while retaining a Device suitable for OpenGTS history", () => {
   const { vehicles } = normalizeSendatrackFleet({
     Account: "legacy-parent-account",
     DeviceList: [{
@@ -56,5 +56,5 @@ test("propagates a parent Account to DeviceList vehicles when rows omit it", () 
 
   assert.equal(vehicles.length, 1);
   assert.equal(vehicles[0].providerAccountId, "legacy-parent-account");
-  assert.equal(vehicles[0].providerDeviceId, "device-17");
+  assert.equal(vehicles[0].providerDeviceId, "v17");
 });
