@@ -1,5 +1,6 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../../lib/company-auth";
+import { isSendatrackConfigured } from "../../../lib/sendatrack";
 import { getStorageHealth } from "../../../lib/storage-health";
 import { getWhatsAppConfigurationReadiness, verifyWhatsAppProvider } from "../../../lib/whatsapp-readiness";
 
@@ -36,6 +37,8 @@ export async function GET(request: Request) {
   const providerDiagnosticError = providerError ?? provider?.error ?? null;
   const checks = {
     persistentStorage: storage.persistent && storage.connected,
+    sessionEncryptionConfigured: Boolean(runtimeEnv.TRACKFLEET_ENCRYPTION_KEY?.trim()),
+    sendatrackConfigured: isSendatrackConfigured(),
     schedulerProtected: Boolean(runtimeEnv.CRON_SECRET?.trim()),
     providerConfigured: configuration.providerReady,
     businessAccountConfigured: configuration.businessAccountConfigured,
@@ -52,6 +55,8 @@ export async function GET(request: Request) {
 
   let nextAction = "ready";
   if (!checks.persistentStorage) nextAction = "configure_persistent_storage";
+  else if (!checks.sessionEncryptionConfigured) nextAction = "configure_session_encryption_key";
+  else if (!checks.sendatrackConfigured) nextAction = "configure_sendatrack";
   else if (!checks.schedulerProtected) nextAction = "configure_cron_secret";
   else if (!checks.providerConfigured) nextAction = "configure_whatsapp_provider";
   else if (!checks.businessAccountConfigured) nextAction = "configure_whatsapp_business_account";
