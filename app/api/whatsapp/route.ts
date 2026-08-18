@@ -1,6 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../lib/company-auth";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
+import { whatsappTemplateLanguage } from "../../lib/whatsapp-template";
 
 type WhatsAppKind = "tracking" | "arrival";
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
         type: "template",
         template: {
           name: templateName,
-          language: { code: "en_US" },
+          language: { code: whatsappTemplateLanguage() },
           components: [{
             type: "body",
             parameters: [
