@@ -3,6 +3,7 @@ import { shouldCreateDelayEvent } from "./automation-delay";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
 import { processPendingNotifications } from "./notification-runner";
+import { parseAutomationStartAt } from "./notification-policy";
 import { getSendatrackSnapshot } from "./sendatrack";
 import { buildEtaObservation } from "./eta-observation";
 import { buildEtaRouteContexts, stableEtaRouteContext } from "./route-history";
@@ -58,11 +59,25 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   }
 
   const deliveries = await store.listForCompany(companyId);
+  const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
   const routeContexts = buildEtaRouteContexts(deliveries);
   const stableContexts = new Map<string, ReturnType<typeof stableEtaRouteContext>>();
   let etaObservations = 0;
   for (const delivery of deliveries) {
-    const events = await store.listEvents(delivery.id);
+    let events = await store.listEvents(delivery.id);
+
+    // The first customer message is the most important MVP notification: it
+    // gives the customer the self-service tracking link. Only deliveries
+    // created after WhatsApp activation are eligible, otherwise enabling the
+    // feature could send a burst to historical customers.
+    const registrationEligible = automationStartAt
+      && delivery.createdAt.getTime() >= automationStartAt.getTime()
+      && !events.some((event) => event.type === "REGISTERED");
+    if (registrationEligible && await store.recordEvent(delivery.id, "REGISTERED", delivery.progress)) {
+      newEvents += 1;
+      events = await store.listEvents(delivery.id);
+    }
+
     const previousEtaObservations = await store.listEtaObservations(delivery.id, 2000);
     const routeContext = stableEtaRouteContext(routeContexts.get(delivery.id) ?? null, previousEtaObservations, events);
     stableContexts.set(delivery.id, routeContext);
