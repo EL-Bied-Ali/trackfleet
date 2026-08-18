@@ -19,6 +19,7 @@ test("WhatsApp production preflight never returns provider secrets", () => {
 test("WhatsApp production preflight verifies all launch-critical dependencies", () => {
   assert.match(route, /persistentStorage:/);
   assert.match(route, /sessionEncryptionConfigured:/);
+  assert.match(route, /sessionEncryptionKeyConfigured/);
   assert.match(route, /sendatrackConfigured:/);
   assert.match(route, /schedulerProtected:/);
   assert.match(route, /providerConfigured:/);
