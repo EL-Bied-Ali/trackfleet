@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { requestIsSameOrigin } from "../app/lib/request-origin.ts";
 
 const mutationRoutes = await Promise.all([
+  "../app/api/auth/login/route.ts",
   "../app/api/deliveries/route.ts",
   "../app/api/deliveries/assign-trip/route.ts",
   "../app/api/deliveries/create-trip/route.ts",
@@ -13,11 +14,15 @@ const mutationRoutes = await Promise.all([
   "../app/api/auth/session/route.ts",
 ].map((path) => readFile(new URL(path, import.meta.url), "utf8")));
 
-const deliveriesRoute = mutationRoutes[0];
+const deliveriesRoute = mutationRoutes[1];
 
 test("same-origin helper accepts the app origin and rejects foreign origins", () => {
   assert.equal(requestIsSameOrigin(new Request("https://trackfleet.example/api", { headers: { origin: "https://trackfleet.example" } })), true);
   assert.equal(requestIsSameOrigin(new Request("https://trackfleet.example/api", { headers: { origin: "https://evil.example" } })), false);
+});
+
+test("Sec-Fetch-Site cross-site requests are rejected even without Origin", () => {
+  assert.equal(requestIsSameOrigin(new Request("https://trackfleet.example/api", { headers: { "sec-fetch-site": "cross-site" } })), false);
 });
 
 test("non-browser requests without Origin remain compatible", () => {
