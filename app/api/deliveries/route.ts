@@ -416,6 +416,8 @@ export async function POST(request: Request) {
       gpsSource: liveVehicle ? "sendatrack" : "simulation",
     });
     if (baselineMetrics) await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
+    await store.recordEvent(delivery.id, "REGISTERED", delivery.progress);
+    await processPendingNotifications(session.companyId, new URL(request.url).origin);
 
     const rows = await store.listForCompany(session.companyId);
     const serviceMinutes = pendingServiceMinutesBefore(delivery, rows);
