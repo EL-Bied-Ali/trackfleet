@@ -5,6 +5,7 @@ import { whatsappTemplateLanguage } from "./whatsapp-template";
 
 const graphApiVersion = "v25.0";
 const expectedTemplateBodyParameters = 3;
+const metaRequestTimeoutMs = 10_000;
 
 type ProviderVerification = {
   configurationReady: boolean;
@@ -40,7 +41,8 @@ function configuredValues() {
   const phoneNumberId = runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim() ?? "";
   const businessAccountId = runtimeEnv.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim() ?? "";
   const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim() ?? "";
-  const templateLanguage = whatsappTemplateLanguage();
+  const configuredTemplateLanguage = runtimeEnv.WHATSAPP_TEMPLATE_LANGUAGE?.trim() ?? "";
+  const templateLanguage = configuredTemplateLanguage || whatsappTemplateLanguage();
   const demoRecipient = normalizeCustomerPhone(runtimeEnv.WHATSAPP_DEMO_RECIPIENT ?? "") ?? "";
   const activationConfigured = Boolean(parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT));
 
@@ -48,6 +50,7 @@ function configuredValues() {
   if (!token) providerMissing.push("access_token");
   if (!phoneNumberId) providerMissing.push("phone_number_id");
   if (!templateName) providerMissing.push("template_name");
+  if (!configuredTemplateLanguage) providerMissing.push("template_language");
 
   const automationMissing = [...providerMissing];
   if (!activationConfigured) automationMissing.push("activation_start_at");
@@ -103,6 +106,7 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
 
   const phoneResponse = await fetchImpl(`https://graph.facebook.com/${graphApiVersion}/${encodeURIComponent(config.phoneNumberId)}?fields=id,display_phone_number,verified_name`, {
     headers: { authorization: `Bearer ${config.token}` },
+    signal: AbortSignal.timeout(metaRequestTimeoutMs),
   });
   if (!phoneResponse.ok) {
     return {
@@ -127,6 +131,7 @@ export async function verifyWhatsAppProvider(fetchImpl: typeof fetch = fetch): P
   if (config.businessAccountId) {
     const templatesResponse = await fetchImpl(`https://graph.facebook.com/${graphApiVersion}/${encodeURIComponent(config.businessAccountId)}/message_templates?fields=name,status,language,components&limit=100`, {
       headers: { authorization: `Bearer ${config.token}` },
+      signal: AbortSignal.timeout(metaRequestTimeoutMs),
     });
     if (!templatesResponse.ok) {
       return {
