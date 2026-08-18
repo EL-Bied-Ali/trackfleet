@@ -11,6 +11,7 @@ test("health explains why production automation is not ready", () => {
   assert.deepEqual(automationMissingRequirements({
     storage: { mode: "memory", persistent: false, connected: true, error: null },
     sendatrackConfigured: true,
+    sendatrackTransportSecure: true,
     sessionEncryptionConfigured: true,
     tickProtected: false,
     whatsappEnabled: false,
@@ -23,12 +24,26 @@ test("dedicated session encryption key is required for production readiness", ()
   assert.deepEqual(automationMissingRequirements({
     storage: persistentStorage,
     sendatrackConfigured: true,
+    sendatrackTransportSecure: true,
     sessionEncryptionConfigured: false,
     tickProtected: true,
     whatsappEnabled: false,
     whatsappProviderConfigured: false,
     whatsappActivationConfigured: false,
   }), ["session_encryption_key"]);
+});
+
+test("insecure SENDATRACK transport blocks a production-ready status", () => {
+  assert.deepEqual(automationMissingRequirements({
+    storage: persistentStorage,
+    sendatrackConfigured: true,
+    sendatrackTransportSecure: false,
+    sessionEncryptionConfigured: true,
+    tickProtected: true,
+    whatsappEnabled: false,
+    whatsappProviderConfigured: false,
+    whatsappActivationConfigured: false,
+  }), ["sendatrack_https"]);
 });
 
 test("session encryption readiness accepts only a 32-byte Base64 key", () => {
@@ -45,10 +60,11 @@ test("session encryption readiness accepts only a 32-byte Base64 key", () => {
   assert.equal(sessionEncryptionKeyConfigured(undefined), false);
 });
 
-test("disabled WhatsApp does not block GPS automation readiness", () => {
+test("disabled WhatsApp does not block GPS automation readiness when core security is ready", () => {
   assert.deepEqual(automationMissingRequirements({
     storage: persistentStorage,
     sendatrackConfigured: true,
+    sendatrackTransportSecure: true,
     sessionEncryptionConfigured: true,
     tickProtected: true,
     whatsappEnabled: false,
@@ -61,6 +77,7 @@ test("enabled WhatsApp requires provider and activation boundary", () => {
   assert.deepEqual(automationMissingRequirements({
     storage: persistentStorage,
     sendatrackConfigured: true,
+    sendatrackTransportSecure: true,
     sessionEncryptionConfigured: true,
     tickProtected: true,
     whatsappEnabled: true,
@@ -72,6 +89,8 @@ test("enabled WhatsApp requires provider and activation boundary", () => {
 test("health provider readiness includes explicit security and Meta requirements", () => {
   assert.match(healthRoute, /sessionEncryptionKeyConfigured/);
   assert.match(healthRoute, /TRACKFLEET_ENCRYPTION_KEY/);
+  assert.match(healthRoute, /sendatrackTransportIsSecure/);
+  assert.match(healthRoute, /sendatrackTransportSecure/);
   assert.match(healthRoute, /WHATSAPP_ACCESS_TOKEN/);
   assert.match(healthRoute, /WHATSAPP_PHONE_NUMBER_ID/);
   assert.match(healthRoute, /WHATSAPP_TEMPLATE_NAME/);
