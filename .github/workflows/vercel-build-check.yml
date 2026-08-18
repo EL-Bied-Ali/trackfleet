@@ -115,6 +115,8 @@ jobs:
         run: pnpm run test:automation-readiness
       - name: Verify automation health diagnostics
         run: pnpm run test:automation-health
+      - name: Verify stable automation public origin
+        run: node --test tests/automation-origin-contract.test.mjs
       - name: Verify WhatsApp production readiness safety
         run: pnpm run test:whatsapp-readiness
       - name: Verify WhatsApp production preflight contract
