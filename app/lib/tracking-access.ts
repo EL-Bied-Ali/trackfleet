@@ -2,6 +2,11 @@
 // then becomes inaccessible without deleting the underlying delivery history.
 export const TRACKING_GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
 export const LEGACY_TRACKING_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const TRACKING_TOKEN_PATTERN = /^[A-Za-z0-9_-]{24}$/;
+
+export function publicTrackingTokenIsValid(value: string) {
+  return TRACKING_TOKEN_PATTERN.test(value);
+}
 
 export function trackingExpiresAt(input: { plannedArrivalAt: Date | null; createdAt: Date }) {
   const base = input.plannedArrivalAt?.getTime();
