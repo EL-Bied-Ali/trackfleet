@@ -170,10 +170,9 @@ export async function GET(request: Request) {
 
       if (!publicTrackingIsActive(row)) return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
 
-      // Public tracking has no tenant SENDATRACK credentials. Read only the
-      // tenant-scoped position already persisted by authenticated refreshes or automation.
-      // This avoids ever applying a server-default provider account to another company.
-
+      // Public tracking is strictly read-only. It may use tenant-scoped data
+      // already persisted by authenticated refreshes or automation, but it must
+      // never create delivery events or trigger outbound notifications.
       const companyRows = await store.listForCompany(row.companyId);
       const routeContexts = buildEtaRouteContexts(companyRows);
       const routeEvents = await store.listEvents(row.id);
@@ -183,11 +182,10 @@ export async function GET(request: Request) {
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await learnedStopMinutes(row.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, companyRows, learnedDwell);
-      const enriched = await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount);
-      await processPendingNotifications(row.companyId, requestUrl.origin);
+      const enriched = enrichDelivery(row, routeEvents, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount);
       return Response.json({
-        deliveries: [publicDeliveryView(enriched.delivery)],
-        events: enriched.events.filter((event) => customerFacingEvent(event.type)),
+        deliveries: [publicDeliveryView(enriched)],
+        events: routeEvents.filter((event) => customerFacingEvent(event.type)),
         publicTracking: true,
       }, { headers: { "cache-control": "no-store" } });
     }
