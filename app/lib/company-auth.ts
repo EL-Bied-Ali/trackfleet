@@ -1,5 +1,6 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getSendatrackSnapshot, type SendatrackCredentials } from "./sendatrack";
+import { decodeSessionEncryptionKey } from "./session-encryption-key";
 
 export type CompanySession = {
   companyId: string;
@@ -50,8 +51,9 @@ async function encryptionKey() {
   const encoded = runtimeEnv.TRACKFLEET_ENCRYPTION_KEY?.trim();
   let raw: Uint8Array;
   if (encoded) {
-    raw = fromBase64(encoded);
-    if (raw.byteLength !== 32) throw new Error("server_not_configured");
+    const dedicatedKey = decodeSessionEncryptionKey(encoded);
+    if (!dedicatedKey) throw new Error("server_not_configured");
+    raw = dedicatedKey;
   } else {
     const fallbackSecret = runtimeEnv.SENDATRACK_PASSWORD;
     if (!fallbackSecret) throw new Error("server_not_configured");
