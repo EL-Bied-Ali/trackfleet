@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     firstTimestamp: result.firstTimestamp,
     lastTimestamp: result.lastTimestamp,
     payloadKeys: result.payloadKeys,
+    accountSource: result.accountSource ?? null,
     providerError: result.providerError ?? null,
     error: result.error ?? null,
   });
