@@ -123,6 +123,16 @@
 
 .maplibre-truck.gps-only > em {
   top: 37px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -3px);
+  transition: opacity .14s ease, transform .14s ease;
+}
+
+.maplibre-truck.gps-only:hover > em,
+.maplibre-truck.gps-only:focus-within > em {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 @media (max-width: 920px) {
