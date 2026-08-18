@@ -10,6 +10,7 @@ export type SendatrackVehicle = {
   providerAccountId: string;
   providerAccountDescription: string;
   providerDeviceId: string;
+  providerDeviceCode: string;
 };
 
 export type SendatrackNormalizationDiagnostics = {
@@ -106,7 +107,13 @@ export function normalizeSendatrackVehicle(value: unknown): SendatrackVehicle | 
   const latitude = numberFrom(record.lastValidLatitude, record.latitude, record.lat, record.GPSPoint_lat, event.GPSPoint_lat, event.latitude, event.lat);
   const longitude = numberFrom(record.lastValidLongitude, record.longitude, record.lng, record.lon, record.GPSPoint_lon, event.GPSPoint_lon, event.longitude, event.lng, event.lon);
   if (latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
-  const id = stringFrom(record.id, record.id_Vehicle, record.vehicleId, record.DeviceCode, record.Device, event.DeviceCode);
+
+  const providerDeviceId = stringFrom(record.Device, event.Device);
+  const providerDeviceCode = stringFrom(record.DeviceCode, event.DeviceCode);
+  // SENDATRACK's `Device` (for example v3) identifies one logical vehicle.
+  // `DeviceCode` is the tracker model (for example fmb120/fmb920) and can be
+  // shared by several trucks, so it must never win when choosing a canonical id.
+  const id = stringFrom(record.id, record.id_Vehicle, record.vehicleId, providerDeviceId, providerDeviceCode);
   const name = stringFrom(record.name, record.vehicleName, record.Device_desc, record.description, record.Device, id);
   if (!id || !name) return null;
   return {
@@ -120,10 +127,8 @@ export function normalizeSendatrackVehicle(value: unknown): SendatrackVehicle | 
     updatedAt: timestampFrom(record.timestamp, record.Timestamp, record.lastUpdate, event.Timestamp, event.timestamp),
     providerAccountId: stringFrom(record.Account, event.Account),
     providerAccountDescription: stringFrom(record.Account_desc, event.Account_desc),
-    // The legacy OpenGTS history service expects the logical Device value (for
-    // example v11) in `d=`, not the hardware/model DeviceCode. Keep the regular
-    // normalized `id` unchanged so existing fleet linking remains stable.
-    providerDeviceId: stringFrom(record.Device, event.Device, record.DeviceCode, event.DeviceCode, id),
+    providerDeviceId: providerDeviceId || id,
+    providerDeviceCode,
   };
 }
 
