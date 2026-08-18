@@ -12,7 +12,8 @@ export async function GET() {
   const whatsappProviderConfigured = Boolean(
     runtimeEnv.WHATSAPP_ACCESS_TOKEN?.trim()
     && runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim()
-    && runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim(),
+    && runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim()
+    && runtimeEnv.WHATSAPP_TEMPLATE_LANGUAGE?.trim(),
   );
   const whatsappActivationConfigured = Boolean(parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT));
   const missing = automationMissingRequirements({
