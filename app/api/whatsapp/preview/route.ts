@@ -1,6 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanySession } from "../../../lib/company-auth";
+import { whatsappConsentWithdrawn } from "../../../lib/delivery-events";
 import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "../../../lib/notification-policy";
 import { buildAutomaticWhatsAppPayload } from "../../../lib/whatsapp-automation";
 import { whatsappTemplateLanguage } from "../../../lib/whatsapp-template";
@@ -26,10 +27,18 @@ export async function GET(request: Request) {
   const { actionable, superseded } = splitLatestPendingNotifications(eligible);
   const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
 
-  const previews = actionable.map((item) => {
-    const trackingUrl = new URL(origin);
-    trackingUrl.searchParams.set("tracking", item.delivery.trackingToken || item.delivery.id);
-    const built = buildAutomaticWhatsAppPayload(item.event.type, item.delivery, trackingUrl.toString());
+  const previews = await Promise.all(actionable.map(async (item) => {
+    const events = await store.listEvents(item.delivery.id);
+    const withdrawn = whatsappConsentWithdrawn(events);
+    const hasPrivateTrackingToken = Boolean(item.delivery.trackingToken);
+    const trackingUrl = hasPrivateTrackingToken ? new URL(origin) : null;
+    if (trackingUrl && item.delivery.trackingToken) trackingUrl.searchParams.set("tracking", item.delivery.trackingToken);
+
+    const built = withdrawn
+      ? { payload: null, reason: "consent_withdrawn" as const }
+      : trackingUrl
+        ? buildAutomaticWhatsAppPayload(item.event.type, item.delivery, trackingUrl.toString())
+        : { payload: null, reason: "tracking_token_missing" as const };
     const historical = automationStartAt
       ? isHistoricalNotification(item.event.createdAt, automationStartAt)
       : false;
@@ -41,15 +50,16 @@ export async function GET(request: Request) {
       event: item.event.type,
       eventCreatedAt: item.event.createdAt.toISOString(),
       historical,
+      consentWithdrawn: withdrawn,
       wouldSend: Boolean(built.payload) && !historical,
       reason: historical ? "historical" : built.reason,
       recipient: built.payload ? maskRecipient(built.payload.to) : null,
       templateName: built.payload?.template.name ?? runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim() ?? null,
       language: built.payload?.template.language.code ?? whatsappTemplateLanguage(),
       parameters: built.payload?.template.components[0].parameters.map((parameter) => parameter.text) ?? [],
-      trackingUrl: trackingUrl.toString(),
+      trackingUrl: trackingUrl?.toString() ?? null,
     };
-  });
+  }));
 
   return Response.json({
     dryRun: true,
