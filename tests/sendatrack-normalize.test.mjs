@@ -40,3 +40,21 @@ test("preserves legacy Account and DeviceCode without changing the existing vehi
   assert.equal(vehicle.providerAccountId, "legacy-account");
   assert.equal(vehicle.providerDeviceId, "legacy-device-code");
 });
+
+test("propagates a parent Account to DeviceList vehicles when rows omit it", () => {
+  const { vehicles } = normalizeSendatrackFleet({
+    Account: "legacy-parent-account",
+    DeviceList: [{
+      DeviceCode: "device-17",
+      Device: "v17",
+      Device_desc: "Truck 17",
+      GPSPoint_lat: 35.7,
+      GPSPoint_lon: -5.8,
+      Timestamp: 1_700_000_000,
+    }],
+  });
+
+  assert.equal(vehicles.length, 1);
+  assert.equal(vehicles[0].providerAccountId, "legacy-parent-account");
+  assert.equal(vehicles[0].providerDeviceId, "device-17");
+});
