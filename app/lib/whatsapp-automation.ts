@@ -2,6 +2,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { normalizeCustomerPhone } from "./customer-contact";
 import { customerFacingEvent, type DeliveryEventType } from "./delivery-events";
 import type { DeliveryRow } from "./delivery-store.types";
+import { whatsappTemplateLanguage } from "./whatsapp-template";
 
 function recipientFrom(delivery: DeliveryRow) {
   // Automatic customer notifications must only use the contact attached to
@@ -38,7 +39,7 @@ export type AutomaticWhatsAppPayload = {
   type: "template";
   template: {
     name: string;
-    language: { code: "en_US" };
+    language: { code: string };
     components: [{
       type: "body";
       parameters: [
@@ -74,7 +75,7 @@ export function buildAutomaticWhatsAppPayload(
       type: "template",
       template: {
         name: templateName,
-        language: { code: "en_US" },
+        language: { code: whatsappTemplateLanguage() },
         components: [{
           type: "body",
           parameters: [
