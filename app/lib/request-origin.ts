@@ -1,4 +1,7 @@
 export function requestIsSameOrigin(request: Request) {
+  const fetchSite = request.headers.get("sec-fetch-site")?.toLowerCase();
+  if (fetchSite === "cross-site") return false;
+
   const origin = request.headers.get("origin");
   if (!origin) return true;
   try {
@@ -9,5 +12,5 @@ export function requestIsSameOrigin(request: Request) {
 }
 
 export function originRejectedResponse() {
-  return Response.json({ error: "origin_not_allowed" }, { status: 403 });
+  return Response.json({ error: "origin_not_allowed" }, { status: 403, headers: { "cache-control": "no-store" } });
 }
