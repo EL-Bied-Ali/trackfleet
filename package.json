@@ -68,7 +68,9 @@
     "test:trip-route-history-api": "node --test tests/trip-route-history-api.test.mjs",
     "test:trip-route-history-ui": "node --test tests/trip-route-history-ui.test.mjs",
     "test:logout-state-cleanup": "node --test tests/logout-state-cleanup.test.mjs",
-    "test:fleet-position-history": "node --test tests/fleet-position-history.test.mjs"
+    "test:fleet-position-history": "node --test tests/fleet-position-history.test.mjs",
+    "test:fleet-trip-reconstruction": "node --experimental-strip-types --test tests/fleet-trip-reconstruction.test.mjs",
+    "test:fleet-history-api": "node --test tests/fleet-history-api.test.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "1.1.0",
@@ -92,7 +94,7 @@
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react": "7.37.5",
-    "eslint-plugin-react-hooks": "6.1.1",
+    "eslint-plugin-react-hooks": "7.0.1",
     "globals": "16.4.0",
     "nitro": "3.0.260610-beta",
     "react-server-dom-webpack": "19.2.6",
