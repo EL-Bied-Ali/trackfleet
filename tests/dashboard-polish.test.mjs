@@ -16,6 +16,12 @@ test("live map markers use one compact vehicle label instead of a GPS badge stac
   assert.doesNotMatch(mapSource, /<b>GPS<\/b>/);
 });
 
+test("MapLibre is loaded only when the interactive map mounts", () => {
+  assert.match(mapSource, /await import\("maplibre-gl"\)/);
+  assert.doesNotMatch(mapSource, /import \* as maplibregl from "maplibre-gl"/);
+  assert.match(mapSource, /maplibreRef/);
+});
+
 test("empty dashboard controls do not render as blank UI", () => {
   assert.match(polish, /\.map-panel \.panel-actions select:empty/);
   assert.match(page, /className="deliveries-empty"/);
