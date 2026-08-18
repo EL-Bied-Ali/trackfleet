@@ -1,0 +1,143 @@
+name: Apply fleet position history storage
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Persist every SENDATRACK fleet position
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          function replaceExact(path, before, after) {
+            const source = fs.readFileSync(path, 'utf8');
+            if (!source.includes(before)) throw new Error(`Expected block not found in ${path}`);
+            fs.writeFileSync(path, source.replace(before, after));
+          }
+
+          replaceExact(
+            'app/lib/delivery-store.types.ts',
+            `export type TripPositionRow = TripPositionInput & {\n  createdAt: Date;\n};\n`,
+            `export type TripPositionRow = TripPositionInput & {\n  createdAt: Date;\n};\n\nexport type FleetPositionInput = {\n  companyId: string;\n  vehicleId: string;\n  vehicleName: string;\n  positionAt: Date;\n  latitude: number;\n  longitude: number;\n  speed: number;\n  heading: number | null;\n  address: string;\n};\n\nexport type FleetPositionRow = FleetPositionInput & {\n  createdAt: Date;\n};\n`
+          );
+          replaceExact(
+            'app/lib/delivery-store.types.ts',
+            `  recordTripPosition(input: TripPositionInput): Promise<boolean>;\n  listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;\n`,
+            `  recordTripPosition(input: TripPositionInput): Promise<boolean>;\n  listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;\n  recordFleetPosition(input: FleetPositionInput): Promise<boolean>;\n  listFleetPositions(companyId: string, vehicleId: string, limit?: number): Promise<FleetPositionRow[]>;\n`
+          );
+
+          replaceExact(
+            'app/lib/delivery-store.memory.ts',
+            `import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, TripPositionRow } from "./delivery-store.types";`,
+            `import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types";`
+          );
+          replaceExact(
+            'app/lib/delivery-store.memory.ts',
+            `const tripPositions: TripPositionRow[] = [];\nconst trips: TripRecord[] = [];`,
+            `const tripPositions: TripPositionRow[] = [];\nconst fleetPositions: FleetPositionRow[] = [];\nconst trips: TripRecord[] = [];`
+          );
+          replaceExact(
+            'app/lib/delivery-store.memory.ts',
+            `  async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {\n    return tripPositions\n      .filter((item) => item.companyId === companyId && item.routeTemplateId === routeTemplateId)\n      .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())\n      .slice(0, Math.max(1, Math.min(20000, limit)));\n  },\n`,
+            `  async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {\n    return tripPositions\n      .filter((item) => item.companyId === companyId && item.routeTemplateId === routeTemplateId)\n      .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())\n      .slice(0, Math.max(1, Math.min(20000, limit)));\n  },\n  async recordFleetPosition(input) {\n    if (fleetPositions.some((item) => item.companyId === input.companyId && item.vehicleId === input.vehicleId && item.positionAt.getTime() === input.positionAt.getTime())) return false;\n    fleetPositions.push({ ...input, createdAt: new Date() });\n    return true;\n  },\n  async listFleetPositions(companyId, vehicleId, limit = 20000) {\n    return fleetPositions\n      .filter((item) => item.companyId === companyId && item.vehicleId === vehicleId)\n      .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())\n      .slice(0, Math.max(1, Math.min(50000, limit)));\n  },\n`
+          );
+
+          replaceExact(
+            'app/lib/delivery-store.postgres.ts',
+            `    await sql\`CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)\`;\n    await sql\`CREATE TABLE IF NOT EXISTS trips (`,
+            `    await sql\`CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)\`;\n    await sql\`CREATE TABLE IF NOT EXISTS fleet_position_observations (\n      company_id text NOT NULL,\n      vehicle_id text NOT NULL,\n      vehicle_name text NOT NULL,\n      position_at timestamptz NOT NULL,\n      latitude double precision NOT NULL,\n      longitude double precision NOT NULL,\n      speed double precision NOT NULL,\n      heading double precision,\n      address text NOT NULL DEFAULT '',\n      created_at timestamptz NOT NULL,\n      PRIMARY KEY (company_id, vehicle_id, position_at)\n    )\`;\n    await sql\`CREATE INDEX IF NOT EXISTS idx_fleet_positions_company_vehicle ON fleet_position_observations(company_id, vehicle_id, position_at DESC)\`;\n    await sql\`CREATE TABLE IF NOT EXISTS trips (`
+          );
+          replaceExact(
+            'app/lib/delivery-store.postgres.ts',
+            `  async upsertTrip(input) {\n`,
+            `  async recordFleetPosition(input) {\n    await ensureSchema();\n    const rows = await sql\`INSERT INTO fleet_position_observations (company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at)\n      VALUES (\${input.companyId}, \${input.vehicleId}, \${input.vehicleName}, \${input.positionAt.toISOString()}, \${input.latitude}, \${input.longitude}, \${input.speed}, \${input.heading}, \${input.address}, \${new Date().toISOString()})\n      ON CONFLICT (company_id, vehicle_id, position_at) DO NOTHING RETURNING vehicle_id\` as Array<{ vehicle_id: string }>;\n    return rows.length > 0;\n  },\n  async listFleetPositions(companyId, vehicleId, limit = 20000) {\n    await ensureSchema();\n    const capped = Math.max(1, Math.min(50000, Math.round(limit)));\n    const rows = await sql\`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at\n      FROM fleet_position_observations WHERE company_id = \${companyId} AND vehicle_id = \${vehicleId} ORDER BY position_at DESC LIMIT \${capped}\` as Array<Record<string, unknown>>;\n    return rows.map((row) => ({\n      companyId: String(row.company_id), vehicleId: String(row.vehicle_id), vehicleName: String(row.vehicle_name), positionAt: new Date(String(row.position_at)),\n      latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), heading: row.heading == null ? null : Number(row.heading), address: String(row.address ?? ''), createdAt: new Date(String(row.created_at)),\n    }));\n  },\n\n  async upsertTrip(input) {\n`
+          );
+
+          replaceExact(
+            'app/lib/delivery-store.cloudflare.ts',
+            `  await database.prepare(\`CREATE TABLE IF NOT EXISTS trips (`,
+            `  await database.prepare(\`CREATE TABLE IF NOT EXISTS fleet_position_observations (\n    company_id text NOT NULL, vehicle_id text NOT NULL, vehicle_name text NOT NULL, position_at integer NOT NULL,\n    latitude real NOT NULL, longitude real NOT NULL, speed real NOT NULL, heading real, address text DEFAULT '' NOT NULL, created_at integer NOT NULL,\n    PRIMARY KEY (company_id, vehicle_id, position_at)\n  )\`).run();\n  await database.prepare(\`CREATE TABLE IF NOT EXISTS trips (`
+          );
+          replaceExact(
+            'app/lib/delivery-store.cloudflare.ts',
+            `    database.prepare("CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)"),\n    database.prepare("CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)"),`,
+            `    database.prepare("CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)"),\n    database.prepare("CREATE INDEX IF NOT EXISTS idx_fleet_positions_company_vehicle ON fleet_position_observations(company_id, vehicle_id, position_at DESC)"),\n    database.prepare("CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)"),`
+          );
+          replaceExact(
+            'app/lib/delivery-store.cloudflare.ts',
+            `  async upsertTrip(input) {\n`,
+            `  async recordFleetPosition(input) {\n    await ensureTable();\n    const result = await db().prepare(\`INSERT OR IGNORE INTO fleet_position_observations\n      (company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\`)\n      .bind(input.companyId, input.vehicleId, input.vehicleName, input.positionAt.getTime(), input.latitude, input.longitude, input.speed, input.heading, input.address, Date.now()).run();\n    return Boolean(result.meta?.changes);\n  },\n  async listFleetPositions(companyId, vehicleId, limit = 20000) {\n    await ensureTable();\n    const capped = Math.max(1, Math.min(50000, Math.round(limit)));\n    const result = await db().prepare(\`SELECT company_id AS companyId, vehicle_id AS vehicleId, vehicle_name AS vehicleName, position_at AS positionAt, latitude, longitude, speed, heading, address, created_at AS createdAt\n      FROM fleet_position_observations WHERE company_id = ? AND vehicle_id = ? ORDER BY position_at DESC LIMIT ?\`).bind(companyId, vehicleId, capped).all<Record<string, unknown>>();\n    return (result.results ?? []).map((row) => ({\n      companyId: String(row.companyId), vehicleId: String(row.vehicleId), vehicleName: String(row.vehicleName), positionAt: new Date(Number(row.positionAt)), latitude: Number(row.latitude), longitude: Number(row.longitude), speed: Number(row.speed), heading: row.heading == null ? null : Number(row.heading), address: String(row.address ?? ''), createdAt: new Date(Number(row.createdAt)),\n    }));\n  },\n  async upsertTrip(input) {\n`
+          );
+
+          replaceExact(
+            'db/schema.ts',
+            `export const trips = sqliteTable("trips", {`,
+            `export const fleetPositionObservations = sqliteTable("fleet_position_observations", {\n  companyId: text("company_id").notNull(),\n  vehicleId: text("vehicle_id").notNull(),\n  vehicleName: text("vehicle_name").notNull(),\n  positionAt: integer("position_at", { mode: "timestamp_ms" }).notNull(),\n  latitude: real("latitude").notNull(),\n  longitude: real("longitude").notNull(),\n  speed: real("speed").notNull(),\n  heading: real("heading"),\n  address: text("address").notNull().default(""),\n  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),\n}, (table) => [\n  primaryKey({ columns: [table.companyId, table.vehicleId, table.positionAt] }),\n  index("idx_fleet_positions_company_vehicle").on(table.companyId, table.vehicleId, table.positionAt),\n]);\n\nexport const trips = sqliteTable("trips", {`
+          );
+
+          replaceExact(
+            'app/lib/server-automation.ts',
+            `  etaObservations: number;\n};`,
+            `  etaObservations: number;\n  fleetPositions: number;\n};`
+          );
+          replaceExact(
+            'app/lib/server-automation.ts',
+            `    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0 };`,
+            `    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0, fleetPositions: 0 };`
+          );
+          replaceExact(
+            'app/lib/server-automation.ts',
+            `  const companyId = await companyIdForAccount(accountID);\n  const transitions = await store.applySendatrackSnapshot(snapshot, companyId);`,
+            `  const companyId = await companyIdForAccount(accountID);\n  const fleetPositionResults = await Promise.all(snapshot.vehicles.map((vehicle) => store.recordFleetPosition({\n    companyId,\n    vehicleId: vehicle.id,\n    vehicleName: vehicle.name,\n    positionAt: new Date(vehicle.updatedAt),\n    latitude: vehicle.latitude,\n    longitude: vehicle.longitude,\n    speed: vehicle.speed,\n    heading: vehicle.heading,\n    address: vehicle.address,\n  })));\n  const fleetPositions = fleetPositionResults.filter(Boolean).length;\n  const transitions = await store.applySendatrackSnapshot(snapshot, companyId);`
+          );
+          replaceExact(
+            'app/lib/server-automation.ts',
+            `    etaObservations,\n  });`,
+            `    etaObservations,\n    fleetPositions,\n  });`
+          );
+          replaceExact(
+            'app/lib/server-automation.ts',
+            `    etaObservations,\n  };\n}`,
+            `    etaObservations,\n    fleetPositions,\n  };\n}`
+          );
+
+          const test = `import assert from "node:assert/strict";\nimport fs from "node:fs";\nimport test from "node:test";\n\nconst types = fs.readFileSync(new URL("../app/lib/delivery-store.types.ts", import.meta.url), "utf8");\nconst postgres = fs.readFileSync(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8");\nconst cloudflare = fs.readFileSync(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8");\nconst memory = fs.readFileSync(new URL("../app/lib/delivery-store.memory.ts", import.meta.url), "utf8");\nconst automation = fs.readFileSync(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8");\nconst schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");\n\ntest("fleet history is tenant scoped and deduplicated by provider timestamp", () => {\n  assert.match(types, /recordFleetPosition\\(input: FleetPositionInput\\)/);\n  assert.match(types, /listFleetPositions\\(companyId: string, vehicleId: string/);\n  assert.match(postgres, /PRIMARY KEY \\(company_id, vehicle_id, position_at\\)/);\n  assert.match(postgres, /ON CONFLICT \\(company_id, vehicle_id, position_at\\) DO NOTHING/);\n  assert.match(cloudflare, /PRIMARY KEY \\(company_id, vehicle_id, position_at\\)/);\n  assert.match(cloudflare, /INSERT OR IGNORE INTO fleet_position_observations/);\n  assert.match(memory, /item\\.companyId === input\\.companyId && item\\.vehicleId === input\\.vehicleId/);\n  assert.match(schema, /fleetPositionObservations = sqliteTable\\("fleet_position_observations"/);\n});\n\ntest("automation records every live vehicle before delivery-specific processing", () => {\n  const recordAt = automation.indexOf('snapshot.vehicles.map((vehicle) => store.recordFleetPosition');\n  const deliveryAt = automation.indexOf('store.applySendatrackSnapshot');\n  assert.ok(recordAt >= 0, 'fleet snapshot recorder missing');\n  assert.ok(deliveryAt > recordAt, 'fleet history must not depend on parcel assignment');\n  assert.match(automation, /fleetPositions: number/);\n  assert.match(automation, /fleetPositions = fleetPositionResults\\.filter\\(Boolean\\)\\.length/);\n});\n`;
+          fs.writeFileSync('tests/fleet-position-history.test.mjs', test);
+
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.scripts['test:fleet-position-history'] = 'node --test tests/fleet-position-history.test.mjs';
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+          pnpm run test:fleet-position-history
+          pnpm exec eslint app/lib/delivery-store.types.ts app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts app/lib/server-automation.ts db/schema.ts tests/fleet-position-history.test.mjs --max-warnings=0
+          pnpm exec tsc -p tsconfig.vercel.json --noEmit
+          git diff --check
+
+          git config user.name "TrackFleet automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add app/lib/delivery-store.types.ts app/lib/delivery-store.memory.ts app/lib/delivery-store.postgres.ts app/lib/delivery-store.cloudflare.ts app/lib/server-automation.ts db/schema.ts tests/fleet-position-history.test.mjs package.json
+          git commit -m "persist full fleet GPS history"
+          git push origin HEAD:main
