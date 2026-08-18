@@ -1,0 +1,47 @@
+name: One-shot SENDATRACK history probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/one-shot-sendatrack-history-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
+      CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
+    steps:
+      - name: Wait for protected history probe and run once
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "TRACKFLEET_CRON_SECRET is empty"
+            exit 2
+          fi
+          for attempt in $(seq 1 30); do
+            code=$(curl --silent --show-error --output /tmp/history.json --write-out '%{http_code}' \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "${BASE_URL}/api/automation/sendatrack-history-probe" || true)
+            if [ "$code" = "200" ] || [ "$code" = "502" ]; then
+              cat /tmp/history.json
+              node - <<'NODE'
+          const fs = require('node:fs');
+          const body = JSON.parse(fs.readFileSync('/tmp/history.json', 'utf8'));
+          console.log(JSON.stringify({ ok: body.ok, status: body.status, contentType: body.contentType, pointCount: body.pointCount, firstTimestamp: body.firstTimestamp, lastTimestamp: body.lastTimestamp, payloadKeys: body.payloadKeys, error: body.error ?? null }));
+          if (body.ok !== true) process.exit(3);
+          NODE
+              exit 0
+            fi
+            echo "attempt=$attempt http=$code"
+            sleep 5
+          done
+          echo "history probe endpoint did not become available"
+          exit 1
