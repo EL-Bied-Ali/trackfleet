@@ -10,8 +10,17 @@ export type SendatrackHistoryProbeResult = {
   firstTimestamp: number | null;
   lastTimestamp: number | null;
   payloadKeys: string[];
+  providerError?: string;
   error?: string;
 };
+
+function safeProviderError(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "";
+  const value = (payload as Record<string, unknown>).Error;
+  if (typeof value === "string") return value.slice(0, 240);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
 
 export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHistoryProbeResult> {
   const accountId = runtimeEnv.SENDATRACK_ACCOUNT_ID?.trim() ?? "";
@@ -46,10 +55,25 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
       return { ok: false, status: response.status, contentType, pointCount: 0, firstTimestamp: null, lastTimestamp: null, payloadKeys: [], error: "history_invalid_json" };
     }
 
-    const points = normalizeSendatrackHistory(payload);
     const payloadKeys = payload && typeof payload === "object" && !Array.isArray(payload)
       ? Object.keys(payload as Record<string, unknown>).slice(0, 20)
       : [];
+    const providerError = safeProviderError(payload);
+    if (providerError) {
+      return {
+        ok: false,
+        status: response.status,
+        contentType,
+        pointCount: 0,
+        firstTimestamp: null,
+        lastTimestamp: null,
+        payloadKeys,
+        providerError,
+        error: "history_provider_error",
+      };
+    }
+
+    const points = normalizeSendatrackHistory(payload);
     return {
       ok: true,
       status: response.status,
