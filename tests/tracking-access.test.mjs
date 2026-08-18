@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { publicTrackingIsActive, trackingExpiresAt } from "../app/lib/tracking-access.ts";
+import { publicTrackingIsActive, publicTrackingTokenIsValid, trackingExpiresAt } from "../app/lib/tracking-access.ts";
+
+test("accepts only the private 24-character Base64URL tracking token shape", () => {
+  assert.equal(publicTrackingTokenIsValid("AbCdEf0123456789_-xyZ123"), true);
+  assert.equal(publicTrackingTokenIsValid("short"), false);
+  assert.equal(publicTrackingTokenIsValid("AbCdEf0123456789_-xyZ12+"), false);
+  assert.equal(publicTrackingTokenIsValid("AbCdEf0123456789_-xyZ1234"), false);
+});
 
 test("expires a tracking link seven days after planned arrival", () => {
   const plannedArrivalAt = new Date("2026-08-20T12:00:00.000Z");
