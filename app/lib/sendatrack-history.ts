@@ -1,4 +1,15 @@
-export const SENDATRACK_HISTORY_BASE_URL = "http://app.sendatrack.com:8080/events7/data.jsonx";
+export type SendatrackHistoryEndpoint = "eventsApp2" | "events7" | "eventsApp";
+
+export const SENDATRACK_HISTORY_ENDPOINT_URLS: Record<SendatrackHistoryEndpoint, string> = {
+  eventsApp2: "http://app.sendatrack.com:8080/eventsApp2/data.jsonx",
+  events7: "http://app.sendatrack.com:8080/events7/data.jsonx",
+  eventsApp: "http://app.sendatrack.com:8080/eventsApp/data.jsonx",
+};
+
+// Public SENDATRACK-family source code uses eventsApp2 for a selected device's
+// historical day. The official 1.0.8 APK also contains events7/eventsApp URLs,
+// which remain bounded fallbacks in the live probe.
+export const SENDATRACK_HISTORY_BASE_URL = SENDATRACK_HISTORY_ENDPOINT_URLS.eventsApp2;
 
 export type SendatrackHistoryQuery = {
   accountId: string;
@@ -7,6 +18,7 @@ export type SendatrackHistoryQuery = {
   deviceId: string;
   from: Date | number;
   to: Date | number;
+  endpoint?: SendatrackHistoryEndpoint;
 };
 
 export type SendatrackHistoryPoint = {
@@ -52,16 +64,17 @@ export function buildSendatrackHistoryUrl(query: SendatrackHistoryQuery) {
   const to = toEpochSeconds(query.to);
   if (from > to) throw new Error("SENDATRACK history range is reversed");
 
-  const url = new URL(SENDATRACK_HISTORY_BASE_URL);
+  const endpoint = query.endpoint ?? "eventsApp2";
+  const url = new URL(SENDATRACK_HISTORY_ENDPOINT_URLS[endpoint]);
+  // Exact legacy/OpenGTS contract confirmed from SENDATRACK-family source:
+  // a=account, p=password, u=user, d=logical Device, rf/rt=epoch seconds.
   url.searchParams.set("a", accountId);
-  if (userId) url.searchParams.set("uId", userId);
   if (password) url.searchParams.set("p", password);
-  url.searchParams.set("dId", deviceId);
+  if (userId) url.searchParams.set("u", userId);
+  url.searchParams.set("d", deviceId);
   url.searchParams.set("rf", String(from));
   url.searchParams.set("rt", String(to));
-  // Both fragments are present in the official APK. Keep the result bounded
-  // while requesting address/detail enrichment used for route reconstruction.
-  url.searchParams.set("l", "10000");
+  url.searchParams.set("l", "5000");
   url.searchParams.set("at", "true");
   return url.toString();
 }
@@ -116,7 +129,7 @@ function normalizeEvent(device: Record<string, unknown>, value: unknown): Sendat
   if (latitude === null || longitude === null || timestamp === null) return null;
   if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
 
-  const deviceId = stringFrom(event.DeviceCode, device.DeviceCode, event.Device, device.Device, device.id);
+  const deviceId = stringFrom(device.Device, event.Device, event.DeviceCode, device.DeviceCode, device.id);
   if (!deviceId) return null;
 
   return {
