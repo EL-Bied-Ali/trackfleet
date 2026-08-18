@@ -1,0 +1,255 @@
+--- whatsapp_mvp ---
+
+> site-creator-vinext-starter@0.1.0 test:whatsapp-mvp /home/runner/work/trackfleet/trackfleet
+> node --experimental-strip-types --test tests/whatsapp-mvp-flow.test.mjs
+
+TAP version 13
+# Subtest: MVP WhatsApp pushes only high-value customer states
+ok 1 - MVP WhatsApp pushes only high-value customer states
+  ---
+  duration_ms: 0.521306
+  type: 'test'
+  ...
+# Subtest: registration is a first-class delivery event
+ok 2 - registration is a first-class delivery event
+  ---
+  duration_ms: 0.154821
+  type: 'test'
+  ...
+# Subtest: new parcel creation immediately queues registration and processes notifications
+ok 3 - new parcel creation immediately queues registration and processes notifications
+  ---
+  duration_ms: 0.149281
+  type: 'test'
+  ...
+# Subtest: scheduler provides a safe registration fallback without messaging historical parcels
+ok 4 - scheduler provides a safe registration fallback without messaging historical parcels
+  ---
+  duration_ms: 0.104629
+  type: 'test'
+  ...
+# Subtest: notification runner filters low-value progress events before newest-event compaction
+ok 5 - notification runner filters low-value progress events before newest-event compaction
+  ---
+  duration_ms: 0.155704
+  type: 'test'
+  ...
+# Subtest: missing customer phone is suppressed instead of retried forever
+ok 6 - missing customer phone is suppressed instead of retried forever
+  ---
+  duration_ms: 0.103875
+  type: 'test'
+  ...
+# Subtest: registration, departure and delay copy direct customers to self-service tracking
+ok 7 - registration, departure and delay copy direct customers to self-service tracking
+  ---
+  duration_ms: 0.156396
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 71.520824
+RESULT whatsapp_mvp=0
+--- notification_policy ---
+
+> site-creator-vinext-starter@0.1.0 test:notification-policy /home/runner/work/trackfleet/trackfleet
+> node --experimental-strip-types --test tests/notification-policy.test.mjs
+
+TAP version 13
+# Subtest: parses a valid automation activation timestamp
+ok 1 - parses a valid automation activation timestamp
+  ---
+  duration_ms: 1.440217
+  type: 'test'
+  ...
+# Subtest: rejects missing or invalid activation timestamps
+ok 2 - rejects missing or invalid activation timestamps
+  ---
+  duration_ms: 0.103266
+  type: 'test'
+  ...
+# Subtest: suppresses events created before activation but keeps new events eligible
+ok 3 - suppresses events created before activation but keeps new events eligible
+  ---
+  duration_ms: 0.0826
+  type: 'test'
+  ...
+# Subtest: keeps only the newest pending event per delivery
+ok 4 - keeps only the newest pending event per delivery
+  ---
+  duration_ms: 0.523119
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 69.470423
+RESULT notification_policy=0
+--- notification_queue ---
+
+> site-creator-vinext-starter@0.1.0 test:notifications /home/runner/work/trackfleet/trackfleet
+> node --experimental-strip-types --test tests/notification-queue.test.mjs
+
+TAP version 13
+# Subtest: notification claim is deduplicated, retryable, then final after success
+ok 1 - notification claim is deduplicated, retryable, then final after success
+  ---
+  duration_ms: 1.267214
+  type: 'test'
+  ...
+# Subtest: an abandoned claim becomes retryable after the timeout
+ok 2 - an abandoned claim becomes retryable after the timeout
+  ---
+  duration_ms: 0.122319
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 66.401328
+RESULT notification_queue=0
+--- whatsapp_preview ---
+
+> site-creator-vinext-starter@0.1.0 test:whatsapp-preview /home/runner/work/trackfleet/trackfleet
+> node --test tests/whatsapp-preview.test.mjs
+
+TAP version 13
+# Subtest: WhatsApp preview requires an authenticated company session
+ok 1 - WhatsApp preview requires an authenticated company session
+  ---
+  duration_ms: 0.60344
+  type: 'test'
+  ...
+# Subtest: WhatsApp preview is a read-only dry run
+ok 2 - WhatsApp preview is a read-only dry run
+  ---
+  duration_ms: 0.204597
+  type: 'test'
+  ...
+# Subtest: preview and real sending use the same payload builder
+ok 3 - preview and real sending use the same payload builder
+  ---
+  duration_ms: 0.099011
+  type: 'test'
+  ...
+# Subtest: preview reports the same configured template language as real sending
+ok 4 - preview reports the same configured template language as real sending
+  ---
+  duration_ms: 0.740739
+  type: 'test'
+  ...
+# Subtest: preview masks customer phone numbers
+ok 5 - preview masks customer phone numbers
+  ---
+  duration_ms: 0.211219
+  type: 'test'
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 43.328477
+RESULT whatsapp_preview=0
+--- whatsapp_readiness ---
+
+> site-creator-vinext-starter@0.1.0 test:whatsapp-readiness /home/runner/work/trackfleet/trackfleet
+> node --test tests/whatsapp-readiness.test.mjs
+
+TAP version 13
+# Subtest: manual WhatsApp demo requires auth, explicit opt-in and explicit template
+ok 1 - manual WhatsApp demo requires auth, explicit opt-in and explicit template
+  ---
+  duration_ms: 0.563409
+  type: 'test'
+  ...
+# Subtest: WhatsApp readiness endpoint is authenticated
+ok 2 - WhatsApp readiness endpoint is authenticated
+  ---
+  duration_ms: 0.091997
+  type: 'test'
+  ...
+# Subtest: WhatsApp readiness performs read-only provider checks
+ok 3 - WhatsApp readiness performs read-only provider checks
+  ---
+  duration_ms: 0.142702
+  type: 'test'
+  ...
+# Subtest: template language is shared by demo, automation, preview readiness and both runtimes
+ok 4 - template language is shared by demo, automation, preview readiness and both runtimes
+  ---
+  duration_ms: 0.09394
+  type: 'test'
+  ...
+# Subtest: provider verification requires the approved template in the configured language
+ok 5 - provider verification requires the approved template in the configured language
+  ---
+  duration_ms: 0.089743
+  type: 'test'
+  ...
+# Subtest: both runtimes support optional WABA id and explicit demo flag
+ok 6 - both runtimes support optional WABA id and explicit demo flag
+  ---
+  duration_ms: 0.102009
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 43.754063
+RESULT whatsapp_readiness=0
+--- typecheck ---
+RESULT typecheck=0
+--- lint ---
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.4
+
+
+A config object has a "plugins" key defined as an array of strings. It looks something like this:
+
+    {
+        "plugins": ["react-hooks"]
+    }
+
+Flat config requires "plugins" to be an object, like this:
+
+    {
+        plugins: {
+            react-hooks: pluginObject
+        }
+    }
+
+Please see the following page for information on how to convert your config object into the correct format:
+https://eslint.org/docs/latest/use/configure/migration-guide#importing-plugins-and-custom-parsers
+
+If you're using a shareable config that you cannot rewrite in flat config format, then use the compatibility utility:
+https://eslint.org/docs/latest/use/configure/migration-guide#using-eslintrc-configs-in-flat-config
+
+RESULT lint=2
+FINAL_RESULT=1
