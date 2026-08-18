@@ -10,6 +10,7 @@ export type SendatrackHistoryProbeResult = {
   lastTimestamp: number | null;
   payloadKeys: string[];
   accountSource?: "account_desc" | "account" | "configured";
+  usedUserId?: boolean;
   providerError?: string;
   error?: string;
 };
@@ -33,7 +34,13 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
 
   const to = Date.now();
   const from = to - Math.max(1, Math.min(hours, 168)) * 60 * 60 * 1000;
-  const url = buildSendatrackHistoryUrl({ accountId: identity.accountId, deviceId: identity.deviceId, from, to });
+  const url = buildSendatrackHistoryUrl({
+    accountId: identity.accountId,
+    userId: identity.userId,
+    deviceId: identity.deviceId,
+    from,
+    to,
+  });
 
   try {
     const response = await fetch(url, {
@@ -44,14 +51,14 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
     const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
     const text = await response.text();
     if (!response.ok) {
-      return { ...emptyResult(`history_http_${response.status}`), status: response.status, contentType, accountSource: identity.accountSource };
+      return { ...emptyResult(`history_http_${response.status}`), status: response.status, contentType, accountSource: identity.accountSource, usedUserId: Boolean(identity.userId) };
     }
 
     let payload: unknown;
     try {
       payload = JSON.parse(text);
     } catch {
-      return { ...emptyResult("history_invalid_json"), status: response.status, contentType, accountSource: identity.accountSource };
+      return { ...emptyResult("history_invalid_json"), status: response.status, contentType, accountSource: identity.accountSource, usedUserId: Boolean(identity.userId) };
     }
 
     const payloadKeys = payload && typeof payload === "object" && !Array.isArray(payload)
@@ -68,6 +75,7 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
         lastTimestamp: null,
         payloadKeys,
         accountSource: identity.accountSource,
+        usedUserId: Boolean(identity.userId),
         providerError,
         error: "history_provider_error",
       };
@@ -83,8 +91,9 @@ export async function probeSendatrackHistory(hours = 24): Promise<SendatrackHist
       lastTimestamp: points.at(-1)?.timestamp ?? null,
       payloadKeys,
       accountSource: identity.accountSource,
+      usedUserId: Boolean(identity.userId),
     };
   } catch (error) {
-    return { ...emptyResult(error instanceof Error ? error.name : "history_fetch_failed"), accountSource: identity.accountSource };
+    return { ...emptyResult(error instanceof Error ? error.name : "history_fetch_failed"), accountSource: identity.accountSource, usedUserId: Boolean(identity.userId) };
   }
 }
