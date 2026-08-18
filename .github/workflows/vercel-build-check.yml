@@ -23,6 +23,10 @@ jobs:
         run: pnpm run test:sendatrack
       - name: Verify full fleet GPS history storage
         run: pnpm run test:fleet-position-history
+      - name: Verify fleet GPS trip reconstruction
+        run: pnpm run test:fleet-trip-reconstruction
+      - name: Verify authenticated fleet history API
+        run: pnpm run test:fleet-history-api
       - name: Verify SENDATRACK historical event parsing
         run: node --experimental-strip-types --test tests/sendatrack-history.test.mjs
       - name: Verify GPS route progress
