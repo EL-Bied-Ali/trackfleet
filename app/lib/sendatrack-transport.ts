@@ -1,6 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 
 export const DEFAULT_SENDATRACK_API_URL = "http://backend2.sendatrack.com/sendatrack/public/api/";
+const EXPECTED_SENDATRACK_HOST = "backend2.sendatrack.com";
 
 export function configuredSendatrackApiUrl() {
   return runtimeEnv.SENDATRACK_API_URL?.trim() || DEFAULT_SENDATRACK_API_URL;
@@ -8,7 +9,8 @@ export function configuredSendatrackApiUrl() {
 
 export function sendatrackTransportIsSecure() {
   try {
-    return new URL(configuredSendatrackApiUrl()).protocol === "https:";
+    const target = new URL(configuredSendatrackApiUrl());
+    return target.protocol === "https:" && target.hostname === EXPECTED_SENDATRACK_HOST;
   } catch {
     return false;
   }
