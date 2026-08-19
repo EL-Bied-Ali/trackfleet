@@ -5,10 +5,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Test-Path ".env.cloudflare")) {
-  throw ".env.cloudflare is required and must remain local (it is ignored by git)."
-}
-
 $previousStorage = $env:TRACKFLEET_STORAGE
 try {
   if ($Storage -eq "postgres") {
@@ -25,8 +21,8 @@ try {
   pnpm exec vinext build
   if ($LASTEXITCODE -ne 0) { throw "Cloudflare build failed." }
 
-  Write-Host "Deploying TrackFleet Worker..."
-  pnpm dlx wrangler@4.124.0 deploy --secrets-file .env.cloudflare
+  Write-Host "Deploying TrackFleet Worker without overwriting stored secrets..."
+  pnpm dlx wrangler@4.124.0 deploy
   if ($LASTEXITCODE -ne 0) { throw "Cloudflare deployment failed." }
 } finally {
   if ($null -eq $previousStorage) {
