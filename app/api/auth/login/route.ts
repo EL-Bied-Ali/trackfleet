@@ -1,3 +1,4 @@
+import { consumeLoginAttempt, clearLoginAttempts } from "trackfleet-login-rate-limit";
 import { createCompanySession } from "../../../lib/company-auth";
 import { publicLoginFailure } from "../../../lib/login-error";
 import { requestIsSameOrigin } from "../../../lib/request-origin";
@@ -11,7 +12,7 @@ function clientKey(request: Request) {
   return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
 }
 
-function allowLoginAttempt(key: string) {
+function allowLocalLoginAttempt(key: string) {
   const now = Date.now();
   const cutoff = now - loginWindowMs;
   const recent = (recentLoginAttempts.get(key) ?? []).filter((timestamp) => timestamp >= cutoff);
@@ -22,15 +23,40 @@ function allowLoginAttempt(key: string) {
   recent.push(now);
   recentLoginAttempts.set(key, recent);
 
-  // Keep the in-memory protection bounded on long-lived instances. Vercel may
-  // run multiple instances, so this is defense in depth rather than a global
-  // account lockout mechanism.
   if (recentLoginAttempts.size > 1_000) {
     for (const [candidate, timestamps] of recentLoginAttempts) {
       if (!timestamps.some((timestamp) => timestamp >= cutoff)) recentLoginAttempts.delete(candidate);
     }
   }
   return true;
+}
+
+async function loginAttemptDecision(request: Request) {
+  try {
+    const decision = await consumeLoginAttempt(request);
+    if (decision.distributed) return decision;
+  } catch (error) {
+    console.error("[trackfleet:auth] distributed login rate limiter unavailable", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
+
+  return {
+    allowed: allowLocalLoginAttempt(clientKey(request)),
+    retryAfterSeconds: Math.ceil(loginWindowMs / 1000),
+    distributed: false,
+  };
+}
+
+async function resetLoginAttempts(request: Request) {
+  recentLoginAttempts.delete(clientKey(request));
+  try {
+    await clearLoginAttempts(request);
+  } catch (error) {
+    console.error("[trackfleet:auth] failed to clear distributed login rate limiter", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
 }
 
 function json(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}) {
@@ -43,9 +69,13 @@ function json(body: Record<string, unknown>, status: number, headers: Record<str
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return json({ error: "origin_not_allowed" }, 403);
 
-  const key = clientKey(request);
-  if (!allowLoginAttempt(key)) {
-    return json({ error: "too_many_login_attempts" }, 429, { "retry-after": "600" });
+  const decision = await loginAttemptDecision(request);
+  if (!decision.allowed) {
+    return json(
+      { error: "too_many_login_attempts" },
+      429,
+      { "retry-after": String(decision.retryAfterSeconds) },
+    );
   }
 
   try {
@@ -55,7 +85,7 @@ export async function POST(request: Request) {
       user: String(payload.user ?? "").trim().slice(0, 120),
       password: String(payload.password ?? "").slice(0, 512),
     });
-    recentLoginAttempts.delete(key);
+    await resetLoginAttempts(request);
     return Response.json({ company: result.company, vehicleCount: result.vehicles.length }, {
       headers: { "set-cookie": result.cookie, "cache-control": "no-store" },
     });
