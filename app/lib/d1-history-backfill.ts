@@ -3,10 +3,11 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import type { DeliveryEventRow, DeliveryRow, DeliveryStatus, EtaObservationRow } from "./delivery-store.types";
 import type { DeliveryEventType } from "./delivery-events";
 
-const maxCompaniesPerPass = 5;
-const pageSize = 20;
-const maxEtaPerDelivery = 20;
+const maxCompaniesPerPass = 3;
+const pageSize = 10;
+const maxEtaPerDelivery = 10;
 const d1BatchSize = 50;
+const maxD1StatementsPerCompanyPage = 800;
 
 type D1Statement = {
   bind(...values: unknown[]): D1Statement;
@@ -239,6 +240,7 @@ function etaStatement(db: D1Binding, observation: EtaObservationRow) {
 }
 
 async function runBatches(db: D1Binding, statements: D1Statement[]) {
+  if (statements.length > maxD1StatementsPerCompanyPage) throw new Error("d1_history_backfill_budget_exceeded");
   for (let index = 0; index < statements.length; index += d1BatchSize) {
     await db.batch(statements.slice(index, index + d1BatchSize));
   }
