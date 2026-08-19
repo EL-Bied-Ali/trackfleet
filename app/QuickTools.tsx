@@ -12,7 +12,9 @@ export default function QuickTools() {
     let active = true;
     const url = new URL(window.location.href);
     if (url.pathname !== "/" || url.searchParams.has("tracking")) {
-      setState("hidden");
+      queueMicrotask(() => {
+        if (active) setState("hidden");
+      });
       return () => { active = false; };
     }
 
