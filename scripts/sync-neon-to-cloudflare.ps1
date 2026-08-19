@@ -23,6 +23,17 @@ if ($value.Length -ge 2) {
 }
 if (-not $value) { throw "DATABASE_URL is empty." }
 
+$uri = $null
+if (-not [Uri]::TryCreate($value, [UriKind]::Absolute, [ref]$uri)) {
+  throw "DATABASE_URL is not a valid absolute URL. Refusing to overwrite the Cloudflare copy."
+}
+if ($uri.Scheme -notin @("postgres", "postgresql")) {
+  throw "DATABASE_URL must use the postgres:// or postgresql:// scheme. Refusing to overwrite the Cloudflare copy."
+}
+if (-not $uri.Host) {
+  throw "DATABASE_URL has no database host. Refusing to overwrite the Cloudflare copy."
+}
+
 $current = @(Get-Content $CloudflareEnvFile)
 $found = $false
 $updated = foreach ($entry in $current) {
@@ -36,4 +47,4 @@ $updated = foreach ($entry in $current) {
 if (-not $found) { $updated += "DATABASE_URL=$value" }
 $updated | Set-Content $CloudflareEnvFile
 
-Write-Host "DATABASE_URL synchronized into $CloudflareEnvFile without printing the secret."
+Write-Host "DATABASE_URL validated and synchronized into $CloudflareEnvFile without printing the secret."
