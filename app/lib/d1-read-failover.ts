@@ -16,7 +16,7 @@ type D1FailoverBinding = {
   prepare(query: string): D1FailoverStatement;
 };
 
-function configured() {
+export function d1ReadFailoverConfigured() {
   if (suppressionDepth > 0) return false;
   const raw = runtimeEnv.TRACKFLEET_D1_READ_FAILOVER?.trim().toLowerCase() ?? "";
   return enabledValues.has(raw);
@@ -46,7 +46,7 @@ async function activateD1ReadFailover(db: D1FailoverBinding, now = Date.now()) {
 }
 
 export async function d1ReadFailoverReady() {
-  if (!configured()) return false;
+  if (!d1ReadFailoverConfigured()) return false;
   const db = d1Binding();
   if (!db) return false;
   try {
@@ -61,7 +61,7 @@ export async function d1ReadFailoverReady() {
 }
 
 export async function d1ReadFailoverActive(now = Date.now()) {
-  if (!configured()) return false;
+  if (!d1ReadFailoverConfigured()) return false;
   const db = d1Binding();
   if (!db) return false;
   try {
