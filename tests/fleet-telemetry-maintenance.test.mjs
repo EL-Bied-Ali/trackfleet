@@ -9,7 +9,7 @@ test("fleet identity cleanup is dry-run by default and atomic when explicitly ap
   assert.match(cleanup, /process\.argv\.includes\("--apply"\)/);
   assert.match(cleanup, /if \(!apply\)/);
   assert.match(cleanup, /sql\.transaction\(\[/);
-  assert.match(cleanup, /duplicate observations for the same physical truck and exact provider/);
+  assert.match(cleanup, /duplicate observations for the same normalized physical truck and exact/);
 });
 
 test("site inference never writes medium or low confidence suggestions", () => {
