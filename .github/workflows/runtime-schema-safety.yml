@@ -38,6 +38,8 @@ jobs:
         run: node --test tests/storage-schema-health.test.mjs
       - name: Verify authenticated quick tool navigation
         run: node --test tests/quick-tools-navigation.test.mjs
+      - name: Verify production release gate
+        run: node --test tests/release-gate-contract.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
