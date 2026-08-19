@@ -26,6 +26,7 @@ export type D1ReconciliationResult = {
 
 type D1Statement = {
   bind(...values: unknown[]): D1Statement;
+  run(): Promise<unknown>;
 };
 
 type D1Binding = {
@@ -273,7 +274,7 @@ export async function reconcileD1Standby(): Promise<D1ReconciliationResult> {
     VALUES ('d1_reconciliation', ?)
     ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at`)
     .bind(now)
-    .run?.();
+    .run();
 
   const sql = neon(url);
   try {
@@ -330,7 +331,7 @@ export async function reconcileD1Standby(): Promise<D1ReconciliationResult> {
       VALUES ('d1_reconciliation', ?, ?)
       ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at, last_success_at = excluded.last_success_at`)
       .bind(now, Date.now())
-      .run?.();
+      .run();
 
     return {
       ran: true,
@@ -349,7 +350,7 @@ export async function reconcileD1Standby(): Promise<D1ReconciliationResult> {
         VALUES ('d1_reconciliation', ?, ?)
         ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at, last_failure_at = excluded.last_failure_at`)
         .bind(now, Date.now())
-        .run?.();
+        .run();
     } catch {}
     throw error;
   }
