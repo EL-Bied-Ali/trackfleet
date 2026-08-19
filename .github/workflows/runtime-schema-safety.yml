@@ -35,6 +35,8 @@ jobs:
         run: node --test tests/storage-failover-readiness.test.mjs
       - name: Verify D1 session replication contract
         run: node --test tests/d1-session-replication.test.mjs
+      - name: Verify D1 site replication contract
+        run: node --test tests/d1-site-replication.test.mjs
       - name: Verify Postgres query budget
         run: node --test tests/postgres-query-budget.test.mjs
       - name: Verify batched-read behavior
