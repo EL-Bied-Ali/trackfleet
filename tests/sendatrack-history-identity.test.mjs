@@ -17,8 +17,11 @@ test("legacy history account candidates are provider-bounded and prefer the Open
   assert.match(sendatrackSource, /seen\.has\(normalized\)/, "duplicate account values must be deduplicated");
 });
 
-test("history identity uses logical Device and discovery stays bounded to confirmed endpoint family", () => {
-  assert.match(normalizeSource, /providerDeviceId: stringFrom\(record\.Device, event\.Device, record\.DeviceCode/);
+test("history identity keeps logical Device separate from shared DeviceCode", () => {
+  assert.match(normalizeSource, /const providerDeviceId = stringFrom\(record\.Device, event\.Device\)/);
+  assert.match(normalizeSource, /const providerDeviceCode = stringFrom\(record\.DeviceCode, event\.DeviceCode\)/);
+  assert.match(normalizeSource, /providerDeviceId: providerDeviceId \|\| id/);
+  assert.doesNotMatch(normalizeSource, /providerDeviceId = stringFrom\([^\n]*DeviceCode/);
   assert.match(historySource, /identities\.slice\(0, 3\)/);
   assert.match(historySource, /\["eventsApp2", "events7", "eventsApp"\]/);
   assert.match(historySource, /userId: identity\.userId/);
