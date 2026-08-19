@@ -11,6 +11,7 @@ const criticalRegressionTests = [
   "micro-batcher.test.mjs",
   "postgres-read-batching.test.mjs",
   "bulk-delivery-import.test.mjs",
+  "delivery-idempotency.test.mjs",
   "operational-alerts.test.mjs",
   "storage-schema-health.test.mjs",
   "quick-tools-navigation.test.mjs",
