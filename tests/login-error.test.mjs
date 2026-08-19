@@ -11,6 +11,8 @@ const [loginRoute, sendatrack] = await Promise.all([
 test("classifies rejected SENDATRACK credentials separately from provider outages", () => {
   assert.equal(classifyLoginError(401, "authentication_failed"), "invalid_credentials");
   assert.equal(classifyLoginError(503, "sendatrack_unavailable"), "service_unavailable");
+  assert.equal(classifyLoginError(503, "login_failed"), "login_failed");
+  assert.equal(classifyLoginError(503, null), "service_unavailable");
   assert.equal(classifyLoginError(500, "unexpected"), "login_failed");
 });
 
