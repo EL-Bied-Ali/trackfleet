@@ -1,0 +1,34 @@
+name: Runtime schema safety
+
+on:
+  push:
+    branches:
+      - main
+      - dashboard-query-batching
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify runtime schema bootstrap safety
+        run: node --test tests/runtime-schema-safety.test.mjs
+      - name: Typecheck Vercel runtime
+        env:
+          VERCEL: "1"
+          NITRO_PRESET: "vercel"
+        run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
+      - name: Build shared Postgres Cloudflare runtime
+        env:
+          TRACKFLEET_STORAGE: postgres
+        run: pnpm exec vinext build
