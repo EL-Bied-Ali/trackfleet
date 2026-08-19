@@ -4,6 +4,8 @@ import test from "node:test";
 
 const runtimeWorkflow = new URL("../.github/workflows/runtime-schema-safety.yml", import.meta.url);
 const deployWorkflow = new URL("../.github/workflows/cloudflare-production-deploy.yml", import.meta.url);
+const smokeWorkflow = new URL("../.github/workflows/deployed-smoke-test.yml", import.meta.url);
+const automationWorkflow = new URL("../.github/workflows/automation-tick.yml", import.meta.url);
 
 const criticalRegressionTests = [
   "runtime-schema-safety.test.mjs",
@@ -64,4 +66,24 @@ test("production deploy publishes observable Cloudflare and D1 commit statuses",
   assert.match(source, /failover\?\.reason === "replication_ready"/);
   assert.match(source, /failover\?\.automatic === true/);
   assert.match(source, /if: always\(\)/);
+});
+
+test("client smoke test targets Cloudflare and checks launch readiness", async () => {
+  const source = await readFile(smokeWorkflow, "utf8");
+  assert.match(source, /https:\/\/trackfleet\.chronoplan\.workers\.dev/);
+  assert.match(source, /storage\?\.mode !== "postgres"/);
+  assert.match(source, /storage\?\.persistent !== true/);
+  assert.match(source, /storage\?\.connected !== true/);
+  assert.match(source, /sessionEncryptionConfigured !== true/);
+  assert.match(source, /sendatrackConfigured !== true/);
+  assert.match(source, /automation\?\.tickProtected !== true/);
+  assert.match(source, /api\/auth\/session/);
+  assert.match(source, /input\[name="accountID"\]/);
+  assert.match(source, /input\[name="password"\]/);
+});
+
+test("business automation defaults to the Cloudflare production origin", async () => {
+  const source = await readFile(automationWorkflow, "utf8");
+  assert.match(source, /TRACKFLEET_BASE_URL \|\| 'https:\/\/trackfleet\.chronoplan\.workers\.dev'/);
+  assert.doesNotMatch(source, /trackfleet-self\.vercel\.app/);
 });
