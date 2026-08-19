@@ -37,6 +37,8 @@ jobs:
         run: node --experimental-strip-types --test tests/storage-failover-readiness.test.mjs tests/d1-standby-readiness-behavior.test.mjs
       - name: Verify D1 read-only failover contract
         run: node --test tests/d1-readonly-failover.test.mjs
+      - name: Drill D1 read-only failover behavior
+        run: node --experimental-strip-types --test tests/d1-failover-drill.test.mjs
       - name: Verify D1 standby cron contract
         run: node --test tests/d1-standby-cron.test.mjs
       - name: Verify D1 session replication contract

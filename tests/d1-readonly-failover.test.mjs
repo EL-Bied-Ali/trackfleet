@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const helper = fs.readFileSync("app/lib/d1-read-failover.ts", "utf8");
+const policy = fs.readFileSync("app/lib/d1-read-failover-policy.ts", "utf8");
 const delivery = fs.readFileSync("app/lib/delivery-store.cloudflare-postgres-failover.ts", "utf8");
 const operational = fs.readFileSync("app/lib/delivery-operational.cloudflare.ts", "utf8");
 const session = fs.readFileSync("app/lib/auth-session-store.cloudflare-postgres-failover.ts", "utf8");
@@ -17,7 +18,9 @@ test("D1 read failover is opt-in, readiness-gated and leased", () => {
   assert.match(helper, /TRACKFLEET_D1_READ_FAILOVER/);
   assert.match(helper, /getD1StandbyReadiness\(db\)/);
   assert.match(helper, /if \(!configured\(\)\) return false/);
-  assert.match(helper, /if \(!\(await approveAndActivateFailover\(\)\)\) throw primaryError/);
+  assert.match(helper, /approveFailover: approveAndActivateFailover/);
+  assert.match(helper, /executeReadFailover/);
+  assert.match(policy, /if \(!\(await input\.approveFailover\(\)\)\) throw primaryError/);
   assert.match(helper, /D1_READ_FAILOVER_LEASE_MS = 5 \* 60_000/);
   assert.match(helper, /id = 'd1_read_failover'/);
   assert.match(envExample, /TRACKFLEET_D1_READ_FAILOVER=false/);
@@ -78,7 +81,9 @@ test("existing sessions and site reads can fall back but their explicit writes r
 });
 
 test("Worker blocks external mutations while the read-only lease is active", () => {
-  assert.match(worker, /request\.method !== "GET" && request\.method !== "HEAD" && await d1ReadFailoverActive\(\)/);
+  assert.match(worker, /const readOnlyLeaseActive = await d1ReadFailoverActive\(\)/);
+  assert.match(worker, /shouldBlockMutationDuringReadFailover\(request\.method, readOnlyLeaseActive\)/);
+  assert.match(policy, /normalized !== "GET" && normalized !== "HEAD"/);
   assert.match(worker, /error: "read_only_failover"/);
   assert.match(worker, /status: 503/);
   assert.match(worker, /"retry-after": "60"/);

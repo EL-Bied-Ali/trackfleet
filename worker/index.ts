@@ -5,6 +5,7 @@ import { reconcileD1StandbySafely } from "../app/lib/d1-reconciliation-safe";
 import { reconcileD1Telemetry } from "../app/lib/d1-telemetry-reconciliation";
 import { backfillD1DeliveryHistory } from "../app/lib/d1-history-backfill";
 import { d1ReadFailoverActive } from "../app/lib/d1-read-failover";
+import { shouldBlockMutationDuringReadFailover } from "../app/lib/d1-read-failover-policy";
 
 interface Env {
   ASSETS: Fetcher;
@@ -79,12 +80,6 @@ async function runScheduledStandbyMaintenance(cron: string) {
   console.warn("[trackfleet:replication] unknown scheduled maintenance cron", { cron });
 }
 
-// Image security config. SVG sources with .svg extension auto-skip the
-// optimization endpoint on the client side (served directly, no proxy).
-// To route SVGs through the optimizer (with security headers), set
-// dangerouslyAllowSVG: true in next.config.js and uncomment below:
-// const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
-
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -101,7 +96,8 @@ const worker = {
       return withSecurityHeaders(response);
     }
 
-    if (request.method !== "GET" && request.method !== "HEAD" && await d1ReadFailoverActive()) {
+    const readOnlyLeaseActive = await d1ReadFailoverActive();
+    if (shouldBlockMutationDuringReadFailover(request.method, readOnlyLeaseActive)) {
       return readOnlyFailoverResponse();
     }
 
