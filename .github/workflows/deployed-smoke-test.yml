@@ -17,6 +17,9 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    permissions:
+      statuses: write
+      actions: read
     env:
       TRACKFLEET_BASE_URL: ${{ github.event.inputs.base_url || 'https://trackfleet.chronoplan.workers.dev' }}
     steps:
@@ -135,3 +138,27 @@ jobs:
           name: trackfleet-client-rendered-home
           path: /tmp/trackfleet-e2e/trackfleet-client-home.png
           if-no-files-found: ignore
+
+      - name: Publish deployed smoke status
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SMOKE_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          if [ "$SMOKE_STATUS" = "success" ]; then
+            state="success"
+            description="Deployed TrackFleet UI and core production smoke passed"
+          else
+            state="failure"
+            description="Deployed TrackFleet smoke failed"
+          fi
+          gh api --method POST "repos/$REPOSITORY/statuses/$TARGET_SHA" \
+            -f state="$state" \
+            -f context="trackfleet/deployed-smoke" \
+            -f target_url="$RUN_URL" \
+            -f description="$description"
