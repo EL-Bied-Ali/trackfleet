@@ -1,3 +1,5 @@
+import { runtimeEnv } from "trackfleet-runtime-env";
+
 export type StorageHealth = {
   mode: "postgres" | "cloudflare-d1" | "memory";
   persistent: boolean;
@@ -26,11 +28,21 @@ export async function getStorageHealth(): Promise<StorageHealth> {
     }
   }
 
-  // Cloudflare's D1 binding is injected through the runtime adapter rather than
-  // process.env. This marker is best-effort; the D1 delivery store performs the
-  // authoritative check when it is used.
-  if (process.env.CF_PAGES || process.env.CLOUDFLARE_ACCOUNT_ID) {
-    return { mode: "cloudflare-d1", persistent: true, connected: true, error: null };
+  if (runtimeEnv.DB) {
+    try {
+      await runtimeEnv.DB.prepare("SELECT 1 AS ok").first();
+      return { mode: "cloudflare-d1", persistent: true, connected: true, error: null };
+    } catch (error) {
+      console.error("[trackfleet:storage] D1 health check failed", {
+        message: error instanceof Error ? error.message : "D1 unavailable",
+      });
+      return {
+        mode: "cloudflare-d1",
+        persistent: true,
+        connected: false,
+        error: "d1_unavailable",
+      };
+    }
   }
 
   return { mode: "memory", persistent: false, connected: true, error: null };
