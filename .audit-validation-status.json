@@ -1,12 +1,12 @@
 {
-  "sourceSha": "ebc59a65fbf85a3b8f830186fcd05a391259c7a6",
+  "sourceSha": "710ee6744ec7d834612f3f5e94027fb53083dacd",
   "job": "failure",
   "install": "success",
   "security": "success",
   "automation": "success",
   "headers": "success",
-  "lint": "success",
-  "typecheck": "failure",
+  "lint": "failure",
+  "typecheck": "skipped",
   "buildVercel": "skipped",
   "buildCloudflare": "skipped"
 }
