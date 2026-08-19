@@ -1,4 +1,4 @@
-import { store } from "trackfleet-delivery-store";
+import { store } from "trackfleet-delivery-store-full";
 import { siteStore } from "trackfleet-site-store";
 import { getCompanySession } from "../../../lib/company-auth";
 import { buildTenantDataExport } from "../../../lib/tenant-data-export";
