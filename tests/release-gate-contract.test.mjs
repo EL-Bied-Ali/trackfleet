@@ -67,11 +67,13 @@ test("post-deploy verification requires persistent Postgres health", async () =>
   assert.match(source, /health\?\.storage\?\.connected === true/);
 });
 
-test("production deploy publishes observable Cloudflare and D1 commit statuses", async () => {
+test("production deploy publishes observable Cloudflare and D1 commit statuses with run links", async () => {
   const source = await readFile(deployWorkflow, "utf8");
   assert.match(source, /statuses:\s*write/);
   assert.match(source, /context="trackfleet\/cloudflare-production"/);
   assert.match(source, /context="trackfleet\/d1-standby"/);
+  assert.match(source, /RUN_URL:\s*\$\{\{ github\.server_url \}\}\/\$\{\{ github\.repository \}\}\/actions\/runs\/\$\{\{ github\.run_id \}\}/);
+  assert.match(source, /target_url="\$RUN_URL"/);
   assert.match(source, /failover\?\.ready === true/);
   assert.match(source, /failover\?\.reason === "replication_ready"/);
   assert.match(source, /failover\?\.automatic === true/);
