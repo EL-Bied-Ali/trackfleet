@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   tick:
+    # On workflow_run, only tick after a successful production deploy. Push/schedule/manual runs still use the health gate below.
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
