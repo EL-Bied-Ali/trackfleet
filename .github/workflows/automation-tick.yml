@@ -3,6 +3,9 @@ name: TrackFleet automation tick
 on:
   schedule:
     - cron: "*/5 * * * *"
+  workflow_run:
+    workflows: ["Cloudflare production deploy"]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -11,6 +14,7 @@ concurrency:
 
 jobs:
   tick:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
@@ -38,6 +42,7 @@ jobs:
           }
 
           const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
+            method: 'POST',
             headers: { authorization: `Bearer ${secret}` },
             cache: 'no-store',
           });
