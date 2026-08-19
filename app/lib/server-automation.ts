@@ -37,22 +37,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   if (!accountID) throw new Error("sendatrack_server_credentials_missing");
 
   const snapshot = await getSendatrackSnapshot();
-  if (!snapshot.connected) {
-    return {
-      connected: false,
-      vehicles: snapshot.vehicles.length,
-      transitions: 0,
-      newEvents: 0,
-      delayEvents: 0,
-      arrivalSiteEvents: 0,
-      automaticCompletions: 0,
-      notificationsSent: 0,
-      notificationFailures: 0,
-      etaObservations: 0,
-      fleetPositions: 0,
-      telemetryPruned: 0,
-    };
-  }
+  if (!snapshot.connected) throw new Error("sendatrack_snapshot_disconnected");
 
   const companyId = await companyIdForAccount(accountID);
   const fleetPositionResults = await Promise.all(snapshot.vehicles.map((vehicle) => store.recordFleetPosition({
