@@ -11,7 +11,8 @@
       "trackfleet-site-store": ["./app/lib/site-store.vercel.ts"],
       "trackfleet-login-rate-limit": ["./app/lib/login-rate-limit.vercel.ts"],
       "trackfleet-automation-heartbeat": ["./app/lib/automation-heartbeat.vercel.ts"],
-      "trackfleet-auth-session-store": ["./app/lib/auth-session-store.vercel.ts"]
+      "trackfleet-auth-session-store": ["./app/lib/auth-session-store.vercel.ts"],
+      "trackfleet-telemetry-retention": ["./app/lib/telemetry-retention.vercel.ts"]
     }
   },
   "include": [
@@ -26,6 +27,7 @@
     "app/lib/site-store.cloudflare.ts",
     "app/lib/login-rate-limit.cloudflare.ts",
     "app/lib/automation-heartbeat.cloudflare.ts",
-    "app/lib/auth-session-store.cloudflare.ts"
+    "app/lib/auth-session-store.cloudflare.ts",
+    "app/lib/telemetry-retention.cloudflare.ts"
   ]
 }
