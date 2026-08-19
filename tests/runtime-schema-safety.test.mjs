@@ -41,7 +41,7 @@ test("Cloudflare D1 runtime adapters never perform schema DDL or schema introspe
 
 test("D1 schema preparation is explicit and outside runtime adapters", () => {
   assert.match(d1SchemaPreparation, /wrangler/);
-  assert.match(d1SchemaPreparation, /PRAGMA table_info\(deliveries\)/);
+  assert.match(d1SchemaPreparation, /PRAGMA table_info\(\$\{table\}\)/);
   assert.match(d1SchemaPreparation, /CREATE TABLE IF NOT EXISTS deliveries/);
   assert.match(d1SchemaPreparation, /CREATE TABLE IF NOT EXISTS automation_runtime_state/);
   assert.match(d1SchemaPreparation, /CREATE TABLE IF NOT EXISTS telemetry_retention_state/);
