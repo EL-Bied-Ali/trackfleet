@@ -153,7 +153,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       });
       if (!response.ok) throw new Error("completion_failed");
       setManualDeliveries((items) => items.filter((item) => item.id !== delivery.id));
-      window.dispatchEvent(new Event("trackfleet-deliveries-changed"));
+      window.location.reload();
     } catch {
       setCompletionError("completion_failed");
     } finally {

@@ -97,5 +97,6 @@ test("manual completion UI requires explicit operator confirmation", () => {
   assert.match(siteManager, /window\.confirm\(confirmation\)/);
   assert.match(siteManager, /\/api\/deliveries\/manual-completion/);
   assert.match(siteManager, /confirmDelivered: true/);
+  assert.match(siteManager, /window\.location\.reload\(\)/);
   assert.match(siteManager, /Marquer livré/);
 });
