@@ -4,6 +4,7 @@ import test from "node:test";
 
 const keySource = fs.readFileSync("app/lib/login-rate-limit-key.ts", "utf8");
 const vercelSource = fs.readFileSync("app/lib/login-rate-limit.vercel.ts", "utf8");
+const sharedPostgresSource = fs.readFileSync("app/lib/login-rate-limit.shared-postgres.ts", "utf8");
 const cloudflareSource = fs.readFileSync("app/lib/login-rate-limit.cloudflare.ts", "utf8");
 const loginRoute = fs.readFileSync("app/api/auth/login/route.ts", "utf8");
 const viteConfig = fs.readFileSync("vite.config.ts", "utf8");
@@ -17,7 +18,8 @@ test("login rate limit keys pseudonymize client addresses with HMAC", () => {
   assert.equal(keySource.includes("console.log"), false);
 });
 
-test("Vercel uses an atomic shared Neon rate limit counter", () => {
+test("shared Postgres runtime uses an atomic Neon rate limit counter", () => {
+  assert.match(sharedPostgresSource, /login-rate-limit\.vercel/);
   assert.match(vercelSource, /CREATE TABLE IF NOT EXISTS login_rate_limits/);
   assert.match(vercelSource, /ON CONFLICT \(client_key\) DO UPDATE/);
   assert.match(vercelSource, /attempts \+ 1/);
@@ -26,10 +28,10 @@ test("Vercel uses an atomic shared Neon rate limit counter", () => {
   assert.equal(vercelSource.includes("x-forwarded-for"), false, "raw client addresses must not reach the persistence module");
 });
 
-test("Cloudflare uses a shared D1 rate limit counter with the same policy", () => {
-  assert.match(cloudflareSource, /CREATE TABLE IF NOT EXISTS login_rate_limits/);
+test("Cloudflare D1 uses the same atomic rate limit policy", () => {
+  assert.match(cloudflareSource, /INSERT INTO login_rate_limits/);
   assert.match(cloudflareSource, /ON CONFLICT\(client_key\) DO UPDATE/);
-  assert.match(cloudflareSource, /attempts \+ 1/);
+  assert.match(cloudflareSource, /login_rate_limits\.attempts \+ 1/);
   assert.match(cloudflareSource, /Number\(row\.attempts\) <= maxAttempts/);
   assert.match(cloudflareSource, /DELETE FROM login_rate_limits/);
 });
@@ -43,9 +45,9 @@ test("login route prefers distributed limits and fails safely to bounded local p
   assert.match(loginRoute, /too_many_login_attempts/);
 });
 
-test("runtime aliases resolve the correct rate limiter on Vercel and Cloudflare", () => {
+test("runtime aliases resolve the correct rate limiter on shared Postgres and Cloudflare", () => {
   assert.match(viteConfig, /trackfleet-login-rate-limit/);
-  assert.match(viteConfig, /login-rate-limit\.vercel\.ts/);
+  assert.match(viteConfig, /login-rate-limit\.shared-postgres\.ts/);
   assert.match(viteConfig, /login-rate-limit\.cloudflare\.ts/);
   assert.match(tsconfigVercel, /trackfleet-login-rate-limit/);
 });
