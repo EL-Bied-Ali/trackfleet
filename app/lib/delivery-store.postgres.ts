@@ -55,6 +55,13 @@ type RawEvent = {
   created_at: string | Date;
 };
 
+type RawPendingNotification = RawDelivery & {
+  event_delivery_id: string;
+  event_type: DeliveryEventType;
+  event_progress: number;
+  event_created_at: string | Date;
+};
+
 function numberOrNull(value: number | string | null) {
   if (value === null) return null;
   const parsed = Number(value);
@@ -96,6 +103,22 @@ function hydrate(row: RawDelivery): DeliveryRow {
 }
 function hydrateEvent(row: RawEvent): DeliveryEventRow {
   return { deliveryId: row.delivery_id, type: row.type, progress: Number(row.progress), createdAt: new Date(row.created_at) };
+}
+function hydrateTrip(row: Record<string, unknown>): TripRecord {
+  const rawStops = JSON.parse(String(row.stops_json)) as Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: string | null }>;
+  return {
+    id: String(row.id),
+    companyId: String(row.company_id),
+    routeTemplateId: String(row.route_template_id),
+    vehicleKey: String(row.vehicle_key),
+    truck: String(row.truck),
+    sendatrackVehicleId: String(row.sendatrack_vehicle_id ?? ""),
+    originSiteId: row.origin_site_id ? String(row.origin_site_id) : null,
+    stops: rawStops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt ? new Date(stop.plannedArrivalAt) : null })),
+    status: String(row.status) as TripRecord["status"],
+    createdAt: new Date(String(row.created_at)),
+    updatedAt: new Date(String(row.updated_at)),
+  };
 }
 function explicitDestination(delivery: DeliveryRow): [number, number] | null {
   return typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
@@ -425,29 +448,32 @@ export const postgresStore: DeliveryStore = {
 
   async upsertTrip(input) {
     await ensureSchema();
-    const existing = await sql`SELECT * FROM trips WHERE company_id = ${input.companyId} AND id = ${input.id} LIMIT 1` as Array<Record<string, unknown>>;
-    if (!existing.length) {
-      const now = new Date().toISOString();
-      await sql`INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at)
-        VALUES (${input.id}, ${input.companyId}, ${input.routeTemplateId}, ${input.vehicleKey}, ${input.truck}, ${input.sendatrackVehicleId}, ${input.originSiteId}, ${JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })))}, ${input.status}, ${now}, ${now})`;
-    } else {
-      await sql`UPDATE trips SET route_template_id = ${input.routeTemplateId}, vehicle_key = ${input.vehicleKey}, truck = ${input.truck}, sendatrack_vehicle_id = ${input.sendatrackVehicleId}, origin_site_id = ${input.originSiteId}, stops_json = ${JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })))}, status = ${input.status}, updated_at = ${new Date().toISOString()} WHERE company_id = ${input.companyId} AND id = ${input.id}`;
-    }
-    return (await this.getTrip(input.companyId, input.id))!;
+    const now = new Date().toISOString();
+    const stopsJson = JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })));
+    const rows = await sql`INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at)
+      VALUES (${input.id}, ${input.companyId}, ${input.routeTemplateId}, ${input.vehicleKey}, ${input.truck}, ${input.sendatrackVehicleId}, ${input.originSiteId}, ${stopsJson}, ${input.status}, ${now}, ${now})
+      ON CONFLICT (company_id, id) DO UPDATE SET
+        route_template_id = EXCLUDED.route_template_id,
+        vehicle_key = EXCLUDED.vehicle_key,
+        truck = EXCLUDED.truck,
+        sendatrack_vehicle_id = EXCLUDED.sendatrack_vehicle_id,
+        origin_site_id = EXCLUDED.origin_site_id,
+        stops_json = EXCLUDED.stops_json,
+        status = EXCLUDED.status,
+        updated_at = EXCLUDED.updated_at
+      RETURNING *` as Array<Record<string, unknown>>;
+    return hydrateTrip(rows[0]);
   },
   async getTrip(companyId, tripId) {
     await ensureSchema();
     const rows = await sql`SELECT * FROM trips WHERE company_id = ${companyId} AND id = ${tripId} LIMIT 1` as Array<Record<string, unknown>>;
-    const row = rows[0];
-    if (!row) return null;
-    const rawStops = JSON.parse(String(row.stops_json)) as Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: string | null }>;
-    return { id: String(row.id), companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), vehicleKey: String(row.vehicle_key), truck: String(row.truck), sendatrackVehicleId: String(row.sendatrack_vehicle_id ?? ''), originSiteId: row.origin_site_id ? String(row.origin_site_id) : null, stops: rawStops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt ? new Date(stop.plannedArrivalAt) : null })), status: String(row.status) as TripRecord['status'], createdAt: new Date(String(row.created_at)), updatedAt: new Date(String(row.updated_at)) };
+    return rows[0] ? hydrateTrip(rows[0]) : null;
   },
   async listTrips(companyId, limit = 100) {
     await ensureSchema();
     const capped = Math.max(1, Math.min(1000, Math.round(limit)));
-    const rows = await sql`SELECT id FROM trips WHERE company_id = ${companyId} ORDER BY updated_at DESC LIMIT ${capped}` as Array<{ id: string }>;
-    return (await Promise.all(rows.map((row) => this.getTrip(companyId, row.id)))).filter((trip): trip is TripRecord => Boolean(trip));
+    const rows = await sql`SELECT * FROM trips WHERE company_id = ${companyId} ORDER BY updated_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
+    return rows.map(hydrateTrip);
   },
 
   async assignDeliveryTrip(deliveryId, companyId, tripId) {
@@ -474,22 +500,28 @@ export const postgresStore: DeliveryStore = {
   async listPendingNotifications(companyId) {
     await ensureSchema();
     const staleBefore = new Date(Date.now() - 5 * 60_000).toISOString();
-    const rows = await sql`SELECT e.delivery_id, e.type, e.progress, e.created_at
+    const rows = await sql`SELECT d.*,
+        e.delivery_id AS event_delivery_id,
+        e.type AS event_type,
+        e.progress AS event_progress,
+        e.created_at AS event_created_at
       FROM delivery_events e
       JOIN deliveries d ON d.id = e.delivery_id
       LEFT JOIN delivery_notifications n ON n.delivery_id = e.delivery_id AND n.event_type = e.type AND n.channel = 'whatsapp'
       WHERE d.company_id = ${companyId}
         AND n.sent_at IS NULL
         AND (n.attempted_at IS NULL OR n.attempted_at < ${staleBefore})
-      ORDER BY e.created_at ASC` as RawEvent[];
-    const pending = [];
-    for (const raw of rows) {
-      const event = hydrateEvent(raw);
-      if (!customerFacingEvent(event.type)) continue;
-      const deliveryRows = await sql`SELECT * FROM deliveries WHERE id = ${event.deliveryId} LIMIT 1` as RawDelivery[];
-      if (deliveryRows[0]) pending.push({ delivery: hydrate(deliveryRows[0]), event });
-    }
-    return pending;
+      ORDER BY e.created_at ASC` as RawPendingNotification[];
+    return rows.flatMap((row) => {
+      const event = hydrateEvent({
+        delivery_id: row.event_delivery_id,
+        type: row.event_type,
+        progress: row.event_progress,
+        created_at: row.event_created_at,
+      });
+      if (!customerFacingEvent(event.type)) return [];
+      return [{ delivery: hydrate(row), event }];
+    });
   },
 
   async claimNotification(deliveryId, type) {
