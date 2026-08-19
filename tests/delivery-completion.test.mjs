@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import "./unloading-delay-suppression.test.mjs";
+import "./unload-departure-guard.test.mjs";
 import { evaluateArrivalDwell, parseUnloadGraceMinutes } from "../app/lib/delivery-arrival.ts";
 
 const [routeProgress, serverAutomation, vercelCompletion, cloudflareCompletion, manualRoute, siteManager] = await Promise.all([
