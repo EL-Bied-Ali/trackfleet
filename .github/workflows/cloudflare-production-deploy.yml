@@ -15,17 +15,54 @@ jobs:
   deploy:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
+      actions: read
     env:
       TRACKFLEET_STORAGE: postgres
       TRACKFLEET_BASE_URL: https://trackfleet.chronoplan.workers.dev
     steps:
+      - name: Resolve validated commit
+        id: release
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require Runtime schema safety for the same commit
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            runs="$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$RELEASE_SHA&per_page=100")"
+            conclusion="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Runtime schema safety" and .event == "push")][0].conclusion // "pending"')"
+            status="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Runtime schema safety" and .event == "push")][0].status // "missing"')"
+            echo "Runtime schema safety: status=$status conclusion=$conclusion"
+            if [ "$conclusion" = "success" ]; then
+              exit 0
+            fi
+            if [ "$status" = "completed" ] && [ "$conclusion" != "success" ]; then
+              echo "Runtime schema safety failed for $RELEASE_SHA. Production deployment is blocked."
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for Runtime schema safety on $RELEASE_SHA. Production deployment is blocked."
+          exit 1
+
       - name: Checkout validated commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ steps.release.outputs.sha }}
 
       - uses: pnpm/action-setup@v4
         with:
