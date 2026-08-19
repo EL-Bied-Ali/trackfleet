@@ -14,6 +14,7 @@ export type ArrivalCompletionResult = {
   arrivalSiteSince: Date | null;
 };
 
+const maxContinuousObservationGapMs = 30 * 60_000;
 let schemaPromise: Promise<void> | null = null;
 
 function sqlClient() {
@@ -30,8 +31,12 @@ async function ensureSchema() {
         company_id text NOT NULL,
         delivery_id text NOT NULL,
         arrived_at timestamptz NOT NULL,
+        last_observed_at timestamptz NOT NULL,
         PRIMARY KEY (company_id, delivery_id)
       )`;
+      await sql`ALTER TABLE delivery_arrival_state ADD COLUMN IF NOT EXISTS last_observed_at timestamptz`;
+      await sql`UPDATE delivery_arrival_state SET last_observed_at = arrived_at WHERE last_observed_at IS NULL`;
+      await sql`ALTER TABLE delivery_arrival_state ALTER COLUMN last_observed_at SET NOT NULL`;
       await sql`CREATE INDEX IF NOT EXISTS idx_delivery_arrival_state_arrived_at ON delivery_arrival_state(arrived_at)`;
     })().catch((error) => {
       schemaPromise = null;
@@ -49,16 +54,34 @@ export async function observeArrivalCompletion(input: ArrivalCompletionObservati
     return { justEntered: false, deliveredNow: false, arrivalSiteSince: null };
   }
 
-  const inserted = await sql`INSERT INTO delivery_arrival_state (company_id, delivery_id, arrived_at)
-    VALUES (${input.companyId}, ${input.deliveryId}, ${input.observationAt.toISOString()})
-    ON CONFLICT (company_id, delivery_id) DO NOTHING
-    RETURNING delivery_id` as Array<{ delivery_id: string }>;
-  const rows = await sql`SELECT arrived_at FROM delivery_arrival_state
-    WHERE company_id = ${input.companyId} AND delivery_id = ${input.deliveryId} LIMIT 1` as Array<{ arrived_at: string | Date }>;
-  const arrivalSiteSince = rows[0] ? new Date(rows[0].arrived_at) : input.observationAt;
-  const elapsedMinutes = Math.max(0, (input.observationAt.getTime() - arrivalSiteSince.getTime()) / 60_000);
+  const rows = await sql`SELECT arrived_at, last_observed_at FROM delivery_arrival_state
+    WHERE company_id = ${input.companyId} AND delivery_id = ${input.deliveryId} LIMIT 1` as Array<{
+      arrived_at: string | Date;
+      last_observed_at: string | Date;
+    }>;
+  const existing = rows[0];
+  const observationMs = input.observationAt.getTime();
+  const previousObservedMs = existing ? new Date(existing.last_observed_at).getTime() : NaN;
+  const continuityBroken = !existing
+    || !Number.isFinite(previousObservedMs)
+    || observationMs < previousObservedMs
+    || observationMs - previousObservedMs > maxContinuousObservationGapMs;
+
+  let arrivalSiteSince = continuityBroken ? input.observationAt : new Date(existing.arrived_at);
+  if (continuityBroken) {
+    await sql`INSERT INTO delivery_arrival_state (company_id, delivery_id, arrived_at, last_observed_at)
+      VALUES (${input.companyId}, ${input.deliveryId}, ${input.observationAt.toISOString()}, ${input.observationAt.toISOString()})
+      ON CONFLICT (company_id, delivery_id) DO UPDATE SET
+        arrived_at = EXCLUDED.arrived_at,
+        last_observed_at = EXCLUDED.last_observed_at`;
+  } else {
+    await sql`UPDATE delivery_arrival_state SET last_observed_at = ${input.observationAt.toISOString()}
+      WHERE company_id = ${input.companyId} AND delivery_id = ${input.deliveryId}`;
+  }
+
+  const elapsedMinutes = Math.max(0, (observationMs - arrivalSiteSince.getTime()) / 60_000);
   if (elapsedMinutes < input.unloadGraceMinutes) {
-    return { justEntered: inserted.length > 0, deliveredNow: false, arrivalSiteSince };
+    return { justEntered: continuityBroken, deliveredNow: false, arrivalSiteSince };
   }
 
   const completed = await sql`WITH updated AS (
@@ -76,23 +99,24 @@ export async function observeArrivalCompletion(input: ArrivalCompletionObservati
   if (completed.length) {
     await sql`DELETE FROM delivery_arrival_state WHERE company_id = ${input.companyId} AND delivery_id = ${input.deliveryId}`;
   }
-  return { justEntered: inserted.length > 0, deliveredNow: completed.length > 0, arrivalSiteSince };
+  return { justEntered: false, deliveredNow: completed.length > 0, arrivalSiteSince };
 }
 
 export async function completeDeliveryManually(companyId: string, deliveryId: string) {
   const sql = await ensureSchema();
+  const now = new Date().toISOString();
   const completed = await sql`WITH updated AS (
       UPDATE deliveries SET status = 'Delivered', progress = 100
       WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered'
       RETURNING id
     ), manual_event AS (
       INSERT INTO delivery_events (delivery_id, type, progress, created_at)
-      SELECT id, 'MANUAL_DELIVERED', 100, ${new Date().toISOString()} FROM updated
+      SELECT id, 'MANUAL_DELIVERED', 100, ${now} FROM updated
       ON CONFLICT (delivery_id, type) DO NOTHING
       RETURNING delivery_id
     ), arrived_event AS (
       INSERT INTO delivery_events (delivery_id, type, progress, created_at)
-      SELECT id, 'ARRIVED', 100, ${new Date().toISOString()} FROM updated
+      SELECT id, 'ARRIVED', 100, ${now} FROM updated
       ON CONFLICT (delivery_id, type) DO NOTHING
       RETURNING delivery_id
     )
