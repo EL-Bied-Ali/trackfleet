@@ -1,0 +1,75 @@
+name: Cloudflare production deploy
+
+on:
+  workflow_run:
+    workflows: ["Platform build check"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: trackfleet-cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      TRACKFLEET_STORAGE: postgres
+      TRACKFLEET_BASE_URL: https://trackfleet.chronoplan.workers.dev
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared-Postgres Cloudflare Worker
+        run: pnpm exec vinext build
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+
+      - name: Verify production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            body="$(curl --fail --silent --show-error --max-time 15 "$TRACKFLEET_BASE_URL/api/health" || true)"
+            if BODY="$body" node - <<'NODE'
+          const body = process.env.BODY || "";
+          try {
+            const health = JSON.parse(body);
+            if (health?.ok === true && health?.storage?.mode === "postgres" && health?.storage?.connected === true) {
+              process.exit(0);
+            }
+          } catch {}
+          process.exit(1);
+          NODE
+            then
+              echo "Cloudflare production health verified."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Cloudflare production health verification failed."
+          exit 1
