@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { automationMissingRequirements } from "../app/lib/automation-health.ts";
+import { automationHeartbeatStatus, AUTOMATION_HEARTBEAT_STALE_AFTER_MS } from "../app/lib/automation-heartbeat-health.ts";
 import { decodeSessionEncryptionKey, sessionEncryptionKeyConfigured } from "../app/lib/session-encryption-key.ts";
 
-const [healthRoute, sendatrackTransport] = await Promise.all([
+const [healthRoute, tickRoute, sendatrackTransport, vercelHeartbeat, cloudflareHeartbeat] = await Promise.all([
   readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/api/automation/tick/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/sendatrack-transport.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/automation-heartbeat.vercel.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/automation-heartbeat.cloudflare.ts", import.meta.url), "utf8"),
 ]);
 const persistentStorage = { mode: "postgres", persistent: true, connected: true, error: null };
 
@@ -95,7 +99,43 @@ test("enabled WhatsApp requires provider and activation boundary", () => {
   }), ["whatsapp_provider", "whatsapp_activation_start"]);
 });
 
-test("health provider readiness includes explicit security and Meta requirements", () => {
+test("scheduler heartbeat becomes stale after three missed five-minute ticks", () => {
+  assert.equal(AUTOMATION_HEARTBEAT_STALE_AFTER_MS, 15 * 60_000);
+  const now = new Date("2026-08-19T00:20:00.000Z");
+  const fresh = automationHeartbeatStatus({
+    lastAttemptAt: new Date("2026-08-19T00:15:00.000Z"),
+    lastSuccessAt: new Date("2026-08-19T00:10:00.000Z"),
+    lastFailureAt: null,
+  }, now);
+  assert.equal(fresh.fresh, true);
+  assert.equal(fresh.successAgeSeconds, 600);
+
+  const stale = automationHeartbeatStatus({
+    lastAttemptAt: new Date("2026-08-19T00:04:00.000Z"),
+    lastSuccessAt: new Date("2026-08-19T00:04:59.000Z"),
+    lastFailureAt: null,
+  }, now);
+  assert.equal(stale.fresh, false);
+});
+
+test("automation tick records best-effort attempt, success and failure heartbeats", () => {
+  assert.match(tickRoute, /recordAutomationAttempt/);
+  assert.match(tickRoute, /recordAutomationSuccess/);
+  assert.match(tickRoute, /recordAutomationFailure/);
+  assert.match(tickRoute, /bestEffortHeartbeat/);
+});
+
+test("heartbeat persistence exists on both Neon and D1 without storing error details", () => {
+  for (const source of [vercelHeartbeat, cloudflareHeartbeat]) {
+    assert.match(source, /automation_runtime_state/);
+    assert.match(source, /last_attempt_at/);
+    assert.match(source, /last_success_at/);
+    assert.match(source, /last_failure_at/);
+    assert.doesNotMatch(source, /error_message|error_detail|stack/);
+  }
+});
+
+test("health provider readiness includes explicit security, Meta and scheduler liveness diagnostics", () => {
   assert.match(healthRoute, /sessionEncryptionKeyConfigured/);
   assert.match(healthRoute, /TRACKFLEET_ENCRYPTION_KEY/);
   assert.match(healthRoute, /sendatrackTransportIsSecure/);
@@ -104,4 +144,6 @@ test("health provider readiness includes explicit security and Meta requirements
   assert.match(healthRoute, /WHATSAPP_PHONE_NUMBER_ID/);
   assert.match(healthRoute, /WHATSAPP_TEMPLATE_NAME/);
   assert.match(healthRoute, /WHATSAPP_TEMPLATE_LANGUAGE/);
+  assert.match(healthRoute, /heartbeatAvailable/);
+  assert.match(healthRoute, /live: heartbeatAvailable \? heartbeat\.fresh : null/);
 });
