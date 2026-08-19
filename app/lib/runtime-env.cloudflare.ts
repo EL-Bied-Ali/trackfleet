@@ -7,6 +7,7 @@ export type TrackFleetRuntimeEnv = {
   SENDATRACK_PASSWORD?: string;
   SENDATRACK_API_URL?: string;
   TRACKFLEET_ENCRYPTION_KEY?: string;
+  TRACKFLEET_TELEMETRY_RETENTION_DAYS?: string;
   CRON_SECRET?: string;
   WHATSAPP_ACCESS_TOKEN?: string;
   WHATSAPP_PHONE_NUMBER_ID?: string;
