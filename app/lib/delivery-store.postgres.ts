@@ -13,6 +13,7 @@ const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the Postgres delivery store");
 const sql = neon(databaseUrl);
 let schemaPromise: Promise<void> | null = null;
+const runtimeSchemaBootstrapEnabled = process.env.TRACKFLEET_RUNTIME_SCHEMA_BOOTSTRAP === "true";
 
 type RawDelivery = {
   id: string;
@@ -108,6 +109,10 @@ function explicitOrigin(delivery: DeliveryRow): [number, number] | null {
 }
 
 async function ensureSchema() {
+  // Production requests must never spend their external-subrequest budget on
+  // schema creation/migration work. The legacy bootstrap remains available as
+  // an explicit one-time escape hatch for controlled development databases.
+  if (!runtimeSchemaBootstrapEnabled) return;
   if (schemaPromise) return schemaPromise;
   schemaPromise = (async () => {
     await sql`CREATE TABLE IF NOT EXISTS deliveries (
