@@ -15,8 +15,6 @@ export const belgiumMoroccoCorridor: Array<[number, number]> = [
 const MARRAKECH_FALLBACK: [number, number] = [-7.9811, 31.6295];
 
 const knownDestinations: Array<{ names: string[]; point: [number, number] }> = [
-  // City-level fallbacks only. Exact agency coordinates override these points
-  // as soon as a confirmed map pin is available.
   { names: ["CASABLANCA"], point: [-7.5898, 33.5731] },
   { names: ["RABAT", "SALÉ", "SALE"], point: [-6.7985, 34.0337] },
   { names: ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"], point: [-5.5000, 35.8900] },
@@ -128,18 +126,16 @@ export function routeForDestination(
   const exactIndex = base.findIndex((point) => samePoint(point, destinationPoint));
   if (exactIndex >= 0) route = base.slice(0, exactIndex + 1);
   else if (includesAny(normalized, ["TANGER MED", "TANGIER MED", "KSAR AL MAJAZ"])) {
-    route = appendIfDifferent(base.slice(0, 5), destinationPoint); // branch after Algeciras
+    route = appendIfDifferent(base.slice(0, 5), destinationPoint);
   } else if (includesAny(normalized, ["TÉTOUAN", "TETOUAN"])) {
-    route = appendIfDifferent(base.slice(0, 6), destinationPoint); // branch after Tanger
+    route = appendIfDifferent(base.slice(0, 6), destinationPoint);
   } else if (includesAny(normalized, ["TANGIER", "TANGER"])) {
     route = appendIfDifferent(base.slice(0, 6), destinationPoint);
   } else if (includesAny(normalized, ["RABAT", "SALÉ", "SALE"])) {
-    route = appendIfDifferent(base.slice(0, 7), destinationPoint); // branch around Rabat/Salé
+    route = appendIfDifferent(base.slice(0, 7), destinationPoint);
   } else if (includesAny(normalized, ["AGADIR", "TIKIOUINE"])) {
     route = appendIfDifferent(appendIfDifferent(base, MARRAKECH_FALLBACK), destinationPoint);
   } else {
-    // Casablanca and the inland/southern branches share the corridor through
-    // Casablanca before continuing to the selected agency.
     route = appendIfDifferent(base, destinationPoint);
   }
 
@@ -205,20 +201,21 @@ export function deriveDeliveryState(
   metrics: RouteMetrics,
   speed: number,
   previousProgress = 0,
-  arrivalRadiusKm = 0.5,
+  _arrivalRadiusKm = 0.5,
   positionAgeMinutes = 0,
 ) {
-  const safeArrivalRadiusKm = Math.max(0.05, Math.min(10, arrivalRadiusKm));
-  const freshPosition = positionAgeMinutes <= 30;
-  if (currentStatus === "Delivered" || (freshPosition && metrics.distanceToDestinationKm <= safeArrivalRadiusKm && speed <= 5)) {
+  if (currentStatus === "Delivered") {
     return { status: "Delivered" as const, progress: 100 };
   }
-  const progress = Math.max(previousProgress, metrics.progress);
+
+  // GPS reaching the destination no longer finalizes a delivery immediately.
+  // The completion layer requires a continuous unloading dwell (120 minutes by
+  // default) or an authenticated manual completion. Keep active deliveries at
+  // 99% until one of those completion paths confirms delivery.
+  const progress = Math.min(99, Math.max(previousProgress, metrics.progress));
   if (currentStatus === "Delayed") return { status: currentStatus, progress };
 
-  // A departure is a real movement away from the delivery baseline, not just a
-  // noisy/stale GPS jump. One kilometre gives enough margin for manoeuvring in
-  // a depot yard while >5 km/h confirms that the truck is actually moving.
+  const freshPosition = positionAgeMinutes <= 30;
   const movedBeyondDepartureZone = metrics.distanceFromOriginKm >= 1 || progress >= 1;
   if (currentStatus === "Loading" && freshPosition && movedBeyondDepartureZone && speed > 5) {
     return { status: "In transit" as const, progress };
