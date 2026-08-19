@@ -1,11 +1,11 @@
 {
-  "job": "failure",
+  "job": "success",
   "install": "success",
   "requestSecurity": "success",
   "automationHealth": "success",
   "headers": "success",
-  "lint": "failure",
-  "typecheck": "skipped",
-  "buildVercel": "skipped",
-  "buildCloudflare": "skipped"
+  "lint": "success",
+  "typecheck": "success",
+  "buildVercel": "success",
+  "buildCloudflare": "success"
 }
