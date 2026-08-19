@@ -47,20 +47,19 @@ export async function pruneTelemetry(companyId: string, retentionDays: number, n
   if (!claimed.length) return { ran: false, fleetPositions: 0, tripPositions: 0, etaObservations: 0 };
 
   const cutoff = telemetryRetentionCutoff(retentionDays, now).toISOString();
-  const [fleet, trip, eta] = await Promise.all([
-    sql`WITH deleted AS (
-      DELETE FROM fleet_position_observations WHERE company_id = ${companyId} AND position_at < ${cutoff} RETURNING 1
-    ) SELECT count(*)::int AS count FROM deleted` as Promise<Array<{ count: number }>>,
-    sql`WITH deleted AS (
-      DELETE FROM trip_position_observations WHERE company_id = ${companyId} AND position_at < ${cutoff} RETURNING 1
-    ) SELECT count(*)::int AS count FROM deleted` as Promise<Array<{ count: number }>>,
-    sql`WITH deleted AS (
-      DELETE FROM delivery_eta_observations
-      WHERE position_at < ${cutoff}
-        AND delivery_id IN (SELECT id FROM deliveries WHERE company_id = ${companyId})
-      RETURNING 1
-    ) SELECT count(*)::int AS count FROM deleted` as Promise<Array<{ count: number }>>,
-  ]);
+  const fleet = await sql`WITH deleted AS (
+    DELETE FROM fleet_position_observations WHERE company_id = ${companyId} AND position_at < ${cutoff} RETURNING 1
+  ) SELECT count(*)::int AS count FROM deleted` as Array<{ count: number }>;
+  const trip = await sql`WITH deleted AS (
+    DELETE FROM trip_position_observations WHERE company_id = ${companyId} AND position_at < ${cutoff} RETURNING 1
+  ) SELECT count(*)::int AS count FROM deleted` as Array<{ count: number }>;
+  const eta = await sql`WITH deleted AS (
+    DELETE FROM delivery_eta_observations
+    WHERE position_at < ${cutoff}
+      AND delivery_id IN (SELECT id FROM deliveries WHERE company_id = ${companyId})
+    RETURNING 1
+  ) SELECT count(*)::int AS count FROM deleted` as Array<{ count: number }>;
+
   return {
     ran: true,
     fleetPositions: Number(fleet[0]?.count ?? 0),
