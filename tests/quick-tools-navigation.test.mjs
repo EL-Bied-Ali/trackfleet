@@ -13,10 +13,11 @@ test("quick tools are hidden outside the authenticated dashboard and on public t
   assert.match(source, /response\.ok \? "visible" : "hidden"/);
 });
 
-test("quick tools expose operations and bulk import only after becoming visible", async () => {
+test("quick tools expose operations, storage growth and bulk import only after becoming visible", async () => {
   const source = await readFile(quickToolsUrl, "utf8");
   assert.match(source, /if \(state !== "visible"\) return null/);
   assert.match(source, /\/operations\?lang=/);
+  assert.match(source, /\/operations\/storage\?lang=/);
   assert.match(source, /\/import\?lang=/);
 });
 
