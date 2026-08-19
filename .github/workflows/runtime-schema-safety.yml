@@ -45,6 +45,8 @@ jobs:
         run: node --test tests/d1-append-replication.test.mjs
       - name: Verify D1 completion replication contract
         run: node --test tests/d1-completion-replication.test.mjs
+      - name: Verify D1 reconciliation contract
+        run: node --test tests/d1-reconciliation.test.mjs
       - name: Verify Postgres query budget
         run: node --test tests/postgres-query-budget.test.mjs
       - name: Verify batched-read behavior
