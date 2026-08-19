@@ -14,10 +14,11 @@ test("Cloudflare schedules standby maintenance as separate invocations", () => {
 });
 
 test("each cron dispatches exactly one bounded standby maintenance slice", () => {
-  assert.match(worker, /cron === operationalReconciliationCron[\s\S]*await reconcileD1Standby\(\)/);
+  assert.match(worker, /import \{ reconcileD1StandbySafely \}/);
+  assert.match(worker, /cron === operationalReconciliationCron[\s\S]*await reconcileD1StandbySafely\(\)/);
   assert.match(worker, /cron === telemetryReconciliationCron[\s\S]*await reconcileD1Telemetry\(\)/);
   assert.match(worker, /cron === historyBackfillCron[\s\S]*await backfillD1DeliveryHistory\(\)/);
-  assert.doesNotMatch(worker, /Promise\.all\(\[\s*reconcileD1Standby/);
+  assert.doesNotMatch(worker, /Promise\.all\(\[\s*reconcileD1StandbySafely/);
 });
 
 test("scheduled maintenance failures are surfaced instead of swallowed", () => {
