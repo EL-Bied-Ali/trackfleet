@@ -3,6 +3,9 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { readJsonObject } from "../app/lib/request-json.ts";
 
+await import("./dependency-security-contract.test.mjs");
+await import("./login-rate-limit-contract.test.mjs");
+
 const routeUrls = [
   "../app/api/deliveries/assign-trip/route.ts",
   "../app/api/deliveries/create-trip/route.ts",
@@ -12,6 +15,7 @@ const routeUrls = [
   "../app/api/deliveries/route.ts",
 ];
 const routes = await Promise.all(routeUrls.map((url) => readFile(new URL(url, import.meta.url), "utf8")));
+const loginRoute = await readFile(new URL("../app/api/auth/login/route.ts", import.meta.url), "utf8");
 
 test("safe JSON parser accepts only JSON objects", async () => {
   const objectRequest = new Request("https://trackfleet.example/api", {
@@ -31,12 +35,34 @@ test("safe JSON parser accepts only JSON objects", async () => {
   }
 });
 
+test("safe JSON parser stops oversized bodies even without trusting Content-Length", async () => {
+  const oversized = new Request("https://trackfleet.example/api", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ value: "x".repeat(512) }),
+  });
+  assert.equal(await readJsonObject(oversized, 64), null);
+
+  const declaredOversized = new Request("https://trackfleet.example/api", {
+    method: "POST",
+    headers: { "content-type": "application/json", "content-length": "999999" },
+    body: JSON.stringify({ value: "small" }),
+  });
+  assert.equal(await readJsonObject(declaredOversized, 64), null);
+});
+
 test("authenticated mutation routes reject malformed JSON consistently", () => {
   for (const route of routes) {
     assert.match(route, /readJsonObject\(request\)/);
     assert.match(route, /invalidJsonResponse\(\)/);
     assert.doesNotMatch(route, /const payload = await request\.json\(\)/);
   }
+});
+
+test("public login also uses the bounded JSON parser", () => {
+  assert.match(loginRoute, /readJsonObject\(request\)/);
+  assert.doesNotMatch(loginRoute, /request\.json\(\)/);
+  assert.match(loginRoute, /invalid_request/);
 });
 
 test("trip and vehicle mutation identifiers are bounded before storage or provider lookup", () => {
