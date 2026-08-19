@@ -29,9 +29,7 @@ const criticalRegressionTests = [
 
 test("runtime safety gate includes every recent production regression", async () => {
   const source = await readFile(runtimeWorkflow, "utf8");
-  for (const filename of criticalRegressionTests) {
-    assert.ok(source.includes(filename), `runtime safety gate is missing ${filename}`);
-  }
+  for (const filename of criticalRegressionTests) assert.ok(source.includes(filename), `runtime safety gate is missing ${filename}`);
 });
 
 test("runtime safety validates the same shared Postgres Cloudflare build used in production", async () => {
@@ -47,8 +45,8 @@ test("Cloudflare deployment starts once per main push and requires both validati
   assert.match(source, /Platform build check/);
   assert.match(source, /Runtime schema safety/);
   assert.match(source, /head_sha=\$RELEASE_SHA/);
-  assert.match(source, /platform_conclusion\" = \"success/);
-  assert.match(source, /runtime_conclusion\" = \"success/);
+  assert.match(source, /platform_conclusion" = "success/);
+  assert.match(source, /runtime_conclusion" = "success/);
   assert.match(source, /Both release gates passed/);
   assert.match(source, /Production deployment is blocked/);
 });

@@ -163,7 +163,13 @@ export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationR
     await recordState(d1, "last_success_at", Date.now());
     return { ran: true, reason: "ok", companies: companies.length, fleetPositions, tripPositions };
   } catch (error) {
-    try { await recordState(d1, "last_failure_at", Date.now()); } catch {}
+    try {
+      await recordState(d1, "last_failure_at", Date.now());
+    } catch (stateError) {
+      console.error("[trackfleet:d1] failed to persist telemetry reconciliation failure state", {
+        message: stateError instanceof Error ? stateError.message : "unknown_error",
+      });
+    }
     throw error;
   }
 }
