@@ -5,6 +5,7 @@ import { readJsonObject } from "../app/lib/request-json.ts";
 
 await import("./dependency-security-contract.test.mjs");
 await import("./login-rate-limit-contract.test.mjs");
+await import("./opaque-session-contract.test.mjs");
 
 const routeUrls = [
   "../app/api/deliveries/assign-trip/route.ts",
