@@ -1,0 +1,52 @@
+.tools {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 80;
+  display: flex;
+  gap: 8px;
+  padding: 7px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, .14);
+  backdrop-filter: blur(14px);
+}
+
+.tool,
+.toolPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 9px;
+  color: #222733;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.tool:hover {
+  background: #f3f4f6;
+}
+
+.toolPrimary {
+  background: #171a21;
+  color: white;
+}
+
+.toolPrimary:hover {
+  background: #2b303a;
+}
+
+@media (max-width: 720px) {
+  .tools {
+    right: 12px;
+    bottom: 12px;
+  }
+  .tool,
+  .toolPrimary {
+    padding: 0 10px;
+  }
+}
