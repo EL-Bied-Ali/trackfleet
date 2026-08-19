@@ -6,11 +6,21 @@ import {
   type PostgresSchemaProbe,
 } from "./storage-schema-contract";
 
+export type StorageFailoverHealth = {
+  candidate: "cloudflare-d1" | null;
+  available: boolean;
+  connected: boolean | null;
+  automatic: boolean;
+  reason: "d1_not_bound" | "replication_not_configured" | "primary_is_d1_or_memory";
+  error: string | null;
+};
+
 export type StorageHealth = {
   mode: "postgres" | "cloudflare-d1" | "memory";
   persistent: boolean;
   connected: boolean;
   error: string | null;
+  failover: StorageFailoverHealth;
 };
 
 type D1HealthBinding = {
@@ -27,9 +37,58 @@ function optionalD1Binding() {
   return (runtimeEnv as unknown as { DB?: D1HealthBinding }).DB;
 }
 
+function inactiveFailover(): StorageFailoverHealth {
+  return {
+    candidate: null,
+    available: false,
+    connected: null,
+    automatic: false,
+    reason: "primary_is_d1_or_memory",
+    error: null,
+  };
+}
+
+async function probeD1Standby(): Promise<StorageFailoverHealth> {
+  const db = optionalD1Binding();
+  if (!db) {
+    return {
+      candidate: null,
+      available: false,
+      connected: null,
+      automatic: false,
+      reason: "d1_not_bound",
+      error: null,
+    };
+  }
+  try {
+    await db.prepare("SELECT 1 AS ok").first();
+    return {
+      candidate: "cloudflare-d1",
+      available: true,
+      connected: true,
+      automatic: false,
+      reason: "replication_not_configured",
+      error: null,
+    };
+  } catch (error) {
+    console.error("[trackfleet:storage] D1 standby health check failed", {
+      message: error instanceof Error ? error.message : "D1 unavailable",
+    });
+    return {
+      candidate: "cloudflare-d1",
+      available: true,
+      connected: false,
+      automatic: false,
+      reason: "replication_not_configured",
+      error: "d1_unavailable",
+    };
+  }
+}
+
 export async function getStorageHealth(): Promise<StorageHealth> {
   const databaseUrl = runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
   if (databaseUrl) {
+    const failover = await probeD1Standby();
     try {
       const { neon } = await import("@neondatabase/serverless");
       const sql = neon(databaseUrl);
@@ -82,9 +141,10 @@ export async function getStorageHealth(): Promise<StorageHealth> {
           persistent: true,
           connected: false,
           error: "postgres_schema_incompatible",
+          failover,
         };
       }
-      return { mode: "postgres", persistent: true, connected: true, error: null };
+      return { mode: "postgres", persistent: true, connected: true, error: null, failover };
     } catch (error) {
       console.error("[trackfleet:storage] postgres health check failed", {
         message: error instanceof Error ? error.message : "Postgres unavailable",
@@ -94,6 +154,7 @@ export async function getStorageHealth(): Promise<StorageHealth> {
         persistent: true,
         connected: false,
         error: "postgres_unavailable",
+        failover,
       };
     }
   }
@@ -102,7 +163,7 @@ export async function getStorageHealth(): Promise<StorageHealth> {
   if (db) {
     try {
       await db.prepare("SELECT 1 AS ok").first();
-      return { mode: "cloudflare-d1", persistent: true, connected: true, error: null };
+      return { mode: "cloudflare-d1", persistent: true, connected: true, error: null, failover: inactiveFailover() };
     } catch (error) {
       console.error("[trackfleet:storage] D1 health check failed", {
         message: error instanceof Error ? error.message : "D1 unavailable",
@@ -112,9 +173,10 @@ export async function getStorageHealth(): Promise<StorageHealth> {
         persistent: true,
         connected: false,
         error: "d1_unavailable",
+        failover: inactiveFailover(),
       };
     }
   }
 
-  return { mode: "memory", persistent: false, connected: true, error: null };
+  return { mode: "memory", persistent: false, connected: true, error: null, failover: inactiveFailover() };
 }
