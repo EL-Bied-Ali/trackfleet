@@ -36,13 +36,17 @@ jobs:
           set -euo pipefail
           for attempt in $(seq 1 40); do
             runs="$(gh api "repos/$REPOSITORY/actions/runs?head_sha=$RELEASE_SHA&per_page=100")"
+            platform_run_id="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Platform build check" and .event == "push")][0].id // ""')"
+            platform_url="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Platform build check" and .event == "push")][0].html_url // ""')"
             platform_status="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Platform build check" and .event == "push")][0].status // "missing"')"
             platform_conclusion="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Platform build check" and .event == "push")][0].conclusion // "pending"')"
+            runtime_run_id="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Runtime schema safety" and .event == "push")][0].id // ""')"
+            runtime_url="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Runtime schema safety" and .event == "push")][0].html_url // ""')"
             runtime_status="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Runtime schema safety" and .event == "push")][0].status // "missing"')"
             runtime_conclusion="$(printf '%s' "$runs" | jq -r '[.workflow_runs[] | select(.name == "Runtime schema safety" and .event == "push")][0].conclusion // "pending"')"
 
-            echo "Platform build check: status=$platform_status conclusion=$platform_conclusion"
-            echo "Runtime schema safety: status=$runtime_status conclusion=$runtime_conclusion"
+            echo "Platform build check: status=$platform_status conclusion=$platform_conclusion url=$platform_url"
+            echo "Runtime schema safety: status=$runtime_status conclusion=$runtime_conclusion url=$runtime_url"
 
             if [ "$platform_conclusion" = "success" ] && [ "$runtime_conclusion" = "success" ]; then
               echo "Both release gates passed for $RELEASE_SHA."
@@ -51,10 +55,18 @@ jobs:
 
             if [ "$platform_status" = "completed" ] && [ "$platform_conclusion" != "success" ]; then
               echo "Platform build check failed for $RELEASE_SHA. Production deployment is blocked."
+              if [ -n "$platform_run_id" ]; then
+                echo "--- Failed Platform build check logs ---"
+                gh run view "$platform_run_id" --repo "$REPOSITORY" --log-failed || true
+              fi
               exit 1
             fi
             if [ "$runtime_status" = "completed" ] && [ "$runtime_conclusion" != "success" ]; then
               echo "Runtime schema safety failed for $RELEASE_SHA. Production deployment is blocked."
+              if [ -n "$runtime_run_id" ]; then
+                echo "--- Failed Runtime schema safety logs ---"
+                gh run view "$runtime_run_id" --repo "$REPOSITORY" --log-failed || true
+              fi
               exit 1
             fi
 
