@@ -95,10 +95,9 @@ export async function recordAutomationFailure(code: AutomationFailureCode = "aut
 export async function getAutomationFailureCode(): Promise<AutomationFailureCode | null> {
   const sql = sqlClient();
   if (!sql) return null;
-  const ids = automationFailureCodes.map((code) => `fleet_tick_failure:${code}`);
   const rows = await sql`SELECT id, last_failure_at
     FROM automation_runtime_state
-    WHERE id = ANY(${ids}) AND last_failure_at IS NOT NULL
+    WHERE id LIKE 'fleet_tick_failure:%' AND last_failure_at IS NOT NULL
     ORDER BY last_failure_at DESC
     LIMIT 1` as Array<{ id: string; last_failure_at: string | Date | null }>;
   const id = rows[0]?.id ?? "";
