@@ -19,6 +19,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      statuses: write
     env:
       TRACKFLEET_STORAGE: postgres
       TRACKFLEET_BASE_URL: https://trackfleet.chronoplan.workers.dev
@@ -118,3 +119,58 @@ jobs:
           done
           echo "Cloudflare production health verification failed."
           exit 1
+
+      - name: Publish D1 standby status
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --silent --show-error --max-time 15 "$TRACKFLEET_BASE_URL/api/health" || true)"
+          result="$(BODY="$body" node - <<'NODE'
+          try {
+            const health = JSON.parse(process.env.BODY || "{}");
+            const failover = health?.storage?.failover;
+            if (failover?.ready === true && failover?.reason === "replication_ready" && failover?.automatic === true) {
+              console.log("success|D1 standby ready; read failover authorized");
+            } else if (failover?.ready === true && failover?.reason === "replication_ready") {
+              console.log("pending|D1 standby ready; read failover disabled");
+            } else {
+              console.log(`pending|D1 standby not ready: ${failover?.reason || "unknown"}`);
+            }
+          } catch {
+            console.log("pending|D1 standby health unavailable");
+          }
+          NODE
+          )"
+          state="${result%%|*}"
+          description="${result#*|}"
+          gh api --method POST "repos/$REPOSITORY/statuses/$RELEASE_SHA" \
+            -f state="$state" \
+            -f context="trackfleet/d1-standby" \
+            -f description="$description"
+
+      - name: Publish Cloudflare production status
+        if: always() && steps.release.outputs.sha != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+          DEPLOY_JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          if [ "$DEPLOY_JOB_STATUS" = "success" ]; then
+            state="success"
+            description="Cloudflare production deploy and health check passed"
+          else
+            state="failure"
+            description="Cloudflare production deployment failed"
+          fi
+          gh api --method POST "repos/$REPOSITORY/statuses/$RELEASE_SHA" \
+            -f state="$state" \
+            -f context="trackfleet/cloudflare-production" \
+            -f description="$description"
