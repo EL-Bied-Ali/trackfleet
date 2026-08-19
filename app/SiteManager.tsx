@@ -149,7 +149,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       const response = await fetch("/api/deliveries/manual-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deliveryId: delivery.id }),
+        body: JSON.stringify({ deliveryId: delivery.id, confirmDelivered: true }),
       });
       if (!response.ok) throw new Error("completion_failed");
       setManualDeliveries((items) => items.filter((item) => item.id !== delivery.id));

@@ -89,11 +89,13 @@ test("manual completion is authenticated, same-origin and tenant scoped", () => 
   assert.match(manualRoute, /getCompanySession\(request\)/);
   assert.match(manualRoute, /completeDeliveryManually\(session\.companyId, deliveryId\)/);
   assert.match(manualRoute, /deliveryId\.length > 100/);
+  assert.match(manualRoute, /confirmDelivered !== true/);
   assert.match(manualRoute, /readJsonObject\(request\)/);
 });
 
 test("manual completion UI requires explicit operator confirmation", () => {
   assert.match(siteManager, /window\.confirm\(confirmation\)/);
   assert.match(siteManager, /\/api\/deliveries\/manual-completion/);
+  assert.match(siteManager, /confirmDelivered: true/);
   assert.match(siteManager, /Marquer livré/);
 });
