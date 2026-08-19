@@ -22,12 +22,13 @@ export async function deliveryIdempotencyTrackingToken(companyId: string, key: s
 
 export function deliveryIdempotencyPayloadMatches(
   delivery: DeliveryRow,
-  input: { customer: string; destination: string; contact: string; plannedArrivalAt: Date | null },
+  input: { customer: string; destination: string; contact: string; eta: string; plannedArrivalAt: Date | null },
 ) {
   const existingPlanned = delivery.plannedArrivalAt?.getTime() ?? null;
   const requestedPlanned = input.plannedArrivalAt?.getTime() ?? null;
   return delivery.customer === input.customer
     && delivery.destination === input.destination
     && delivery.contact === input.contact
+    && delivery.eta === input.eta
     && existingPlanned === requestedPlanned;
 }
