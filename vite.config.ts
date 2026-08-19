@@ -51,6 +51,12 @@ const authSessionStorePath = fileURLToPath(
     import.meta.url,
   ),
 );
+const telemetryRetentionPath = fileURLToPath(
+  new URL(
+    isVercel ? "./app/lib/telemetry-retention.vercel.ts" : "./app/lib/telemetry-retention.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -96,6 +102,7 @@ export default defineConfig(async () => {
         "trackfleet-login-rate-limit": loginRateLimitPath,
         "trackfleet-automation-heartbeat": automationHeartbeatPath,
         "trackfleet-auth-session-store": authSessionStorePath,
+        "trackfleet-telemetry-retention": telemetryRetentionPath,
       },
     },
     server: isCodexSeatbeltSandbox
