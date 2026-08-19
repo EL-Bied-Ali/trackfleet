@@ -124,7 +124,7 @@ async function enrichAndDetectDelay<T extends {
       confidence: delivery.etaConfidence,
       source: delivery.etaSource,
     },
-    delivered: row.status === "Delivered",
+    delivered: row.status === "Delivered" || events.some((event) => event.type === "ARRIVED_AT_SITE"),
     alreadyDetected: events.some((event) => event.type === "DELAY_DETECTED"),
   });
 
