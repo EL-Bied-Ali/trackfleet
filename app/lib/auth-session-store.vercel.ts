@@ -47,6 +47,21 @@ async function ensureSchema() {
 export async function createServerSession(input: StoredCompanySession) {
   const sql = await ensureSchema();
   const now = new Date().toISOString();
+
+  // The production schema links sessions.company_id to companies.id. Keep the
+  // company record in sync before inserting the session so first login works on
+  // a fresh shared Postgres database while preserving referential integrity.
+  await sql`INSERT INTO companies (
+      id, account_label, user_label, credentials_ciphertext, created_at, updated_at
+    ) VALUES (
+      ${input.companyId}, ${input.accountLabel}, ${input.userLabel}, ${input.credentialsCiphertext}, ${now}, ${now}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      account_label = EXCLUDED.account_label,
+      user_label = EXCLUDED.user_label,
+      credentials_ciphertext = EXCLUDED.credentials_ciphertext,
+      updated_at = EXCLUDED.updated_at`;
+
   await sql`INSERT INTO sessions (
       token_hash, company_id, account_label, user_label, credentials_ciphertext, expires_at, created_at
     ) VALUES (
