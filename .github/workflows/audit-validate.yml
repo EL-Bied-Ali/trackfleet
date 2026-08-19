@@ -14,6 +14,9 @@ on:
       - ".github/workflows/audit-validate.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -27,22 +30,52 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - name: Install locked dependencies
+      - id: install
+        name: Install locked dependencies
         run: pnpm install --frozen-lockfile
-      - name: Run request, dependency and login security contracts
+      - id: request_security
+        name: Run request, dependency and login security contracts
         run: node --experimental-strip-types --test tests/request-json-safety.test.mjs
-      - name: Run automation health and heartbeat contracts
+      - id: automation_health
+        name: Run automation health and heartbeat contracts
         run: node --experimental-strip-types --test tests/automation-health.test.mjs
-      - name: Run security header parity contract
+      - id: headers
+        name: Run security header parity contract
         run: node --test tests/security-headers-contract.test.mjs
-      - name: Lint
+      - id: lint
+        name: Lint
         run: pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
-      - name: Typecheck Vercel runtime
+      - id: typecheck
+        name: Typecheck Vercel runtime
         run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
-      - name: Build Vercel output
+      - id: build_vercel
+        name: Build Vercel output
         env:
           VERCEL: "1"
           NITRO_PRESET: "vercel"
         run: pnpm run build:vercel
-      - name: Build Cloudflare output
+      - id: build_cloudflare
+        name: Build Cloudflare output
         run: pnpm run build
+      - name: Record validation outcome
+        if: always()
+        shell: bash
+        run: |
+          cat > .audit-validation-status.json <<'JSON'
+          {
+            "job": "${{ job.status }}",
+            "install": "${{ steps.install.outcome }}",
+            "requestSecurity": "${{ steps.request_security.outcome }}",
+            "automationHealth": "${{ steps.automation_health.outcome }}",
+            "headers": "${{ steps.headers.outcome }}",
+            "lint": "${{ steps.lint.outcome }}",
+            "typecheck": "${{ steps.typecheck.outcome }}",
+            "buildVercel": "${{ steps.build_vercel.outcome }}",
+            "buildCloudflare": "${{ steps.build_cloudflare.outcome }}"
+          }
+          JSON
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audit-validation-status.json
+          git commit -m "record audit validation outcome" || exit 0
+          git push origin HEAD:audit-hardening-20260819
