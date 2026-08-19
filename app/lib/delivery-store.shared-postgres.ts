@@ -101,6 +101,23 @@ async function mirrorDelivery(delivery: DeliveryRow) {
   }
 }
 
+async function mirrorTripAssignment(deliveryId: string, companyId: string, tripId: string) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare("UPDATE deliveries SET trip_id = ? WHERE id = ? AND company_id = ?")
+      .bind(tripId, deliveryId, companyId)
+      .run();
+  } catch (error) {
+    console.error("[trackfleet:replication] D1 delivery trip assignment failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+      deliveryId,
+      companyId,
+      tripId,
+    });
+  }
+}
+
 const listEventsBatched = createRecordBatcher<DeliveryEventRow[]>(loadEventBatch, () => []);
 const listEtaObservationsBatched = createLimitedArrayBatcher<EtaObservationRow>(
   loadEtaBatch,
@@ -115,6 +132,26 @@ export const store: DeliveryStore = {
   async create(input) {
     const delivery = await baseStore.create(input);
     await mirrorDelivery(delivery);
+    return delivery;
+  },
+  async applySendatrackSnapshot(snapshot, companyId) {
+    const transitions = await baseStore.applySendatrackSnapshot(snapshot, companyId);
+    for (const transition of transitions) await mirrorDelivery(transition.delivery);
+    return transitions;
+  },
+  async linkVehicle(deliveryId, companyId, vehicle) {
+    const delivery = await baseStore.linkVehicle(deliveryId, companyId, vehicle);
+    if (delivery) await mirrorDelivery(delivery);
+    return delivery;
+  },
+  async assignDeliveryTrip(deliveryId, companyId, tripId) {
+    const assigned = await baseStore.assignDeliveryTrip(deliveryId, companyId, tripId);
+    if (assigned) await mirrorTripAssignment(deliveryId, companyId, tripId);
+    return assigned;
+  },
+  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {
+    const delivery = await baseStore.assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId);
+    if (delivery) await mirrorDelivery(delivery);
     return delivery;
   },
 };

@@ -39,6 +39,8 @@ jobs:
         run: node --test tests/d1-site-replication.test.mjs
       - name: Verify D1 delivery create replication contract
         run: node --test tests/d1-delivery-create-replication.test.mjs
+      - name: Verify D1 delivery state replication contract
+        run: node --test tests/d1-delivery-state-replication.test.mjs
       - name: Verify Postgres query budget
         run: node --test tests/postgres-query-budget.test.mjs
       - name: Verify batched-read behavior
