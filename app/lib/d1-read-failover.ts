@@ -1,5 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { getD1StandbyReadiness, type D1ReadinessBinding } from "./d1-standby-readiness";
+import { getD1StandbyReadiness } from "./d1-standby-readiness";
 
 const enabledValues = new Set(["1", "true", "yes", "on", "enabled"]);
 export const D1_READ_FAILOVER_LEASE_MS = 5 * 60_000;
@@ -11,7 +11,7 @@ type D1FailoverStatement = {
   first<T = Record<string, unknown>>(): Promise<T | null>;
 };
 
-type D1FailoverBinding = D1ReadinessBinding & {
+type D1FailoverBinding = {
   prepare(query: string): D1FailoverStatement;
 };
 
