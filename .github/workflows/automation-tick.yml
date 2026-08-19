@@ -1,8 +1,6 @@
-name: TrackFleet automation tick
+name: TrackFleet automation heartbeat
 
 on:
-  push:
-    branches: [main]
   schedule:
     - cron: "*/5 * * * *"
   workflow_run:
@@ -11,12 +9,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: trackfleet-automation-tick
-  cancel-in-progress: false
+  group: trackfleet-automation-heartbeat
+  cancel-in-progress: true
 
 jobs:
-  tick:
-    # On workflow_run, only tick after a successful production deploy. Push/schedule/manual runs still use the health gate below.
+  audit:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -24,39 +21,31 @@ jobs:
       statuses: write
     env:
       BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet.chronoplan.workers.dev' }}
-      CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
     steps:
-      - name: Run TrackFleet automation
-        id: run_tick
+      - name: Read production automation heartbeat
+        id: heartbeat
         shell: bash
         run: |
           set -euo pipefail
           node - <<'NODE'
-          const baseUrl = process.env.BASE_URL;
-          const secret = (process.env.CRON_SECRET || '').trim();
-          if (!secret) throw new Error('TRACKFLEET_CRON_SECRET is empty');
-
-          const healthResponse = await fetch(`${baseUrl}/api/health`, { cache: 'no-store' });
-          if (!healthResponse.ok) throw new Error(`health_http_${healthResponse.status}`);
-          const health = await healthResponse.json();
-          if (health?.automation?.ready !== true) {
-            throw new Error(`production_not_ready:${JSON.stringify({
-              storage: health?.storage,
-              sendatrackConfigured: health?.sendatrackConfigured,
-              automation: health?.automation,
-            })}`);
-          }
-
-          const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
-            headers: { authorization: `Bearer ${secret}` },
-            cache: 'no-store',
-          });
-          const body = await tickResponse.text();
-          console.log(body);
-          if (!tickResponse.ok) throw new Error(`tick_http_${tickResponse.status}`);
+          const fs = require('node:fs');
+          const response = await fetch(`${process.env.BASE_URL}/api/health`, { cache: 'no-store' });
+          if (!response.ok) throw new Error(`health_http_${response.status}`);
+          const health = await response.json();
+          const automation = health?.automation ?? {};
+          const summary = {
+            ready: automation.ready === true,
+            live: automation.live === true,
+            heartbeatAvailable: automation.heartbeatAvailable === true,
+            missing: Array.isArray(automation.missing) ? automation.missing : [],
+          };
+          console.log(JSON.stringify(summary));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `ready=${summary.ready ? 'true' : 'false'}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `live=${summary.live ? 'true' : 'false'}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `missing=${summary.missing.join(',') || 'none'}\n`);
           NODE
 
-      - name: Publish automation tick status
+      - name: Publish automation heartbeat status
         if: always()
         continue-on-error: true
         env:
@@ -64,18 +53,27 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TICK_OUTCOME: ${{ steps.run_tick.outcome }}
+          HEARTBEAT_OUTCOME: ${{ steps.heartbeat.outcome }}
+          READY: ${{ steps.heartbeat.outputs.ready }}
+          LIVE: ${{ steps.heartbeat.outputs.live }}
+          MISSING: ${{ steps.heartbeat.outputs.missing }}
         shell: bash
         run: |
-          if [ "$TICK_OUTCOME" = "success" ]; then
-            state="success"
-            description="Production automation tick succeeded"
-          else
+          if [ "$HEARTBEAT_OUTCOME" != "success" ]; then
             state="failure"
-            description="Production automation tick failed; inspect workflow run"
+            description="Production automation health could not be read"
+          elif [ "$LIVE" = "true" ]; then
+            state="success"
+            description="Cloudflare automation heartbeat is live"
+          elif [ "$READY" = "true" ]; then
+            state="pending"
+            description="Automation ready; waiting for Cloudflare heartbeat"
+          else
+            state="pending"
+            description="Automation not ready: ${MISSING:-unknown}"
           fi
           gh api --method POST "repos/$REPOSITORY/statuses/$TARGET_SHA" \
             -f state="$state" \
-            -f context="trackfleet/automation-tick" \
+            -f context="trackfleet/automation-heartbeat" \
             -f target_url="$RUN_URL" \
-            -f description="$description"
+            -f description="${description:0:140}"
