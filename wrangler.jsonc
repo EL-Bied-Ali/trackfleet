@@ -4,6 +4,9 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-08-19",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "TRACKFLEET_ALLOW_INSECURE_SENDATRACK": "true"
+  },
   "triggers": {
     "crons": [
       "*/15 * * * *",
