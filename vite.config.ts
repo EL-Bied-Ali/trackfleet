@@ -18,43 +18,43 @@ const runtimeEnvPath = fileURLToPath(
 );
 const deliveryStorePath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/delivery-store.vercel.ts" : "./app/lib/delivery-store.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/delivery-store.shared-postgres.ts" : "./app/lib/delivery-store.cloudflare.ts",
     import.meta.url,
   ),
 );
 const siteStorePath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/site-store.vercel.ts" : "./app/lib/site-store.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/site-store.shared-postgres.ts" : "./app/lib/site-store.cloudflare.ts",
     import.meta.url,
   ),
 );
 const loginRateLimitPath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/login-rate-limit.vercel.ts" : "./app/lib/login-rate-limit.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/login-rate-limit.shared-postgres.ts" : "./app/lib/login-rate-limit.cloudflare.ts",
     import.meta.url,
   ),
 );
 const automationHeartbeatPath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/automation-heartbeat.vercel.ts" : "./app/lib/automation-heartbeat.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/automation-heartbeat.shared-postgres.ts" : "./app/lib/automation-heartbeat.cloudflare.ts",
     import.meta.url,
   ),
 );
 const authSessionStorePath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/auth-session-store.vercel.ts" : "./app/lib/auth-session-store.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/auth-session-store.shared-postgres.ts" : "./app/lib/auth-session-store.cloudflare.ts",
     import.meta.url,
   ),
 );
 const telemetryRetentionPath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/telemetry-retention.vercel.ts" : "./app/lib/telemetry-retention.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/telemetry-retention.shared-postgres.ts" : "./app/lib/telemetry-retention.cloudflare.ts",
     import.meta.url,
   ),
 );
 const deliveryCompletionPath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/delivery-completion.vercel.ts" : "./app/lib/delivery-completion.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/delivery-completion.shared-postgres.ts" : "./app/lib/delivery-completion.cloudflare.ts",
     import.meta.url,
   ),
 );
