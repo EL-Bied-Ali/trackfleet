@@ -18,6 +18,8 @@ test("D1 delivery mirror preserves identity and tracking fields", () => {
 });
 
 test("D1 delivery replication is best-effort", () => {
-  assert.match(source, /catch \(error\) \{\s*console\.error\("\[trackfleet:replication\] D1 delivery mirror failed"/s);
+  assert.match(source, /function replicationError\(scope: string, error: unknown, context: Record<string, unknown>\)/);
+  assert.match(source, /console\.error\(`\[trackfleet:replication\] D1 \$\{scope\} mirror failed`/);
+  assert.match(source, /catch \(error\) \{\s*replicationError\("delivery", error,/s);
   assert.doesNotMatch(source, /throw error/);
 });
