@@ -1,6 +1,7 @@
 import { neon } from "@neondatabase/serverless";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { reconcileD1Standby, type D1ReconciliationResult } from "./d1-reconciliation";
+import { withoutD1ReadFailover } from "./d1-read-failover";
 
 // Keep these equal to the bounded reconciliation limits. The contract test
 // intentionally checks both files so a future limit change cannot silently
@@ -43,7 +44,7 @@ async function recordCoverageFailure(db: D1Binding, attemptedAt: number) {
 export async function reconcileD1StandbySafely(): Promise<D1ReconciliationResult> {
   const db = d1();
   const url = databaseUrl();
-  if (!db || !url) return reconcileD1Standby();
+  if (!db || !url) return withoutD1ReadFailover(() => reconcileD1Standby());
 
   const sql = neon(url);
   const rows = await sql`SELECT
@@ -76,5 +77,5 @@ export async function reconcileD1StandbySafely(): Promise<D1ReconciliationResult
     throw new Error("d1_reconciliation_coverage_exceeded");
   }
 
-  return reconcileD1Standby();
+  return withoutD1ReadFailover(() => reconcileD1Standby());
 }
