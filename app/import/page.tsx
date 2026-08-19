@@ -8,7 +8,7 @@ import {
 } from "../lib/bulk-delivery-import";
 
 type ImportStatus = "pending" | "success" | "failed";
-type ImportRow = BulkDeliveryDraft & { status: ImportStatus; error?: string };
+type ImportRow = BulkDeliveryDraft & { idempotencyKey: string; status: ImportStatus; error?: string };
 
 function downloadTemplate() {
   const blob = new Blob([BULK_DELIVERY_CSV_TEMPLATE], { type: "text/csv;charset=utf-8" });
@@ -20,10 +20,13 @@ function downloadTemplate() {
   URL.revokeObjectURL(url);
 }
 
-async function importOne(row: BulkDeliveryDraft) {
+async function importOne(row: ImportRow) {
   const response = await fetch("/api/deliveries", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": row.idempotencyKey,
+    },
     body: JSON.stringify({
       customer: row.customer,
       destination: row.destination,
@@ -68,7 +71,7 @@ export default function BulkImportPage() {
     const text = await file.text();
     const parsed = parseBulkDeliveryCsv(text);
     setErrors(parsed.errors);
-    setRows(parsed.rows.map((row) => ({ ...row, status: "pending" })));
+    setRows(parsed.rows.map((row) => ({ ...row, idempotencyKey: crypto.randomUUID(), status: "pending" })));
   }
 
   async function runImport() {

@@ -1,7 +1,8 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { siteStore } from "trackfleet-site-store";
-import type { DeliveryTransition } from "../../lib/delivery-store.types";
+import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
+import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
@@ -141,6 +142,19 @@ function optionalNumber(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+async function idempotentReplayResponse(delivery: DeliveryRow, companyId: string) {
+  const [events, rows] = await Promise.all([
+    store.listEvents(delivery.id),
+    store.listForCompany(companyId),
+  ]);
+  const serviceMinutes = pendingServiceMinutesBefore(delivery, rows);
+  return Response.json({
+    delivery: enrichDelivery(delivery, events, serviceMinutes),
+    idempotentReplay: true,
+  }, { status: 200, headers: { "cache-control": "no-store" } });
+}
+
 async function learnedStopMinutes(companyId: string, routeTemplateId: string | null, currentTripInstanceId: string | null, prefetchedSites?: Awaited<ReturnType<typeof siteStore.listForCompany>>) {
   const learned = new Map<string, number>();
   if (!routeTemplateId) return learned;
@@ -342,6 +356,10 @@ export async function POST(request: Request) {
     if (!requestIsSameOrigin(request)) return originRejectedResponse();
     const session = await getCompanySession(request);
     if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
+    if (idempotencyKey && !validDeliveryIdempotencyKey(idempotencyKey)) {
+      return Response.json({ error: "invalid_idempotency_key" }, { status: 400, headers: { "cache-control": "no-store" } });
+    }
 
     const payload = await readJsonObject(request);
     if (!payload) return invalidJsonResponse();
@@ -381,6 +399,7 @@ export async function POST(request: Request) {
     if (!customer || !destination || !truck || (!plannedArrivalAt && !validLegacyEta)) {
       return Response.json({ error: "customer, destination, truck, and a valid planned arrival are required" }, { status: 400 });
     }
+    const normalizedEta = validLegacyEta ? eta : plannedArrivalAt!.toISOString().slice(11, 16);
 
     const contact = normalizeCustomerPhone(contactInput);
     if (contact === null) {
@@ -407,6 +426,20 @@ export async function POST(request: Request) {
       ? [destinationLongitude, destinationLatitude]
       : null;
 
+    const idempotencyTrackingToken = idempotencyKey
+      ? await deliveryIdempotencyTrackingToken(session.companyId, idempotencyKey)
+      : null;
+    if (idempotencyTrackingToken) {
+      const existing = await store.getPublic(idempotencyTrackingToken);
+      if (existing) {
+        if (existing.companyId !== session.companyId) throw new Error("idempotency_token_collision");
+        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt })) {
+          return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
+        }
+        return idempotentReplayResponse(existing, session.companyId);
+      }
+    }
+
     const snapshot = await getSendatrackSnapshot(session.credentials);
     const liveVehicle = matchDeliveryVehicle({ sendatrackVehicleId, truck }, snapshot.vehicles).vehicle;
     const originLatitude = liveVehicle?.latitude ?? originSite?.latitude ?? null;
@@ -418,30 +451,42 @@ export async function POST(request: Request) {
       ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination, exactDestination, exactOrigin)
       : null;
 
-    const delivery = await store.create({
-      customer,
-      originSiteId: originSite?.id ?? null,
-      originLatitude,
-      originLongitude,
-      destinationSiteId: site?.id ?? null,
-      destination,
-      destinationLatitude,
-      destinationLongitude,
-      arrivalRadiusKm,
-      truck: liveVehicle?.name ?? truck,
-      eta: validLegacyEta ? eta : plannedArrivalAt!.toISOString().slice(11, 16),
-      plannedArrivalAt,
-      contact,
-      whatsappOptIn,
-      whatsappOptInAt: whatsappOptIn ? new Date() : null,
-      sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
-      companyId: session.companyId,
-      trackingToken: createTrackingToken(),
-      driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
-      latitude: liveVehicle?.latitude ?? originLatitude, longitude: liveVehicle?.longitude ?? originLongitude,
-      speed: liveVehicle?.speed ?? null, lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,
-      gpsSource: liveVehicle ? "sendatrack" : "simulation",
-    });
+    let delivery: DeliveryRow;
+    try {
+      delivery = await store.create({
+        customer,
+        originSiteId: originSite?.id ?? null,
+        originLatitude,
+        originLongitude,
+        destinationSiteId: site?.id ?? null,
+        destination,
+        destinationLatitude,
+        destinationLongitude,
+        arrivalRadiusKm,
+        truck: liveVehicle?.name ?? truck,
+        eta: normalizedEta,
+        plannedArrivalAt,
+        contact,
+        whatsappOptIn,
+        whatsappOptInAt: whatsappOptIn ? new Date() : null,
+        sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
+        companyId: session.companyId,
+        trackingToken: idempotencyTrackingToken ?? createTrackingToken(),
+        driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
+        latitude: liveVehicle?.latitude ?? originLatitude, longitude: liveVehicle?.longitude ?? originLongitude,
+        speed: liveVehicle?.speed ?? null, lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,
+        gpsSource: liveVehicle ? "sendatrack" : "simulation",
+      });
+    } catch (error) {
+      if (idempotencyTrackingToken) {
+        const existing = await store.getPublic(idempotencyTrackingToken).catch(() => null);
+        if (existing?.companyId === session.companyId
+          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt })) {
+          return idempotentReplayResponse(existing, session.companyId);
+        }
+      }
+      throw error;
+    }
     if (baselineMetrics) await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
     await store.recordEvent(delivery.id, "REGISTERED", delivery.progress);
     await processPendingNotifications(session.companyId, new URL(request.url).origin);
@@ -449,7 +494,7 @@ export async function POST(request: Request) {
     const rows = await store.listForCompany(session.companyId);
     const serviceMinutes = pendingServiceMinutesBefore(delivery, rows);
     const enriched = await enrichAndDetectDelay(delivery, serviceMinutes);
-    return Response.json({ delivery: enriched.delivery }, { status: 201 });
+    return Response.json({ delivery: enriched.delivery, idempotentReplay: false }, { status: 201, headers: { "cache-control": "no-store" } });
   } catch (error) {
     return errorResponse(error);
   }
