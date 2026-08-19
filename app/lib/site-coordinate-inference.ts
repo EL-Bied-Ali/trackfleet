@@ -20,13 +20,13 @@ export type SiteCoordinateInferencePoint = {
 
 export type SiteCoordinateSuggestion = {
   siteId: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | null;
+  longitude: number | null;
   confidence: "high" | "medium" | "low";
   pointCount: number;
   vehicleCount: number;
   addressEvidence: string[];
-  radius95Km: number;
+  radius95Km: number | null;
 };
 
 const genericAddressTokens = new Set([
@@ -68,7 +68,7 @@ function addressEvidence(site: SiteCoordinateInferenceSite, points: SiteCoordina
   return { matches, cityMatch };
 }
 
-function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateInferencePoint[]): SiteCoordinateSuggestion {
+function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateInferencePoint[]) {
   const latitude = points.reduce((sum, point) => sum + point.latitude, 0) / points.length;
   const longitude = points.reduce((sum, point) => sum + point.longitude, 0) / points.length;
   const vehicles = new Set(points.map((point) => normalizePhysicalVehicleName(point.vehicleName)).filter(Boolean));
@@ -77,7 +77,6 @@ function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateI
     { latitude, longitude },
     { latitude: point.latitude, longitude: point.longitude },
   )));
-
   const repeated = points.length >= 8 && vehicles.size >= 2;
   const compact = radius95Km <= 0.35;
   const confidence: SiteCoordinateSuggestion["confidence"] = repeated && compact && evidence.matches.length > 0
@@ -85,7 +84,6 @@ function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateI
     : repeated && compact && evidence.cityMatch
       ? "medium"
       : "low";
-
   return {
     siteId: site.id,
     latitude: rounded(latitude),
@@ -95,6 +93,20 @@ function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateI
     vehicleCount: vehicles.size,
     addressEvidence: evidence.matches,
     radius95Km: rounded(radius95Km, 3),
+    relevant: evidence.matches.length > 0 || evidence.cityMatch,
+  };
+}
+
+function emptySuggestion(siteId: string): SiteCoordinateSuggestion {
+  return {
+    siteId,
+    latitude: null,
+    longitude: null,
+    confidence: "low",
+    pointCount: 0,
+    vehicleCount: 0,
+    addressEvidence: [],
+    radius95Km: null,
   };
 }
 
@@ -121,6 +133,7 @@ export function inferSiteCoordinateSuggestions(
   return sites.map((site) => {
     const scored = [...clusters.values()]
       .map((cluster) => scoreCluster(site, cluster))
+      .filter((candidate) => candidate.relevant)
       .sort((left, right) => {
         const rank = { high: 3, medium: 2, low: 1 } as const;
         if (rank[right.confidence] !== rank[left.confidence]) return rank[right.confidence] - rank[left.confidence];
@@ -128,15 +141,9 @@ export function inferSiteCoordinateSuggestions(
         if (right.vehicleCount !== left.vehicleCount) return right.vehicleCount - left.vehicleCount;
         return right.pointCount - left.pointCount;
       });
-    return scored[0] ?? {
-      siteId: site.id,
-      latitude: 0,
-      longitude: 0,
-      confidence: "low" as const,
-      pointCount: 0,
-      vehicleCount: 0,
-      addressEvidence: [],
-      radius95Km: 0,
-    };
+    const best = scored[0];
+    if (!best) return emptySuggestion(site.id);
+    const { relevant: _relevant, ...suggestion } = best;
+    return suggestion;
   });
 }
