@@ -1,0 +1,89 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { publicDeliveryView } from "../app/lib/public-delivery-view.ts";
+
+const source = {
+  id: "DEL-1",
+  companyId: "company-secret",
+  customer: "Customer",
+  contact: "+32000000000",
+  whatsappOptIn: true,
+  whatsappOptInAt: new Date("2026-08-20T00:00:00.000Z"),
+  destination: "Tanger Med",
+  destinationLatitude: 35.858923,
+  destinationLongitude: -5.532664,
+  arrivalRadiusKm: 0.5,
+  truck: "18799-B-2",
+  driver: "Private Driver",
+  status: "In transit",
+  eta: "12:00",
+  plannedArrivalAt: new Date("2026-08-20T12:00:00.000Z"),
+  progress: 50,
+  latitude: 35.7,
+  longitude: -5.6,
+  speed: 70,
+  lastPositionAt: new Date("2026-08-20T10:00:00.000Z"),
+  trackingToken: "AbCdEf0123456789_-xyZ123",
+  sendatrackVehicleId: "provider-secret-id",
+  tripId: "trip-private",
+  routeDistanceKm: 100,
+  remainingDistanceKm: 50,
+  distanceToDestinationKm: 50,
+  positionAgeMinutes: 2,
+  gpsFresh: true,
+  estimatedArrivalAt: "2026-08-20T12:00:00.000Z",
+  etaDelayMinutes: 0,
+  etaConfidence: "medium",
+  etaSource: "observed-pace",
+  effectiveSpeedKmh: 65,
+  etaHistoryTrips: 4,
+  etaHistoricalSpeedKmh: 62,
+  trackingExpiresAt: "2026-08-27T12:00:00.000Z",
+};
+
+test("public delivery view exposes only the customer tracking allow-list", () => {
+  const publicView = publicDeliveryView(source);
+  assert.deepEqual(Object.keys(publicView).sort(), [
+    "arrivalRadiusKm",
+    "customer",
+    "destination",
+    "destinationLatitude",
+    "destinationLongitude",
+    "distanceToDestinationKm",
+    "effectiveSpeedKmh",
+    "estimatedArrivalAt",
+    "eta",
+    "etaConfidence",
+    "etaDelayMinutes",
+    "etaHistoricalSpeedKmh",
+    "etaHistoryTrips",
+    "etaSource",
+    "gpsFresh",
+    "id",
+    "lastPositionAt",
+    "latitude",
+    "longitude",
+    "plannedArrivalAt",
+    "positionAgeMinutes",
+    "progress",
+    "remainingDistanceKm",
+    "routeDistanceKm",
+    "speed",
+    "status",
+    "trackingExpiresAt",
+    "truck",
+  ].sort());
+
+  for (const forbidden of [
+    "companyId",
+    "contact",
+    "whatsappOptIn",
+    "whatsappOptInAt",
+    "driver",
+    "trackingToken",
+    "sendatrackVehicleId",
+    "tripId",
+  ]) {
+    assert.equal(Object.hasOwn(publicView, forbidden), false, `${forbidden} must stay private`);
+  }
+});
