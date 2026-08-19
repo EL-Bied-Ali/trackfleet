@@ -8,7 +8,7 @@ export type StorageHealth = {
 };
 
 export async function getStorageHealth(): Promise<StorageHealth> {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
+  const databaseUrl = runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
   if (databaseUrl) {
     try {
       const { neon } = await import("@neondatabase/serverless");
