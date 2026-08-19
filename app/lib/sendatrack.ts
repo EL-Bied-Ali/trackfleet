@@ -1,6 +1,6 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { normalizeSendatrackFleet, type SendatrackVehicle } from "./sendatrack-normalize";
-import { sendatrackTransportIsSecure } from "./sendatrack-transport";
+import { sendatrackTransportIsAllowed } from "./sendatrack-transport";
 
 export type SendatrackCredentials = {
   accountID: string;
@@ -36,9 +36,9 @@ function environmentCredentials(): SendatrackCredentials {
   };
 }
 
-function requireSecureTransport() {
-  if (!sendatrackTransportIsSecure()) {
-    console.error("[trackfleet:sendatrack] blocked insecure provider transport");
+function requireAllowedTransport() {
+  if (!sendatrackTransportIsAllowed()) {
+    console.error("[trackfleet:sendatrack] blocked insecure provider transport without explicit override");
     throw new Error("service_unavailable");
   }
 }
@@ -117,7 +117,7 @@ function authenticationRejectedStatus(status: number) {
 }
 
 async function login(auth: SendatrackCredentials) {
-  requireSecureTransport();
+  requireAllowedTransport();
   const key = credentialKey(auth);
   const cachedToken = cachedTokens.get(key);
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
@@ -153,7 +153,7 @@ async function login(auth: SendatrackCredentials) {
 }
 
 async function requestFleetPayload(token: string, auth: SendatrackCredentials) {
-  requireSecureTransport();
+  requireAllowedTransport();
   const response = await fetch(apiUrl("list?"), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
@@ -191,7 +191,7 @@ export async function getSendatrackLegacyHistoryIdentities(): Promise<Sendatrack
 
   // OpenGTS uses the account key (not its human-readable description) for `a=`.
   // Keep discovery bounded to the three values already present in the authenticated
-  // SENDATRACK context. Password never leaves server memory except in a secure provider request.
+  // SENDATRACK context. If the insecure override is enabled, the provider request is knowingly HTTP.
   const candidates: SendatrackLegacyHistoryIdentity[] = [];
   const seen = new Set<string>();
   const add = (accountId: string, accountSource: SendatrackLegacyHistoryIdentity["accountSource"]) => {
