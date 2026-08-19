@@ -1,13 +1,15 @@
 import { neon } from "@neondatabase/serverless";
 import { runtimeEnv } from "trackfleet-runtime-env";
 
-const maxCompanies = 50;
-const maxFleetPositionsPerCompany = 2000;
-const maxTripPositionsPerCompany = 2000;
+const maxCompanies = 5;
+const maxFleetPositionsPerCompany = 100;
+const maxTripPositionsPerCompany = 100;
 const d1BatchSize = 50;
+const maxD1StatementsPerPass = 1000;
 
 type D1Statement = {
   bind(...values: unknown[]): D1Statement;
+  run(): Promise<unknown>;
 };
 
 type D1Binding = {
@@ -107,9 +109,22 @@ function tripStatement(d1: D1Binding, row: TripPositionRow) {
 }
 
 async function runBatches(d1: D1Binding, statements: D1Statement[]) {
+  if (statements.length > maxD1StatementsPerPass) throw new Error("d1_telemetry_reconciliation_budget_exceeded");
   for (let index = 0; index < statements.length; index += d1BatchSize) {
     await d1.batch(statements.slice(index, index + d1BatchSize));
   }
+}
+
+async function recordState(d1: D1Binding, column: "last_attempt_at" | "last_success_at" | "last_failure_at", at: number) {
+  const query = column === "last_attempt_at"
+    ? `INSERT INTO automation_runtime_state (id, last_attempt_at) VALUES ('d1_telemetry_reconciliation', ?)
+       ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at`
+    : column === "last_success_at"
+      ? `INSERT INTO automation_runtime_state (id, last_success_at) VALUES ('d1_telemetry_reconciliation', ?)
+         ON CONFLICT(id) DO UPDATE SET last_success_at = excluded.last_success_at`
+      : `INSERT INTO automation_runtime_state (id, last_failure_at) VALUES ('d1_telemetry_reconciliation', ?)
+         ON CONFLICT(id) DO UPDATE SET last_failure_at = excluded.last_failure_at`;
+  await d1.prepare(query).bind(at).run();
 }
 
 export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationResult> {
@@ -118,30 +133,37 @@ export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationR
   const url = databaseUrl();
   if (!url) return { ran: false, reason: "postgres_not_configured", companies: 0, fleetPositions: 0, tripPositions: 0 };
 
+  await recordState(d1, "last_attempt_at", Date.now());
   const sql = neon(url);
-  const companies = await sql`SELECT company_id AS id FROM deliveries
-    WHERE company_id IS NOT NULL AND company_id <> ''
-    GROUP BY company_id ORDER BY MAX(created_at) DESC LIMIT ${maxCompanies}` as Array<{ id: string }>;
+  try {
+    const companies = await sql`SELECT company_id AS id FROM deliveries
+      WHERE company_id IS NOT NULL AND company_id <> ''
+      GROUP BY company_id ORDER BY MAX(created_at) DESC LIMIT ${maxCompanies}` as Array<{ id: string }>;
 
-  const statements: D1Statement[] = [];
-  let fleetPositions = 0;
-  let tripPositions = 0;
-  for (const { id: companyId } of companies) {
-    const fleetPromise = sql`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
-      FROM fleet_position_observations WHERE company_id = ${companyId}
-      ORDER BY position_at DESC LIMIT ${maxFleetPositionsPerCompany}`
-      .then((rows) => rows as unknown as FleetPositionRow[]);
-    const tripPromise = sql`SELECT company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
-      FROM trip_position_observations WHERE company_id = ${companyId}
-      ORDER BY position_at DESC LIMIT ${maxTripPositionsPerCompany}`
-      .then((rows) => rows as unknown as TripPositionRow[]);
-    const [fleetRows, tripRows] = await Promise.all([fleetPromise, tripPromise]);
-    fleetPositions += fleetRows.length;
-    tripPositions += tripRows.length;
-    statements.push(...fleetRows.map((row) => fleetStatement(d1, row)));
-    statements.push(...tripRows.map((row) => tripStatement(d1, row)));
+    const statements: D1Statement[] = [];
+    let fleetPositions = 0;
+    let tripPositions = 0;
+    for (const { id: companyId } of companies) {
+      const fleetPromise = sql`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
+        FROM fleet_position_observations WHERE company_id = ${companyId}
+        ORDER BY position_at DESC LIMIT ${maxFleetPositionsPerCompany}`
+        .then((rows) => rows as unknown as FleetPositionRow[]);
+      const tripPromise = sql`SELECT company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
+        FROM trip_position_observations WHERE company_id = ${companyId}
+        ORDER BY position_at DESC LIMIT ${maxTripPositionsPerCompany}`
+        .then((rows) => rows as unknown as TripPositionRow[]);
+      const [fleetRows, tripRows] = await Promise.all([fleetPromise, tripPromise]);
+      fleetPositions += fleetRows.length;
+      tripPositions += tripRows.length;
+      statements.push(...fleetRows.map((row) => fleetStatement(d1, row)));
+      statements.push(...tripRows.map((row) => tripStatement(d1, row)));
+    }
+
+    await runBatches(d1, statements);
+    await recordState(d1, "last_success_at", Date.now());
+    return { ran: true, reason: "ok", companies: companies.length, fleetPositions, tripPositions };
+  } catch (error) {
+    try { await recordState(d1, "last_failure_at", Date.now()); } catch {}
+    throw error;
   }
-
-  await runBatches(d1, statements);
-  return { ran: true, reason: "ok", companies: companies.length, fleetPositions, tripPositions };
 }
