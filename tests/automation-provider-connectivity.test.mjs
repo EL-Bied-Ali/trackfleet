@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-const [automationSource, tickRoute] = await Promise.all([
+const [automationSource, tickRoute, heartbeatStore, healthRoute] = await Promise.all([
   readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/automation/tick/route.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/automation-heartbeat.vercel.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
 ]);
 
 test("a disconnected SENDATRACK snapshot is an automation failure", () => {
@@ -19,4 +21,27 @@ test("tick records success only after runFleetAutomation resolves", () => {
   assert.ok(runIndex >= 0);
   assert.ok(successIndex > runIndex);
   assert.ok(failureIndex > runIndex);
+});
+
+test("provider failures are classified into bounded non-secret codes", () => {
+  for (const code of [
+    "sendatrack_authentication_failed",
+    "sendatrack_service_unavailable",
+    "sendatrack_unexpected_response",
+    "sendatrack_not_configured",
+    "sendatrack_disconnected",
+    "automation_failed",
+  ]) {
+    assert.match(heartbeatStore, new RegExp(`\\"${code}\\"`));
+  }
+  assert.match(tickRoute, /failureCodeFor\(message\)/);
+  assert.match(tickRoute, /recordAutomationFailure\(failureCode\)/);
+  assert.doesNotMatch(healthRoute, /error:\s*message/);
+  assert.match(healthRoute, /lastFailureCode/);
+});
+
+test("failure diagnostics reuse heartbeat rows without schema expansion", () => {
+  assert.match(heartbeatStore, /fleet_tick_failure:\$\{code\}/);
+  assert.match(heartbeatStore, /id LIKE 'fleet_tick_failure:%'/);
+  assert.doesNotMatch(heartbeatStore, /ALTER TABLE/);
 });

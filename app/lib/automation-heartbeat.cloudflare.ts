@@ -7,6 +7,22 @@ export type AutomationHeartbeat = {
 };
 
 export type RuntimeHeartbeatJob = "fleet_tick" | "telemetry_retention";
+export type AutomationFailureCode =
+  | "sendatrack_authentication_failed"
+  | "sendatrack_service_unavailable"
+  | "sendatrack_unexpected_response"
+  | "sendatrack_not_configured"
+  | "sendatrack_disconnected"
+  | "automation_failed";
+
+const automationFailureCodes: AutomationFailureCode[] = [
+  "sendatrack_authentication_failed",
+  "sendatrack_service_unavailable",
+  "sendatrack_unexpected_response",
+  "sendatrack_not_configured",
+  "sendatrack_disconnected",
+  "automation_failed",
+];
 
 function database() {
   return runtimeEnv.DB ?? null;
@@ -65,8 +81,27 @@ export function recordAutomationSuccess() {
   return recordRuntimeSuccess("fleet_tick");
 }
 
-export function recordAutomationFailure() {
-  return recordRuntimeFailure("fleet_tick");
+export async function recordAutomationFailure(code: AutomationFailureCode = "automation_failed") {
+  await recordRuntimeFailure("fleet_tick");
+  const db = database();
+  if (!db) return;
+  const now = Date.now();
+  const diagnosticId = `fleet_tick_failure:${code}`;
+  await db.prepare(`INSERT INTO automation_runtime_state (id, last_attempt_at, last_failure_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at, last_failure_at = excluded.last_failure_at`)
+    .bind(diagnosticId, now, now).run();
+}
+
+export async function getAutomationFailureCode(): Promise<AutomationFailureCode | null> {
+  const db = database();
+  if (!db) return null;
+  const row = await db.prepare(`SELECT id FROM automation_runtime_state
+    WHERE id LIKE 'fleet_tick_failure:%' AND last_failure_at IS NOT NULL
+    ORDER BY last_failure_at DESC LIMIT 1`).first<{ id: string }>();
+  const id = row?.id ?? "";
+  const code = id.startsWith("fleet_tick_failure:") ? id.slice("fleet_tick_failure:".length) : "";
+  return automationFailureCodes.includes(code as AutomationFailureCode) ? code as AutomationFailureCode : null;
 }
 
 export function getAutomationHeartbeat() {
