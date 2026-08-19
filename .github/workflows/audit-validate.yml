@@ -1,0 +1,48 @@
+name: Audit hardening validation
+
+on:
+  push:
+    branches: [audit-hardening-20260819]
+    paths:
+      - "app/**"
+      - "tests/**"
+      - "worker/**"
+      - "vite.config.ts"
+      - "tsconfig.vercel.json"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/audit-validate.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run request, dependency and login security contracts
+        run: node --experimental-strip-types --test tests/request-json-safety.test.mjs
+      - name: Run automation health and heartbeat contracts
+        run: node --experimental-strip-types --test tests/automation-health.test.mjs
+      - name: Run security header parity contract
+        run: node --test tests/security-headers-contract.test.mjs
+      - name: Lint
+        run: pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+      - name: Typecheck Vercel runtime
+        run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
+      - name: Build Vercel output
+        env:
+          VERCEL: "1"
+          NITRO_PRESET: "vercel"
+        run: pnpm run build:vercel
+      - name: Build Cloudflare output
+        run: pnpm run build
