@@ -7,6 +7,7 @@ import { sessionEncryptionKeyConfigured } from "../../lib/session-encryption-key
 import { isSendatrackConfigured } from "../../lib/sendatrack";
 import { sendatrackTransportIsSecure } from "../../lib/sendatrack-transport";
 import { getStorageHealth } from "../../lib/storage-health";
+import { telemetryRetentionPolicy } from "../../lib/telemetry-retention";
 
 export async function GET() {
   const storage = await getStorageHealth();
@@ -22,6 +23,7 @@ export async function GET() {
     && runtimeEnv.WHATSAPP_TEMPLATE_LANGUAGE?.trim(),
   );
   const whatsappActivationConfigured = Boolean(parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT));
+  const telemetryRetention = telemetryRetentionPolicy(runtimeEnv.TRACKFLEET_TELEMETRY_RETENTION_DAYS);
   const missing = automationMissingRequirements({
     storage,
     sendatrackConfigured,
@@ -55,6 +57,7 @@ export async function GET() {
     sendatrackTransportSecure,
     sessionEncryptionConfigured,
     storage,
+    telemetryRetention,
     automation: {
       tickProtected,
       whatsappEnabled,
