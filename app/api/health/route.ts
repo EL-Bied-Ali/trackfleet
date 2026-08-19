@@ -1,4 +1,4 @@
-import { getAutomationHeartbeat, getRuntimeHeartbeat } from "trackfleet-automation-heartbeat";
+import { getAutomationFailureCode, getAutomationHeartbeat, getRuntimeHeartbeat } from "trackfleet-automation-heartbeat";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import {
   automationHeartbeatStatus,
@@ -50,8 +50,10 @@ export async function GET() {
 
   let heartbeatAvailable = false;
   let heartbeat = automationHeartbeatStatus({ lastAttemptAt: null, lastSuccessAt: null, lastFailureAt: null });
+  let lastFailureCode = null;
   try {
     heartbeat = automationHeartbeatStatus(await getAutomationHeartbeat());
+    lastFailureCode = await getAutomationFailureCode();
     heartbeatAvailable = true;
   } catch (error) {
     console.error("[trackfleet:health] automation heartbeat unavailable", {
@@ -107,6 +109,7 @@ export async function GET() {
       missing,
       heartbeatAvailable,
       live: heartbeatAvailable ? heartbeat.fresh : null,
+      lastFailureCode,
       heartbeat,
     },
     timestamp: new Date().toISOString(),
