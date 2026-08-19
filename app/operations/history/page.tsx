@@ -30,7 +30,8 @@ export default function DeliveryHistoryPage() {
   const [error, setError] = useState(false);
 
   const loadPage = useCallback(async (next: HistoryCursor | null, append: boolean) => {
-    append ? setLoadingMore(true) : setLoading(true);
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     setError(false);
     try {
       const session = await fetch("/api/auth/session", { cache: "no-store" });
@@ -57,7 +58,10 @@ export default function DeliveryHistoryPage() {
     }
   }, [language]);
 
-  useEffect(() => { void loadPage(null, false); }, [loadPage]);
+  useEffect(() => {
+    const initial = window.setTimeout(() => void loadPage(null, false), 0);
+    return () => window.clearTimeout(initial);
+  }, [loadPage]);
 
   const dateLocale = language === "nl" ? "nl-BE" : language === "en" ? "en-GB" : "fr-BE";
   const copy = language === "nl"
