@@ -49,11 +49,17 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   }
 
   useEffect(() => {
-    if (open) void refresh().catch(() => setError("sites_unavailable"));
+    if (!open) return;
+    queueMicrotask(() => {
+      void refresh().catch(() => setError("sites_unavailable"));
+    });
   }, [open]);
 
   useEffect(() => {
-    if (consentOpen) void refreshConsents().catch(() => setConsentError("consent_unavailable"));
+    if (!consentOpen) return;
+    queueMicrotask(() => {
+      void refreshConsents().catch(() => setConsentError("consent_unavailable"));
+    });
   }, [consentOpen]);
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
