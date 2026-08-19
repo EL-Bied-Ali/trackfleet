@@ -79,6 +79,12 @@ jobs:
       - name: Build shared-Postgres Cloudflare Worker
         run: pnpm exec vinext build
 
+      - name: Prepare D1 fallback schema
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/prepare-d1-schema.mjs --remote
+
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
