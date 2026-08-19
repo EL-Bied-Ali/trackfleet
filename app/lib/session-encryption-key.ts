@@ -1,4 +1,4 @@
-import { normalizeEnvValue } from "./env-value";
+import { normalizeEnvValue } from "./env-value.ts";
 
 function decodeBase64(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
