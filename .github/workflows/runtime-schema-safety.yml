@@ -46,6 +46,8 @@ jobs:
         run: node --experimental-strip-types --test tests/telemetry-growth.test.mjs
       - name: Verify tenant-safe data export
         run: node --experimental-strip-types --test tests/tenant-data-export.test.mjs
+      - name: Verify full-history export query scaling
+        run: node --test tests/full-history-export-scaling.test.mjs
       - name: Verify retention maintenance heartbeat
         run: node --experimental-strip-types --test tests/retention-heartbeat.test.mjs tests/telemetry-retention.test.mjs
       - name: Verify bounded operational delivery window
