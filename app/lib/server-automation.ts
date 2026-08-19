@@ -82,13 +82,13 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     }
 
     const delivery = transition.delivery;
+    const tickObservedAt = new Date();
     const hasPosition = typeof delivery.latitude === "number"
       && typeof delivery.longitude === "number"
       && delivery.lastPositionAt instanceof Date;
     let insideArrivalZone = false;
-    let observationAt = new Date();
     if (hasPosition) {
-      observationAt = delivery.lastPositionAt!;
+      const positionAt = delivery.lastPositionAt!;
       const destinationPoint = destinationPointFor(
         delivery.destination,
         typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
@@ -96,7 +96,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
           : null,
       );
       const distanceToDestinationKm = distanceKm([delivery.longitude!, delivery.latitude!], destinationPoint);
-      const positionAgeMinutes = Math.max(0, (Date.now() - observationAt.getTime()) / 60_000);
+      const positionAgeMinutes = Math.max(0, (tickObservedAt.getTime() - positionAt.getTime()) / 60_000);
       const radiusKm = Math.max(0.05, Math.min(10, delivery.arrivalRadiusKm || 0.5));
       insideArrivalZone = positionAgeMinutes <= 30
         && distanceToDestinationKm <= radiusKm
@@ -107,7 +107,11 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
       companyId,
       deliveryId: delivery.id,
       insideArrivalZone,
-      observationAt,
+      // Dwell is based on repeated scheduler observations, not on changes to
+      // the provider timestamp. A parked tracker may keep the same GPS fix for
+      // several ticks; freshness above still requires a provider update within
+      // 30 minutes, so stale positions cannot keep the timer alive.
+      observationAt: tickObservedAt,
       unloadGraceMinutes,
     });
     if (completion.justEntered && await store.recordEvent(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
