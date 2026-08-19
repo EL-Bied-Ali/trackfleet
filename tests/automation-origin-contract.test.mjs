@@ -10,7 +10,7 @@ const [workflow, tickRoute, runner, smokeWorkflow] = await Promise.all([
 ]);
 
 test("scheduled automation defaults to the stable production hostname", () => {
-  assert.match(workflow, /https:\/\/trackfleet-self\.vercel\.app/);
+  assert.match(workflow, /https:\/\/trackfleet\.chronoplan\.workers\.dev/);
   assert.match(workflow, /TRACKFLEET_BASE_URL/);
   assert.match(workflow, /\/api\/automation\/tick/);
 });
