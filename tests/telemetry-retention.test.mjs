@@ -71,8 +71,10 @@ test("automation runs retention best-effort without making tracking depend on ma
   assert.match(automationSource, /telemetryPruned/);
 });
 
-test("health and environment example expose the retention override", () => {
+test("health and environment example expose retention policy and maintenance liveness", () => {
   assert.match(healthSource, /telemetryRetentionPolicy/);
-  assert.match(healthSource, /telemetryRetention,/);
+  assert.match(healthSource, /telemetryRetention:\s*\{/);
+  assert.match(healthSource, /heartbeatAvailable: retentionHeartbeatAvailable/);
+  assert.match(healthSource, /heartbeat: retentionHeartbeat/);
   assert.match(envExample, /TRACKFLEET_TELEMETRY_RETENTION_DAYS=/);
 });
