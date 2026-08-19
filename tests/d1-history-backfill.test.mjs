@@ -7,10 +7,12 @@ const route = fs.readFileSync("app/api/storage/backfill-history/route.ts", "utf8
 const schema = fs.readFileSync("scripts/prepare-d1-history-backfill-state.mjs", "utf8");
 
 test("history backfill is bounded and uses stable keyset pagination", () => {
-  assert.match(source, /const maxCompaniesPerPass = 5;/);
-  assert.match(source, /const pageSize = 20;/);
-  assert.match(source, /const maxEtaPerDelivery = 20;/);
+  assert.match(source, /const maxCompaniesPerPass = 3;/);
+  assert.match(source, /const pageSize = 10;/);
+  assert.match(source, /const maxEtaPerDelivery = 10;/);
   assert.match(source, /const d1BatchSize = 50;/);
+  assert.match(source, /const maxD1StatementsPerCompanyPage = 800;/);
+  assert.match(source, /d1_history_backfill_budget_exceeded/);
   assert.match(source, /created_at < \$\{cursorCreatedAt\} OR \(created_at = \$\{cursorCreatedAt\} AND id < \$\{cursorId\}\)/);
   assert.doesNotMatch(source, /\bOFFSET\b/i);
 });

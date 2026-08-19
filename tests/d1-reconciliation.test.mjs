@@ -6,11 +6,14 @@ const source = fs.readFileSync("app/lib/d1-reconciliation.ts", "utf8");
 const route = fs.readFileSync("app/api/storage/reconcile/route.ts", "utf8");
 
 test("D1 reconciliation is bounded and batched", () => {
-  assert.match(source, /const maxCompanies = 50;/);
-  assert.match(source, /const maxTripsPerCompany = 500;/);
-  assert.match(source, /const maxEtaPerDelivery = 200;/);
+  assert.match(source, /const maxCompanies = 5;/);
+  assert.match(source, /const maxTripsPerCompany = 100;/);
+  assert.match(source, /const maxEtaPerDelivery = 20;/);
   assert.match(source, /const d1BatchSize = 50;/);
-  assert.match(source, /const maxActiveSessions = 1000;/);
+  assert.match(source, /const maxActiveSessions = 200;/);
+  assert.match(source, /const maxD1StatementsPerPass = 1000;/);
+  assert.match(source, /statements\.length > maxD1StatementsPerPass/);
+  assert.match(source, /d1_reconciliation_budget_exceeded/);
   assert.match(source, /await db\.batch\(statements\.slice\(index, index \+ d1BatchSize\)\);/);
 });
 
