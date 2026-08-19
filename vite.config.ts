@@ -57,6 +57,12 @@ const telemetryRetentionPath = fileURLToPath(
     import.meta.url,
   ),
 );
+const deliveryCompletionPath = fileURLToPath(
+  new URL(
+    isVercel ? "./app/lib/delivery-completion.vercel.ts" : "./app/lib/delivery-completion.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -103,6 +109,7 @@ export default defineConfig(async () => {
         "trackfleet-automation-heartbeat": automationHeartbeatPath,
         "trackfleet-auth-session-store": authSessionStorePath,
         "trackfleet-telemetry-retention": telemetryRetentionPath,
+        "trackfleet-delivery-completion": deliveryCompletionPath,
       },
     },
     server: isCodexSeatbeltSandbox
