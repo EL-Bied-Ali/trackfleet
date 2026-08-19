@@ -16,7 +16,10 @@ function explicitOrigin(row: DeliveryRow): [number, number] | null {
 }
 
 export function shouldCreateDelayEvent(row: DeliveryRow, events: DeliveryEventRow[], companyDeliveries: DeliveryRow[] = [row]) {
-  if (row.status === "Delivered" || events.some((event) => event.type === "DELAY_DETECTED")) return false;
+  if (
+    row.status === "Delivered"
+    || events.some((event) => event.type === "DELAY_DETECTED" || event.type === "ARRIVED_AT_SITE")
+  ) return false;
   if (typeof row.latitude !== "number" || typeof row.longitude !== "number" || !row.lastPositionAt) return false;
 
   const origin = explicitOrigin(row);
