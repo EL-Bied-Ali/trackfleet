@@ -1,6 +1,16 @@
 import { store as primaryStore } from "./delivery-store.shared-postgres";
-import { store as standbyStore } from "./delivery-store.cloudflare";
 import { loadOperationalDeliveriesFromD1 } from "./delivery-operational.cloudflare";
+import {
+  getPublicDeliveryFromD1,
+  getTripFromD1,
+  listDeliveryEventsFromD1,
+  listDeliveryIdsForTripFromD1,
+  listEtaObservationsFromD1,
+  listFleetPositionsFromD1,
+  listRouteEtaObservationsFromD1,
+  listTripPositionsFromD1,
+  listTripsFromD1,
+} from "./d1-standby-read-store";
 import {
   d1ReadFailoverActive,
   suppressMaintenanceWriteDuringD1Failover,
@@ -15,7 +25,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.getPublic",
       () => primaryStore.getPublic(tracking),
-      () => standbyStore.getPublic(tracking),
+      () => getPublicDeliveryFromD1(tracking),
     );
   },
 
@@ -31,7 +41,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.listEvents",
       () => primaryStore.listEvents(deliveryId),
-      () => standbyStore.listEvents(deliveryId),
+      () => listDeliveryEventsFromD1(deliveryId),
     );
   },
 
@@ -39,7 +49,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.listEtaObservations",
       () => primaryStore.listEtaObservations(deliveryId, limit),
-      () => standbyStore.listEtaObservations(deliveryId, limit),
+      () => listEtaObservationsFromD1(deliveryId, limit),
     );
   },
 
@@ -47,7 +57,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.listEtaObservationsForRoute",
       () => primaryStore.listEtaObservationsForRoute(routeTemplateId, destinationSiteId, limit),
-      () => standbyStore.listEtaObservationsForRoute(routeTemplateId, destinationSiteId, limit),
+      () => listRouteEtaObservationsFromD1(routeTemplateId, destinationSiteId, limit),
     );
   },
 
@@ -55,7 +65,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.listTripPositionsForRoute",
       () => primaryStore.listTripPositionsForRoute(companyId, routeTemplateId, limit),
-      () => standbyStore.listTripPositionsForRoute(companyId, routeTemplateId, limit),
+      () => listTripPositionsFromD1(companyId, routeTemplateId, limit),
     );
   },
 
@@ -63,7 +73,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.listFleetPositions",
       () => primaryStore.listFleetPositions(companyId, vehicleId, limit),
-      () => standbyStore.listFleetPositions(companyId, vehicleId, limit),
+      () => listFleetPositionsFromD1(companyId, vehicleId, limit),
     );
   },
 
@@ -71,7 +81,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.getTrip",
       () => primaryStore.getTrip(companyId, tripId),
-      () => standbyStore.getTrip(companyId, tripId),
+      () => getTripFromD1(companyId, tripId),
     );
   },
 
@@ -79,7 +89,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.listTrips",
       () => primaryStore.listTrips(companyId, limit),
-      () => standbyStore.listTrips(companyId, limit),
+      () => listTripsFromD1(companyId, limit),
     );
   },
 
@@ -87,7 +97,7 @@ export const store: DeliveryStore = {
     return withD1ReadFailover(
       "delivery.listDeliveryIdsForTrip",
       () => primaryStore.listDeliveryIdsForTrip(companyId, tripId),
-      () => standbyStore.listDeliveryIdsForTrip(companyId, tripId),
+      () => listDeliveryIdsForTripFromD1(companyId, tripId),
     );
   },
 
@@ -163,14 +173,9 @@ export const store: DeliveryStore = {
     );
   },
 
-  // The dashboard GET derives trips as part of rendering. During an active
-  // read-only lease these derived writes are replaced with the D1 snapshot (or
-  // a transient equivalent) so rendering remains available without creating a
-  // second writable source of truth. External non-GET requests are blocked at
-  // the Worker boundary while the lease is active.
   async upsertTrip(input) {
     if (await d1ReadFailoverActive()) {
-      const existing = await standbyStore.getTrip(input.companyId, input.id).catch(() => null);
+      const existing = await getTripFromD1(input.companyId, input.id).catch(() => null);
       if (existing) return existing;
       const now = new Date();
       return { ...input, createdAt: now, updatedAt: now };
@@ -193,6 +198,5 @@ export const store: DeliveryStore = {
     return primaryStore.linkVehicle(deliveryId, companyId, vehicle);
   },
 
-  // Delivery creation is never used by a GET path and remains strictly primary.
   create: primaryStore.create,
 };
