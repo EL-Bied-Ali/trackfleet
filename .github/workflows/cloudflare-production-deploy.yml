@@ -130,6 +130,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
           REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -155,6 +156,7 @@ jobs:
           gh api --method POST "repos/$REPOSITORY/statuses/$RELEASE_SHA" \
             -f state="$state" \
             -f context="trackfleet/d1-standby" \
+            -f target_url="$RUN_URL" \
             -f description="$description"
 
       - name: Publish Cloudflare production status
@@ -165,6 +167,7 @@ jobs:
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
           REPOSITORY: ${{ github.repository }}
           DEPLOY_JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
           if [ "$DEPLOY_JOB_STATUS" = "success" ]; then
@@ -177,4 +180,5 @@ jobs:
           gh api --method POST "repos/$REPOSITORY/statuses/$RELEASE_SHA" \
             -f state="$state" \
             -f context="trackfleet/cloudflare-production" \
+            -f target_url="$RUN_URL" \
             -f description="$description"
