@@ -1,4 +1,4 @@
-name: Patch arrival regression expectations
+name: Patch manual completion refresh
 
 on:
   push:
@@ -16,52 +16,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: audit-hardening-20260819
-      - name: Update arrival contracts
+      - name: Refresh dashboard after manual completion
         run: |
           python - <<'PY'
           from pathlib import Path
-
-          route = Path('tests/route-progress.test.mjs')
-          text = route.read_text()
-          text = text.replace(
-              'assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 1).status, "Delivered");',
-              'assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 1).status, "In transit");\n  assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 1).progress, 99);',
-          )
-          text = text.replace(
-              'assert.deepEqual(deriveDeliveryState("In transit", destination, 0), { status: "Delivered", progress: 100 });',
-              'assert.deepEqual(deriveDeliveryState("In transit", destination, 0), { status: "In transit", progress: 99 });',
-          )
-          route.write_text(text)
-
-          schema = Path('db/schema.ts')
-          schema_text = schema.read_text()
-          schema_text = schema_text.replace(
-              '    "DELAY_DETECTED",\n    "ARRIVED",\n    "GPS_STALE",',
-              '    "DELAY_DETECTED",\n    "ARRIVED_AT_SITE",\n    "ARRIVED",\n    "MANUAL_DELIVERED",\n    "GPS_STALE",',
-          )
-          schema.write_text(schema_text)
-
           manager = Path('app/SiteManager.tsx')
-          manager_text = manager.read_text().replace(
-              'body: JSON.stringify({ deliveryId: delivery.id }),',
-              'body: JSON.stringify({ deliveryId: delivery.id, confirmDelivered: true }),',
-          )
-          manager.write_text(manager_text)
+          text = manager.read_text()
+          old = '      window.dispatchEvent(new Event("trackfleet-deliveries-changed"));'
+          new = '      window.location.reload();'
+          if old not in text:
+              raise SystemExit('manual completion refresh marker not found')
+          manager.write_text(text.replace(old, new, 1))
 
           test_path = Path('tests/delivery-completion.test.mjs')
           test_text = test_path.read_text()
-          marker = 'assert.match(manualRoute, /deliveryId\\.length > 100/);'
-          if marker in test_text and 'confirmDelivered' not in test_text.split('test("manual completion is authenticated')[1].split('});')[0]:
-              test_text = test_text.replace(marker, marker + '\n  assert.match(manualRoute, /confirmDelivered !== true/);')
-          ui_marker = 'assert.match(siteManager, /\\/api\\/deliveries\\/manual-completion/);'
-          if ui_marker in test_text and 'confirmDelivered: true' not in test_text:
-              test_text = test_text.replace(ui_marker, ui_marker + '\n  assert.match(siteManager, /confirmDelivered: true/);')
+          marker = '  assert.match(siteManager, /confirmDelivered: true/);'
+          refresh_assertion = '  assert.match(siteManager, /window\\.location\\.reload\\(\\)/);'
+          if refresh_assertion not in test_text:
+              test_text = test_text.replace(marker, marker + '\n' + refresh_assertion)
           test_path.write_text(test_text)
           PY
       - name: Commit update
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/route-progress.test.mjs db/schema.ts app/SiteManager.tsx tests/delivery-completion.test.mjs
-          git commit -m "align delivery completion safety contracts" || exit 0
+          git add app/SiteManager.tsx tests/delivery-completion.test.mjs
+          git commit -m "refresh dashboard after manual completion" || exit 0
           git push origin HEAD:audit-hardening-20260819
