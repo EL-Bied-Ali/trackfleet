@@ -103,6 +103,8 @@ test("CSV retries retain one generated idempotency key per parsed row", async ()
   assert.match(source, /idempotencyKey: crypto\.randomUUID\(\)/);
   assert.match(source, /"idempotency-key": row\.idempotencyKey/);
   assert.match(source, /filter\(\(\{ row \}\) => row\.status !== "success"\)/);
-  assert.match(source, /\{ \.\.\.row, status: "failed", error: message \}/);
-  assert.doesNotMatch(source, /idempotencyKey: crypto\.randomUUID\(\)[\s\S]*status: "failed"/);
+  const failureMutation = source.match(/setRows\(\(existing\) => existing\.map\(\(row, index\) => index === current\.index \? (\{[^\n]+status: "failed"[^\n]+\}) : row\)\)/)?.[1] ?? "";
+  assert.match(failureMutation, /\.\.\.row/);
+  assert.doesNotMatch(failureMutation, /idempotencyKey/);
+  assert.doesNotMatch(failureMutation, /randomUUID/);
 });
