@@ -9,10 +9,13 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 3
+    permissions:
+      statuses: write
     env:
       TRACKFLEET_BASE_URL: https://trackfleet.chronoplan.workers.dev
     steps:
       - name: Read production health
+        id: health
         shell: bash
         run: |
           set -euo pipefail
@@ -48,5 +51,36 @@ jobs:
             },
           };
           console.log(JSON.stringify(summary, null, 2));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `ready=${summary.automation.ready ? 'true' : 'false'}\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `missing=${summary.automation.missing.join(',') || 'none'}\n`);
           if (!summary.ok || summary.storage.mode !== 'postgres' || summary.storage.connected !== true) process.exit(1);
           NODE
+
+      - name: Publish MVP readiness status
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HEALTH_OUTCOME: ${{ steps.health.outcome }}
+          READY: ${{ steps.health.outputs.ready }}
+          MISSING: ${{ steps.health.outputs.missing }}
+        shell: bash
+        run: |
+          if [ "$HEALTH_OUTCOME" != "success" ]; then
+            state="failure"
+            description="Production Postgres health audit failed"
+          elif [ "$READY" = "true" ]; then
+            state="success"
+            description="MVP runtime ready; automation requirements satisfied"
+          else
+            state="pending"
+            description="MVP runtime pending: ${MISSING:-unknown}"
+          fi
+          gh api --method POST "repos/$REPOSITORY/statuses/$SHA" \
+            -f state="$state" \
+            -f context="trackfleet/mvp-readiness" \
+            -f target_url="$RUN_URL" \
+            -f description="${description:0:140}"
