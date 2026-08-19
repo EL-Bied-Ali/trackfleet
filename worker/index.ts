@@ -10,6 +10,7 @@ import { shouldBlockMutationDuringReadFailover } from "../app/lib/d1-read-failov
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  CRON_SECRET?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -30,6 +31,7 @@ interface ScheduledController {
   noRetry(): void;
 }
 
+const automationCron = "*/5 * * * *";
 const operationalReconciliationCron = "*/15 * * * *";
 const telemetryReconciliationCron = "5,20,35,50 * * * *";
 const historyBackfillCron = "10,25,40,55 * * * *";
@@ -61,7 +63,22 @@ function readOnlyFailoverResponse() {
   }));
 }
 
-async function runScheduledStandbyMaintenance(cron: string) {
+async function runAutomationTick(env: Env, ctx: ExecutionContext) {
+  const secret = env.CRON_SECRET?.trim();
+  if (!secret) throw new Error("cron_secret_missing");
+
+  const response = await handler.fetch(new Request("https://trackfleet.internal/api/automation/tick", {
+    headers: { authorization: `Bearer ${secret}` },
+  }), env, ctx);
+  if (!response.ok) throw new Error(`automation_tick_http_${response.status}`);
+  console.info("[trackfleet:automation] scheduled tick completed", { status: response.status });
+}
+
+async function runScheduledTask(cron: string, env: Env, ctx: ExecutionContext) {
+  if (cron === automationCron) {
+    await runAutomationTick(env, ctx);
+    return;
+  }
   if (cron === operationalReconciliationCron) {
     const result = await reconcileD1StandbySafely();
     console.info("[trackfleet:replication] scheduled operational reconciliation", result);
@@ -77,7 +94,7 @@ async function runScheduledStandbyMaintenance(cron: string) {
     console.info("[trackfleet:replication] scheduled history backfill", result);
     return;
   }
-  console.warn("[trackfleet:replication] unknown scheduled maintenance cron", { cron });
+  console.warn("[trackfleet:cron] unknown scheduled task", { cron });
 }
 
 const worker = {
@@ -104,11 +121,11 @@ const worker = {
     return withSecurityHeaders(await handler.fetch(request, env, ctx));
   },
 
-  async scheduled(controller: ScheduledController, _env: Env, _ctx: ExecutionContext): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     try {
-      await runScheduledStandbyMaintenance(controller.cron);
+      await runScheduledTask(controller.cron, env, ctx);
     } catch (error) {
-      console.error("[trackfleet:replication] scheduled standby maintenance failed", {
+      console.error("[trackfleet:cron] scheduled task failed", {
         cron: controller.cron,
         scheduledTime: controller.scheduledTime,
         message: error instanceof Error ? error.message : "unknown_error",
