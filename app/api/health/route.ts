@@ -1,4 +1,6 @@
+import { getAutomationHeartbeat } from "trackfleet-automation-heartbeat";
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { automationHeartbeatStatus, AUTOMATION_HEARTBEAT_STALE_AFTER_MS } from "../../lib/automation-heartbeat-health";
 import { automationMissingRequirements } from "../../lib/automation-health";
 import { parseAutomationStartAt } from "../../lib/notification-policy";
 import { sessionEncryptionKeyConfigured } from "../../lib/session-encryption-key";
@@ -31,6 +33,21 @@ export async function GET() {
     whatsappActivationConfigured,
   });
 
+  let heartbeatAvailable = false;
+  let heartbeat = automationHeartbeatStatus({ lastAttemptAt: null, lastSuccessAt: null, lastFailureAt: null });
+  try {
+    heartbeat = automationHeartbeatStatus(await getAutomationHeartbeat());
+    heartbeatAvailable = true;
+  } catch (error) {
+    console.error("[trackfleet:health] automation heartbeat unavailable", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    heartbeat = {
+      ...heartbeat,
+      staleAfterSeconds: Math.floor(AUTOMATION_HEARTBEAT_STALE_AFTER_MS / 1000),
+    };
+  }
+
   return Response.json({
     ok: storage.connected,
     service: "trackfleet",
@@ -45,6 +62,9 @@ export async function GET() {
       whatsappActivationConfigured,
       ready: missing.length === 0,
       missing,
+      heartbeatAvailable,
+      live: heartbeatAvailable ? heartbeat.fresh : null,
+      heartbeat,
     },
     timestamp: new Date().toISOString(),
   }, {
