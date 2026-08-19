@@ -36,6 +36,8 @@ jobs:
         run: node --test tests/operational-alerts.test.mjs
       - name: Verify storage schema compatibility checks
         run: node --test tests/storage-schema-health.test.mjs
+      - name: Verify authenticated quick tool navigation
+        run: node --test tests/quick-tools-navigation.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
