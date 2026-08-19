@@ -14,6 +14,8 @@ export type ArrivalCompletionResult = {
   arrivalSiteSince: Date | null;
 };
 
+const maxContinuousObservationGapMs = 30 * 60_000;
+
 function db() {
   if (!runtimeEnv.DB) throw new Error("Cloudflare D1 binding `DB` is required for delivery completion");
   return runtimeEnv.DB;
@@ -25,8 +27,14 @@ async function ensureSchema() {
     company_id text NOT NULL,
     delivery_id text NOT NULL,
     arrived_at integer NOT NULL,
+    last_observed_at integer NOT NULL,
     PRIMARY KEY (company_id, delivery_id)
   )`).run();
+  const columns = await database.prepare("PRAGMA table_info(delivery_arrival_state)").all<{ name: string }>();
+  if (!(columns.results ?? []).some((column) => column.name === "last_observed_at")) {
+    await database.prepare("ALTER TABLE delivery_arrival_state ADD COLUMN last_observed_at integer").run();
+    await database.prepare("UPDATE delivery_arrival_state SET last_observed_at = arrived_at WHERE last_observed_at IS NULL").run();
+  }
   await database.prepare("CREATE INDEX IF NOT EXISTS idx_delivery_arrival_state_arrived_at ON delivery_arrival_state(arrived_at)").run();
   return database;
 }
@@ -39,16 +47,31 @@ export async function observeArrivalCompletion(input: ArrivalCompletionObservati
     return { justEntered: false, deliveredNow: false, arrivalSiteSince: null };
   }
 
-  const insert = await database.prepare(`INSERT OR IGNORE INTO delivery_arrival_state (company_id, delivery_id, arrived_at)
-    VALUES (?, ?, ?)`).bind(input.companyId, input.deliveryId, input.observationAt.getTime()).run();
-  const state = await database.prepare(`SELECT arrived_at AS arrivedAt FROM delivery_arrival_state
-    WHERE company_id = ? AND delivery_id = ? LIMIT 1`)
+  const state = await database.prepare(`SELECT arrived_at AS arrivedAt, last_observed_at AS lastObservedAt
+    FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ? LIMIT 1`)
     .bind(input.companyId, input.deliveryId)
-    .first<{ arrivedAt: number }>();
-  const arrivalSiteSince = state ? new Date(state.arrivedAt) : input.observationAt;
-  const elapsedMinutes = Math.max(0, (input.observationAt.getTime() - arrivalSiteSince.getTime()) / 60_000);
+    .first<{ arrivedAt: number; lastObservedAt: number | null }>();
+  const observationMs = input.observationAt.getTime();
+  const previousObservedMs = state?.lastObservedAt ?? NaN;
+  const continuityBroken = !state
+    || !Number.isFinite(previousObservedMs)
+    || observationMs < previousObservedMs
+    || observationMs - previousObservedMs > maxContinuousObservationGapMs;
+
+  const arrivalSiteSince = continuityBroken ? input.observationAt : new Date(state.arrivedAt);
+  if (continuityBroken) {
+    await database.prepare(`INSERT INTO delivery_arrival_state (company_id, delivery_id, arrived_at, last_observed_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(company_id, delivery_id) DO UPDATE SET arrived_at = excluded.arrived_at, last_observed_at = excluded.last_observed_at`)
+      .bind(input.companyId, input.deliveryId, observationMs, observationMs).run();
+  } else {
+    await database.prepare("UPDATE delivery_arrival_state SET last_observed_at = ? WHERE company_id = ? AND delivery_id = ?")
+      .bind(observationMs, input.companyId, input.deliveryId).run();
+  }
+
+  const elapsedMinutes = Math.max(0, (observationMs - arrivalSiteSince.getTime()) / 60_000);
   if (elapsedMinutes < input.unloadGraceMinutes) {
-    return { justEntered: Number(insert.meta.changes ?? 0) > 0, deliveredNow: false, arrivalSiteSince };
+    return { justEntered: continuityBroken, deliveredNow: false, arrivalSiteSince };
   }
 
   const existing = await database.prepare("SELECT id FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1")
@@ -58,7 +81,7 @@ export async function observeArrivalCompletion(input: ArrivalCompletionObservati
     database.prepare("UPDATE deliveries SET status = 'Delivered', progress = 100 WHERE id = ? AND company_id = ? AND status != 'Delivered'")
       .bind(input.deliveryId, input.companyId),
     database.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'ARRIVED', 100, ?)")
-      .bind(input.deliveryId, input.observationAt.getTime()),
+      .bind(input.deliveryId, observationMs),
     database.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
       .bind(input.companyId, input.deliveryId),
   ]);
