@@ -42,6 +42,8 @@ jobs:
         run: node --test tests/release-gate-contract.test.mjs
       - name: Verify tenant telemetry growth reporting
         run: node --experimental-strip-types --test tests/telemetry-growth.test.mjs
+      - name: Verify tenant-safe data export
+        run: node --experimental-strip-types --test tests/tenant-data-export.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
