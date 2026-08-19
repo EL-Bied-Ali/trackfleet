@@ -1,5 +1,4 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import { createDeliveryId } from "./delivery-id";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
@@ -52,93 +51,6 @@ function explicitOrigin(delivery: DeliveryRow): [number, number] | null {
     : null;
 }
 
-async function ensureDeliveryColumns() {
-  const result = await db().prepare("PRAGMA table_info(deliveries)").all<{ name: string }>();
-  const columns = new Set((result.results ?? []).map((column) => column.name));
-  if (!columns.has("origin_site_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN origin_site_id text").run();
-  if (!columns.has("origin_latitude")) await db().prepare("ALTER TABLE deliveries ADD COLUMN origin_latitude real").run();
-  if (!columns.has("origin_longitude")) await db().prepare("ALTER TABLE deliveries ADD COLUMN origin_longitude real").run();
-  if (!columns.has("destination_site_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN destination_site_id text").run();
-  if (!columns.has("destination_latitude")) await db().prepare("ALTER TABLE deliveries ADD COLUMN destination_latitude real").run();
-  if (!columns.has("destination_longitude")) await db().prepare("ALTER TABLE deliveries ADD COLUMN destination_longitude real").run();
-  if (!columns.has("arrival_radius_km")) await db().prepare("ALTER TABLE deliveries ADD COLUMN arrival_radius_km real DEFAULT 0.5 NOT NULL").run();
-  if (!columns.has("planned_arrival_at")) await db().prepare("ALTER TABLE deliveries ADD COLUMN planned_arrival_at integer").run();
-  if (!columns.has("trip_id")) await db().prepare("ALTER TABLE deliveries ADD COLUMN trip_id text").run();
-  if (!columns.has("whatsapp_opt_in")) await db().prepare("ALTER TABLE deliveries ADD COLUMN whatsapp_opt_in integer DEFAULT 0 NOT NULL").run();
-  if (!columns.has("whatsapp_opt_in_at")) await db().prepare("ALTER TABLE deliveries ADD COLUMN whatsapp_opt_in_at integer").run();
-}
-
-async function ensureTable() {
-  const database = db();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS deliveries (
-    id text PRIMARY KEY NOT NULL, customer text NOT NULL, origin_site_id text, origin_latitude real, origin_longitude real, destination_site_id text, destination text NOT NULL,
-    destination_latitude real, destination_longitude real, arrival_radius_km real DEFAULT 0.5 NOT NULL,
-    truck text NOT NULL, driver text NOT NULL, status text NOT NULL, eta text NOT NULL, planned_arrival_at integer,
-    progress integer DEFAULT 0 NOT NULL, color text DEFAULT '#916ed7' NOT NULL, contact text DEFAULT '' NOT NULL,
-    whatsapp_opt_in integer DEFAULT 0 NOT NULL, whatsapp_opt_in_at integer,
-    sendatrack_vehicle_id text DEFAULT '' NOT NULL, latitude real, longitude real, speed real, last_position_at integer,
-    gps_source text DEFAULT 'simulation' NOT NULL, company_id text DEFAULT 'demo' NOT NULL, tracking_token text, created_at integer NOT NULL
-  )`).run();
-  await ensureDeliveryColumns();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS delivery_events (
-    delivery_id text NOT NULL, type text NOT NULL, progress integer NOT NULL, created_at integer NOT NULL,
-    PRIMARY KEY (delivery_id, type)
-  )`).run();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS delivery_notifications (
-    delivery_id text NOT NULL, event_type text NOT NULL, channel text NOT NULL,
-    attempted_at integer NOT NULL, sent_at integer,
-    PRIMARY KEY (delivery_id, event_type, channel)
-  )`).run();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS delivery_eta_observations (
-    delivery_id text NOT NULL, position_at integer NOT NULL, estimated_arrival_at integer NOT NULL, planned_arrival_at integer,
-    delay_minutes integer, effective_speed_kmh real, remaining_distance_km real NOT NULL, progress integer NOT NULL,
-    confidence text NOT NULL, source text NOT NULL, created_at integer NOT NULL, PRIMARY KEY (delivery_id, position_at)
-  )`).run();
-  const etaColumnsResult = await database.prepare("PRAGMA table_info(delivery_eta_observations)").all<{ name: string }>();
-  const etaColumns = new Set((etaColumnsResult.results ?? []).map((column) => column.name));
-  if (!etaColumns.has("route_template_id")) await database.prepare("ALTER TABLE delivery_eta_observations ADD COLUMN route_template_id text").run();
-  if (!etaColumns.has("trip_instance_id")) await database.prepare("ALTER TABLE delivery_eta_observations ADD COLUMN trip_instance_id text").run();
-  if (!etaColumns.has("destination_site_id")) await database.prepare("ALTER TABLE delivery_eta_observations ADD COLUMN destination_site_id text").run();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS trip_position_observations (
-    company_id text NOT NULL, route_template_id text NOT NULL, trip_instance_id text NOT NULL, vehicle_id text NOT NULL,
-    position_at integer NOT NULL, latitude real NOT NULL, longitude real NOT NULL, speed real NOT NULL, created_at integer NOT NULL,
-    PRIMARY KEY (company_id, trip_instance_id, position_at)
-  )`).run();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS fleet_position_observations (
-    company_id text NOT NULL, vehicle_id text NOT NULL, vehicle_name text NOT NULL, position_at integer NOT NULL,
-    latitude real NOT NULL, longitude real NOT NULL, speed real NOT NULL, heading real, address text DEFAULT '' NOT NULL, created_at integer NOT NULL,
-    PRIMARY KEY (company_id, vehicle_id, position_at)
-  )`).run();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS trips (
-    id text NOT NULL, company_id text NOT NULL, route_template_id text NOT NULL, vehicle_key text NOT NULL, truck text NOT NULL,
-    sendatrack_vehicle_id text DEFAULT '' NOT NULL, origin_site_id text, stops_json text NOT NULL, status text NOT NULL,
-    created_at integer NOT NULL, updated_at integer NOT NULL, PRIMARY KEY (company_id, id)
-  )`).run();
-  await database.batch([
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)"),
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)"),
-    database.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)"),
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)"),
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)"),
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_eta_observations_route_destination ON delivery_eta_observations(route_template_id, destination_site_id, position_at DESC)"),
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)"),
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_fleet_positions_company_vehicle ON fleet_position_observations(company_id, vehicle_id, position_at DESC)"),
-    database.prepare("CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)"),
-  ]);
-  for (const delivery of seedDeliveries) {
-    await database.prepare(`INSERT OR IGNORE INTO deliveries
-      (id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-       truck, driver, status, eta, planned_arrival_at, progress, color, contact, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
-       latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.originLatitude, delivery.originLongitude, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
-        delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
-        delivery.progress, delivery.color, delivery.contact, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
-        delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
-        delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.createdAt.getTime()).run();
-  }
-}
-
 const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_latitude AS originLatitude, origin_longitude AS originLongitude, destination_site_id AS destinationSiteId, destination,
   destination_latitude AS destinationLatitude, destination_longitude AS destinationLongitude, arrival_radius_km AS arrivalRadiusKm,
   truck, driver, status, eta, planned_arrival_at AS plannedArrivalAt, progress, color, contact,
@@ -154,19 +66,16 @@ async function baselineProgress(deliveryId: string) {
 
 export const store: DeliveryStore = {
   async getPublic(tracking) {
-    await ensureTable();
     const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE tracking_token = ? LIMIT 1`).bind(tracking).first<RawDelivery>();
     return row ? hydrate(row) : null;
   },
   async listForCompany(companyId) {
-    await ensureTable();
     const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE company_id = ? ORDER BY created_at DESC`).bind(companyId).all<RawDelivery>();
     return (result.results ?? []).map(hydrate);
   },
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
-    await ensureTable();
     const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE company_id = ? AND status != 'Delivered'`).bind(companyId).all<RawDelivery>();
     const statements = [];
     for (const rawDelivery of result.results ?? []) {
@@ -191,7 +100,6 @@ export const store: DeliveryStore = {
     return transitions;
   },
   async linkVehicle(deliveryId, companyId, vehicle) {
-    await ensureTable();
     const raw = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
     if (!raw) return null;
     const delivery = hydrate(raw);
@@ -204,17 +112,14 @@ export const store: DeliveryStore = {
     return updated ? hydrate(updated) : null;
   },
   async recordEvent(deliveryId, type, progress) {
-    await ensureTable();
     const result = await db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, ?, ?, ?)`).bind(deliveryId, type, progress, Date.now()).run();
     return Boolean(result.meta?.changes);
   },
   async listEvents(deliveryId) {
-    await ensureTable();
     const result = await db().prepare(`SELECT delivery_id AS deliveryId, type, progress, created_at AS createdAt FROM delivery_events WHERE delivery_id = ? ORDER BY created_at ASC`).bind(deliveryId).all<RawDeliveryEvent>();
     return (result.results ?? []).map(hydrateEvent);
   },
   async recordEtaObservation(input) {
-    await ensureTable();
     const result = await db().prepare(`INSERT OR IGNORE INTO delivery_eta_observations
       (delivery_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -222,7 +127,6 @@ export const store: DeliveryStore = {
     return Boolean(result.meta?.changes);
   },
   async listEtaObservations(deliveryId, limit = 200) {
-    await ensureTable();
     const capped = Math.max(1, Math.min(2000, Math.round(limit)));
     const result = await db().prepare(`SELECT delivery_id AS deliveryId, route_template_id AS routeTemplateId, trip_instance_id AS tripInstanceId, destination_site_id AS destinationSiteId, position_at AS positionAt, estimated_arrival_at AS estimatedArrivalAt, planned_arrival_at AS plannedArrivalAt, delay_minutes AS delayMinutes, effective_speed_kmh AS effectiveSpeedKmh, remaining_distance_km AS remainingDistanceKm, progress, confidence, source, created_at AS createdAt FROM delivery_eta_observations WHERE delivery_id = ? ORDER BY position_at DESC LIMIT ?`).bind(deliveryId, capped).all<Record<string, unknown>>();
     return (result.results ?? []).map((row) => ({
@@ -233,7 +137,6 @@ export const store: DeliveryStore = {
     }));
   },
   async listEtaObservationsForRoute(routeTemplateId, destinationSiteId, limit = 5000) {
-    await ensureTable();
     const capped = Math.max(1, Math.min(10000, Math.round(limit)));
     const result = await db().prepare(`SELECT delivery_id AS deliveryId, route_template_id AS routeTemplateId, trip_instance_id AS tripInstanceId, destination_site_id AS destinationSiteId, position_at AS positionAt, estimated_arrival_at AS estimatedArrivalAt, planned_arrival_at AS plannedArrivalAt, delay_minutes AS delayMinutes, effective_speed_kmh AS effectiveSpeedKmh, remaining_distance_km AS remainingDistanceKm, progress, confidence, source, created_at AS createdAt FROM delivery_eta_observations WHERE route_template_id = ? AND destination_site_id = ? ORDER BY position_at DESC LIMIT ?`).bind(routeTemplateId, destinationSiteId, capped).all<Record<string, unknown>>();
     return (result.results ?? []).map((row) => ({
@@ -244,14 +147,12 @@ export const store: DeliveryStore = {
     }));
   },
   async recordTripPosition(input) {
-    await ensureTable();
     const result = await db().prepare(`INSERT OR IGNORE INTO trip_position_observations
       (company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(input.companyId, input.routeTemplateId, input.tripInstanceId, input.vehicleId, input.positionAt.getTime(), input.latitude, input.longitude, input.speed, Date.now()).run();
     return Boolean(result.meta?.changes);
   },
   async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {
-    await ensureTable();
     const capped = Math.max(1, Math.min(20000, Math.round(limit)));
     const result = await db().prepare(`SELECT company_id AS companyId, route_template_id AS routeTemplateId, trip_instance_id AS tripInstanceId, vehicle_id AS vehicleId, position_at AS positionAt, latitude, longitude, speed, created_at AS createdAt FROM trip_position_observations WHERE company_id = ? AND route_template_id = ? ORDER BY position_at DESC LIMIT ?`).bind(companyId, routeTemplateId, capped).all<Record<string, unknown>>();
     return (result.results ?? []).map((row) => ({
@@ -259,14 +160,12 @@ export const store: DeliveryStore = {
     }));
   },
   async recordFleetPosition(input) {
-    await ensureTable();
     const result = await db().prepare(`INSERT OR IGNORE INTO fleet_position_observations
       (company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(input.companyId, input.vehicleId, input.vehicleName, input.positionAt.getTime(), input.latitude, input.longitude, input.speed, input.heading, input.address, Date.now()).run();
     return Boolean(result.meta?.changes);
   },
   async listFleetPositions(companyId, vehicleId, limit = 20000) {
-    await ensureTable();
     const capped = Math.max(1, Math.min(50000, Math.round(limit)));
     const result = await db().prepare(`SELECT company_id AS companyId, vehicle_id AS vehicleId, vehicle_name AS vehicleName, position_at AS positionAt, latitude, longitude, speed, heading, address, created_at AS createdAt
       FROM fleet_position_observations WHERE company_id = ? AND vehicle_id = ? ORDER BY position_at DESC LIMIT ?`).bind(companyId, vehicleId, capped).all<Record<string, unknown>>();
@@ -275,7 +174,6 @@ export const store: DeliveryStore = {
     }));
   },
   async upsertTrip(input) {
-    await ensureTable();
     const existing = await db().prepare("SELECT id FROM trips WHERE company_id = ? AND id = ? LIMIT 1").bind(input.companyId, input.id).first<{ id: string }>();
     if (!existing) {
       const now = Date.now();
@@ -288,26 +186,22 @@ export const store: DeliveryStore = {
     return (await this.getTrip(input.companyId, input.id))!;
   },
   async getTrip(companyId, tripId) {
-    await ensureTable();
     const row = await db().prepare("SELECT * FROM trips WHERE company_id = ? AND id = ? LIMIT 1").bind(companyId, tripId).first<Record<string, unknown>>();
     if (!row) return null;
     const rawStops = JSON.parse(String(row.stops_json)) as Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: number | null }>;
     return { id: String(row.id), companyId: String(row.company_id), routeTemplateId: String(row.route_template_id), vehicleKey: String(row.vehicle_key), truck: String(row.truck), sendatrackVehicleId: String(row.sendatrack_vehicle_id ?? ''), originSiteId: row.origin_site_id ? String(row.origin_site_id) : null, stops: rawStops.map((stop) => ({ ...stop, plannedArrivalAt: typeof stop.plannedArrivalAt === 'number' ? new Date(stop.plannedArrivalAt) : null })), status: String(row.status) as TripRecord['status'], createdAt: new Date(Number(row.created_at)), updatedAt: new Date(Number(row.updated_at)) };
   },
   async listTrips(companyId, limit = 100) {
-    await ensureTable();
     const capped = Math.max(1, Math.min(1000, Math.round(limit)));
     const result = await db().prepare("SELECT id FROM trips WHERE company_id = ? ORDER BY updated_at DESC LIMIT ?").bind(companyId, capped).all<{ id: string }>();
     return (await Promise.all((result.results ?? []).map((row) => this.getTrip(companyId, row.id)))).filter((trip): trip is TripRecord => Boolean(trip));
   },
 
   async assignDeliveryTrip(deliveryId, companyId, tripId) {
-    await ensureTable();
     const result = await db().prepare("UPDATE deliveries SET trip_id = ? WHERE id = ? AND company_id = ? AND (trip_id IS NULL OR trip_id = ?)").bind(tripId, deliveryId, companyId, tripId).run();
     return Boolean(result.meta?.changes);
   },
   async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {
-    await ensureTable();
     const result = await db().prepare("UPDATE deliveries SET trip_id = ?, truck = ?, sendatrack_vehicle_id = ? WHERE id = ? AND company_id = ? AND status != 'Delivered' AND trip_id IS NULL AND truck = ? AND sendatrack_vehicle_id = ''")
       .bind(tripId, truck, sendatrackVehicleId, deliveryId, companyId, UNASSIGNED_TRUCK).run();
     if (!result.meta?.changes) return null;
@@ -315,13 +209,11 @@ export const store: DeliveryStore = {
     return updated ? hydrate(updated) : null;
   },
   async listDeliveryIdsForTrip(companyId, tripId) {
-    await ensureTable();
     const result = await db().prepare("SELECT id FROM deliveries WHERE company_id = ? AND trip_id = ? ORDER BY created_at ASC").bind(companyId, tripId).all<{ id: string }>();
     return (result.results ?? []).map((row) => row.id);
   },
 
   async listPendingNotifications(companyId) {
-    await ensureTable();
     const staleBefore = Date.now() - 5 * 60_000;
     const result = await db().prepare(`SELECT e.delivery_id AS deliveryId, e.type, e.progress, e.created_at AS createdAt
       FROM delivery_events e
@@ -339,7 +231,6 @@ export const store: DeliveryStore = {
     return pending;
   },
   async claimNotification(deliveryId, type) {
-    await ensureTable();
     const now = Date.now();
     const inserted = await db().prepare(`INSERT OR IGNORE INTO delivery_notifications (delivery_id, event_type, channel, attempted_at, sent_at) VALUES (?, ?, 'whatsapp', ?, NULL)`).bind(deliveryId, type, now).run();
     if (inserted.meta?.changes) return true;
@@ -347,15 +238,12 @@ export const store: DeliveryStore = {
     return Boolean(reclaimed.meta?.changes);
   },
   async markNotificationSent(deliveryId, type) {
-    await ensureTable();
     await db().prepare(`UPDATE delivery_notifications SET sent_at = ? WHERE delivery_id = ? AND event_type = ? AND channel = 'whatsapp'`).bind(Date.now(), deliveryId, type).run();
   },
   async releaseNotification(deliveryId, type) {
-    await ensureTable();
     await db().prepare(`DELETE FROM delivery_notifications WHERE delivery_id = ? AND event_type = ? AND channel = 'whatsapp' AND sent_at IS NULL`).bind(deliveryId, type).run();
   },
   async create(input: CreateDeliveryInput) {
-    await ensureTable();
     const delivery: DeliveryRow = {
       ...input,
       whatsappOptIn: input.whatsappOptIn === true,
