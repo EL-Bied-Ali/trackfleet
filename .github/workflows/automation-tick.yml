@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
-      BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet-self.vercel.app' }}
+      BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet.chronoplan.workers.dev' }}
       CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
     steps:
       - name: Run TrackFleet automation
