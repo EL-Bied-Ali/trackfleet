@@ -10,7 +10,7 @@ test("Postgres health reports D1 standby separately from the active backend", ()
   assert.match(health, /failover: StorageFailoverHealth/);
   assert.match(health, /candidate: "cloudflare-d1"/);
   assert.match(health, /ready: readiness\.ready/);
-  assert.match(health, /reason: readiness\.ready \? "replication_ready" : readiness\.reason/);
+  assert.match(health, /reason: readiness\.reason === "ready" \? "replication_ready" : readiness\.reason/);
   assert.match(health, /automatic: false/);
 });
 
