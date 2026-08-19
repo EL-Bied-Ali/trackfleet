@@ -11,6 +11,7 @@ const safeReconciliation = fs.readFileSync("app/lib/d1-reconciliation-safe.ts", 
 const worker = fs.readFileSync("worker/index.ts", "utf8");
 const vite = fs.readFileSync("vite.config.ts", "utf8");
 const envExample = fs.readFileSync(".env.example", "utf8");
+const sqlMutation = /\b(?:INSERT|UPDATE|DELETE|ALTER)\s|\bCREATE\s+TABLE/i;
 
 test("D1 read failover is opt-in, readiness-gated and leased", () => {
   assert.match(helper, /TRACKFLEET_D1_READ_FAILOVER/);
@@ -37,7 +38,7 @@ test("operational D1 fallback mirrors the bounded Postgres dashboard window", ()
   assert.match(operational, /status <> 'Delivered'/);
   assert.match(operational, /delivery_events/);
   assert.match(operational, /UNION ALL/);
-  assert.doesNotMatch(operational, /INSERT|UPDATE|DELETE|ALTER|CREATE TABLE/i);
+  assert.doesNotMatch(operational, sqlMutation);
 });
 
 test("delivery standby wrapper falls back only on reads and never calls D1 business mutations", () => {
@@ -73,7 +74,7 @@ test("existing sessions and site reads can fall back but their explicit writes r
   assert.match(sites, /withD1ReadFailover/);
   assert.match(sites, /SELECT \* FROM sites WHERE company_id = \? ORDER BY label/);
   assert.match(sites, /return primarySiteStore\.upsert\(input\)/);
-  assert.doesNotMatch(sites, /INSERT|UPDATE|DELETE|ALTER|CREATE TABLE/i);
+  assert.doesNotMatch(sites, sqlMutation);
 });
 
 test("Worker blocks external mutations while the read-only lease is active", () => {
@@ -83,11 +84,13 @@ test("Worker blocks external mutations while the read-only lease is active", () 
   assert.match(worker, /"retry-after": "60"/);
 });
 
-test("reconciliation refuses silent company or session truncation before freshness can be renewed", () => {
+test("reconciliation refuses silent coverage truncation and cannot self-fail over", () => {
   assert.match(safeReconciliation, /D1_RECONCILIATION_MAX_COMPANIES = 5/);
   assert.match(safeReconciliation, /D1_RECONCILIATION_MAX_ACTIVE_SESSIONS = 200/);
   assert.match(safeReconciliation, /COUNT\(DISTINCT company_id\)/);
   assert.match(safeReconciliation, /COUNT\(\*\) FROM sessions WHERE expires_at > NOW\(\)/);
   assert.match(safeReconciliation, /last_failure_at/);
   assert.match(safeReconciliation, /d1_reconciliation_coverage_exceeded/);
+  assert.match(safeReconciliation, /withoutD1ReadFailover\(\(\) => reconcileD1Standby\(\)\)/);
+  assert.match(helper, /if \(suppressionDepth > 0\) return false/);
 });
