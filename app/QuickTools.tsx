@@ -37,6 +37,10 @@ export default function QuickTools() {
         <span aria-hidden="true">△</span>
         <span>Operations</span>
       </a>
+      <a href={`/operations/history?lang=${encodeURIComponent(language)}`} className={styles.tool}>
+        <span aria-hidden="true">≡</span>
+        <span>History</span>
+      </a>
       <a href={`/operations/storage?lang=${encodeURIComponent(language)}`} className={styles.tool}>
         <span aria-hidden="true">▥</span>
         <span>Storage</span>
