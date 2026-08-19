@@ -4,21 +4,12 @@ import { loginRateLimitKey } from "./login-rate-limit-key";
 const windowMs = 10 * 60_000;
 const maxAttempts = 8;
 
-async function ensureTable() {
-  const db = runtimeEnv.DB;
-  if (!db) return null;
-  await db.prepare(`CREATE TABLE IF NOT EXISTS login_rate_limits (
-    client_key text PRIMARY KEY NOT NULL,
-    window_started_at integer NOT NULL,
-    attempts integer NOT NULL,
-    updated_at integer NOT NULL
-  )`).run();
-  await db.prepare("CREATE INDEX IF NOT EXISTS idx_login_rate_limits_updated_at ON login_rate_limits(updated_at)").run();
-  return db;
+function database() {
+  return runtimeEnv.DB ?? null;
 }
 
 export async function consumeLoginAttempt(request: Request) {
-  const db = await ensureTable();
+  const db = database();
   if (!db || !runtimeEnv.TRACKFLEET_ENCRYPTION_KEY?.trim()) return { allowed: true, retryAfterSeconds: 0, distributed: false };
 
   const key = await loginRateLimitKey(request);
@@ -40,7 +31,7 @@ export async function consumeLoginAttempt(request: Request) {
 }
 
 export async function clearLoginAttempts(request: Request) {
-  const db = await ensureTable();
+  const db = database();
   if (!db || !runtimeEnv.TRACKFLEET_ENCRYPTION_KEY?.trim()) return;
   const key = await loginRateLimitKey(request);
   await db.prepare("DELETE FROM login_rate_limits WHERE client_key = ?").bind(key).run();

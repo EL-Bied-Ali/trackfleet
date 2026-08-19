@@ -21,24 +21,6 @@ function db() {
   return runtimeEnv.DB;
 }
 
-async function ensureSchema() {
-  const database = db();
-  await database.prepare(`CREATE TABLE IF NOT EXISTS delivery_arrival_state (
-    company_id text NOT NULL,
-    delivery_id text NOT NULL,
-    arrived_at integer NOT NULL,
-    last_observed_at integer NOT NULL,
-    PRIMARY KEY (company_id, delivery_id)
-  )`).run();
-  const columns = await database.prepare("PRAGMA table_info(delivery_arrival_state)").all<{ name: string }>();
-  if (!(columns.results ?? []).some((column) => column.name === "last_observed_at")) {
-    await database.prepare("ALTER TABLE delivery_arrival_state ADD COLUMN last_observed_at integer").run();
-    await database.prepare("UPDATE delivery_arrival_state SET last_observed_at = arrived_at WHERE last_observed_at IS NULL").run();
-  }
-  await database.prepare("CREATE INDEX IF NOT EXISTS idx_delivery_arrival_state_arrived_at ON delivery_arrival_state(arrived_at)").run();
-  return database;
-}
-
 async function clearArrivalState(database: D1Database, companyId: string, deliveryId: string) {
   await database.batch([
     database.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
@@ -51,7 +33,7 @@ async function clearArrivalState(database: D1Database, companyId: string, delive
 }
 
 export async function observeArrivalCompletion(input: ArrivalCompletionObservation): Promise<ArrivalCompletionResult> {
-  const database = await ensureSchema();
+  const database = db();
   if (!input.insideArrivalZone) {
     await clearArrivalState(database, input.companyId, input.deliveryId);
     return { justEntered: false, deliveredNow: false, arrivalSiteSince: null };
@@ -105,7 +87,7 @@ export async function observeArrivalCompletion(input: ArrivalCompletionObservati
 }
 
 export async function completeDeliveryManually(companyId: string, deliveryId: string) {
-  const database = await ensureSchema();
+  const database = db();
   const existing = await database.prepare("SELECT id FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1")
     .bind(deliveryId, companyId).first<{ id: string }>();
   if (!existing) return false;

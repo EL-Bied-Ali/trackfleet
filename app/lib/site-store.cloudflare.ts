@@ -7,24 +7,6 @@ function db() {
   return runtimeEnv.DB;
 }
 
-async function ensureSchema() {
-  await db().prepare(`CREATE TABLE IF NOT EXISTS sites (
-    company_id text NOT NULL,
-    id text NOT NULL,
-    label text NOT NULL,
-    city text NOT NULL,
-    country text NOT NULL,
-    address text NOT NULL,
-    latitude real,
-    longitude real,
-    arrival_radius_km real NOT NULL DEFAULT 0.5,
-    roles text NOT NULL,
-    created_at integer NOT NULL,
-    updated_at integer NOT NULL,
-    PRIMARY KEY (company_id, id)
-  )`).run();
-}
-
 function hydrate(row: Record<string, unknown>): CompanySite {
   return {
     companyId: String(row.company_id),
@@ -43,7 +25,6 @@ function hydrate(row: Record<string, unknown>): CompanySite {
 }
 
 async function seed(companyId: string) {
-  await ensureSchema();
   const now = Date.now();
   for (const site of knownSites) {
     await db().prepare(`INSERT OR IGNORE INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,created_at,updated_at)
@@ -58,7 +39,6 @@ export const siteStore: SiteStore = {
     return (result.results ?? []).map((row) => hydrate(row as Record<string, unknown>));
   },
   async upsert(input: CreateCompanySiteInput) {
-    await ensureSchema();
     const now = Date.now();
     await db().prepare(`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
