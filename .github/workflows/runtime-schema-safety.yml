@@ -77,6 +77,8 @@ jobs:
         run: node --test tests/quick-tools-navigation.test.mjs
       - name: Verify existing site coordinate editing
         run: node --test tests/site-coordinate-editing.test.mjs
+      - name: Verify canonical physical vehicle identity
+        run: node --experimental-strip-types --test tests/vehicle-identity.test.mjs
       - name: Verify production release gate
         run: node --test tests/release-gate-contract.test.mjs
       - name: Verify tenant telemetry growth reporting
