@@ -127,14 +127,15 @@ export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationR
   let fleetPositions = 0;
   let tripPositions = 0;
   for (const { id: companyId } of companies) {
-    const [fleetRows, tripRows] = await Promise.all([
-      sql`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
-        FROM fleet_position_observations WHERE company_id = ${companyId}
-        ORDER BY position_at DESC LIMIT ${maxFleetPositionsPerCompany}` as Promise<FleetPositionRow[]>,
-      sql`SELECT company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
-        FROM trip_position_observations WHERE company_id = ${companyId}
-        ORDER BY position_at DESC LIMIT ${maxTripPositionsPerCompany}` as Promise<TripPositionRow[]>,
-    ]);
+    const fleetPromise = sql`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
+      FROM fleet_position_observations WHERE company_id = ${companyId}
+      ORDER BY position_at DESC LIMIT ${maxFleetPositionsPerCompany}`
+      .then((rows) => rows as unknown as FleetPositionRow[]);
+    const tripPromise = sql`SELECT company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
+      FROM trip_position_observations WHERE company_id = ${companyId}
+      ORDER BY position_at DESC LIMIT ${maxTripPositionsPerCompany}`
+      .then((rows) => rows as unknown as TripPositionRow[]);
+    const [fleetRows, tripRows] = await Promise.all([fleetPromise, tripPromise]);
     fleetPositions += fleetRows.length;
     tripPositions += tripRows.length;
     statements.push(...fleetRows.map((row) => fleetStatement(d1, row)));
