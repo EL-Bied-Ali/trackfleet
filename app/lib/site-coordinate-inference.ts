@@ -1,0 +1,170 @@
+export type SiteCoordinateInferenceSite = {
+  id: string;
+  label: string;
+  city: string;
+  address: string;
+  country: string;
+};
+
+export type SiteCoordinateInferencePoint = {
+  vehicleName: string;
+  latitude: number;
+  longitude: number;
+  speed: number;
+  address: string;
+  positionAt: Date;
+};
+
+export type SiteCoordinateSuggestion = {
+  siteId: string;
+  latitude: number | null;
+  longitude: number | null;
+  confidence: "high" | "medium" | "low";
+  pointCount: number;
+  vehicleCount: number;
+  addressEvidence: string[];
+  radius95Km: number | null;
+  spanHours: number | null;
+};
+
+const genericAddressTokens = new Set([
+  "avenue", "boulevard", "route", "rue", "street", "road", "lot", "residence", "maroc", "morocco",
+  "belgique", "belgium", "ville", "port", "centre", "center", "quartier", "hay", "derb", "douar",
+]);
+
+function normalized(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function normalizeVehicleName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function distanceKm(left: { latitude: number; longitude: number }, right: { latitude: number; longitude: number }) {
+  const rad = Math.PI / 180;
+  const dLat = (right.latitude - left.latitude) * rad;
+  const dLon = (right.longitude - left.longitude) * rad;
+  const lat1 = left.latitude * rad;
+  const lat2 = right.latitude * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function tokens(value: string) {
+  return normalized(value).split(/\s+/).filter((token) => token.length >= 4 && !genericAddressTokens.has(token));
+}
+
+function rounded(value: number, digits = 6) {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function percentile95(values: number[]) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
+}
+
+function clusterKey(point: SiteCoordinateInferencePoint) {
+  // ~100 m cells in the Morocco/Belgium corridor. This is intentionally much
+  // smaller than TrackFleet's default 500 m arrival geofence.
+  return `${point.latitude.toFixed(3)}:${point.longitude.toFixed(3)}`;
+}
+
+function addressEvidence(site: SiteCoordinateInferenceSite, points: SiteCoordinateInferencePoint[]) {
+  const city = normalized(site.city);
+  const distinctive = new Set(tokens(`${site.label} ${site.address}`).filter((token) => !city.includes(token)));
+  const pointText = normalized(points.map((point) => point.address).join(" "));
+  const matches = [...distinctive].filter((token) => pointText.includes(token));
+  const cityMatch = city.length >= 4 && pointText.includes(city);
+  return { matches, cityMatch };
+}
+
+function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateInferencePoint[]) {
+  const latitude = points.reduce((sum, point) => sum + point.latitude, 0) / points.length;
+  const longitude = points.reduce((sum, point) => sum + point.longitude, 0) / points.length;
+  const vehicles = new Set(points.map((point) => normalizeVehicleName(point.vehicleName)).filter(Boolean));
+  const evidence = addressEvidence(site, points);
+  const radius95Km = percentile95(points.map((point) => distanceKm(
+    { latitude, longitude },
+    { latitude: point.latitude, longitude: point.longitude },
+  )));
+  const timestamps = points.map((point) => point.positionAt.getTime()).filter(Number.isFinite);
+  const spanHours = timestamps.length >= 2 ? (Math.max(...timestamps) - Math.min(...timestamps)) / 3_600_000 : 0;
+  const compact = radius95Km <= 0.35;
+  const repeated = points.length >= 8 && (vehicles.size >= 2 || spanHours >= 6);
+  // One truck can establish a site when it repeatedly parks there over many
+  // hours, but then we require at least two specific address tokens. Multiple
+  // physical trucks need one specific token because independent visits already
+  // provide strong corroboration.
+  const strongAddress = evidence.matches.length >= (vehicles.size >= 2 ? 1 : 2);
+  const confidence: SiteCoordinateSuggestion["confidence"] = repeated && compact && strongAddress
+    ? "high"
+    : repeated && compact && evidence.cityMatch
+      ? "medium"
+      : "low";
+  return {
+    siteId: site.id,
+    latitude: rounded(latitude),
+    longitude: rounded(longitude),
+    confidence,
+    pointCount: points.length,
+    vehicleCount: vehicles.size,
+    addressEvidence: evidence.matches,
+    radius95Km: rounded(radius95Km, 3),
+    spanHours: rounded(spanHours, 2),
+    relevant: evidence.matches.length > 0 || evidence.cityMatch,
+  };
+}
+
+function emptySuggestion(siteId: string): SiteCoordinateSuggestion {
+  return {
+    siteId,
+    latitude: null,
+    longitude: null,
+    confidence: "low",
+    pointCount: 0,
+    vehicleCount: 0,
+    addressEvidence: [],
+    radius95Km: null,
+    spanHours: null,
+  };
+}
+
+export function inferSiteCoordinateSuggestions(
+  sites: SiteCoordinateInferenceSite[],
+  observations: SiteCoordinateInferencePoint[],
+): SiteCoordinateSuggestion[] {
+  const stationary = observations.filter((point) =>
+    Number.isFinite(point.latitude)
+      && Number.isFinite(point.longitude)
+      && Math.abs(point.latitude) <= 90
+      && Math.abs(point.longitude) <= 180
+      && Number.isFinite(point.speed)
+      && point.speed <= 5,
+  );
+  const clusters = new Map<string, SiteCoordinateInferencePoint[]>();
+  for (const point of stationary) {
+    const key = clusterKey(point);
+    const existing = clusters.get(key) ?? [];
+    existing.push(point);
+    clusters.set(key, existing);
+  }
+
+  return sites.map((site) => {
+    const scored = [...clusters.values()]
+      .map((cluster) => scoreCluster(site, cluster))
+      .filter((candidate) => candidate.relevant)
+      .sort((left, right) => {
+        const rank = { high: 3, medium: 2, low: 1 } as const;
+        if (rank[right.confidence] !== rank[left.confidence]) return rank[right.confidence] - rank[left.confidence];
+        if (right.addressEvidence.length !== left.addressEvidence.length) return right.addressEvidence.length - left.addressEvidence.length;
+        if (right.vehicleCount !== left.vehicleCount) return right.vehicleCount - left.vehicleCount;
+        return right.pointCount - left.pointCount;
+      });
+    const best = scored[0];
+    if (!best) return emptySuggestion(site.id);
+    const { relevant: _relevant, ...suggestion } = best;
+    return suggestion;
+  });
+}
