@@ -15,6 +15,7 @@ export type DeliveryRow = {
   destinationLatitude: number | null;
   destinationLongitude: number | null;
   arrivalRadiusKm: number;
+  arrivalSiteSince: Date | null;
   truck: string;
   driver: string;
   status: DeliveryStatus;
@@ -105,8 +106,9 @@ export type PendingDeliveryNotification = {
   event: DeliveryEventRow;
 };
 
-export type CreateDeliveryInput = Omit<DeliveryRow, "id" | "trackingToken" | "createdAt"> & {
+export type CreateDeliveryInput = Omit<DeliveryRow, "id" | "trackingToken" | "createdAt" | "arrivalSiteSince"> & {
   trackingToken: string;
+  arrivalSiteSince?: Date | null;
 };
 
 export interface DeliveryStore {
@@ -114,6 +116,7 @@ export interface DeliveryStore {
   listForCompany(companyId: string): Promise<DeliveryRow[]>;
   applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string): Promise<DeliveryTransition[]>;
   linkVehicle(deliveryId: string, companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow | null>;
+  completeDeliveryManually(deliveryId: string, companyId: string): Promise<DeliveryRow | null>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;
