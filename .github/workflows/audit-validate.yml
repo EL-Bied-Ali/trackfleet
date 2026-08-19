@@ -39,7 +39,7 @@ jobs:
       - id: route_progress
         run: pnpm run test:route-progress
       - id: delivery_completion
-        run: node --experimental-strip-types --test tests/delivery-completion.test.mjs tests/unloading-delay-suppression.test.mjs tests/automation-delay.test.mjs
+        run: node --experimental-strip-types --test tests/delivery-completion.test.mjs tests/unloading-delay-suppression.test.mjs tests/unload-departure-guard.test.mjs tests/automation-delay.test.mjs
       - id: security
         run: node --experimental-strip-types --test tests/request-json-safety.test.mjs
       - id: automation
