@@ -15,3 +15,11 @@ export function sendatrackTransportIsSecure() {
     return false;
   }
 }
+
+export function insecureSendatrackTransportExplicitlyAllowed() {
+  return runtimeEnv.TRACKFLEET_ALLOW_INSECURE_SENDATRACK === "true";
+}
+
+export function sendatrackTransportIsAllowed() {
+  return sendatrackTransportIsSecure() || insecureSendatrackTransportExplicitlyAllowed();
+}
