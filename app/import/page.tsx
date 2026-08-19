@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   BULK_DELIVERY_CSV_TEMPLATE,
@@ -100,7 +101,7 @@ export default function BulkImportPage() {
     <main style={{ padding: 40, fontFamily: "system-ui", maxWidth: 720, margin: "0 auto" }}>
       <h1>Connexion requise</h1>
       <p>Connectez-vous d’abord à TrackFleet avant d’importer des livraisons.</p>
-      <a href="/">Retour à TrackFleet</a>
+      <Link href="/">Retour à TrackFleet</Link>
     </main>
   );
 
@@ -112,7 +113,7 @@ export default function BulkImportPage() {
           <h1 style={{ margin: "6px 0" }}>Importer des livraisons en masse</h1>
           <p style={{ margin: 0, color: "#6b7280" }}>Prévisualisez et validez jusqu’à 100 colis avant de les créer.</p>
         </div>
-        <a href="/" style={{ color: "#111827", fontWeight: 700 }}>← Dashboard</a>
+        <Link href="/" style={{ color: "#111827", fontWeight: 700 }}>← Dashboard</Link>
       </header>
 
       <section style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 20, marginBottom: 20 }}>
