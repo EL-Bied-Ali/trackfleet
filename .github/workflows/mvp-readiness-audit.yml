@@ -1,12 +1,14 @@
 name: MVP production readiness audit
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["Cloudflare production deploy"]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
   audit:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -40,6 +42,7 @@ jobs:
             },
             sendatrackConfigured: health?.sendatrackConfigured === true,
             sendatrackTransportSecure: health?.sendatrackTransportSecure === true,
+            sendatrackInsecureTransportAllowed: health?.sendatrackInsecureTransportAllowed === true,
             sessionEncryptionConfigured: health?.sessionEncryptionConfigured === true,
             automation: {
               tickProtected: health?.automation?.tickProtected === true,
@@ -80,7 +83,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           HEALTH_OUTCOME: ${{ steps.health.outcome }}
           READY: ${{ steps.health.outputs.ready }}
