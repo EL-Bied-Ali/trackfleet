@@ -14,6 +14,7 @@ const criticalRegressionTests = [
   "operational-alerts.test.mjs",
   "storage-schema-health.test.mjs",
   "quick-tools-navigation.test.mjs",
+  "telemetry-growth.test.mjs",
   "release-gate-contract.test.mjs",
 ];
 
