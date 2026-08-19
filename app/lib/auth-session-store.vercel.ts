@@ -9,54 +9,24 @@ export type StoredCompanySession = {
   expiresAt: Date;
 };
 
-let schemaPromise: Promise<void> | null = null;
-
 function sqlClient() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) throw new Error("DATABASE_URL is required for server sessions");
   return neon(databaseUrl);
 }
 
-async function ensureSchema() {
-  const sql = sqlClient();
-  if (!schemaPromise) {
-    schemaPromise = (async () => {
-      await sql`CREATE TABLE IF NOT EXISTS sessions (
-        token_hash text PRIMARY KEY,
-        company_id text NOT NULL,
-        account_label text,
-        user_label text,
-        credentials_ciphertext text,
-        expires_at timestamptz NOT NULL,
-        created_at timestamptz NOT NULL
-      )`;
-      await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS account_label text`;
-      await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_label text`;
-      await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS credentials_ciphertext text`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_sessions_company_id ON sessions(company_id)`;
-      await sql`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`;
-    })().catch((error) => {
-      schemaPromise = null;
-      throw error;
-    });
-  }
-  await schemaPromise;
-  return sql;
-}
-
+// Production schema is provisioned separately. Running CREATE/ALTER statements
+// on every cold Worker invocation consumes Cloudflare subrequests before useful
+// application work begins.
 export async function createServerSession(input: StoredCompanySession) {
-  const sql = await ensureSchema();
+  const sql = sqlClient();
   const now = new Date().toISOString();
 
-  // The production schema links sessions.company_id to companies.id. Keep the
-  // company record in sync before inserting the session so first login works on
-  // a fresh shared Postgres database while preserving referential integrity.
   await sql`INSERT INTO companies (
       id, account_label, user_label, credentials_ciphertext, created_at, updated_at
     ) VALUES (
       ${input.companyId}, ${input.accountLabel}, ${input.userLabel}, ${input.credentialsCiphertext}, ${now}, ${now}
-    )
-    ON CONFLICT (id) DO UPDATE SET
+    ) ON CONFLICT (id) DO UPDATE SET
       account_label = EXCLUDED.account_label,
       user_label = EXCLUDED.user_label,
       credentials_ciphertext = EXCLUDED.credentials_ciphertext,
@@ -71,7 +41,7 @@ export async function createServerSession(input: StoredCompanySession) {
 }
 
 export async function getServerSession(tokenHash: string): Promise<StoredCompanySession | null> {
-  const sql = await ensureSchema();
+  const sql = sqlClient();
   const rows = await sql`SELECT token_hash, company_id, account_label, user_label, credentials_ciphertext, expires_at
     FROM sessions
     WHERE token_hash = ${tokenHash}
@@ -96,6 +66,6 @@ export async function getServerSession(tokenHash: string): Promise<StoredCompany
 }
 
 export async function deleteServerSession(tokenHash: string) {
-  const sql = await ensureSchema();
+  const sql = sqlClient();
   await sql`DELETE FROM sessions WHERE token_hash = ${tokenHash}`;
 }
