@@ -20,11 +20,14 @@ jobs:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      statuses: write
     env:
       BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet.chronoplan.workers.dev' }}
       CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
     steps:
       - name: Run TrackFleet automation
+        id: run_tick
         shell: bash
         run: |
           set -euo pipefail
@@ -52,3 +55,27 @@ jobs:
           console.log(body);
           if (!tickResponse.ok) throw new Error(`tick_http_${tickResponse.status}`);
           NODE
+
+      - name: Publish automation tick status
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TICK_OUTCOME: ${{ steps.run_tick.outcome }}
+        shell: bash
+        run: |
+          if [ "$TICK_OUTCOME" = "success" ]; then
+            state="success"
+            description="Production automation tick succeeded"
+          else
+            state="failure"
+            description="Production automation tick failed; inspect workflow run"
+          fi
+          gh api --method POST "repos/$REPOSITORY/statuses/$TARGET_SHA" \
+            -f state="$state" \
+            -f context="trackfleet/automation-tick" \
+            -f target_url="$RUN_URL" \
+            -f description="$description"
