@@ -53,3 +53,11 @@ test("autonomous tick never duplicates an existing delay event", () => {
   ];
   assert.equal(shouldCreateDelayEvent(delivery(), events), false);
 });
+
+test("unloading dwell suppresses new delay alerts after arrival at the site", () => {
+  const events = [
+    event("DEPARTED", new Date("2026-08-16T08:00:00.000Z")),
+    event("ARRIVED_AT_SITE", new Date("2026-08-16T17:50:00.000Z"), 99),
+  ];
+  assert.equal(shouldCreateDelayEvent(delivery({ progress: 99 }), events), false);
+});
