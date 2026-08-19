@@ -1,8 +1,7 @@
-import { runtimeEnv } from "trackfleet-runtime-env";
-import { executeReadFailover } from "./d1-read-failover-policy";
+import { runtimeEnv, runtimePlatform } from "trackfleet-runtime-env";
+import { executeReadFailover, resolveD1ReadFailoverConfigured } from "./d1-read-failover-policy";
 import { getD1StandbyReadiness } from "./d1-standby-readiness";
 
-const enabledValues = new Set(["1", "true", "yes", "on", "enabled"]);
 export const D1_READ_FAILOVER_LEASE_MS = 5 * 60_000;
 let suppressionDepth = 0;
 
@@ -18,8 +17,7 @@ type D1FailoverBinding = {
 
 export function d1ReadFailoverConfigured() {
   if (suppressionDepth > 0) return false;
-  const raw = runtimeEnv.TRACKFLEET_D1_READ_FAILOVER?.trim().toLowerCase() ?? "";
-  return enabledValues.has(raw);
+  return resolveD1ReadFailoverConfigured(runtimeEnv.TRACKFLEET_D1_READ_FAILOVER, runtimePlatform);
 }
 
 function d1Binding() {
