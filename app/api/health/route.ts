@@ -1,6 +1,11 @@
-import { getAutomationHeartbeat } from "trackfleet-automation-heartbeat";
+import { getAutomationHeartbeat, getRuntimeHeartbeat } from "trackfleet-automation-heartbeat";
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { automationHeartbeatStatus, AUTOMATION_HEARTBEAT_STALE_AFTER_MS } from "../../lib/automation-heartbeat-health";
+import {
+  automationHeartbeatStatus,
+  AUTOMATION_HEARTBEAT_STALE_AFTER_MS,
+  retentionHeartbeatStatus,
+  RETENTION_HEARTBEAT_STALE_AFTER_MS,
+} from "../../lib/automation-heartbeat-health";
 import { automationMissingRequirements } from "../../lib/automation-health";
 import { parseUnloadGraceMinutes } from "../../lib/delivery-arrival";
 import { parseAutomationStartAt } from "../../lib/notification-policy";
@@ -52,6 +57,21 @@ export async function GET() {
     };
   }
 
+  let retentionHeartbeatAvailable = false;
+  let retentionHeartbeat = retentionHeartbeatStatus({ lastAttemptAt: null, lastSuccessAt: null, lastFailureAt: null });
+  try {
+    retentionHeartbeat = retentionHeartbeatStatus(await getRuntimeHeartbeat("telemetry_retention"));
+    retentionHeartbeatAvailable = true;
+  } catch (error) {
+    console.error("[trackfleet:health] retention heartbeat unavailable", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    retentionHeartbeat = {
+      ...retentionHeartbeat,
+      staleAfterSeconds: Math.floor(RETENTION_HEARTBEAT_STALE_AFTER_MS / 1000),
+    };
+  }
+
   return Response.json({
     ok: storage.connected,
     service: "trackfleet",
@@ -59,7 +79,12 @@ export async function GET() {
     sendatrackTransportSecure,
     sessionEncryptionConfigured,
     storage,
-    telemetryRetention,
+    telemetryRetention: {
+      ...telemetryRetention,
+      heartbeatAvailable: retentionHeartbeatAvailable,
+      live: retentionHeartbeatAvailable ? retentionHeartbeat.fresh : null,
+      heartbeat: retentionHeartbeat,
+    },
     deliveryCompletion: {
       unloadGraceMinutes,
       gpsFreshnessRequiredMinutes: 30,
