@@ -60,7 +60,7 @@ test("leaving the geofence or using stale GPS cancels the dwell", () => {
 });
 
 test("GPS alone can no longer finalize an active delivery", () => {
-  assert.match(routeProgress, /Keep active deliveries at\n  \/\/ 99% until one of those completion paths confirms delivery/);
+  assert.match(routeProgress, /Keep active deliveries at\n\s{2}\/\/ 99% until one of those completion paths confirms delivery/);
   assert.match(routeProgress, /Math\.min\(99, Math\.max\(previousProgress, metrics\.progress\)\)/);
   assert.doesNotMatch(routeProgress, /distanceToDestinationKm <= safeArrivalRadiusKm && speed <= 5/);
 });
