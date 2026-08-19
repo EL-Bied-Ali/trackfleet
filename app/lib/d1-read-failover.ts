@@ -2,6 +2,17 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { getD1StandbyReadiness, type D1ReadinessBinding } from "./d1-standby-readiness";
 
 const enabledValues = new Set(["1", "true", "yes", "on", "enabled"]);
+export const D1_READ_FAILOVER_LEASE_MS = 5 * 60_000;
+
+type D1FailoverStatement = {
+  bind(...values: unknown[]): D1FailoverStatement;
+  run(): Promise<unknown>;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+};
+
+type D1FailoverBinding = D1ReadinessBinding & {
+  prepare(query: string): D1FailoverStatement;
+};
 
 function configured() {
   const raw = runtimeEnv.TRACKFLEET_D1_READ_FAILOVER?.trim().toLowerCase() ?? "";
@@ -9,7 +20,17 @@ function configured() {
 }
 
 function d1Binding() {
-  return (runtimeEnv as unknown as { DB?: D1ReadinessBinding }).DB ?? null;
+  return (runtimeEnv as unknown as { DB?: D1FailoverBinding }).DB ?? null;
+}
+
+async function activateD1ReadFailover(db: D1FailoverBinding, now = Date.now()) {
+  await db.prepare(`INSERT INTO automation_runtime_state (id, last_attempt_at, last_success_at)
+    VALUES ('d1_read_failover', ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      last_attempt_at = excluded.last_attempt_at,
+      last_success_at = excluded.last_success_at`)
+    .bind(now, now)
+    .run();
 }
 
 export async function d1ReadFailoverReady() {
@@ -27,6 +48,36 @@ export async function d1ReadFailoverReady() {
   }
 }
 
+export async function d1ReadFailoverActive(now = Date.now()) {
+  if (!configured()) return false;
+  const db = d1Binding();
+  if (!db) return false;
+  try {
+    const row = await db.prepare(`SELECT last_success_at AS activated_at
+      FROM automation_runtime_state WHERE id = 'd1_read_failover' LIMIT 1`)
+      .first<{ activated_at: number | null }>();
+    const activatedAt = Number(row?.activated_at ?? 0);
+    return activatedAt > 0 && now - activatedAt <= D1_READ_FAILOVER_LEASE_MS;
+  } catch {
+    return false;
+  }
+}
+
+async function approveAndActivateFailover() {
+  if (!(await d1ReadFailoverReady())) return false;
+  const db = d1Binding();
+  if (!db) return false;
+  try {
+    await activateD1ReadFailover(db);
+    return true;
+  } catch (error) {
+    console.error("[trackfleet:failover] failed to activate D1 read-only lease", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    return false;
+  }
+}
+
 export async function withD1ReadFailover<T>(
   scope: string,
   primaryRead: () => Promise<T>,
@@ -35,7 +86,7 @@ export async function withD1ReadFailover<T>(
   try {
     return await primaryRead();
   } catch (primaryError) {
-    if (!(await d1ReadFailoverReady())) throw primaryError;
+    if (!(await approveAndActivateFailover())) throw primaryError;
 
     console.warn("[trackfleet:failover] primary read failed; serving readiness-approved D1 standby", {
       scope,
@@ -62,7 +113,7 @@ export async function suppressMaintenanceWriteDuringD1Failover<T>(
   try {
     return await primaryWrite();
   } catch (primaryError) {
-    if (!(await d1ReadFailoverReady())) throw primaryError;
+    if (!(await approveAndActivateFailover())) throw primaryError;
     console.warn("[trackfleet:failover] primary maintenance write unavailable; preserving D1 as read-only", {
       scope,
       primaryMessage: primaryError instanceof Error ? primaryError.message : "unknown_error",
