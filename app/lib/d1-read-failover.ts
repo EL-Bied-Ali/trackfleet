@@ -1,4 +1,4 @@
-import { runtimeEnv } from "trackfleet-runtime-env";
+import { runtimeEnv, runtimePlatform } from "trackfleet-runtime-env";
 import { executeReadFailover } from "./d1-read-failover-policy";
 import { getD1StandbyReadiness } from "./d1-standby-readiness";
 
@@ -19,6 +19,7 @@ type D1FailoverBinding = {
 export function d1ReadFailoverConfigured() {
   if (suppressionDepth > 0) return false;
   const raw = runtimeEnv.TRACKFLEET_D1_READ_FAILOVER?.trim().toLowerCase() ?? "";
+  if (!raw) return runtimePlatform === "cloudflare";
   return enabledValues.has(raw);
 }
 
