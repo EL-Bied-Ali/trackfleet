@@ -1,11 +1,13 @@
 {
-  "sourceSha": "16e887cbdfc24fad03fa9cbdae8c1c7c2b25d6a1",
+  "sourceSha": "6bff38dc8972f306c616412a868936e180ee5ef0",
   "job": "failure",
   "install": "success",
-  "security": "success",
-  "automation": "success",
-  "headers": "success",
-  "lint": "failure",
+  "routeProgress": "failure",
+  "deliveryCompletion": "skipped",
+  "security": "skipped",
+  "automation": "skipped",
+  "headers": "skipped",
+  "lint": "skipped",
   "typecheck": "skipped",
   "buildVercel": "skipped",
   "buildCloudflare": "skipped"
