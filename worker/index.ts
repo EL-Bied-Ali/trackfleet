@@ -1,7 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { reconcileD1Standby } from "../app/lib/d1-reconciliation";
+import { reconcileD1StandbySafely } from "../app/lib/d1-reconciliation-safe";
 import { reconcileD1Telemetry } from "../app/lib/d1-telemetry-reconciliation";
 import { backfillD1DeliveryHistory } from "../app/lib/d1-history-backfill";
 
@@ -48,7 +48,7 @@ function withSecurityHeaders(response: Response) {
 
 async function runScheduledStandbyMaintenance(cron: string) {
   if (cron === operationalReconciliationCron) {
-    const result = await reconcileD1Standby();
+    const result = await reconcileD1StandbySafely();
     console.info("[trackfleet:replication] scheduled operational reconciliation", result);
     return;
   }
