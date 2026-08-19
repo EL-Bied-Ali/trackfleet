@@ -47,10 +47,19 @@ async function ensureSchema() {
   return sql;
 }
 
+async function clearArrivalState(sql: ReturnType<typeof sqlClient>, companyId: string, deliveryId: string) {
+  await Promise.all([
+    sql`DELETE FROM delivery_arrival_state WHERE company_id = ${companyId} AND delivery_id = ${deliveryId}`,
+    sql`DELETE FROM delivery_events
+      WHERE delivery_id = ${deliveryId} AND type = 'ARRIVED_AT_SITE'
+        AND EXISTS (SELECT 1 FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId})`,
+  ]);
+}
+
 export async function observeArrivalCompletion(input: ArrivalCompletionObservation): Promise<ArrivalCompletionResult> {
   const sql = await ensureSchema();
   if (!input.insideArrivalZone) {
-    await sql`DELETE FROM delivery_arrival_state WHERE company_id = ${input.companyId} AND delivery_id = ${input.deliveryId}`;
+    await clearArrivalState(sql, input.companyId, input.deliveryId);
     return { justEntered: false, deliveredNow: false, arrivalSiteSince: null };
   }
 
@@ -67,8 +76,11 @@ export async function observeArrivalCompletion(input: ArrivalCompletionObservati
     || observationMs < previousObservedMs
     || observationMs - previousObservedMs > maxContinuousObservationGapMs;
 
-  let arrivalSiteSince = continuityBroken ? input.observationAt : new Date(existing.arrived_at);
+  const arrivalSiteSince = continuityBroken ? input.observationAt : new Date(existing.arrived_at);
   if (continuityBroken) {
+    await sql`DELETE FROM delivery_events
+      WHERE delivery_id = ${input.deliveryId} AND type = 'ARRIVED_AT_SITE'
+        AND EXISTS (SELECT 1 FROM deliveries WHERE id = ${input.deliveryId} AND company_id = ${input.companyId})`;
     await sql`INSERT INTO delivery_arrival_state (company_id, delivery_id, arrived_at, last_observed_at)
       VALUES (${input.companyId}, ${input.deliveryId}, ${input.observationAt.toISOString()}, ${input.observationAt.toISOString()})
       ON CONFLICT (company_id, delivery_id) DO UPDATE SET
