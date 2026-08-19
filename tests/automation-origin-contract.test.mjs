@@ -27,9 +27,10 @@ test("native Cloudflare scheduler calls the protected tick route with the Worker
 });
 
 test("automation failures are logged server-side but not reflected to callers", () => {
-  assert.match(tickRoute, /console\.error\("\[trackfleet:automation\] tick failed", \{ message \}\)/);
+  assert.match(tickRoute, /console\.error\("\[trackfleet:automation\] tick failed", \{ message, failureCode \}\)/);
   assert.match(tickRoute, /error: "automation_failed"/);
   assert.doesNotMatch(tickRoute, /error: message/);
+  assert.doesNotMatch(tickRoute, /error: failureCode/);
 });
 
 test("GitHub audits readiness and liveness without executing production automation", () => {
