@@ -4,7 +4,7 @@ import {
   getServerSession as getPrimarySession,
   type StoredCompanySession,
 } from "./auth-session-store.shared-postgres";
-import { getServerSession as getStandbySession } from "./auth-session-store.cloudflare";
+import { getStandbySessionFromD1 } from "./d1-standby-session-read";
 import { withD1ReadFailover } from "./d1-read-failover";
 
 export async function createServerSession(input: StoredCompanySession) {
@@ -15,7 +15,7 @@ export async function getServerSession(tokenHash: string): Promise<StoredCompany
   return withD1ReadFailover(
     "session.get",
     () => getPrimarySession(tokenHash),
-    () => getStandbySession(tokenHash),
+    () => getStandbySessionFromD1(tokenHash),
   );
 }
 
