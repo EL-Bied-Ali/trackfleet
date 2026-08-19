@@ -4,6 +4,8 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-08-19",
   "compatibility_flags": ["nodejs_compat"],
+  // SENDATRACK does not currently expose the TrackFleet API over HTTPS.
+  // This explicit MVP override is monitored by /api/health and can be removed if TLS becomes available.
   "vars": {
     "TRACKFLEET_ALLOW_INSECURE_SENDATRACK": "true"
   },
