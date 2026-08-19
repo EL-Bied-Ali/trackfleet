@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { project30dRows } from "./telemetry-growth-projection";
 
 export type TelemetryGrowthMetric = {
   key: "fleet_positions" | "trip_positions" | "eta_observations" | "delivery_events";
@@ -25,13 +26,6 @@ type RawMetric = {
   oldest_at: Date | string | null;
   newest_at: Date | string | null;
 };
-
-export function project30dRows(last7dRows: number, last24hRows: number) {
-  const weeklyDailyAverage = Math.max(0, last7dRows) / 7;
-  const recentDailyRate = Math.max(0, last24hRows);
-  const dailyRate = Math.max(weeklyDailyAverage, recentDailyRate);
-  return Math.round(dailyRate * 30);
-}
 
 function iso(value: Date | string | null) {
   if (!value) return null;
