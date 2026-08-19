@@ -97,6 +97,8 @@ jobs:
         run: pnpm exec vinext build
 
       - name: Prepare D1 fallback schema
+        id: d1_prepare
+        continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -143,11 +145,15 @@ jobs:
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
           REPOSITORY: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          D1_PREP_OUTCOME: ${{ steps.d1_prepare.outcome }}
         shell: bash
         run: |
           set -euo pipefail
-          body="$(curl --fail --silent --show-error --max-time 15 "$TRACKFLEET_BASE_URL/api/health" || true)"
-          result="$(BODY="$body" node - <<'NODE'
+          if [ "$D1_PREP_OUTCOME" != "success" ]; then
+            result="pending|D1 standby preparation failed; Postgres production remains active"
+          else
+            body="$(curl --fail --silent --show-error --max-time 15 "$TRACKFLEET_BASE_URL/api/health" || true)"
+            result="$(BODY="$body" node - <<'NODE'
           try {
             const health = JSON.parse(process.env.BODY || "{}");
             const failover = health?.storage?.failover;
@@ -162,7 +168,8 @@ jobs:
             console.log("pending|D1 standby health unavailable");
           }
           NODE
-          )"
+            )"
+          fi
           state="${result%%|*}"
           description="${result#*|}"
           gh api --method POST "repos/$REPOSITORY/statuses/$RELEASE_SHA" \
