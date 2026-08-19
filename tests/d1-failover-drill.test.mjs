@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   executeReadFailover,
+  resolveD1ReadFailoverConfigured,
   shouldBlockMutationDuringReadFailover,
 } from "../app/lib/d1-read-failover-policy.ts";
+
+test("Cloudflare permits readiness-gated failover by default while Vercel does not", () => {
+  assert.equal(resolveD1ReadFailoverConfigured(undefined, "cloudflare"), true);
+  assert.equal(resolveD1ReadFailoverConfigured("", "cloudflare"), true);
+  assert.equal(resolveD1ReadFailoverConfigured(undefined, "vercel"), false);
+  assert.equal(resolveD1ReadFailoverConfigured("false", "cloudflare"), false);
+  assert.equal(resolveD1ReadFailoverConfigured("true", "cloudflare"), true);
+});
 
 test("healthy primary never touches D1 standby", async () => {
   let approvals = 0;
