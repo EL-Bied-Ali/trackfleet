@@ -117,16 +117,34 @@ export async function createCompanySession(credentials: SendatrackCredentials) {
   const token = randomToken(32);
   const tokenHash = await sha256(`trackfleet-session-token:${token}`);
   const expiresAt = new Date(Date.now() + sessionDurationSeconds * 1000);
-  const credentialsCiphertext = await encryptCredentials(normalized);
 
-  await createServerSession({
-    tokenHash,
-    companyId,
-    accountLabel: normalized.accountID,
-    userLabel: normalized.user,
-    credentialsCiphertext,
-    expiresAt,
-  });
+  let credentialsCiphertext: string;
+  try {
+    credentialsCiphertext = await encryptCredentials(normalized);
+    console.info("[trackfleet:auth] credentials encrypted");
+  } catch (error) {
+    console.error("[trackfleet:auth] credential encryption failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    throw error;
+  }
+
+  try {
+    await createServerSession({
+      tokenHash,
+      companyId,
+      accountLabel: normalized.accountID,
+      userLabel: normalized.user,
+      credentialsCiphertext,
+      expiresAt,
+    });
+    console.info("[trackfleet:auth] server session created");
+  } catch (error) {
+    console.error("[trackfleet:auth] server session creation failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    throw error;
+  }
 
   return {
     cookie: `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,
