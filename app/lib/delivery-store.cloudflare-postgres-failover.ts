@@ -1,7 +1,11 @@
 import { store as primaryStore } from "./delivery-store.shared-postgres";
 import { store as standbyStore } from "./delivery-store.cloudflare";
 import { loadOperationalDeliveriesFromD1 } from "./delivery-operational.cloudflare";
-import { suppressMaintenanceWriteDuringD1Failover, withD1ReadFailover } from "./d1-read-failover";
+import {
+  d1ReadFailoverActive,
+  suppressMaintenanceWriteDuringD1Failover,
+  withD1ReadFailover,
+} from "./d1-read-failover";
 import type { DeliveryStore } from "./delivery-store.types";
 
 export const store: DeliveryStore = {
@@ -159,11 +163,36 @@ export const store: DeliveryStore = {
     );
   },
 
-  // Explicit business mutations remain primary-only. They deliberately never
-  // write to D1 during failover, preventing split-brain.
+  // The dashboard GET derives trips as part of rendering. During an active
+  // read-only lease these derived writes are replaced with the D1 snapshot (or
+  // a transient equivalent) so rendering remains available without creating a
+  // second writable source of truth. External non-GET requests are blocked at
+  // the Worker boundary while the lease is active.
+  async upsertTrip(input) {
+    if (await d1ReadFailoverActive()) {
+      const existing = await standbyStore.getTrip(input.companyId, input.id).catch(() => null);
+      if (existing) return existing;
+      const now = new Date();
+      return { ...input, createdAt: now, updatedAt: now };
+    }
+    return primaryStore.upsertTrip(input);
+  },
+
+  async assignDeliveryTrip(deliveryId, companyId, tripId) {
+    if (await d1ReadFailoverActive()) return false;
+    return primaryStore.assignDeliveryTrip(deliveryId, companyId, tripId);
+  },
+
+  async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {
+    if (await d1ReadFailoverActive()) return null;
+    return primaryStore.assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId);
+  },
+
+  async linkVehicle(deliveryId, companyId, vehicle) {
+    if (await d1ReadFailoverActive()) return null;
+    return primaryStore.linkVehicle(deliveryId, companyId, vehicle);
+  },
+
+  // Delivery creation is never used by a GET path and remains strictly primary.
   create: primaryStore.create,
-  linkVehicle: primaryStore.linkVehicle,
-  upsertTrip: primaryStore.upsertTrip,
-  assignDeliveryTrip: primaryStore.assignDeliveryTrip,
-  assignDeliveryToPlannedTrip: primaryStore.assignDeliveryToPlannedTrip,
 };
