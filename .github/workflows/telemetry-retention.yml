@@ -1,0 +1,36 @@
+name: TrackFleet telemetry retention
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: trackfleet-telemetry-retention
+  cancel-in-progress: false
+
+jobs:
+  retain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BASE_URL: ${{ vars.TRACKFLEET_BASE_URL || 'https://trackfleet.chronoplan.workers.dev' }}
+      CRON_SECRET: ${{ secrets.TRACKFLEET_CRON_SECRET }}
+    steps:
+      - name: Run telemetry retention
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const baseUrl = process.env.BASE_URL;
+          const secret = (process.env.CRON_SECRET || '').trim();
+          if (!secret) throw new Error('TRACKFLEET_CRON_SECRET is empty');
+
+          const response = await fetch(`${baseUrl}/api/maintenance/retention`, {
+            headers: { authorization: `Bearer ${secret}` },
+            cache: 'no-store',
+          });
+          const body = await response.text();
+          console.log(body);
+          if (!response.ok) throw new Error(`retention_http_${response.status}`);
+          NODE
