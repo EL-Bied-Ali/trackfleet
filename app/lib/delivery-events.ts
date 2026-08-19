@@ -6,8 +6,10 @@ export type DeliveryEventType =
   | "PROGRESS_50"
   | "PROGRESS_75"
   | "NEAR_DESTINATION"
+  | "ARRIVED_AT_SITE"
   | "DELAY_DETECTED"
   | "ARRIVED"
+  | "MANUAL_DELIVERED"
   | "GPS_STALE"
   | "WHATSAPP_OPT_OUT";
 
@@ -19,6 +21,7 @@ export type DeliveryEventInput = {
   distanceToDestinationKm: number;
   positionAgeMinutes: number;
   arrivalRadiusKm?: number;
+  arrivedAtSite?: boolean;
 };
 
 export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventType[] {
@@ -44,6 +47,10 @@ export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventTy
     events.push("NEAR_DESTINATION");
   }
 
+  if (input.arrivedAtSite) {
+    events.push("ARRIVED_AT_SITE");
+  }
+
   if (input.previousStatus !== "Delivered" && input.nextStatus === "Delivered") {
     events.push("ARRIVED");
   }
@@ -56,7 +63,11 @@ export function detectDeliveryEvents(input: DeliveryEventInput): DeliveryEventTy
 }
 
 export function customerFacingEvent(event: DeliveryEventType) {
-  return event !== "GPS_STALE" && event !== "GPS_BASELINE" && event !== "WHATSAPP_OPT_OUT";
+  return event !== "GPS_STALE"
+    && event !== "GPS_BASELINE"
+    && event !== "WHATSAPP_OPT_OUT"
+    && event !== "ARRIVED_AT_SITE"
+    && event !== "MANUAL_DELIVERED";
 }
 
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {
