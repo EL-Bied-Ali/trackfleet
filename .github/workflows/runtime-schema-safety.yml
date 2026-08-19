@@ -48,6 +48,8 @@ jobs:
         run: node --experimental-strip-types --test tests/retention-heartbeat.test.mjs tests/telemetry-retention.test.mjs
       - name: Verify bounded operational delivery window
         run: node --test tests/operational-delivery-window.test.mjs
+      - name: Verify keyset delivery history pagination
+        run: node --test tests/delivery-history-pagination.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
