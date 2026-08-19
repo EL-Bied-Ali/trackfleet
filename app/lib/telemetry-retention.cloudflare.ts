@@ -13,6 +13,8 @@ export type TelemetryPruneResult = {
   etaObservations: number;
 };
 
+export type TelemetryPruneAllResult = TelemetryPruneResult & { companies: number };
+
 const maintenanceIntervalMs = 24 * 60 * 60 * 1000;
 
 async function ensureSchema() {
@@ -35,9 +37,7 @@ export async function pruneTelemetry(companyId: string, retentionDays: number, n
   const staleBefore = nowMs - maintenanceIntervalMs;
   const existing = await db.prepare("SELECT last_pruned_at AS lastPrunedAt FROM telemetry_retention_state WHERE company_id = ? LIMIT 1")
     .bind(companyId).first<{ lastPrunedAt: number }>();
-  if (existing && existing.lastPrunedAt >= staleBefore) {
-    return { ran: false, fleetPositions: 0, tripPositions: 0, etaObservations: 0 };
-  }
+  if (existing && existing.lastPrunedAt >= staleBefore) return { ran: false, fleetPositions: 0, tripPositions: 0, etaObservations: 0 };
 
   const claim = await db.prepare(`INSERT INTO telemetry_retention_state (company_id, last_pruned_at)
     VALUES (?, ?)
@@ -57,11 +57,10 @@ export async function pruneTelemetry(companyId: string, retentionDays: number, n
       WHERE company_id = ? AND (
         position_at < ? OR rowid IN (
           SELECT rowid FROM (
-            SELECT rowid,
-              row_number() OVER (
-                PARTITION BY company_id, vehicle_id, CAST(position_at / ? AS INTEGER)
-                ORDER BY position_at
-              ) AS rn
+            SELECT rowid, row_number() OVER (
+              PARTITION BY company_id, vehicle_id, CAST(position_at / ? AS INTEGER)
+              ORDER BY position_at
+            ) AS rn
             FROM fleet_position_observations
             WHERE company_id = ? AND position_at >= ? AND position_at < ?
           ) ranked WHERE rn > 1
@@ -71,11 +70,10 @@ export async function pruneTelemetry(companyId: string, retentionDays: number, n
       WHERE company_id = ? AND (
         position_at < ? OR rowid IN (
           SELECT rowid FROM (
-            SELECT rowid,
-              row_number() OVER (
-                PARTITION BY company_id, trip_instance_id, CAST(position_at / ? AS INTEGER)
-                ORDER BY position_at
-              ) AS rn
+            SELECT rowid, row_number() OVER (
+              PARTITION BY company_id, trip_instance_id, CAST(position_at / ? AS INTEGER)
+              ORDER BY position_at
+            ) AS rn
             FROM trip_position_observations
             WHERE company_id = ? AND position_at >= ? AND position_at < ?
           ) ranked WHERE rn > 1
@@ -92,4 +90,21 @@ export async function pruneTelemetry(companyId: string, retentionDays: number, n
     tripPositions: Number(results[1]?.meta?.changes ?? 0),
     etaObservations: Number(results[2]?.meta?.changes ?? 0),
   };
+}
+
+export async function pruneAllTelemetry(retentionDays: number, now = new Date()): Promise<TelemetryPruneAllResult> {
+  const db = await ensureSchema();
+  const { results = [] } = await db.prepare("SELECT DISTINCT company_id FROM deliveries WHERE company_id IS NOT NULL AND company_id <> ''").all<{ company_id: string }>();
+  let ran = false;
+  let fleetPositions = 0;
+  let tripPositions = 0;
+  let etaObservations = 0;
+  for (const row of results) {
+    const result = await pruneTelemetry(row.company_id, retentionDays, now);
+    ran ||= result.ran;
+    fleetPositions += result.fleetPositions;
+    tripPositions += result.tripPositions;
+    etaObservations += result.etaObservations;
+  }
+  return { ran, companies: results.length, fleetPositions, tripPositions, etaObservations };
 }
