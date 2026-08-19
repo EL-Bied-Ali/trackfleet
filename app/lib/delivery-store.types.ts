@@ -64,17 +64,6 @@ export type EtaObservationRow = EtaObservationInput & {
   createdAt: Date;
 };
 
-export type StoredEtaRouteContext = {
-  routeTemplateId: string;
-  tripInstanceId: string;
-  destinationSiteId: string;
-};
-
-export type DashboardHistoryBundle = {
-  eventsByDelivery: Record<string, DeliveryEventRow[]>;
-  stableEtaContextsByDelivery: Record<string, StoredEtaRouteContext>;
-};
-
 export type TripPositionInput = {
   companyId: string;
   routeTemplateId: string;
@@ -127,7 +116,6 @@ export interface DeliveryStore {
   linkVehicle(deliveryId: string, companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow | null>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
-  loadDashboardHistory?(deliveryIds: string[]): Promise<DashboardHistoryBundle>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;
   listEtaObservations(deliveryId: string, limit?: number): Promise<EtaObservationRow[]>;
   listEtaObservationsForRoute(routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
