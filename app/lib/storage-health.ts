@@ -86,7 +86,7 @@ async function probeD1Standby(): Promise<StorageFailoverHealth> {
       connected: true,
       ready: readiness.ready,
       automatic: false,
-      reason: readiness.ready ? "replication_ready" : readiness.reason,
+      reason: readiness.reason === "ready" ? "replication_ready" : readiness.reason,
       readiness,
       error: null,
     };
