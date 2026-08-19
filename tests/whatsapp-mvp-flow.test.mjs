@@ -53,8 +53,10 @@ test("WhatsApp consent is explicit, voluntary and persisted on parcel creation",
   assert.match(deliveryRoute, /whatsappOptInAt: whatsappOptIn \? new Date\(\) : null/);
   assert.match(postgresStore, /whatsapp_opt_in boolean NOT NULL DEFAULT false/);
   assert.match(postgresStore, /whatsapp_opt_in_at timestamptz/);
-  assert.match(cloudflareStore, /whatsapp_opt_in integer DEFAULT 0 NOT NULL/);
-  assert.match(cloudflareStore, /whatsapp_opt_in_at integer/);
+  assert.match(cloudflareStore, /whatsapp_opt_in AS whatsappOptIn/);
+  assert.match(cloudflareStore, /whatsapp_opt_in_at AS whatsappOptInAt/);
+  assert.match(cloudflareStore, /delivery\.whatsappOptIn === true \? 1 : 0/);
+  assert.match(cloudflareStore, /delivery\.whatsappOptInAt\?\.getTime\(\) \?\? null/);
   assert.match(schema, /whatsappOptIn: integer\(["']whatsapp_opt_in["']/);
   assert.match(schema, /whatsappOptInAt: integer\(["']whatsapp_opt_in_at["']/);
 });
