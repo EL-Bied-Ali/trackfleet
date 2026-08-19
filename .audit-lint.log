@@ -1,0 +1,90 @@
+
+/home/runner/work/trackfleet/trackfleet/app/SiteManager.tsx
+  52:20  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/trackfleet/trackfleet/app/SiteManager.tsx:52:20
+  50 |
+  51 |   useEffect(() => {
+> 52 |     if (open) void refresh().catch(() => setError("sites_unavailable"));
+     |                    ^^^^^^^ Avoid calling setState() directly within an effect
+  53 |   }, [open]);
+  54 |
+  55 |   useEffect(() => {                                                                                             react-hooks/set-state-in-effect
+  56:27  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/trackfleet/trackfleet/app/SiteManager.tsx:56:27
+  54 |
+  55 |   useEffect(() => {
+> 56 |     if (consentOpen) void refreshConsents().catch(() => setConsentError("consent_unavailable"));
+     |                           ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  57 |   }, [consentOpen]);
+  58 |
+  59 |   async function save(event: React.FormEvent<HTMLFormElement>) {  react-hooks/set-state-in-effect
+
+/home/runner/work/trackfleet/trackfleet/app/page.tsx
+  201:7    error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/trackfleet/trackfleet/app/page.tsx:201:7
+  199 |   useEffect(() => {
+  200 |     if (new URLSearchParams(window.location.search).get("tracking")) {
+> 201 |       setPublicTrackingState("loading");
+      |       ^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  202 |       setAuthState("anonymous");
+  203 |       return;
+  204 |     }                                                                                                                                                                                                                     react-hooks/set-state-in-effect
+  237:7    error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/trackfleet/trackfleet/app/page.tsx:237:7
+  235 |   useEffect(() => {
+  236 |     if (!company || !knownSites.length) {
+> 237 |       setDefaultOriginSiteId("");
+      |       ^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  238 |       return;
+  239 |     }
+  240 |     const originIds = knownSites.filter((site) => site.roles.includes("origin")).map((site) => site.id);                                                                                                                                                                                 react-hooks/set-state-in-effect
+  248:101  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/home/runner/work/trackfleet/trackfleet/app/page.tsx:248:101
+  246 |     const requestedLocale = new URLSearchParams(window.location.search).get("lang");
+  247 |     const savedLocale = window.localStorage.getItem("trackfleet-locale");
+> 248 |     if (!requestedLocale && (savedLocale === "en" || savedLocale === "fr" || savedLocale === "nl")) setLocale(savedLocale);
+      |                                                                                                     ^^^^^^^^^ Avoid calling setState() directly within an effect
+  249 |   }, []);
+  250 |
+  251 |   useEffect(() => {  react-hooks/set-state-in-effect
+
+/home/runner/work/trackfleet/trackfleet/app/privacy/page.tsx
+  61:115  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+
+✖ 6 problems (6 errors, 0 warnings)
+
