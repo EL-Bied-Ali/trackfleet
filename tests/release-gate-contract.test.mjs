@@ -40,14 +40,24 @@ test("runtime safety validates the same shared Postgres Cloudflare build used in
   assert.match(source, /pnpm exec vinext build/);
 });
 
-test("Cloudflare deployment requires both validation workflows for the same commit", async () => {
+test("Cloudflare deployment starts once per main push and requires both validation workflows for the same commit", async () => {
   const source = await readFile(deployWorkflow, "utf8");
-  assert.match(source, /workflows:\s*\["Platform build check"\]/);
-  assert.match(source, /github\.event\.workflow_run\.conclusion == 'success'/);
+  assert.match(source, /push:\s*\n\s*branches:\s*\[main\]/);
+  assert.doesNotMatch(source, /workflow_run:/);
+  assert.match(source, /Platform build check/);
   assert.match(source, /Runtime schema safety/);
   assert.match(source, /head_sha=\$RELEASE_SHA/);
-  assert.match(source, /conclusion\" = \"success/);
+  assert.match(source, /platform_conclusion\" = \"success/);
+  assert.match(source, /runtime_conclusion\" = \"success/);
+  assert.match(source, /Both release gates passed/);
   assert.match(source, /Production deployment is blocked/);
+});
+
+test("manual Cloudflare dispatch uses the same validated main commit path", async () => {
+  const source = await readFile(deployWorkflow, "utf8");
+  assert.match(source, /workflow_dispatch:/);
+  assert.match(source, /echo "sha=\$\{\{ github\.sha \}\}"/);
+  assert.doesNotMatch(source, /github\.event\.workflow_run/);
 });
 
 test("post-deploy verification requires persistent Postgres health", async () => {
