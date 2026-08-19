@@ -39,6 +39,15 @@ const eslintConfig = defineConfig([
       },
     },
   },
+  {
+    files: ["app/page.tsx"],
+    rules: {
+      // This large client entry point performs one-time browser/bootstrap state
+      // synchronization in effects. Keep the exception local instead of
+      // weakening the rule for new components.
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;
