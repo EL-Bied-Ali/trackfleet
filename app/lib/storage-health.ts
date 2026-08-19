@@ -5,6 +5,7 @@ import {
   normalizePostgresSchemaProbe,
   type PostgresSchemaProbe,
 } from "./storage-schema-contract";
+import { d1ReadFailoverConfigured } from "./d1-read-failover";
 import {
   getD1StandbyReadiness,
   type D1StandbyReadiness,
@@ -44,10 +45,6 @@ type D1HealthBinding = D1ReadinessBinding & {
 };
 
 function optionalD1Binding() {
-  // The runtime-env alias intentionally has a different static DB type on
-  // Vercel (unavailable) and Cloudflare (D1Database). Keep this cross-runtime
-  // health probe structurally typed instead of making the Vercel build import
-  // Cloudflare-specific globals.
   return (runtimeEnv as unknown as { DB?: D1HealthBinding }).DB;
 }
 
@@ -65,6 +62,7 @@ function inactiveFailover(): StorageFailoverHealth {
 }
 
 async function probeD1Standby(): Promise<StorageFailoverHealth> {
+  const automatic = d1ReadFailoverConfigured();
   const db = optionalD1Binding();
   if (!db) {
     return {
@@ -72,7 +70,7 @@ async function probeD1Standby(): Promise<StorageFailoverHealth> {
       available: false,
       connected: null,
       ready: false,
-      automatic: false,
+      automatic,
       reason: "d1_not_bound",
       readiness: null,
       error: null,
@@ -85,7 +83,7 @@ async function probeD1Standby(): Promise<StorageFailoverHealth> {
       available: true,
       connected: true,
       ready: readiness.ready,
-      automatic: false,
+      automatic,
       reason: readiness.reason === "ready" ? "replication_ready" : readiness.reason,
       readiness,
       error: null,
@@ -99,7 +97,7 @@ async function probeD1Standby(): Promise<StorageFailoverHealth> {
       available: true,
       connected: false,
       ready: false,
-      automatic: false,
+      automatic,
       reason: "d1_unavailable",
       readiness: null,
       error: "d1_unavailable",

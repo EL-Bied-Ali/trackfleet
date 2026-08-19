@@ -1,0 +1,105 @@
+name: Cloudflare D1 failover control
+
+on:
+  workflow_dispatch:
+    inputs:
+      enabled:
+        description: Enable or disable readiness-gated D1 read failover
+        required: true
+        type: choice
+        options:
+          - "false"
+          - "true"
+        default: "false"
+
+concurrency:
+  group: trackfleet-cloudflare-failover-control
+  cancel-in-progress: false
+
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      TRACKFLEET_BASE_URL: https://trackfleet.chronoplan.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Require ready production D1 standby before enabling
+        if: ${{ inputs.enabled == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body="$(curl --fail --silent --show-error --max-time 15 "$TRACKFLEET_BASE_URL/api/health")"
+          BODY="$body" node - <<'NODE'
+          const health = JSON.parse(process.env.BODY || "{}");
+          const failover = health?.storage?.failover;
+          if (
+            health?.ok !== true ||
+            health?.storage?.mode !== "postgres" ||
+            health?.storage?.connected !== true ||
+            failover?.connected !== true ||
+            failover?.ready !== true ||
+            failover?.reason !== "replication_ready" ||
+            failover?.readiness?.operationalFresh !== true ||
+            failover?.readiness?.telemetryFresh !== true ||
+            failover?.readiness?.history?.complete !== true
+          ) {
+            console.error("D1 standby is not ready for activation.", { storage: health?.storage });
+            process.exit(1);
+          }
+          NODE
+
+      - name: Set persistent Cloudflare failover flag
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ inputs.enabled }}" | pnpm exec wrangler secret put TRACKFLEET_D1_READ_FAILOVER --name trackfleet
+
+      - name: Verify production failover flag
+        env:
+          EXPECTED: ${{ inputs.enabled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            body="$(curl --fail --silent --show-error --max-time 15 "$TRACKFLEET_BASE_URL/api/health" || true)"
+            if BODY="$body" EXPECTED="$EXPECTED" node - <<'NODE'
+          const health = JSON.parse(process.env.BODY || "{}");
+          const expected = process.env.EXPECTED === "true";
+          const failover = health?.storage?.failover;
+          if (
+            health?.storage?.mode === "postgres" &&
+            health?.storage?.connected === true &&
+            failover?.automatic === expected &&
+            (!expected || (failover?.ready === true && failover?.reason === "replication_ready"))
+          ) process.exit(0);
+          process.exit(1);
+          NODE
+            then
+              echo "Cloudflare D1 failover flag verified: $EXPECTED"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Cloudflare D1 failover flag verification failed."
+          exit 1

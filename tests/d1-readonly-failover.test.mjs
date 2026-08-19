@@ -17,7 +17,7 @@ const sqlMutation = /\b(?:INSERT|UPDATE|DELETE|ALTER)\s|\bCREATE\s+TABLE/i;
 test("D1 read failover is opt-in, readiness-gated and leased", () => {
   assert.match(helper, /TRACKFLEET_D1_READ_FAILOVER/);
   assert.match(helper, /getD1StandbyReadiness\(db\)/);
-  assert.match(helper, /if \(!configured\(\)\) return false/);
+  assert.match(helper, /if \(!d1ReadFailoverConfigured\(\)\) return false/);
   assert.match(helper, /approveFailover: approveAndActivateFailover/);
   assert.match(helper, /executeReadFailover/);
   assert.match(policy, /if \(!\(await input\.approveFailover\(\)\)\) throw primaryError/);
