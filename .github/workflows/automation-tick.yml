@@ -27,8 +27,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node - <<'NODE'
-          const fs = require('node:fs');
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
           const response = await fetch(`${process.env.BASE_URL}/api/health`, { cache: 'no-store' });
           if (!response.ok) throw new Error(`health_http_${response.status}`);
           const health = await response.json();
