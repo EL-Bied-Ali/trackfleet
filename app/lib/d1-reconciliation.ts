@@ -6,11 +6,12 @@ import type { DeliveryEventRow, DeliveryRow, EtaObservationRow } from "./deliver
 import type { CompanySite } from "./site-store.types";
 import type { TripRecord } from "./trip-record";
 
-const maxCompanies = 50;
-const maxTripsPerCompany = 500;
-const maxEtaPerDelivery = 200;
+const maxCompanies = 5;
+const maxTripsPerCompany = 100;
+const maxEtaPerDelivery = 20;
 const d1BatchSize = 50;
-const maxActiveSessions = 1000;
+const maxActiveSessions = 200;
+const maxD1StatementsPerPass = 1000;
 
 export type D1ReconciliationResult = {
   ran: boolean;
@@ -254,6 +255,7 @@ function sessionStatement(db: D1Binding, session: SessionRow) {
 }
 
 async function runBatches(db: D1Binding, statements: D1Statement[]) {
+  if (statements.length > maxD1StatementsPerPass) throw new Error("d1_reconciliation_budget_exceeded");
   for (let index = 0; index < statements.length; index += d1BatchSize) {
     await db.batch(statements.slice(index, index + d1BatchSize));
   }
