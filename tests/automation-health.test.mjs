@@ -5,6 +5,8 @@ import { automationMissingRequirements } from "../app/lib/automation-health.ts";
 import { automationHeartbeatStatus, AUTOMATION_HEARTBEAT_STALE_AFTER_MS } from "../app/lib/automation-heartbeat-health.ts";
 import { decodeSessionEncryptionKey, sessionEncryptionKeyConfigured } from "../app/lib/session-encryption-key.ts";
 
+await import("./telemetry-retention.test.mjs");
+
 const [healthRoute, tickRoute, sendatrackTransport, vercelHeartbeat, cloudflareHeartbeat] = await Promise.all([
   readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/automation/tick/route.ts", import.meta.url), "utf8"),
@@ -135,7 +137,7 @@ test("heartbeat persistence exists on both Neon and D1 without storing error det
   }
 });
 
-test("health provider readiness includes explicit security, Meta and scheduler liveness diagnostics", () => {
+test("health provider readiness includes explicit security, Meta, scheduler and retention diagnostics", () => {
   assert.match(healthRoute, /sessionEncryptionKeyConfigured/);
   assert.match(healthRoute, /TRACKFLEET_ENCRYPTION_KEY/);
   assert.match(healthRoute, /sendatrackTransportIsSecure/);
@@ -146,4 +148,6 @@ test("health provider readiness includes explicit security, Meta and scheduler l
   assert.match(healthRoute, /WHATSAPP_TEMPLATE_LANGUAGE/);
   assert.match(healthRoute, /heartbeatAvailable/);
   assert.match(healthRoute, /live: heartbeatAvailable \? heartbeat\.fresh : null/);
+  assert.match(healthRoute, /telemetryRetentionPolicy/);
+  assert.match(healthRoute, /telemetryRetention,/);
 });
