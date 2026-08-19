@@ -5,6 +5,7 @@ import test from "node:test";
 const health = fs.readFileSync("app/lib/storage-health.ts", "utf8");
 const readiness = fs.readFileSync("app/lib/d1-standby-readiness.ts", "utf8");
 const vite = fs.readFileSync("vite.config.ts", "utf8");
+const envExample = fs.readFileSync(".env.example", "utf8");
 
 test("Postgres health reports D1 standby separately from the active backend", () => {
   assert.match(health, /failover: StorageFailoverHealth/);
@@ -25,9 +26,11 @@ test("D1 readiness requires fresh operational and telemetry reconciliation plus 
   assert.match(readiness, /ready: reason === "ready"/);
 });
 
-test("current Cloudflare storage selection remains build-time until automatic failover is enabled separately", () => {
-  assert.match(vite, /process\.env\.TRACKFLEET_STORAGE === "postgres"/);
-  assert.match(vite, /useSharedPostgres \? "\.\/app\/lib\/delivery-store\.shared-postgres\.ts" : "\.\/app\/lib\/delivery-store\.cloudflare\.ts"/);
+test("Cloudflare Postgres can compile read failover wrappers without enabling them by default", () => {
+  assert.match(vite, /const useCloudflarePostgresFailover = !isVercel && process\.env\.TRACKFLEET_STORAGE === "postgres"/);
+  assert.match(vite, /delivery-store\.cloudflare-postgres-failover\.ts/);
+  assert.match(vite, /delivery-store\.shared-postgres\.ts/);
+  assert.match(envExample, /TRACKFLEET_D1_READ_FAILOVER=false/);
 });
 
 test("health never claims automatic D1 failover merely because readiness is green", () => {

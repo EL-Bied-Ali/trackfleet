@@ -1,5 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { reconcileD1Standby } from "../../../lib/d1-reconciliation";
+import { reconcileD1StandbySafely } from "../../../lib/d1-reconciliation-safe";
 
 function authorized(request: Request) {
   const secret = runtimeEnv.CRON_SECRET?.trim();
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await reconcileD1Standby();
+    const result = await reconcileD1StandbySafely();
     const status = result.ran ? 200 : 503;
     return Response.json({ ok: result.ran, reconciliation: result }, {
       status,

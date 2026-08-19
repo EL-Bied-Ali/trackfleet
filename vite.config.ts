@@ -7,6 +7,7 @@ import { sites } from "./build/sites-vite-plugin";
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const isVercel = Boolean(process.env.VERCEL);
 const useSharedPostgres = isVercel || process.env.TRACKFLEET_STORAGE === "postgres";
+const useCloudflarePostgresFailover = !isVercel && process.env.TRACKFLEET_STORAGE === "postgres";
 const maplibreCssPath = fileURLToPath(
   new URL("./node_modules/maplibre-gl/dist/maplibre-gl.css", import.meta.url),
 );
@@ -18,7 +19,11 @@ const runtimeEnvPath = fileURLToPath(
 );
 const deliveryStorePath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/delivery-store.shared-postgres.ts" : "./app/lib/delivery-store.cloudflare.ts",
+    useCloudflarePostgresFailover
+      ? "./app/lib/delivery-store.cloudflare-postgres-failover.ts"
+      : useSharedPostgres
+        ? "./app/lib/delivery-store.shared-postgres.ts"
+        : "./app/lib/delivery-store.cloudflare.ts",
     import.meta.url,
   ),
 );
@@ -30,7 +35,11 @@ const fullDeliveryStorePath = fileURLToPath(
 );
 const siteStorePath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/site-store.shared-postgres.ts" : "./app/lib/site-store.cloudflare.ts",
+    useCloudflarePostgresFailover
+      ? "./app/lib/site-store.cloudflare-postgres-failover.ts"
+      : useSharedPostgres
+        ? "./app/lib/site-store.shared-postgres.ts"
+        : "./app/lib/site-store.cloudflare.ts",
     import.meta.url,
   ),
 );
@@ -48,7 +57,11 @@ const automationHeartbeatPath = fileURLToPath(
 );
 const authSessionStorePath = fileURLToPath(
   new URL(
-    useSharedPostgres ? "./app/lib/auth-session-store.shared-postgres.ts" : "./app/lib/auth-session-store.cloudflare.ts",
+    useCloudflarePostgresFailover
+      ? "./app/lib/auth-session-store.cloudflare-postgres-failover.ts"
+      : useSharedPostgres
+        ? "./app/lib/auth-session-store.shared-postgres.ts"
+        : "./app/lib/auth-session-store.cloudflare.ts",
     import.meta.url,
   ),
 );
