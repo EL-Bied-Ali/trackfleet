@@ -23,6 +23,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Verify runtime schema bootstrap safety
         run: node --test tests/runtime-schema-safety.test.mjs
+      - name: Verify Postgres query budget
+        run: node --test tests/postgres-query-budget.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
