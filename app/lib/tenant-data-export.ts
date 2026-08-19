@@ -1,5 +1,5 @@
 import type { DeliveryEventRow, DeliveryRow } from "./delivery-store.types";
-import type { SiteRecord } from "./site-store.types";
+import type { CompanySite } from "./site-store.types";
 import type { TripRecord } from "./trip-record";
 
 export type TenantDataExport = {
@@ -9,7 +9,7 @@ export type TenantDataExport = {
   deliveries: Array<Omit<DeliveryRow, "trackingToken">>;
   events: DeliveryEventRow[];
   trips: TripRecord[];
-  sites: SiteRecord[];
+  sites: CompanySite[];
 };
 
 export function sanitizeDeliveryForExport(delivery: DeliveryRow): Omit<DeliveryRow, "trackingToken"> {
@@ -22,7 +22,7 @@ export function buildTenantDataExport(input: {
   deliveries: DeliveryRow[];
   events: DeliveryEventRow[];
   trips: TripRecord[];
-  sites: SiteRecord[];
+  sites: CompanySite[];
   generatedAt?: Date;
 }): TenantDataExport {
   return {
