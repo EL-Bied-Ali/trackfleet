@@ -5,29 +5,6 @@ import type { CompanySite, CreateCompanySiteInput, SiteStore } from "./site-stor
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the Postgres site store");
 const sql = neon(databaseUrl);
-let schemaPromise: Promise<void> | null = null;
-
-async function ensureSchema() {
-  if (schemaPromise) return schemaPromise;
-  schemaPromise = (async () => {
-    await sql`CREATE TABLE IF NOT EXISTS sites (
-      company_id text NOT NULL,
-      id text NOT NULL,
-      label text NOT NULL,
-      city text NOT NULL,
-      country text NOT NULL,
-      address text NOT NULL,
-      latitude double precision,
-      longitude double precision,
-      arrival_radius_km double precision NOT NULL DEFAULT 0.5,
-      roles text NOT NULL,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now(),
-      PRIMARY KEY (company_id, id)
-    )`;
-  })();
-  return schemaPromise;
-}
 
 function hydrate(row: Record<string, unknown>): CompanySite {
   return {
@@ -47,12 +24,35 @@ function hydrate(row: Record<string, unknown>): CompanySite {
 }
 
 async function seed(companyId: string) {
-  await ensureSchema();
-  for (const site of knownSites) {
-    await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles)
-      VALUES (${companyId},${site.id},${site.label},${site.city},${site.country},${site.address},${site.latitude},${site.longitude},${site.arrivalRadiusKm},${JSON.stringify(site.roles)})
-      ON CONFLICT (company_id,id) DO NOTHING`;
-  }
+  // Production schema is provisioned separately. Seed all known sites in a
+  // single Neon request instead of one Cloudflare subrequest per site.
+  const payload = JSON.stringify(knownSites.map((site) => ({
+    id: site.id,
+    label: site.label,
+    city: site.city,
+    country: site.country,
+    address: site.address,
+    latitude: site.latitude,
+    longitude: site.longitude,
+    arrival_radius_km: site.arrivalRadiusKm,
+    roles: JSON.stringify(site.roles),
+  })));
+
+  await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles)
+    SELECT ${companyId}, seed.id, seed.label, seed.city, seed.country, seed.address,
+      seed.latitude, seed.longitude, seed.arrival_radius_km, seed.roles
+    FROM json_to_recordset(${payload}::json) AS seed(
+      id text,
+      label text,
+      city text,
+      country text,
+      address text,
+      latitude double precision,
+      longitude double precision,
+      arrival_radius_km double precision,
+      roles text
+    )
+    ON CONFLICT (company_id,id) DO NOTHING`;
 }
 
 export const postgresSiteStore: SiteStore = {
@@ -62,7 +62,6 @@ export const postgresSiteStore: SiteStore = {
     return rows.map((row) => hydrate(row as Record<string, unknown>));
   },
   async upsert(input: CreateCompanySiteInput) {
-    await ensureSchema();
     const rows = await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,updated_at)
       VALUES (${input.companyId},${input.id},${input.label},${input.city},${input.country},${input.address},${input.latitude},${input.longitude},${input.arrivalRadiusKm},${JSON.stringify(input.roles)},now())
       ON CONFLICT (company_id,id) DO UPDATE SET label=excluded.label,city=excluded.city,country=excluded.country,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,arrival_radius_km=excluded.arrival_radius_km,roles=excluded.roles,updated_at=now()
