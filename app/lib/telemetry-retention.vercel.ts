@@ -13,6 +13,10 @@ export type TelemetryPruneResult = {
   etaObservations: number;
 };
 
+export type TelemetryPruneAllResult = TelemetryPruneResult & {
+  companies: number;
+};
+
 const maintenanceIntervalMs = 24 * 60 * 60 * 1000;
 let schemaPromise: Promise<void> | null = null;
 
@@ -120,4 +124,21 @@ export async function pruneTelemetry(companyId: string, retentionDays: number, n
     tripPositions: Number(trip[0]?.count ?? 0),
     etaObservations: Number(eta[0]?.count ?? 0),
   };
+}
+
+export async function pruneAllTelemetry(retentionDays: number, now = new Date()): Promise<TelemetryPruneAllResult> {
+  const sql = await ensureSchema();
+  const rows = await sql`SELECT DISTINCT company_id FROM deliveries WHERE company_id IS NOT NULL AND company_id <> ''` as Array<{ company_id: string }>;
+  let ran = false;
+  let fleetPositions = 0;
+  let tripPositions = 0;
+  let etaObservations = 0;
+  for (const row of rows) {
+    const result = await pruneTelemetry(row.company_id, retentionDays, now);
+    ran ||= result.ran;
+    fleetPositions += result.fleetPositions;
+    tripPositions += result.tripPositions;
+    etaObservations += result.etaObservations;
+  }
+  return { ran, companies: rows.length, fleetPositions, tripPositions, etaObservations };
 }
