@@ -32,6 +32,7 @@ export async function POST(request: Request) {
   if (!payload) return invalidJsonResponse();
   const deliveryId = String(payload.deliveryId ?? "").trim();
   if (!deliveryId || deliveryId.length > 100) return noStore({ error: "invalid_delivery_id" }, 400);
+  if (payload.confirmDelivered !== true) return noStore({ error: "delivery_confirmation_required" }, 400);
 
   try {
     const completed = await completeDeliveryManually(session.companyId, deliveryId);
