@@ -1,3 +1,5 @@
+import { normalizeEnvValue } from "./env-value";
+
 export type TrackFleetRuntimeEnv = {
   DB?: undefined;
   SENDATRACK_ACCOUNT_ID?: string;
@@ -19,5 +21,13 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_AUTOMATION_START_AT?: string;
 };
 
-export const runtimeEnv = process.env as TrackFleetRuntimeEnv;
+const rawRuntimeEnv = process.env as TrackFleetRuntimeEnv;
+
+export const runtimeEnv = new Proxy(rawRuntimeEnv, {
+  get(target, property, receiver) {
+    const value = Reflect.get(target, property, receiver);
+    return typeof value === "string" ? normalizeEnvValue(value) : value;
+  },
+});
+
 export const runtimePlatform = "vercel" as const;
