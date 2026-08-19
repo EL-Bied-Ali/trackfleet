@@ -24,6 +24,7 @@ export type SiteCoordinateSuggestion = {
   vehicleCount: number;
   addressEvidence: string[];
   radius95Km: number | null;
+  spanHours: number | null;
 };
 
 const genericAddressTokens = new Set([
@@ -88,9 +89,16 @@ function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateI
     { latitude, longitude },
     { latitude: point.latitude, longitude: point.longitude },
   )));
-  const repeated = points.length >= 8 && vehicles.size >= 2;
+  const timestamps = points.map((point) => point.positionAt.getTime()).filter(Number.isFinite);
+  const spanHours = timestamps.length >= 2 ? (Math.max(...timestamps) - Math.min(...timestamps)) / 3_600_000 : 0;
   const compact = radius95Km <= 0.35;
-  const confidence: SiteCoordinateSuggestion["confidence"] = repeated && compact && evidence.matches.length > 0
+  const repeated = points.length >= 8 && (vehicles.size >= 2 || spanHours >= 6);
+  // One truck can establish a site when it repeatedly parks there over many
+  // hours, but then we require at least two specific address tokens. Multiple
+  // physical trucks need one specific token because independent visits already
+  // provide strong corroboration.
+  const strongAddress = evidence.matches.length >= (vehicles.size >= 2 ? 1 : 2);
+  const confidence: SiteCoordinateSuggestion["confidence"] = repeated && compact && strongAddress
     ? "high"
     : repeated && compact && evidence.cityMatch
       ? "medium"
@@ -104,6 +112,7 @@ function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateI
     vehicleCount: vehicles.size,
     addressEvidence: evidence.matches,
     radius95Km: rounded(radius95Km, 3),
+    spanHours: rounded(spanHours, 2),
     relevant: evidence.matches.length > 0 || evidence.cityMatch,
   };
 }
@@ -118,6 +127,7 @@ function emptySuggestion(siteId: string): SiteCoordinateSuggestion {
     vehicleCount: 0,
     addressEvidence: [],
     radius95Km: null,
+    spanHours: null,
   };
 }
 
