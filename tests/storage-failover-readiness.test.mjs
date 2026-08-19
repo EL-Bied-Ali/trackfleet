@@ -12,7 +12,8 @@ test("Postgres health reports D1 standby separately from the active backend", ()
   assert.match(health, /candidate: "cloudflare-d1"/);
   assert.match(health, /ready: readiness\.ready/);
   assert.match(health, /reason: readiness\.reason === "ready" \? "replication_ready" : readiness\.reason/);
-  assert.match(health, /automatic: false/);
+  assert.match(health, /const automatic = d1ReadFailoverConfigured\(\)/);
+  assert.match(health, /automatic,/);
 });
 
 test("D1 readiness requires fresh operational and telemetry reconciliation plus complete history", () => {
@@ -33,6 +34,8 @@ test("Cloudflare Postgres can compile read failover wrappers without enabling th
   assert.match(envExample, /TRACKFLEET_D1_READ_FAILOVER=false/);
 });
 
-test("health never claims automatic D1 failover merely because readiness is green", () => {
+test("readiness alone never enables automatic D1 failover", () => {
+  assert.match(health, /d1ReadFailoverConfigured/);
+  assert.doesNotMatch(health, /automatic:\s*readiness\.ready/);
   assert.doesNotMatch(health, /automatic:\s*true/);
 });
