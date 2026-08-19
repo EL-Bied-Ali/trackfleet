@@ -3,6 +3,7 @@ import { getD1StandbyReadiness, type D1ReadinessBinding } from "./d1-standby-rea
 
 const enabledValues = new Set(["1", "true", "yes", "on", "enabled"]);
 export const D1_READ_FAILOVER_LEASE_MS = 5 * 60_000;
+let suppressionDepth = 0;
 
 type D1FailoverStatement = {
   bind(...values: unknown[]): D1FailoverStatement;
@@ -15,12 +16,22 @@ type D1FailoverBinding = D1ReadinessBinding & {
 };
 
 function configured() {
+  if (suppressionDepth > 0) return false;
   const raw = runtimeEnv.TRACKFLEET_D1_READ_FAILOVER?.trim().toLowerCase() ?? "";
   return enabledValues.has(raw);
 }
 
 function d1Binding() {
   return (runtimeEnv as unknown as { DB?: D1FailoverBinding }).DB ?? null;
+}
+
+export async function withoutD1ReadFailover<T>(operation: () => Promise<T>): Promise<T> {
+  suppressionDepth += 1;
+  try {
+    return await operation();
+  } finally {
+    suppressionDepth -= 1;
+  }
 }
 
 async function activateD1ReadFailover(db: D1FailoverBinding, now = Date.now()) {
