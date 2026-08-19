@@ -1,0 +1,52 @@
+name: MVP production readiness audit
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      TRACKFLEET_BASE_URL: https://trackfleet.chronoplan.workers.dev
+    steps:
+      - name: Read production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 "$TRACKFLEET_BASE_URL/api/health" -o /tmp/trackfleet-health.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const health = JSON.parse(fs.readFileSync('/tmp/trackfleet-health.json', 'utf8'));
+          const summary = {
+            ok: health?.ok === true,
+            storage: {
+              mode: health?.storage?.mode ?? null,
+              persistent: health?.storage?.persistent ?? null,
+              connected: health?.storage?.connected ?? null,
+              error: health?.storage?.error ?? null,
+              failover: {
+                available: health?.storage?.failover?.available ?? null,
+                connected: health?.storage?.failover?.connected ?? null,
+                ready: health?.storage?.failover?.ready ?? null,
+                automatic: health?.storage?.failover?.automatic ?? null,
+                reason: health?.storage?.failover?.reason ?? null,
+              },
+            },
+            sendatrackConfigured: health?.sendatrackConfigured === true,
+            sendatrackTransportSecure: health?.sendatrackTransportSecure === true,
+            sessionEncryptionConfigured: health?.sessionEncryptionConfigured === true,
+            automation: {
+              tickProtected: health?.automation?.tickProtected === true,
+              whatsappEnabled: health?.automation?.whatsappEnabled === true,
+              ready: health?.automation?.ready === true,
+              missing: Array.isArray(health?.automation?.missing) ? health.automation.missing : ['health_shape_invalid'],
+              heartbeatAvailable: health?.automation?.heartbeatAvailable ?? null,
+              live: health?.automation?.live ?? null,
+            },
+          };
+          console.log(JSON.stringify(summary, null, 2));
+          if (!summary.ok || summary.storage.mode !== 'postgres' || summary.storage.connected !== true) process.exit(1);
+          NODE
