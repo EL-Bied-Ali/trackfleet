@@ -1,5 +1,10 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { telemetryRetentionCutoff } from "./telemetry-retention";
+import {
+  ETA_HISTORY_RETENTION_DAYS,
+  HIGH_RESOLUTION_TELEMETRY_DAYS,
+  TELEMETRY_DOWNSAMPLE_BUCKET_MINUTES,
+  telemetryRetentionCutoff,
+} from "./telemetry-retention";
 
 export type TelemetryPruneResult = {
   ran: boolean;
@@ -41,14 +46,46 @@ export async function pruneTelemetry(companyId: string, retentionDays: number, n
     .bind(companyId, nowMs, staleBefore).run();
   if (!claim.meta?.changes) return { ran: false, fleetPositions: 0, tripPositions: 0, etaObservations: 0 };
 
-  const cutoff = telemetryRetentionCutoff(retentionDays, now).getTime();
+  const highResolutionDays = Math.min(HIGH_RESOLUTION_TELEMETRY_DAYS, retentionDays);
+  const rawCutoff = telemetryRetentionCutoff(retentionDays, now).getTime();
+  const highResolutionCutoff = telemetryRetentionCutoff(highResolutionDays, now).getTime();
+  const etaCutoff = telemetryRetentionCutoff(Math.max(ETA_HISTORY_RETENTION_DAYS, retentionDays), now).getTime();
+  const bucketMs = TELEMETRY_DOWNSAMPLE_BUCKET_MINUTES * 60 * 1000;
+
   const results = await db.batch([
-    db.prepare("DELETE FROM fleet_position_observations WHERE company_id = ? AND position_at < ?").bind(companyId, cutoff),
-    db.prepare("DELETE FROM trip_position_observations WHERE company_id = ? AND position_at < ?").bind(companyId, cutoff),
+    db.prepare(`DELETE FROM fleet_position_observations
+      WHERE company_id = ? AND (
+        position_at < ? OR rowid IN (
+          SELECT rowid FROM (
+            SELECT rowid,
+              row_number() OVER (
+                PARTITION BY company_id, vehicle_id, CAST(position_at / ? AS INTEGER)
+                ORDER BY position_at
+              ) AS rn
+            FROM fleet_position_observations
+            WHERE company_id = ? AND position_at >= ? AND position_at < ?
+          ) ranked WHERE rn > 1
+        )
+      )`).bind(companyId, rawCutoff, bucketMs, companyId, rawCutoff, highResolutionCutoff),
+    db.prepare(`DELETE FROM trip_position_observations
+      WHERE company_id = ? AND (
+        position_at < ? OR rowid IN (
+          SELECT rowid FROM (
+            SELECT rowid,
+              row_number() OVER (
+                PARTITION BY company_id, trip_instance_id, CAST(position_at / ? AS INTEGER)
+                ORDER BY position_at
+              ) AS rn
+            FROM trip_position_observations
+            WHERE company_id = ? AND position_at >= ? AND position_at < ?
+          ) ranked WHERE rn > 1
+        )
+      )`).bind(companyId, rawCutoff, bucketMs, companyId, rawCutoff, highResolutionCutoff),
     db.prepare(`DELETE FROM delivery_eta_observations
       WHERE position_at < ? AND delivery_id IN (SELECT id FROM deliveries WHERE company_id = ?)`)
-      .bind(cutoff, companyId),
+      .bind(etaCutoff, companyId),
   ]);
+
   return {
     ran: true,
     fleetPositions: Number(results[0]?.meta?.changes ?? 0),
