@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { project30dRows } from "../app/lib/telemetry-growth.ts";
+import { project30dRows } from "../app/lib/telemetry-growth-projection.ts";
 
 const reportSource = new URL("../app/lib/telemetry-growth.ts", import.meta.url);
 const routeSource = new URL("../app/api/operations/storage/route.ts", import.meta.url);
