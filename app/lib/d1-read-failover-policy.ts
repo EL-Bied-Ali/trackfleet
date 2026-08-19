@@ -1,3 +1,11 @@
+const enabledValues = new Set(["1", "true", "yes", "on", "enabled"]);
+
+export function resolveD1ReadFailoverConfigured(rawValue: string | undefined, platform: string) {
+  const raw = rawValue?.trim().toLowerCase() ?? "";
+  if (!raw) return platform === "cloudflare";
+  return enabledValues.has(raw);
+}
+
 export async function executeReadFailover<T>(input: {
   primaryRead: () => Promise<T>;
   approveFailover: () => Promise<boolean>;
