@@ -1,6 +1,7 @@
 export const D1_STANDBY_MAX_SYNC_AGE_MS = 30 * 60_000;
 
 type D1ReadinessStatement = {
+  bind(...values: unknown[]): D1ReadinessStatement;
   first<T = Record<string, unknown>>(): Promise<T | null>;
 };
 
