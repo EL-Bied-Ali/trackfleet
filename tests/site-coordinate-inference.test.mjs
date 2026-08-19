@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { inferSiteCoordinateSuggestions } from "../app/lib/site-coordinate-inference.ts";
 
-function points({ address, baseLat, baseLon, vehicles = ["A-1", "B-2"], count = 12 }) {
+function points({ address, baseLat, baseLon, vehicles = ["A-1", "B-2"], count = 12, spacingMinutes = 1 }) {
   return Array.from({ length: count }, (_, index) => ({
     vehicleName: vehicles[index % vehicles.length],
     latitude: baseLat + (index % 3) * 0.00003,
     longitude: baseLon + (index % 2) * 0.00003,
     speed: 0,
     address,
-    positionAt: new Date(Date.UTC(2026, 7, 18, 10, index)),
+    positionAt: new Date(Date.UTC(2026, 7, 18, 10, index * spacingMinutes)),
   }));
 }
 
@@ -21,6 +21,38 @@ test("specific address evidence plus repeated compact stops produces high confid
   assert.ok(suggestion.addressEvidence.includes("ksar") || suggestion.addressEvidence.includes("majaz"));
   assert.equal(suggestion.vehicleCount, 2);
   assert.ok(suggestion.latitude && suggestion.longitude);
+});
+
+test("one physical truck can establish high confidence after a long repeated stay with strong address evidence", () => {
+  const [suggestion] = inferSiteCoordinateSuggestions([
+    { id: "tanger-med", label: "Port Tanger Med · Ksar Al Majaz", city: "Tanger Med", address: "Oued Ghlala, Ksar Al Majaz, Maroc", country: "MA" },
+  ], points({
+    address: "RN16, Ksar El Majaz, Maroc",
+    baseLat: 35.859,
+    baseLon: -5.533,
+    vehicles: ["18799-B-2"],
+    count: 12,
+    spacingMinutes: 60,
+  }));
+  assert.equal(suggestion.confidence, "high");
+  assert.equal(suggestion.vehicleCount, 1);
+  assert.ok((suggestion.spanHours ?? 0) >= 6);
+  assert.ok(suggestion.addressEvidence.includes("ksar"));
+  assert.ok(suggestion.addressEvidence.includes("majaz"));
+});
+
+test("a short single-truck stop is not promoted to high confidence", () => {
+  const [suggestion] = inferSiteCoordinateSuggestions([
+    { id: "tanger-med", label: "Port Tanger Med · Ksar Al Majaz", city: "Tanger Med", address: "Oued Ghlala, Ksar Al Majaz, Maroc", country: "MA" },
+  ], points({
+    address: "RN16, Ksar El Majaz, Maroc",
+    baseLat: 35.859,
+    baseLon: -5.533,
+    vehicles: ["18799-B-2"],
+    count: 12,
+    spacingMinutes: 2,
+  }));
+  assert.notEqual(suggestion.confidence, "high");
 });
 
 test("city-only evidence remains medium even with many trucks", () => {
