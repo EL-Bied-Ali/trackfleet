@@ -56,6 +56,24 @@ jobs:
           if (!summary.ok || summary.storage.mode !== 'postgres' || summary.storage.connected !== true) process.exit(1);
           NODE
 
+      - name: Probe SENDATRACK HTTPS transport
+        if: steps.health.outputs.ready != 'true' && contains(steps.health.outputs.missing, 'sendatrack_https')
+        shell: bash
+        run: |
+          set -u
+          url="https://backend2.sendatrack.com/sendatrack/public/api/"
+          code="$(curl --silent --show-error --location --max-time 20 --output /dev/null --write-out '%{http_code}' "$url" 2>/tmp/sendatrack-https-error || true)"
+          echo "SENDATRACK HTTPS probe HTTP status: ${code:-000}"
+          if [ -s /tmp/sendatrack-https-error ]; then
+            echo "SENDATRACK HTTPS probe transport output:"
+            cat /tmp/sendatrack-https-error
+          fi
+          if [ -n "$code" ] && [ "$code" != "000" ]; then
+            echo "SENDATRACK HTTPS transport is reachable."
+          else
+            echo "SENDATRACK HTTPS transport could not be established."
+          fi
+
       - name: Publish MVP readiness status
         if: always()
         continue-on-error: true
