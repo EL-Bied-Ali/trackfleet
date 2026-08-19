@@ -1,4 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { executeReadFailover } from "./d1-read-failover-policy";
 import { getD1StandbyReadiness } from "./d1-standby-readiness";
 
 const enabledValues = new Set(["1", "true", "yes", "on", "enabled"]);
@@ -89,31 +90,28 @@ async function approveAndActivateFailover() {
   }
 }
 
-export async function withD1ReadFailover<T>(
+export function withD1ReadFailover<T>(
   scope: string,
   primaryRead: () => Promise<T>,
   standbyRead: () => Promise<T>,
 ): Promise<T> {
-  try {
-    return await primaryRead();
-  } catch (primaryError) {
-    if (!(await approveAndActivateFailover())) throw primaryError;
-
-    console.warn("[trackfleet:failover] primary read failed; serving readiness-approved D1 standby", {
-      scope,
-      primaryMessage: primaryError instanceof Error ? primaryError.message : "unknown_error",
-    });
-
-    try {
-      return await standbyRead();
-    } catch (standbyError) {
+  return executeReadFailover({
+    primaryRead,
+    approveFailover: approveAndActivateFailover,
+    standbyRead,
+    onFailover(primaryError) {
+      console.warn("[trackfleet:failover] primary read failed; serving readiness-approved D1 standby", {
+        scope,
+        primaryMessage: primaryError instanceof Error ? primaryError.message : "unknown_error",
+      });
+    },
+    onStandbyFailure(_primaryError, standbyError) {
       console.error("[trackfleet:failover] D1 standby read also failed", {
         scope,
         standbyMessage: standbyError instanceof Error ? standbyError.message : "unknown_error",
       });
-      throw primaryError;
-    }
-  }
+    },
+  });
 }
 
 export async function suppressMaintenanceWriteDuringD1Failover<T>(
