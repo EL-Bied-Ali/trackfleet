@@ -11,7 +11,11 @@ import { parseUnloadGraceMinutes } from "../../lib/delivery-arrival";
 import { parseAutomationStartAt } from "../../lib/notification-policy";
 import { sessionEncryptionKeyConfigured } from "../../lib/session-encryption-key";
 import { isSendatrackConfigured } from "../../lib/sendatrack";
-import { sendatrackTransportIsSecure } from "../../lib/sendatrack-transport";
+import {
+  insecureSendatrackTransportExplicitlyAllowed,
+  sendatrackTransportIsAllowed,
+  sendatrackTransportIsSecure,
+} from "../../lib/sendatrack-transport";
 import { getStorageHealth } from "../../lib/storage-health";
 import { telemetryRetentionPolicy } from "../../lib/telemetry-retention";
 
@@ -19,6 +23,8 @@ export async function GET() {
   const storage = await getStorageHealth();
   const sendatrackConfigured = isSendatrackConfigured();
   const sendatrackTransportSecure = sendatrackTransportIsSecure();
+  const sendatrackInsecureOverrideEnabled = insecureSendatrackTransportExplicitlyAllowed();
+  const sendatrackTransportAllowed = sendatrackTransportIsAllowed();
   const sessionEncryptionConfigured = sessionEncryptionKeyConfigured(runtimeEnv.TRACKFLEET_ENCRYPTION_KEY);
   const tickProtected = Boolean(runtimeEnv.CRON_SECRET?.trim());
   const whatsappEnabled = runtimeEnv.WHATSAPP_AUTOMATION_ENABLED === "true";
@@ -34,7 +40,7 @@ export async function GET() {
   const missing = automationMissingRequirements({
     storage,
     sendatrackConfigured,
-    sendatrackTransportSecure,
+    sendatrackTransportSecure: sendatrackTransportAllowed,
     sessionEncryptionConfigured,
     tickProtected,
     whatsappEnabled,
@@ -77,6 +83,8 @@ export async function GET() {
     service: "trackfleet",
     sendatrackConfigured,
     sendatrackTransportSecure,
+    sendatrackTransportAllowed,
+    sendatrackInsecureOverrideEnabled,
     sessionEncryptionConfigured,
     storage,
     telemetryRetention: {

@@ -1,5 +1,6 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { normalizeSendatrackFleet, type SendatrackVehicle } from "./sendatrack-normalize";
+import { sendatrackTransportIsAllowed } from "./sendatrack-transport";
 
 export type SendatrackCredentials = {
   accountID: string;
@@ -33,6 +34,13 @@ function environmentCredentials(): SendatrackCredentials {
     user: runtimeEnv.SENDATRACK_USER?.trim() ?? "",
     password: runtimeEnv.SENDATRACK_PASSWORD ?? "",
   };
+}
+
+function requireAllowedTransport() {
+  if (!sendatrackTransportIsAllowed()) {
+    console.error("[trackfleet:sendatrack] blocked insecure provider transport without explicit override");
+    throw new Error("service_unavailable");
+  }
 }
 
 function apiUrl(path: string) {
@@ -109,6 +117,7 @@ function authenticationRejectedStatus(status: number) {
 }
 
 async function login(auth: SendatrackCredentials) {
+  requireAllowedTransport();
   const key = credentialKey(auth);
   const cachedToken = cachedTokens.get(key);
   if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
@@ -144,6 +153,7 @@ async function login(auth: SendatrackCredentials) {
 }
 
 async function requestFleetPayload(token: string, auth: SendatrackCredentials) {
+  requireAllowedTransport();
   const response = await fetch(apiUrl("list?"), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
@@ -181,7 +191,7 @@ export async function getSendatrackLegacyHistoryIdentities(): Promise<Sendatrack
 
   // OpenGTS uses the account key (not its human-readable description) for `a=`.
   // Keep discovery bounded to the three values already present in the authenticated
-  // SENDATRACK context. Password never leaves server memory except in the provider request.
+  // SENDATRACK context. If the insecure override is enabled, the provider request is knowingly HTTP.
   const candidates: SendatrackLegacyHistoryIdentity[] = [];
   const seen = new Set<string>();
   const add = (accountId: string, accountSource: SendatrackLegacyHistoryIdentity["accountSource"]) => {
