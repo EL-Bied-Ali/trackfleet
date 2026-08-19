@@ -1,6 +1,3 @@
-import { haversineKm } from "./fleet-trip-reconstruction";
-import { normalizePhysicalVehicleName } from "./vehicle-identity";
-
 export type SiteCoordinateInferenceSite = {
   id: string;
   label: string;
@@ -38,6 +35,20 @@ function normalized(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function normalizeVehicleName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function distanceKm(left: { latitude: number; longitude: number }, right: { latitude: number; longitude: number }) {
+  const rad = Math.PI / 180;
+  const dLat = (right.latitude - left.latitude) * rad;
+  const dLon = (right.longitude - left.longitude) * rad;
+  const lat1 = left.latitude * rad;
+  const lat2 = right.latitude * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function tokens(value: string) {
   return normalized(value).split(/\s+/).filter((token) => token.length >= 4 && !genericAddressTokens.has(token));
 }
@@ -71,9 +82,9 @@ function addressEvidence(site: SiteCoordinateInferenceSite, points: SiteCoordina
 function scoreCluster(site: SiteCoordinateInferenceSite, points: SiteCoordinateInferencePoint[]) {
   const latitude = points.reduce((sum, point) => sum + point.latitude, 0) / points.length;
   const longitude = points.reduce((sum, point) => sum + point.longitude, 0) / points.length;
-  const vehicles = new Set(points.map((point) => normalizePhysicalVehicleName(point.vehicleName)).filter(Boolean));
+  const vehicles = new Set(points.map((point) => normalizeVehicleName(point.vehicleName)).filter(Boolean));
   const evidence = addressEvidence(site, points);
-  const radius95Km = percentile95(points.map((point) => haversineKm(
+  const radius95Km = percentile95(points.map((point) => distanceKm(
     { latitude, longitude },
     { latitude: point.latitude, longitude: point.longitude },
   )));
