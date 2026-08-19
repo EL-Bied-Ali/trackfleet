@@ -1,6 +1,9 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { reconcileD1Standby } from "../app/lib/d1-reconciliation";
+import { reconcileD1Telemetry } from "../app/lib/d1-telemetry-reconciliation";
+import { backfillD1DeliveryHistory } from "../app/lib/d1-history-backfill";
 
 interface Env {
   ASSETS: Fetcher;
@@ -19,6 +22,16 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+interface ScheduledController {
+  cron: string;
+  scheduledTime: number;
+  noRetry(): void;
+}
+
+const operationalReconciliationCron = "*/15 * * * *";
+const telemetryReconciliationCron = "5,20,35,50 * * * *";
+const historyBackfillCron = "10,25,40,55 * * * *";
+
 const securityHeaders = {
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "X-Content-Type-Options": "nosniff",
@@ -31,6 +44,25 @@ function withSecurityHeaders(response: Response) {
   const secured = new Response(response.body, response);
   for (const [key, value] of Object.entries(securityHeaders)) secured.headers.set(key, value);
   return secured;
+}
+
+async function runScheduledStandbyMaintenance(cron: string) {
+  if (cron === operationalReconciliationCron) {
+    const result = await reconcileD1Standby();
+    console.info("[trackfleet:replication] scheduled operational reconciliation", result);
+    return;
+  }
+  if (cron === telemetryReconciliationCron) {
+    const result = await reconcileD1Telemetry();
+    console.info("[trackfleet:replication] scheduled telemetry reconciliation", result);
+    return;
+  }
+  if (cron === historyBackfillCron) {
+    const result = await backfillD1DeliveryHistory();
+    console.info("[trackfleet:replication] scheduled history backfill", result);
+    return;
+  }
+  console.warn("[trackfleet:replication] unknown scheduled maintenance cron", { cron });
 }
 
 // Image security config. SVG sources with .svg extension auto-skip the
@@ -56,6 +88,19 @@ const worker = {
     }
 
     return withSecurityHeaders(await handler.fetch(request, env, ctx));
+  },
+
+  async scheduled(controller: ScheduledController, _env: Env, _ctx: ExecutionContext): Promise<void> {
+    try {
+      await runScheduledStandbyMaintenance(controller.cron);
+    } catch (error) {
+      console.error("[trackfleet:replication] scheduled standby maintenance failed", {
+        cron: controller.cron,
+        scheduledTime: controller.scheduledTime,
+        message: error instanceof Error ? error.message : "unknown_error",
+      });
+      throw error;
+    }
   },
 };
 
