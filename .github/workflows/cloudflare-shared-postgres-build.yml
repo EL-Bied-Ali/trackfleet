@@ -1,0 +1,25 @@
+name: Cloudflare shared Postgres build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-cloudflare-shared-postgres:
+    runs-on: ubuntu-latest
+    env:
+      TRACKFLEET_STORAGE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build Cloudflare Worker with shared Postgres storage
+        run: pnpm run build
