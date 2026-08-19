@@ -8,6 +8,7 @@
       "@/*": ["./*"],
       "trackfleet-runtime-env": ["./app/lib/runtime-env.vercel.ts"],
       "trackfleet-delivery-store": ["./app/lib/delivery-store.vercel.ts"],
+      "trackfleet-delivery-store-full": ["./app/lib/delivery-store.vercel.ts"],
       "trackfleet-site-store": ["./app/lib/site-store.vercel.ts"],
       "trackfleet-login-rate-limit": ["./app/lib/login-rate-limit.vercel.ts"],
       "trackfleet-automation-heartbeat": ["./app/lib/automation-heartbeat.vercel.ts"],
