@@ -31,6 +31,8 @@ jobs:
           rm -rf .wrangler/state
           node scripts/prepare-d1-schema.mjs --local
           node scripts/prepare-d1-schema.mjs --local
+      - name: Verify storage failover readiness contract
+        run: node --test tests/storage-failover-readiness.test.mjs
       - name: Verify Postgres query budget
         run: node --test tests/postgres-query-budget.test.mjs
       - name: Verify batched-read behavior
