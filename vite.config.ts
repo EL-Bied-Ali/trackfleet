@@ -45,6 +45,12 @@ const automationHeartbeatPath = fileURLToPath(
     import.meta.url,
   ),
 );
+const authSessionStorePath = fileURLToPath(
+  new URL(
+    isVercel ? "./app/lib/auth-session-store.vercel.ts" : "./app/lib/auth-session-store.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -89,6 +95,7 @@ export default defineConfig(async () => {
         "trackfleet-site-store": siteStorePath,
         "trackfleet-login-rate-limit": loginRateLimitPath,
         "trackfleet-automation-heartbeat": automationHeartbeatPath,
+        "trackfleet-auth-session-store": authSessionStorePath,
       },
     },
     server: isCodexSeatbeltSandbox
