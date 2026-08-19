@@ -6,52 +6,46 @@ export type AutomationHeartbeat = {
   lastFailureAt: Date | null;
 };
 
-async function ensureTable() {
-  const db = runtimeEnv.DB;
-  if (!db) return null;
-  await db.prepare(`CREATE TABLE IF NOT EXISTS automation_runtime_state (
-    id text PRIMARY KEY NOT NULL,
-    last_attempt_at integer,
-    last_success_at integer,
-    last_failure_at integer
-  )`).run();
-  return db;
+export type RuntimeHeartbeatJob = "fleet_tick" | "telemetry_retention";
+
+function database() {
+  return runtimeEnv.DB ?? null;
 }
 
-export async function recordAutomationAttempt() {
-  const db = await ensureTable();
+export async function recordRuntimeAttempt(jobId: RuntimeHeartbeatJob) {
+  const db = database();
   if (!db) return;
   const now = Date.now();
   await db.prepare(`INSERT INTO automation_runtime_state (id, last_attempt_at)
-    VALUES ('fleet_tick', ?)
-    ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at`).bind(now).run();
+    VALUES (?, ?)
+    ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at`).bind(jobId, now).run();
 }
 
-export async function recordAutomationSuccess() {
-  const db = await ensureTable();
+export async function recordRuntimeSuccess(jobId: RuntimeHeartbeatJob) {
+  const db = database();
   if (!db) return;
   const now = Date.now();
   await db.prepare(`INSERT INTO automation_runtime_state (id, last_attempt_at, last_success_at)
-    VALUES ('fleet_tick', ?, ?)
+    VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at, last_success_at = excluded.last_success_at`)
-    .bind(now, now).run();
+    .bind(jobId, now, now).run();
 }
 
-export async function recordAutomationFailure() {
-  const db = await ensureTable();
+export async function recordRuntimeFailure(jobId: RuntimeHeartbeatJob) {
+  const db = database();
   if (!db) return;
   const now = Date.now();
   await db.prepare(`INSERT INTO automation_runtime_state (id, last_attempt_at, last_failure_at)
-    VALUES ('fleet_tick', ?, ?)
+    VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at, last_failure_at = excluded.last_failure_at`)
-    .bind(now, now).run();
+    .bind(jobId, now, now).run();
 }
 
-export async function getAutomationHeartbeat(): Promise<AutomationHeartbeat> {
-  const db = await ensureTable();
+export async function getRuntimeHeartbeat(jobId: RuntimeHeartbeatJob): Promise<AutomationHeartbeat> {
+  const db = database();
   if (!db) return { lastAttemptAt: null, lastSuccessAt: null, lastFailureAt: null };
   const row = await db.prepare(`SELECT last_attempt_at AS lastAttemptAt, last_success_at AS lastSuccessAt, last_failure_at AS lastFailureAt
-    FROM automation_runtime_state WHERE id = 'fleet_tick' LIMIT 1`).first<{
+    FROM automation_runtime_state WHERE id = ? LIMIT 1`).bind(jobId).first<{
       lastAttemptAt: number | null;
       lastSuccessAt: number | null;
       lastFailureAt: number | null;
@@ -61,4 +55,20 @@ export async function getAutomationHeartbeat(): Promise<AutomationHeartbeat> {
     lastSuccessAt: row?.lastSuccessAt ? new Date(row.lastSuccessAt) : null,
     lastFailureAt: row?.lastFailureAt ? new Date(row.lastFailureAt) : null,
   };
+}
+
+export function recordAutomationAttempt() {
+  return recordRuntimeAttempt("fleet_tick");
+}
+
+export function recordAutomationSuccess() {
+  return recordRuntimeSuccess("fleet_tick");
+}
+
+export function recordAutomationFailure() {
+  return recordRuntimeFailure("fleet_tick");
+}
+
+export function getAutomationHeartbeat() {
+  return getRuntimeHeartbeat("fleet_tick");
 }
