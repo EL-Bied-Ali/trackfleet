@@ -34,6 +34,8 @@ jobs:
         run: node --test tests/bulk-delivery-import.test.mjs
       - name: Verify operational alert detection
         run: node --test tests/operational-alerts.test.mjs
+      - name: Verify storage schema compatibility checks
+        run: node --test tests/storage-schema-health.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
