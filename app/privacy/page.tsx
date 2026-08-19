@@ -58,7 +58,7 @@ export default function PrivacyPage() {
           <h2>5. Service providers</h2>
           <p>
             TrackFleet may transmit the minimum data needed to infrastructure, database, fleet-tracking and messaging
-            providers used by the transport company. For WhatsApp notifications, message data is processed by Meta's
+            providers used by the transport company. For WhatsApp notifications, message data is processed by Meta&apos;s
             WhatsApp Business Platform. Fleet-position data may be obtained from the configured fleet provider.
           </p>
         </section>
