@@ -63,9 +63,12 @@ export default function StorageOperationsPage() {
   }, [locale]);
 
   useEffect(() => {
-    void refresh();
+    const initial = window.setTimeout(() => void refresh(), 0);
     const timer = window.setInterval(() => void refresh(), 300_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(timer);
+    };
   }, [refresh]);
 
   const totalProjected = useMemo(() => report?.metrics.reduce((sum, metric) => sum + metric.projected30dRows, 0) ?? 0, [report]);
