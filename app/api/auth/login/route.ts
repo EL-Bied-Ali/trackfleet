@@ -1,6 +1,7 @@
 import { consumeLoginAttempt, clearLoginAttempts } from "trackfleet-login-rate-limit";
 import { createCompanySession } from "../../../lib/company-auth";
 import { publicLoginFailure } from "../../../lib/login-error";
+import { readJsonObject } from "../../../lib/request-json";
 import { requestIsSameOrigin } from "../../../lib/request-origin";
 
 const loginWindowMs = 10 * 60_000;
@@ -78,8 +79,10 @@ export async function POST(request: Request) {
     );
   }
 
+  const payload = await readJsonObject(request);
+  if (!payload) return json({ error: "invalid_request" }, 400);
+
   try {
-    const payload = await request.json() as Record<string, unknown>;
     const result = await createCompanySession({
       accountID: String(payload.accountID ?? "").trim().slice(0, 120),
       user: String(payload.user ?? "").trim().slice(0, 120),
