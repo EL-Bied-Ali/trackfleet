@@ -19,6 +19,7 @@ const criticalRegressionTests = [
   "telemetry-retention.test.mjs",
   "retention-heartbeat.test.mjs",
   "tenant-data-export.test.mjs",
+  "full-history-export-scaling.test.mjs",
   "operational-delivery-window.test.mjs",
   "delivery-history-pagination.test.mjs",
   "release-gate-contract.test.mjs",
