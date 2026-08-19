@@ -6,6 +6,7 @@ import { sites } from "./build/sites-vite-plugin";
 
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 const isVercel = Boolean(process.env.VERCEL);
+const useSharedPostgres = isVercel || process.env.TRACKFLEET_STORAGE === "postgres";
 const maplibreCssPath = fileURLToPath(
   new URL("./node_modules/maplibre-gl/dist/maplibre-gl.css", import.meta.url),
 );
@@ -17,43 +18,43 @@ const runtimeEnvPath = fileURLToPath(
 );
 const deliveryStorePath = fileURLToPath(
   new URL(
-    isVercel ? "./app/lib/delivery-store.vercel.ts" : "./app/lib/delivery-store.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/delivery-store.vercel.ts" : "./app/lib/delivery-store.cloudflare.ts",
     import.meta.url,
   ),
 );
 const siteStorePath = fileURLToPath(
   new URL(
-    isVercel ? "./app/lib/site-store.vercel.ts" : "./app/lib/site-store.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/site-store.vercel.ts" : "./app/lib/site-store.cloudflare.ts",
     import.meta.url,
   ),
 );
 const loginRateLimitPath = fileURLToPath(
   new URL(
-    isVercel ? "./app/lib/login-rate-limit.vercel.ts" : "./app/lib/login-rate-limit.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/login-rate-limit.vercel.ts" : "./app/lib/login-rate-limit.cloudflare.ts",
     import.meta.url,
   ),
 );
 const automationHeartbeatPath = fileURLToPath(
   new URL(
-    isVercel ? "./app/lib/automation-heartbeat.vercel.ts" : "./app/lib/automation-heartbeat.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/automation-heartbeat.vercel.ts" : "./app/lib/automation-heartbeat.cloudflare.ts",
     import.meta.url,
   ),
 );
 const authSessionStorePath = fileURLToPath(
   new URL(
-    isVercel ? "./app/lib/auth-session-store.vercel.ts" : "./app/lib/auth-session-store.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/auth-session-store.vercel.ts" : "./app/lib/auth-session-store.cloudflare.ts",
     import.meta.url,
   ),
 );
 const telemetryRetentionPath = fileURLToPath(
   new URL(
-    isVercel ? "./app/lib/telemetry-retention.vercel.ts" : "./app/lib/telemetry-retention.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/telemetry-retention.vercel.ts" : "./app/lib/telemetry-retention.cloudflare.ts",
     import.meta.url,
   ),
 );
 const deliveryCompletionPath = fileURLToPath(
   new URL(
-    isVercel ? "./app/lib/delivery-completion.vercel.ts" : "./app/lib/delivery-completion.cloudflare.ts",
+    useSharedPostgres ? "./app/lib/delivery-completion.vercel.ts" : "./app/lib/delivery-completion.cloudflare.ts",
     import.meta.url,
   ),
 );
