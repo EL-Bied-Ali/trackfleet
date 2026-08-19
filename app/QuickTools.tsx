@@ -41,6 +41,10 @@ export default function QuickTools() {
         <span aria-hidden="true">▥</span>
         <span>Storage</span>
       </a>
+      <a href="/api/operations/export" className={styles.tool}>
+        <span aria-hidden="true">⇩</span>
+        <span>Export</span>
+      </a>
       <a href={`/import?lang=${encodeURIComponent(language)}`} className={styles.toolPrimary}>
         <span aria-hidden="true">＋</span>
         <span>Import CSV</span>
