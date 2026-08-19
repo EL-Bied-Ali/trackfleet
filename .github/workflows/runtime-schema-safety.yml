@@ -32,6 +32,8 @@ jobs:
         run: node --test tests/micro-batcher.test.mjs tests/postgres-read-batching.test.mjs
       - name: Verify bulk delivery CSV import
         run: node --test tests/bulk-delivery-import.test.mjs
+      - name: Verify operational alert detection
+        run: node --test tests/operational-alerts.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
