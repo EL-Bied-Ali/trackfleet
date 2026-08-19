@@ -67,8 +67,9 @@ export default function PrivacyPage() {
           <h2>6. Public tracking and credentials</h2>
           <p>
             Customer tracking is accessed through a private tracking token. Provider credentials are never included in
-            public tracking responses. When company authentication is used, the authenticated session is stored in an
-            encrypted, HttpOnly and Secure session cookie so browser scripts cannot read the session contents directly.
+            public tracking responses or stored in the browser session cookie. The browser receives only an opaque,
+            HttpOnly and Secure session token; provider credentials are encrypted and retained in server-side session
+            storage for the lifetime of that authenticated session.
           </p>
         </section>
 
