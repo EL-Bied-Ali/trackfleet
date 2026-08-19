@@ -9,7 +9,8 @@
       "trackfleet-runtime-env": ["./app/lib/runtime-env.vercel.ts"],
       "trackfleet-delivery-store": ["./app/lib/delivery-store.vercel.ts"],
       "trackfleet-site-store": ["./app/lib/site-store.vercel.ts"],
-      "trackfleet-login-rate-limit": ["./app/lib/login-rate-limit.vercel.ts"]
+      "trackfleet-login-rate-limit": ["./app/lib/login-rate-limit.vercel.ts"],
+      "trackfleet-automation-heartbeat": ["./app/lib/automation-heartbeat.vercel.ts"]
     }
   },
   "include": [
@@ -22,6 +23,7 @@
     "app/lib/delivery-store.cloudflare.ts",
     "app/lib/runtime-env.cloudflare.ts",
     "app/lib/site-store.cloudflare.ts",
-    "app/lib/login-rate-limit.cloudflare.ts"
+    "app/lib/login-rate-limit.cloudflare.ts",
+    "app/lib/automation-heartbeat.cloudflare.ts"
   ]
 }
