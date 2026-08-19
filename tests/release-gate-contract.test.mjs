@@ -58,6 +58,14 @@ test("manual Cloudflare dispatch uses the same validated main commit path", asyn
   assert.doesNotMatch(source, /github\.event\.workflow_run/);
 });
 
+test("D1 standby preparation cannot block the primary Postgres production deployment", async () => {
+  const source = await readFile(deployWorkflow, "utf8");
+  assert.match(source, /- name: Prepare D1 fallback schema[\s\S]*?continue-on-error:\s*true/);
+  assert.match(source, /id:\s*d1_prepare/);
+  assert.match(source, /D1_PREP_OUTCOME:\s*\$\{\{ steps\.d1_prepare\.outcome \}\}/);
+  assert.match(source, /D1 standby preparation failed; Postgres production remains active/);
+});
+
 test("post-deploy verification requires persistent Postgres health", async () => {
   const source = await readFile(deployWorkflow, "utf8");
   assert.match(source, /health\?\.ok === true/);
