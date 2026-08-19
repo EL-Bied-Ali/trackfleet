@@ -72,6 +72,7 @@ jobs:
         run: |
           cat > .audit-validation-status.json <<'JSON'
           {
+            "sourceSha": "${{ github.sha }}",
             "job": "${{ job.status }}",
             "install": "${{ steps.install.outcome }}",
             "requestSecurity": "${{ steps.request_security.outcome }}",
