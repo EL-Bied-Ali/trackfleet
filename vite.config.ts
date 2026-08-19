@@ -22,6 +22,12 @@ const deliveryStorePath = fileURLToPath(
     import.meta.url,
   ),
 );
+const fullDeliveryStorePath = fileURLToPath(
+  new URL(
+    useSharedPostgres ? "./app/lib/delivery-store.full-shared-postgres.ts" : "./app/lib/delivery-store.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 const siteStorePath = fileURLToPath(
   new URL(
     useSharedPostgres ? "./app/lib/site-store.shared-postgres.ts" : "./app/lib/site-store.cloudflare.ts",
@@ -82,6 +88,7 @@ export default defineConfig(async () => {
         "maplibre-gl/dist/maplibre-gl.css": maplibreCssPath,
         "trackfleet-runtime-env": runtimeEnvPath,
         "trackfleet-delivery-store": deliveryStorePath,
+        "trackfleet-delivery-store-full": fullDeliveryStorePath,
         "trackfleet-site-store": siteStorePath,
         "trackfleet-login-rate-limit": loginRateLimitPath,
         "trackfleet-automation-heartbeat": automationHeartbeatPath,
