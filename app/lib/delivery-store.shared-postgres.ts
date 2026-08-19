@@ -5,6 +5,7 @@ import { loadOperationalDeliveries } from "./delivery-operational.postgres";
 import { loadEtaBatch, loadEventBatch } from "./delivery-store.postgres-read-batches";
 import { createLimitedArrayBatcher, createRecordBatcher } from "./micro-batcher";
 import type { DeliveryEventRow, DeliveryRow, DeliveryStore, EtaObservationRow } from "./delivery-store.types";
+import type { TripRecord } from "./trip-record";
 
 type D1MirrorStatement = {
   bind(...values: unknown[]): D1MirrorStatement;
@@ -17,6 +18,13 @@ type D1MirrorBinding = {
 
 function d1() {
   return (runtimeEnv as unknown as { DB?: D1MirrorBinding }).DB ?? null;
+}
+
+function replicationError(scope: string, error: unknown, context: Record<string, unknown>) {
+  console.error(`[trackfleet:replication] D1 ${scope} mirror failed`, {
+    message: error instanceof Error ? error.message : "unknown_error",
+    ...context,
+  });
 }
 
 async function mirrorDelivery(delivery: DeliveryRow) {
@@ -93,11 +101,7 @@ async function mirrorDelivery(delivery: DeliveryRow) {
       )
       .run();
   } catch (error) {
-    console.error("[trackfleet:replication] D1 delivery mirror failed", {
-      message: error instanceof Error ? error.message : "unknown_error",
-      deliveryId: delivery.id,
-      companyId: delivery.companyId,
-    });
+    replicationError("delivery", error, { deliveryId: delivery.id, companyId: delivery.companyId });
   }
 }
 
@@ -109,12 +113,143 @@ async function mirrorTripAssignment(deliveryId: string, companyId: string, tripI
       .bind(tripId, deliveryId, companyId)
       .run();
   } catch (error) {
-    console.error("[trackfleet:replication] D1 delivery trip assignment failed", {
-      message: error instanceof Error ? error.message : "unknown_error",
-      deliveryId,
-      companyId,
-      tripId,
-    });
+    replicationError("delivery trip assignment", error, { deliveryId, companyId, tripId });
+  }
+}
+
+async function mirrorEvent(
+  deliveryId: string,
+  type: Parameters<DeliveryStore["recordEvent"]>[1],
+  progress: number,
+) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, ?, ?, ?)")
+      .bind(deliveryId, type, progress, Date.now())
+      .run();
+  } catch (error) {
+    replicationError("delivery event", error, { deliveryId, type });
+  }
+}
+
+async function mirrorEtaObservation(input: Parameters<DeliveryStore["recordEtaObservation"]>[0]) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare(`INSERT OR IGNORE INTO delivery_eta_observations (
+      delivery_id, route_template_id, trip_instance_id, destination_site_id, position_at,
+      estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh,
+      remaining_distance_km, progress, confidence, source, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        input.deliveryId,
+        input.routeTemplateId,
+        input.tripInstanceId,
+        input.destinationSiteId,
+        input.positionAt.getTime(),
+        input.estimatedArrivalAt.getTime(),
+        input.plannedArrivalAt?.getTime() ?? null,
+        input.delayMinutes,
+        input.effectiveSpeedKmh,
+        input.remainingDistanceKm,
+        input.progress,
+        input.confidence,
+        input.source,
+        Date.now(),
+      )
+      .run();
+  } catch (error) {
+    replicationError("ETA observation", error, { deliveryId: input.deliveryId });
+  }
+}
+
+async function mirrorTripPosition(input: Parameters<DeliveryStore["recordTripPosition"]>[0]) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare(`INSERT OR IGNORE INTO trip_position_observations (
+      company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        input.companyId,
+        input.routeTemplateId,
+        input.tripInstanceId,
+        input.vehicleId,
+        input.positionAt.getTime(),
+        input.latitude,
+        input.longitude,
+        input.speed,
+        Date.now(),
+      )
+      .run();
+  } catch (error) {
+    replicationError("trip position", error, { companyId: input.companyId, tripInstanceId: input.tripInstanceId });
+  }
+}
+
+async function mirrorFleetPosition(input: Parameters<DeliveryStore["recordFleetPosition"]>[0]) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare(`INSERT OR IGNORE INTO fleet_position_observations (
+      company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(
+        input.companyId,
+        input.vehicleId,
+        input.vehicleName,
+        input.positionAt.getTime(),
+        input.latitude,
+        input.longitude,
+        input.speed,
+        input.heading,
+        input.address,
+        Date.now(),
+      )
+      .run();
+  } catch (error) {
+    replicationError("fleet position", error, { companyId: input.companyId, vehicleId: input.vehicleId });
+  }
+}
+
+async function mirrorTrip(trip: TripRecord) {
+  const db = d1();
+  if (!db) return;
+  const stopsJson = JSON.stringify(trip.stops.map((stop) => ({
+    ...stop,
+    plannedArrivalAt: stop.plannedArrivalAt?.getTime() ?? null,
+  })));
+  try {
+    await db.prepare(`INSERT INTO trips (
+      id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id,
+      origin_site_id, stops_json, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(company_id, id) DO UPDATE SET
+      route_template_id = excluded.route_template_id,
+      vehicle_key = excluded.vehicle_key,
+      truck = excluded.truck,
+      sendatrack_vehicle_id = excluded.sendatrack_vehicle_id,
+      origin_site_id = excluded.origin_site_id,
+      stops_json = excluded.stops_json,
+      status = excluded.status,
+      updated_at = excluded.updated_at`)
+      .bind(
+        trip.id,
+        trip.companyId,
+        trip.routeTemplateId,
+        trip.vehicleKey,
+        trip.truck,
+        trip.sendatrackVehicleId,
+        trip.originSiteId,
+        stopsJson,
+        trip.status,
+        trip.createdAt.getTime(),
+        trip.updatedAt.getTime(),
+      )
+      .run();
+  } catch (error) {
+    replicationError("trip", error, { companyId: trip.companyId, tripId: trip.id });
   }
 }
 
@@ -143,6 +278,31 @@ export const store: DeliveryStore = {
     const delivery = await baseStore.linkVehicle(deliveryId, companyId, vehicle);
     if (delivery) await mirrorDelivery(delivery);
     return delivery;
+  },
+  async recordEvent(deliveryId, type, progress) {
+    const inserted = await baseStore.recordEvent(deliveryId, type, progress);
+    if (inserted) await mirrorEvent(deliveryId, type, progress);
+    return inserted;
+  },
+  async recordEtaObservation(input) {
+    const inserted = await baseStore.recordEtaObservation(input);
+    if (inserted) await mirrorEtaObservation(input);
+    return inserted;
+  },
+  async recordTripPosition(input) {
+    const inserted = await baseStore.recordTripPosition(input);
+    if (inserted) await mirrorTripPosition(input);
+    return inserted;
+  },
+  async recordFleetPosition(input) {
+    const inserted = await baseStore.recordFleetPosition(input);
+    if (inserted) await mirrorFleetPosition(input);
+    return inserted;
+  },
+  async upsertTrip(input) {
+    const trip = await baseStore.upsertTrip(input);
+    await mirrorTrip(trip);
+    return trip;
   },
   async assignDeliveryTrip(deliveryId, companyId, tripId) {
     const assigned = await baseStore.assignDeliveryTrip(deliveryId, companyId, tripId);
