@@ -1,5 +1,6 @@
 import "./postgres-runtime-bootstrap";
 import { store as baseStore } from "./delivery-store.vercel";
+import { loadOperationalDeliveries } from "./delivery-operational.postgres";
 import { loadEtaBatch, loadEventBatch } from "./delivery-store.postgres-read-batches";
 import { createLimitedArrayBatcher, createRecordBatcher } from "./micro-batcher";
 import type { DeliveryEventRow, DeliveryStore, EtaObservationRow } from "./delivery-store.types";
@@ -12,6 +13,7 @@ const listEtaObservationsBatched = createLimitedArrayBatcher<EtaObservationRow>(
 
 export const store: DeliveryStore = {
   ...baseStore,
+  listForCompany: loadOperationalDeliveries,
   listEvents: listEventsBatched,
   listEtaObservations: listEtaObservationsBatched,
 };
