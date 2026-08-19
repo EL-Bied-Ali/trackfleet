@@ -15,6 +15,7 @@ import { buildTruckStopPlans } from "./truck-stop-plan";
 import { stablePlanRouteTemplateId } from "./route-learning";
 import { telemetryRetentionPolicy } from "./telemetry-retention";
 import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "./trip-record";
+import { canonicalFleetVehicleId } from "./vehicle-identity";
 
 export type AutomationRunResult = {
   connected: boolean;
@@ -56,10 +57,11 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   const companyId = await companyIdForAccount(accountID);
   const fleetPositionResults = await Promise.all(snapshot.vehicles.map((vehicle) => store.recordFleetPosition({
     companyId,
-    // SENDATRACK's DeviceCode is a hardware model (for example fmb120) and is
-    // shared by multiple trucks. The logical Device value (v3, v4, ...) is the
-    // stable per-truck identity used by their web timeline, so prefer it here.
-    vehicleId: vehicle.providerDeviceId || vehicle.id,
+    // Provider ids can change shape across SENDATRACK payloads (v3, tk00x,
+    // fmb920, ...). Telemetry therefore uses the physical truck label/plate
+    // as its canonical identity while provider ids remain available for live
+    // delivery linking.
+    vehicleId: canonicalFleetVehicleId(vehicle.name, vehicle.providerDeviceId || vehicle.id),
     vehicleName: vehicle.name,
     positionAt: new Date(vehicle.updatedAt),
     latitude: vehicle.latitude,
@@ -108,10 +110,6 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
       companyId,
       deliveryId: delivery.id,
       insideArrivalZone,
-      // Dwell is based on repeated scheduler observations, not on changes to
-      // the provider timestamp. A parked tracker may keep the same GPS fix for
-      // several ticks; freshness above still requires a provider update within
-      // 30 minutes, so stale positions cannot keep the timer alive.
       observationAt: tickObservedAt,
       unloadGraceMinutes,
     });
@@ -125,8 +123,6 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     }
   }
 
-  // Reload after arrival processing so downstream ETA/trip/notification logic
-  // sees automatic completions performed by the persistent completion layer.
   const deliveries = await store.listForCompany(companyId);
   const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
   const routeContexts = buildEtaRouteContexts(deliveries);
@@ -135,10 +131,6 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   for (const delivery of deliveries) {
     let events = await store.listEvents(delivery.id);
 
-    // The first customer message is the most important MVP notification: it
-    // gives the customer the self-service tracking link. Only deliveries
-    // created after WhatsApp activation are eligible, otherwise enabling the
-    // feature could send a burst to historical customers.
     const registrationEligible = automationStartAt
       && delivery.createdAt.getTime() >= automationStartAt.getTime()
       && !events.some((event) => event.type === "REGISTERED");
@@ -154,8 +146,14 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     if (etaObservation && await store.recordEtaObservation(etaObservation)) etaObservations += 1;
     if (routeContext && delivery.gpsSource === "sendatrack" && delivery.sendatrackVehicleId && typeof delivery.latitude === "number" && typeof delivery.longitude === "number" && delivery.lastPositionAt) {
       await store.recordTripPosition({
-        companyId, routeTemplateId: routeContext.routeTemplateId, tripInstanceId: routeContext.tripInstanceId, vehicleId: delivery.sendatrackVehicleId,
-        positionAt: delivery.lastPositionAt, latitude: delivery.latitude, longitude: delivery.longitude, speed: delivery.speed ?? 0,
+        companyId,
+        routeTemplateId: routeContext.routeTemplateId,
+        tripInstanceId: routeContext.tripInstanceId,
+        vehicleId: canonicalFleetVehicleId(delivery.truck, delivery.sendatrackVehicleId),
+        positionAt: delivery.lastPositionAt,
+        latitude: delivery.latitude,
+        longitude: delivery.longitude,
+        speed: delivery.speed ?? 0,
       });
     }
     if (!shouldCreateDelayEvent(delivery, events, deliveries)) continue;
