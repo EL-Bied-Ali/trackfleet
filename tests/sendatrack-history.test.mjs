@@ -21,7 +21,7 @@ test("normalizes SENDATRACK DeviceList/EventData history in timestamp order", ()
   const points = normalizeSendatrackHistory(payload);
   assert.equal(points.length, 3);
   assert.deepEqual(points.map((point) => point.timestamp), [1_700_000_000, 1_700_000_120, 1_700_000_300]);
-  assert.equal(points[0].deviceId, "truck-code-11");
+  assert.equal(points[0].deviceId, "v11");
   assert.equal(points[1].speed, 75);
   assert.equal(points[2].address, "Tanger");
 });
@@ -29,7 +29,7 @@ test("normalizes SENDATRACK DeviceList/EventData history in timestamp order", ()
 test("segments a completed historical trip from SENDATRACK status events", () => {
   const trips = segmentSendatrackHistoryTrips(normalizeSendatrackHistory(payload));
   assert.equal(trips.length, 1);
-  assert.equal(trips[0].deviceId, "truck-code-11");
+  assert.equal(trips[0].deviceId, "v11");
   assert.equal(trips[0].startedAt, 1_700_000_000);
   assert.equal(trips[0].endedAt, 1_700_000_300);
   assert.equal(trips[0].durationSeconds, 300);
