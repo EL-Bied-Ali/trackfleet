@@ -39,11 +39,21 @@ async function ensureSchema() {
   return database;
 }
 
+async function clearArrivalState(database: D1Database, companyId: string, deliveryId: string) {
+  await database.batch([
+    database.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
+      .bind(companyId, deliveryId),
+    database.prepare(`DELETE FROM delivery_events
+      WHERE delivery_id = ? AND type = 'ARRIVED_AT_SITE'
+        AND EXISTS (SELECT 1 FROM deliveries WHERE id = ? AND company_id = ?)`)
+      .bind(deliveryId, deliveryId, companyId),
+  ]);
+}
+
 export async function observeArrivalCompletion(input: ArrivalCompletionObservation): Promise<ArrivalCompletionResult> {
   const database = await ensureSchema();
   if (!input.insideArrivalZone) {
-    await database.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
-      .bind(input.companyId, input.deliveryId).run();
+    await clearArrivalState(database, input.companyId, input.deliveryId);
     return { justEntered: false, deliveredNow: false, arrivalSiteSince: null };
   }
 
@@ -60,10 +70,16 @@ export async function observeArrivalCompletion(input: ArrivalCompletionObservati
 
   const arrivalSiteSince = continuityBroken ? input.observationAt : new Date(state.arrivedAt);
   if (continuityBroken) {
-    await database.prepare(`INSERT INTO delivery_arrival_state (company_id, delivery_id, arrived_at, last_observed_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(company_id, delivery_id) DO UPDATE SET arrived_at = excluded.arrived_at, last_observed_at = excluded.last_observed_at`)
-      .bind(input.companyId, input.deliveryId, observationMs, observationMs).run();
+    await database.batch([
+      database.prepare(`DELETE FROM delivery_events
+        WHERE delivery_id = ? AND type = 'ARRIVED_AT_SITE'
+          AND EXISTS (SELECT 1 FROM deliveries WHERE id = ? AND company_id = ?)`)
+        .bind(input.deliveryId, input.deliveryId, input.companyId),
+      database.prepare(`INSERT INTO delivery_arrival_state (company_id, delivery_id, arrived_at, last_observed_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(company_id, delivery_id) DO UPDATE SET arrived_at = excluded.arrived_at, last_observed_at = excluded.last_observed_at`)
+        .bind(input.companyId, input.deliveryId, observationMs, observationMs),
+    ]);
   } else {
     await database.prepare("UPDATE delivery_arrival_state SET last_observed_at = ? WHERE company_id = ? AND delivery_id = ?")
       .bind(observationMs, input.companyId, input.deliveryId).run();
