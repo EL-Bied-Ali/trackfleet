@@ -53,3 +53,20 @@ export async function withD1ReadFailover<T>(
     }
   }
 }
+
+export async function suppressMaintenanceWriteDuringD1Failover<T>(
+  scope: string,
+  primaryWrite: () => Promise<T>,
+  failoverValue: T,
+): Promise<T> {
+  try {
+    return await primaryWrite();
+  } catch (primaryError) {
+    if (!(await d1ReadFailoverReady())) throw primaryError;
+    console.warn("[trackfleet:failover] primary maintenance write unavailable; preserving D1 as read-only", {
+      scope,
+      primaryMessage: primaryError instanceof Error ? primaryError.message : "unknown_error",
+    });
+    return failoverValue;
+  }
+}
