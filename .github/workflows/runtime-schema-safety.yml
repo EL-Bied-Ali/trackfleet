@@ -34,7 +34,9 @@ jobs:
           node scripts/prepare-d1-schema.mjs --local
           node scripts/prepare-d1-history-backfill-state.mjs --local
       - name: Verify storage failover readiness contract
-        run: node --test tests/storage-failover-readiness.test.mjs
+        run: node --experimental-strip-types --test tests/storage-failover-readiness.test.mjs tests/d1-standby-readiness-behavior.test.mjs
+      - name: Verify D1 standby cron contract
+        run: node --test tests/d1-standby-cron.test.mjs
       - name: Verify D1 session replication contract
         run: node --test tests/d1-session-replication.test.mjs
       - name: Verify D1 site replication contract
