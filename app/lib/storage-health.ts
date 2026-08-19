@@ -5,13 +5,27 @@ import {
   normalizePostgresSchemaProbe,
   type PostgresSchemaProbe,
 } from "./storage-schema-contract";
+import {
+  getD1StandbyReadiness,
+  type D1StandbyReadiness,
+  type D1ReadinessBinding,
+} from "./d1-standby-readiness";
 
 export type StorageFailoverHealth = {
   candidate: "cloudflare-d1" | null;
   available: boolean;
   connected: boolean | null;
+  ready: boolean;
   automatic: boolean;
-  reason: "d1_not_bound" | "replication_not_configured" | "primary_is_d1_or_memory";
+  reason:
+    | "d1_not_bound"
+    | "d1_unavailable"
+    | "replication_not_started"
+    | "replication_stale"
+    | "history_backfill_incomplete"
+    | "replication_ready"
+    | "primary_is_d1_or_memory";
+  readiness: D1StandbyReadiness | null;
   error: string | null;
 };
 
@@ -23,7 +37,7 @@ export type StorageHealth = {
   failover: StorageFailoverHealth;
 };
 
-type D1HealthBinding = {
+type D1HealthBinding = D1ReadinessBinding & {
   prepare(query: string): {
     first<T = unknown>(): Promise<T | null>;
   };
@@ -42,8 +56,10 @@ function inactiveFailover(): StorageFailoverHealth {
     candidate: null,
     available: false,
     connected: null,
+    ready: false,
     automatic: false,
     reason: "primary_is_d1_or_memory",
+    readiness: null,
     error: null,
   };
 }
@@ -55,19 +71,23 @@ async function probeD1Standby(): Promise<StorageFailoverHealth> {
       candidate: null,
       available: false,
       connected: null,
+      ready: false,
       automatic: false,
       reason: "d1_not_bound",
+      readiness: null,
       error: null,
     };
   }
   try {
-    await db.prepare("SELECT 1 AS ok").first();
+    const readiness = await getD1StandbyReadiness(db);
     return {
       candidate: "cloudflare-d1",
       available: true,
       connected: true,
+      ready: readiness.ready,
       automatic: false,
-      reason: "replication_not_configured",
+      reason: readiness.ready ? "replication_ready" : readiness.reason,
+      readiness,
       error: null,
     };
   } catch (error) {
@@ -78,8 +98,10 @@ async function probeD1Standby(): Promise<StorageFailoverHealth> {
       candidate: "cloudflare-d1",
       available: true,
       connected: false,
+      ready: false,
       automatic: false,
-      reason: "replication_not_configured",
+      reason: "d1_unavailable",
+      readiness: null,
       error: "d1_unavailable",
     };
   }
