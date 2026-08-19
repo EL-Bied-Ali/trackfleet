@@ -1,0 +1,12 @@
+{
+  "sourceSha": "bcd4d29ce39e4031aee47841a74e28a05d9d597e",
+  "job": "failure",
+  "install": "success",
+  "security": "success",
+  "automation": "success",
+  "headers": "success",
+  "lint": "success",
+  "typecheck": "failure",
+  "buildVercel": "skipped",
+  "buildCloudflare": "skipped"
+}
