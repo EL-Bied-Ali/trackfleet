@@ -36,6 +36,10 @@ jobs:
           cache: pnpm
       - id: install
         run: pnpm install --frozen-lockfile
+      - id: route_progress
+        run: pnpm run test:route-progress
+      - id: delivery_completion
+        run: node --experimental-strip-types --test tests/delivery-completion.test.mjs
       - id: security
         run: node --experimental-strip-types --test tests/request-json-safety.test.mjs
       - id: automation
@@ -62,6 +66,8 @@ jobs:
             "sourceSha": "${{ github.sha }}",
             "job": "${{ job.status }}",
             "install": "${{ steps.install.outcome }}",
+            "routeProgress": "${{ steps.route_progress.outcome }}",
+            "deliveryCompletion": "${{ steps.delivery_completion.outcome }}",
             "security": "${{ steps.security.outcome }}",
             "automation": "${{ steps.automation.outcome }}",
             "headers": "${{ steps.headers.outcome }}",
