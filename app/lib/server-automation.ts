@@ -1,10 +1,13 @@
+import { observeArrivalCompletion } from "trackfleet-delivery-completion";
 import { store } from "trackfleet-delivery-store";
 import { pruneTelemetry } from "trackfleet-telemetry-retention";
 import { shouldCreateDelayEvent } from "./automation-delay";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
+import { parseUnloadGraceMinutes } from "./delivery-arrival";
 import { processPendingNotifications } from "./notification-runner";
 import { parseAutomationStartAt } from "./notification-policy";
+import { distanceKm, destinationPointFor } from "./route-progress";
 import { getSendatrackSnapshot } from "./sendatrack";
 import { buildEtaObservation } from "./eta-observation";
 import { buildEtaRouteContexts, stableEtaRouteContext } from "./route-history";
@@ -19,6 +22,8 @@ export type AutomationRunResult = {
   transitions: number;
   newEvents: number;
   delayEvents: number;
+  arrivalSiteEvents: number;
+  automaticCompletions: number;
   notificationsSent: number;
   notificationFailures: number;
   etaObservations: number;
@@ -32,7 +37,20 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
 
   const snapshot = await getSendatrackSnapshot();
   if (!snapshot.connected) {
-    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0, fleetPositions: 0, telemetryPruned: 0 };
+    return {
+      connected: false,
+      vehicles: snapshot.vehicles.length,
+      transitions: 0,
+      newEvents: 0,
+      delayEvents: 0,
+      arrivalSiteEvents: 0,
+      automaticCompletions: 0,
+      notificationsSent: 0,
+      notificationFailures: 0,
+      etaObservations: 0,
+      fleetPositions: 0,
+      telemetryPruned: 0,
+    };
   }
 
   const companyId = await companyIdForAccount(accountID);
@@ -52,15 +70,58 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   })));
   const fleetPositions = fleetPositionResults.filter(Boolean).length;
   const transitions = await store.applySendatrackSnapshot(snapshot, companyId);
+  const unloadGraceMinutes = parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
   let newEvents = 0;
   let delayEvents = 0;
+  let arrivalSiteEvents = 0;
+  let automaticCompletions = 0;
 
   for (const transition of transitions) {
     for (const type of transition.events) {
       if (await store.recordEvent(transition.delivery.id, type, transition.delivery.progress)) newEvents += 1;
     }
+
+    const delivery = transition.delivery;
+    const hasPosition = typeof delivery.latitude === "number"
+      && typeof delivery.longitude === "number"
+      && delivery.lastPositionAt instanceof Date;
+    let insideArrivalZone = false;
+    let observationAt = new Date();
+    if (hasPosition) {
+      observationAt = delivery.lastPositionAt!;
+      const destinationPoint = destinationPointFor(
+        delivery.destination,
+        typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
+          ? [delivery.destinationLongitude, delivery.destinationLatitude]
+          : null,
+      );
+      const distanceToDestinationKm = distanceKm([delivery.longitude!, delivery.latitude!], destinationPoint);
+      const positionAgeMinutes = Math.max(0, (Date.now() - observationAt.getTime()) / 60_000);
+      const radiusKm = Math.max(0.05, Math.min(10, delivery.arrivalRadiusKm || 0.5));
+      insideArrivalZone = positionAgeMinutes <= 30
+        && distanceToDestinationKm <= radiusKm
+        && (delivery.speed ?? 0) <= 5;
+    }
+
+    const completion = await observeArrivalCompletion({
+      companyId,
+      deliveryId: delivery.id,
+      insideArrivalZone,
+      observationAt,
+      unloadGraceMinutes,
+    });
+    if (completion.justEntered && await store.recordEvent(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
+      newEvents += 1;
+      arrivalSiteEvents += 1;
+    }
+    if (completion.deliveredNow) {
+      newEvents += 1;
+      automaticCompletions += 1;
+    }
   }
 
+  // Reload after arrival processing so downstream ETA/trip/notification logic
+  // sees automatic completions performed by the persistent completion layer.
   const deliveries = await store.listForCompany(companyId);
   const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
   const routeContexts = buildEtaRouteContexts(deliveries);
@@ -153,6 +214,8 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     transitions: transitions.length,
     newEvents,
     delayEvents,
+    arrivalSiteEvents,
+    automaticCompletions,
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
     etaObservations,
@@ -166,6 +229,8 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     transitions: transitions.length,
     newEvents,
     delayEvents,
+    arrivalSiteEvents,
+    automaticCompletions,
     notificationsSent: notifications.sent,
     notificationFailures: notifications.failed,
     etaObservations,
