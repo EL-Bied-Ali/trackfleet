@@ -11,6 +11,10 @@ test("trip upserts refresh the complete mutable snapshot", () => {
   assert.match(memory, /existing\.originSiteId = input\.originSiteId/);
   assert.match(memory, /existing\.stops = input\.stops\.map/);
 
-  assert.match(postgres, /UPDATE trips SET route_template_id = .*origin_site_id = .*stops_json = .*status =/s);
-  assert.match(cloudflare, /UPDATE trips SET route_template_id = \?, vehicle_key = \?, truck = \?, sendatrack_vehicle_id = \?, origin_site_id = \?, stops_json = \?, status = \?/);
+  assert.match(postgres, /ON CONFLICT \(company_id, id\) DO UPDATE SET/);
+  for (const field of ["route_template_id", "vehicle_key", "truck", "sendatrack_vehicle_id", "origin_site_id", "stops_json", "status", "updated_at"]) {
+    assert.match(postgres, new RegExp(`${field} = EXCLUDED\\.${field}`));
+  }
+
+  assert.match(cloudflare, /UPDATE trips SET route_template_id = \?, vehicle_key = \?, truck = \?, sendatrack_vehicle_id = \?, origin_site_id = \?, stops_json = \?, status = \?, updated_at = \?/);
 });
