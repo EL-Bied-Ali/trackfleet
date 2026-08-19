@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { normalizeEnvValue } from "./env-value";
 
 export type TrackFleetRuntimeEnv = {
   DB?: D1Database;
@@ -21,5 +22,13 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_AUTOMATION_START_AT?: string;
 };
 
-export const runtimeEnv = env as unknown as TrackFleetRuntimeEnv;
+const rawRuntimeEnv = env as unknown as TrackFleetRuntimeEnv;
+
+export const runtimeEnv = new Proxy(rawRuntimeEnv, {
+  get(target, property, receiver) {
+    const value = Reflect.get(target, property, receiver);
+    return typeof value === "string" ? normalizeEnvValue(value) : value;
+  },
+});
+
 export const runtimePlatform = "cloudflare" as const;
