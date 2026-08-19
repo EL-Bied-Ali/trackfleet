@@ -98,7 +98,8 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
       const distanceToDestinationKm = distanceKm([delivery.longitude!, delivery.latitude!], destinationPoint);
       const positionAgeMinutes = Math.max(0, (tickObservedAt.getTime() - positionAt.getTime()) / 60_000);
       const radiusKm = Math.max(0.05, Math.min(10, delivery.arrivalRadiusKm || 0.5));
-      insideArrivalZone = positionAgeMinutes <= 30
+      insideArrivalZone = delivery.status !== "Loading"
+        && positionAgeMinutes <= 30
         && distanceToDestinationKm <= radiusKm
         && (delivery.speed ?? 0) <= 5;
     }
