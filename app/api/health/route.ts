@@ -2,6 +2,7 @@ import { getAutomationHeartbeat } from "trackfleet-automation-heartbeat";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { automationHeartbeatStatus, AUTOMATION_HEARTBEAT_STALE_AFTER_MS } from "../../lib/automation-heartbeat-health";
 import { automationMissingRequirements } from "../../lib/automation-health";
+import { parseUnloadGraceMinutes } from "../../lib/delivery-arrival";
 import { parseAutomationStartAt } from "../../lib/notification-policy";
 import { sessionEncryptionKeyConfigured } from "../../lib/session-encryption-key";
 import { isSendatrackConfigured } from "../../lib/sendatrack";
@@ -24,6 +25,7 @@ export async function GET() {
   );
   const whatsappActivationConfigured = Boolean(parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT));
   const telemetryRetention = telemetryRetentionPolicy(runtimeEnv.TRACKFLEET_TELEMETRY_RETENTION_DAYS);
+  const unloadGraceMinutes = parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
   const missing = automationMissingRequirements({
     storage,
     sendatrackConfigured,
@@ -58,6 +60,11 @@ export async function GET() {
     sessionEncryptionConfigured,
     storage,
     telemetryRetention,
+    deliveryCompletion: {
+      unloadGraceMinutes,
+      gpsFreshnessRequiredMinutes: 30,
+      maximumArrivalSpeedKmh: 5,
+    },
     automation: {
       tickProtected,
       whatsappEnabled,
