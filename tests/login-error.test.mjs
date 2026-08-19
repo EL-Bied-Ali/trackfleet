@@ -52,8 +52,12 @@ test("public login rate limits repeated provider authentication attempts", () =>
   assert.match(loginRoute, /retry-after/);
 });
 
-test("successful login clears the local attempt bucket", () => {
-  assert.match(loginRoute, /recentLoginAttempts\.delete\(key\)/);
+test("successful login clears local and distributed attempt buckets", () => {
+  assert.match(loginRoute, /recentLoginAttempts\.delete\(clientKey\(request\)\)/);
+  assert.match(loginRoute, /await clearLoginAttempts\(request\)/);
+  const sessionAt = loginRoute.indexOf("await createCompanySession");
+  const resetAt = loginRoute.indexOf("await resetLoginAttempts(request)");
+  assert.ok(sessionAt >= 0 && resetAt > sessionAt, "rate-limit state must be cleared only after successful authentication");
 });
 
 test("login bounds untrusted credential field sizes before forwarding", () => {
@@ -63,7 +67,8 @@ test("login bounds untrusted credential field sizes before forwarding", () => {
 });
 
 test("login route returns only sanitized public failure codes", () => {
-  assert.match(loginRoute, /publicLoginFailure\(error\)/);
-  assert.match(loginRoute, /failure\.code/);
-  assert.doesNotMatch(loginRoute, /error instanceof Error \? error\.message/);
+  assert.match(loginRoute, /const failure = publicLoginFailure\(error\)/);
+  assert.match(loginRoute, /return json\(\{ error: failure\.code \}, failure\.status\)/);
+  assert.doesNotMatch(loginRoute, /return json\(\{ error: error(?:\.message)?/);
+  assert.doesNotMatch(loginRoute, /Response\.json\(\{ error: error(?:\.message)?/);
 });
