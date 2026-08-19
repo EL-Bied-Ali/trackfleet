@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import { pruneTelemetry } from "trackfleet-telemetry-retention";
 import { shouldCreateDelayEvent } from "./automation-delay";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
@@ -9,6 +10,7 @@ import { buildEtaObservation } from "./eta-observation";
 import { buildEtaRouteContexts, stableEtaRouteContext } from "./route-history";
 import { buildTruckStopPlans } from "./truck-stop-plan";
 import { stablePlanRouteTemplateId } from "./route-learning";
+import { telemetryRetentionPolicy } from "./telemetry-retention";
 import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "./trip-record";
 
 export type AutomationRunResult = {
@@ -21,6 +23,7 @@ export type AutomationRunResult = {
   notificationFailures: number;
   etaObservations: number;
   fleetPositions: number;
+  telemetryPruned: number;
 };
 
 export async function runFleetAutomation(origin: string): Promise<AutomationRunResult> {
@@ -29,7 +32,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
 
   const snapshot = await getSendatrackSnapshot();
   if (!snapshot.connected) {
-    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0, fleetPositions: 0 };
+    return { connected: false, vehicles: snapshot.vehicles.length, transitions: 0, newEvents: 0, delayEvents: 0, notificationsSent: 0, notificationFailures: 0, etaObservations: 0, fleetPositions: 0, telemetryPruned: 0 };
   }
 
   const companyId = await companyIdForAccount(accountID);
@@ -132,6 +135,19 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   }
 
   const notifications = await processPendingNotifications(companyId, origin);
+  let telemetryPruned = 0;
+  const retention = telemetryRetentionPolicy(runtimeEnv.TRACKFLEET_TELEMETRY_RETENTION_DAYS);
+  if (retention.valid && retention.days !== null) {
+    try {
+      const pruned = await pruneTelemetry(companyId, retention.days);
+      telemetryPruned = pruned.fleetPositions + pruned.tripPositions + pruned.etaObservations;
+    } catch (error) {
+      console.error("[trackfleet:automation] telemetry retention maintenance failed", {
+        message: error instanceof Error ? error.message : "unknown_error",
+      });
+    }
+  }
+
   console.info("[trackfleet:automation] tick", {
     vehicles: snapshot.vehicles.length,
     transitions: transitions.length,
@@ -141,6 +157,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     notificationFailures: notifications.failed,
     etaObservations,
     fleetPositions,
+    telemetryPruned,
   });
 
   return {
@@ -153,5 +170,6 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     notificationFailures: notifications.failed,
     etaObservations,
     fleetPositions,
+    telemetryPruned,
   };
 }
