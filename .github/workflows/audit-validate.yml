@@ -47,7 +47,12 @@ jobs:
       - id: headers
         run: node --test tests/security-headers-contract.test.mjs
       - id: lint
-        run: pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0
+        shell: bash
+        run: |
+          set +e
+          pnpm exec eslint . --ignore-pattern dist --ignore-pattern .next --max-warnings=0 2>&1 | tee .audit-lint.log
+          status=${PIPESTATUS[0]}
+          exit "$status"
       - id: typecheck
         run: pnpm exec tsc -p tsconfig.vercel.json --noEmit
       - id: vercel
@@ -79,6 +84,6 @@ jobs:
           JSON
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .audit-validation-status.json
+          git add .audit-validation-status.json .audit-lint.log
           git commit -m "record audit validation outcome" || exit 0
           git push origin HEAD:audit-hardening-20260819
