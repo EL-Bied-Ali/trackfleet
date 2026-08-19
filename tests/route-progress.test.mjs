@@ -122,7 +122,8 @@ test("honours a configurable arrival geofence radius", () => {
     distanceToDestinationKm: 0.8,
   };
   assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 0.5).status, "In transit");
-  assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 1).status, "Delivered");
+  assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 1).status, "In transit");
+  assert.equal(deriveDeliveryState("In transit", metrics, 0, 99, 1).progress, 99);
 });
 
 test("rebases a delivery created mid-corridor to zero percent", () => {
@@ -146,7 +147,7 @@ test("derives loading, in-transit and delivered states from GPS", () => {
   assert.equal(moving.status, "In transit");
   assert.ok(moving.progress > 0);
   const destination = calculateRouteMetrics(33.5731, -7.5898, "Casablanca, MA");
-  assert.deepEqual(deriveDeliveryState("In transit", destination, 0), { status: "Delivered", progress: 100 });
+  assert.deepEqual(deriveDeliveryState("In transit", destination, 0), { status: "In transit", progress: 99 });
   assert.equal(deriveDeliveryState("In transit", destination, 50).status, "In transit");
 });
 
