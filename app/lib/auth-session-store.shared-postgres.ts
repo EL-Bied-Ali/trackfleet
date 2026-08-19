@@ -7,8 +7,18 @@ import {
   type StoredCompanySession,
 } from "./auth-session-store.vercel";
 
+type D1MirrorStatement = {
+  bind(...values: unknown[]): D1MirrorStatement;
+  run(): Promise<unknown>;
+};
+
+type D1MirrorBinding = {
+  prepare(query: string): D1MirrorStatement;
+  batch(statements: D1MirrorStatement[]): Promise<unknown>;
+};
+
 function d1() {
-  return runtimeEnv.DB ?? null;
+  return (runtimeEnv as unknown as { DB?: D1MirrorBinding }).DB ?? null;
 }
 
 async function mirrorCreate(input: StoredCompanySession) {
