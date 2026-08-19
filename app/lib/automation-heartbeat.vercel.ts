@@ -7,6 +7,22 @@ export type AutomationHeartbeat = {
 };
 
 export type RuntimeHeartbeatJob = "fleet_tick" | "telemetry_retention";
+export type AutomationFailureCode =
+  | "sendatrack_authentication_failed"
+  | "sendatrack_service_unavailable"
+  | "sendatrack_unexpected_response"
+  | "sendatrack_not_configured"
+  | "sendatrack_disconnected"
+  | "automation_failed";
+
+const automationFailureCodes: AutomationFailureCode[] = [
+  "sendatrack_authentication_failed",
+  "sendatrack_service_unavailable",
+  "sendatrack_unexpected_response",
+  "sendatrack_not_configured",
+  "sendatrack_disconnected",
+  "automation_failed",
+];
 
 function sqlClient() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -65,8 +81,29 @@ export function recordAutomationSuccess() {
   return recordRuntimeSuccess("fleet_tick");
 }
 
-export function recordAutomationFailure() {
-  return recordRuntimeFailure("fleet_tick");
+export async function recordAutomationFailure(code: AutomationFailureCode = "automation_failed") {
+  await recordRuntimeFailure("fleet_tick");
+  const sql = sqlClient();
+  if (!sql) return;
+  const now = new Date().toISOString();
+  const diagnosticId = `fleet_tick_failure:${code}`;
+  await sql`INSERT INTO automation_runtime_state (id, last_attempt_at, last_failure_at)
+    VALUES (${diagnosticId}, ${now}, ${now})
+    ON CONFLICT (id) DO UPDATE SET last_attempt_at = EXCLUDED.last_attempt_at, last_failure_at = EXCLUDED.last_failure_at`;
+}
+
+export async function getAutomationFailureCode(): Promise<AutomationFailureCode | null> {
+  const sql = sqlClient();
+  if (!sql) return null;
+  const ids = automationFailureCodes.map((code) => `fleet_tick_failure:${code}`);
+  const rows = await sql`SELECT id, last_failure_at
+    FROM automation_runtime_state
+    WHERE id = ANY(${ids}) AND last_failure_at IS NOT NULL
+    ORDER BY last_failure_at DESC
+    LIMIT 1` as Array<{ id: string; last_failure_at: string | Date | null }>;
+  const id = rows[0]?.id ?? "";
+  const code = id.startsWith("fleet_tick_failure:") ? id.slice("fleet_tick_failure:".length) : "";
+  return automationFailureCodes.includes(code as AutomationFailureCode) ? code as AutomationFailureCode : null;
 }
 
 export function getAutomationHeartbeat() {
