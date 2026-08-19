@@ -44,7 +44,6 @@ jobs:
           }
 
           const tickResponse = await fetch(`${baseUrl}/api/automation/tick`, {
-            method: 'POST',
             headers: { authorization: `Bearer ${secret}` },
             cache: 'no-store',
           });
