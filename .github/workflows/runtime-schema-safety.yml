@@ -28,6 +28,8 @@ jobs:
         run: node --test tests/runtime-schema-safety.test.mjs
       - name: Verify Postgres query budget
         run: node --test tests/postgres-query-budget.test.mjs
+      - name: Verify bulk delivery CSV import
+        run: node --test tests/bulk-delivery-import.test.mjs
       - name: Typecheck Vercel runtime
         env:
           VERCEL: "1"
