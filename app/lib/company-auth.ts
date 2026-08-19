@@ -1,3 +1,8 @@
+import {
+  createServerSession,
+  deleteServerSession,
+  getServerSession,
+} from "trackfleet-auth-session-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getSendatrackSnapshot, type SendatrackCredentials } from "./sendatrack";
 import { decodeSessionEncryptionKey } from "./session-encryption-key";
@@ -12,11 +17,10 @@ export type CompanySession = {
 const cookieName = "__Host-trackfleet_session";
 const sessionDurationSeconds = 7 * 24 * 60 * 60;
 
-type SessionPayload = {
+type StoredCredentials = {
   accountID: string;
   user: string;
   password: string;
-  expiresAt: number;
 };
 
 function toBase64(bytes: Uint8Array) {
@@ -63,14 +67,14 @@ async function encryptionKey() {
   return crypto.subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["encrypt", "decrypt"]);
 }
 
-async function encryptPayload(payload: SessionPayload) {
+async function encryptCredentials(credentials: StoredCredentials) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+  const plaintext = new TextEncoder().encode(JSON.stringify(credentials));
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await encryptionKey(), plaintext);
   return `${toBase64(iv)}.${toBase64(new Uint8Array(ciphertext))}`;
 }
 
-async function decryptPayload(value: string): Promise<SessionPayload> {
+async function decryptCredentials(value: string): Promise<StoredCredentials> {
   const [ivValue, ciphertextValue] = value.split(".");
   if (!ivValue || !ciphertextValue) throw new Error("invalid_session");
   const plaintext = await crypto.subtle.decrypt(
@@ -78,7 +82,11 @@ async function decryptPayload(value: string): Promise<SessionPayload> {
     await encryptionKey(),
     fromBase64(ciphertextValue),
   );
-  return JSON.parse(new TextDecoder().decode(plaintext)) as SessionPayload;
+  const parsed = JSON.parse(new TextDecoder().decode(plaintext)) as Partial<StoredCredentials>;
+  if (typeof parsed.accountID !== "string" || typeof parsed.user !== "string" || typeof parsed.password !== "string") {
+    throw new Error("invalid_session");
+  }
+  return { accountID: parsed.accountID, user: parsed.user, password: parsed.password };
 }
 
 function cookieValue(request: Request) {
@@ -91,11 +99,11 @@ function cookieValue(request: Request) {
 }
 
 export async function ensureAuthTables() {
-  // Compatibility no-op: sessions are encrypted, stateless cookies on both runtimes.
+  // Session tables are created lazily by the platform-specific server store.
 }
 
 export async function createCompanySession(credentials: SendatrackCredentials) {
-  const normalized = {
+  const normalized: StoredCredentials = {
     accountID: credentials.accountID.trim(),
     user: credentials.user.trim(),
     password: credentials.password,
@@ -105,43 +113,72 @@ export async function createCompanySession(credentials: SendatrackCredentials) {
   const snapshot = await getSendatrackSnapshot(normalized);
   if (!snapshot.connected) throw new Error(snapshot.error === "authentication_failed" ? "authentication_failed" : "sendatrack_unavailable");
 
-  const expiresAt = Date.now() + sessionDurationSeconds * 1000;
-  const encrypted = await encryptPayload({ ...normalized, expiresAt });
+  const companyId = await sha256(`sendatrack-account:${normalized.accountID.toLowerCase()}`);
+  const token = randomToken(32);
+  const tokenHash = await sha256(`trackfleet-session-token:${token}`);
+  const expiresAt = new Date(Date.now() + sessionDurationSeconds * 1000);
+  const credentialsCiphertext = await encryptCredentials(normalized);
+
+  await createServerSession({
+    tokenHash,
+    companyId,
+    accountLabel: normalized.accountID,
+    userLabel: normalized.user,
+    credentialsCiphertext,
+    expiresAt,
+  });
 
   return {
-    cookie: `${cookieName}=${encrypted}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,
+    cookie: `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,
     company: { account: normalized.accountID, user: normalized.user },
     vehicles: snapshot.vehicles,
   };
 }
 
 export async function getCompanySession(request: Request): Promise<CompanySession | null> {
-  // Authenticated API reads can also refresh fleet state. Browsers identify
-  // cross-site requests with Sec-Fetch-Site; never allow an existing session
-  // cookie to authorize such a request.
   if (request.headers.get("sec-fetch-site")?.toLowerCase() === "cross-site") return null;
 
   const token = cookieValue(request);
   if (!token) return null;
   try {
-    const payload = await decryptPayload(token);
-    if (payload.expiresAt <= Date.now()) return null;
+    const tokenHash = await sha256(`trackfleet-session-token:${token}`);
+    const stored = await getServerSession(tokenHash);
+    if (!stored) return null;
+    if (stored.expiresAt.getTime() <= Date.now()) {
+      await deleteServerSession(tokenHash).catch(() => undefined);
+      return null;
+    }
+
+    const credentials = await decryptCredentials(stored.credentialsCiphertext);
+    const expectedCompanyId = await sha256(`sendatrack-account:${credentials.accountID.toLowerCase()}`);
+    if (expectedCompanyId !== stored.companyId) {
+      await deleteServerSession(tokenHash).catch(() => undefined);
+      return null;
+    }
+
     return {
-      companyId: await sha256(`sendatrack-account:${payload.accountID.toLowerCase()}`),
-      accountLabel: payload.accountID,
-      userLabel: payload.user,
-      credentials: {
-        accountID: payload.accountID,
-        user: payload.user,
-        password: payload.password,
-      },
+      companyId: stored.companyId,
+      accountLabel: stored.accountLabel,
+      userLabel: stored.userLabel,
+      credentials,
     };
   } catch {
     return null;
   }
 }
 
-export async function deleteCompanySession(_request: Request) {
+export async function deleteCompanySession(request: Request) {
+  const token = cookieValue(request);
+  if (token) {
+    try {
+      const tokenHash = await sha256(`trackfleet-session-token:${token}`);
+      await deleteServerSession(tokenHash);
+    } catch (error) {
+      console.error("[trackfleet:auth] failed to delete server session", {
+        message: error instanceof Error ? error.message : "unknown_error",
+      });
+    }
+  }
   return `${cookieName}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
