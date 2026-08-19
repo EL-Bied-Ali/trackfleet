@@ -33,6 +33,12 @@ const siteStorePath = fileURLToPath(
     import.meta.url,
   ),
 );
+const loginRateLimitPath = fileURLToPath(
+  new URL(
+    isVercel ? "./app/lib/login-rate-limit.vercel.ts" : "./app/lib/login-rate-limit.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 
 const localBindingConfig = {
   main: "./worker/index.ts",
@@ -75,6 +81,7 @@ export default defineConfig(async () => {
         "trackfleet-runtime-env": runtimeEnvPath,
         "trackfleet-delivery-store": deliveryStorePath,
         "trackfleet-site-store": siteStorePath,
+        "trackfleet-login-rate-limit": loginRateLimitPath,
       },
     },
     server: isCodexSeatbeltSandbox
