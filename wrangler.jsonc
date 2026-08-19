@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "trackfleet",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "trackfleet-db",
+      "database_id": "47058ea5-8699-4c70-baa6-95ff52b425e8"
+    }
+  ]
+}
