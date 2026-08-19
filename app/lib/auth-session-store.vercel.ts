@@ -21,20 +21,18 @@ async function ensureSchema() {
   const sql = sqlClient();
   if (!schemaPromise) {
     schemaPromise = (async () => {
-      await sql`CREATE TABLE IF NOT EXISTS companies (
-        id text PRIMARY KEY,
-        account_label text NOT NULL,
-        user_label text NOT NULL,
-        credentials_ciphertext text NOT NULL,
-        created_at timestamptz NOT NULL,
-        updated_at timestamptz NOT NULL
-      )`;
       await sql`CREATE TABLE IF NOT EXISTS sessions (
         token_hash text PRIMARY KEY,
         company_id text NOT NULL,
+        account_label text,
+        user_label text,
+        credentials_ciphertext text,
         expires_at timestamptz NOT NULL,
         created_at timestamptz NOT NULL
       )`;
+      await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS account_label text`;
+      await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS user_label text`;
+      await sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS credentials_ciphertext text`;
       await sql`CREATE INDEX IF NOT EXISTS idx_sessions_company_id ON sessions(company_id)`;
       await sql`CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)`;
     })().catch((error) => {
@@ -49,34 +47,29 @@ async function ensureSchema() {
 export async function createServerSession(input: StoredCompanySession) {
   const sql = await ensureSchema();
   const now = new Date().toISOString();
-  await sql`INSERT INTO companies (id, account_label, user_label, credentials_ciphertext, created_at, updated_at)
-    VALUES (${input.companyId}, ${input.accountLabel}, ${input.userLabel}, ${input.credentialsCiphertext}, ${now}, ${now})
-    ON CONFLICT (id) DO UPDATE SET
-      account_label = EXCLUDED.account_label,
-      user_label = EXCLUDED.user_label,
-      credentials_ciphertext = EXCLUDED.credentials_ciphertext,
-      updated_at = EXCLUDED.updated_at`;
-  await sql`INSERT INTO sessions (token_hash, company_id, expires_at, created_at)
-    VALUES (${input.tokenHash}, ${input.companyId}, ${input.expiresAt.toISOString()}, ${now})`;
+  await sql`INSERT INTO sessions (
+      token_hash, company_id, account_label, user_label, credentials_ciphertext, expires_at, created_at
+    ) VALUES (
+      ${input.tokenHash}, ${input.companyId}, ${input.accountLabel}, ${input.userLabel}, ${input.credentialsCiphertext}, ${input.expiresAt.toISOString()}, ${now}
+    )`;
   await sql`DELETE FROM sessions WHERE expires_at < ${now}`;
 }
 
 export async function getServerSession(tokenHash: string): Promise<StoredCompanySession | null> {
   const sql = await ensureSchema();
-  const rows = await sql`SELECT s.token_hash, s.company_id, s.expires_at, c.account_label, c.user_label, c.credentials_ciphertext
-    FROM sessions s
-    JOIN companies c ON c.id = s.company_id
-    WHERE s.token_hash = ${tokenHash}
+  const rows = await sql`SELECT token_hash, company_id, account_label, user_label, credentials_ciphertext, expires_at
+    FROM sessions
+    WHERE token_hash = ${tokenHash}
     LIMIT 1` as Array<{
       token_hash: string;
       company_id: string;
+      account_label: string | null;
+      user_label: string | null;
+      credentials_ciphertext: string | null;
       expires_at: string | Date;
-      account_label: string;
-      user_label: string;
-      credentials_ciphertext: string;
     }>;
   const row = rows[0];
-  if (!row) return null;
+  if (!row || !row.account_label || !row.user_label || !row.credentials_ciphertext) return null;
   return {
     tokenHash: row.token_hash,
     companyId: row.company_id,
