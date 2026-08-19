@@ -1,3 +1,5 @@
+import { normalizeEnvValue } from "./env-value";
+
 function decodeBase64(value: string) {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized) || normalized.length % 4 === 1) return null;
@@ -11,7 +13,7 @@ function decodeBase64(value: string) {
 }
 
 export function decodeSessionEncryptionKey(value: string | null | undefined) {
-  const encoded = value?.trim();
+  const encoded = normalizeEnvValue(value);
   if (!encoded) return null;
   const raw = decodeBase64(encoded);
   return raw?.byteLength === 32 ? raw : null;
