@@ -24,15 +24,28 @@ type ConsentDelivery = {
   status: string;
 };
 
+type ManualDelivery = {
+  id: string;
+  customer: string;
+  destination: string;
+  truck: string;
+  status: string;
+  progress: number;
+};
+
 export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) {
   const [open, setOpen] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
+  const [completionOpen, setCompletionOpen] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [consents, setConsents] = useState<ConsentDelivery[]>([]);
+  const [manualDeliveries, setManualDeliveries] = useState<ManualDelivery[]>([]);
   const [saving, setSaving] = useState(false);
   const [consentBusy, setConsentBusy] = useState<string | null>(null);
+  const [completionBusy, setCompletionBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [consentError, setConsentError] = useState("");
+  const [completionError, setCompletionError] = useState("");
 
   async function refresh() {
     const response = await fetch("/api/sites", { cache: "no-store" });
@@ -48,6 +61,13 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     setConsents(data.deliveries ?? []);
   }
 
+  async function refreshManualCompletions() {
+    const response = await fetch("/api/deliveries/manual-completion", { cache: "no-store" });
+    if (!response.ok) throw new Error("completion_unavailable");
+    const data = await response.json() as { deliveries: ManualDelivery[] };
+    setManualDeliveries(data.deliveries ?? []);
+  }
+
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
@@ -61,6 +81,13 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       void refreshConsents().catch(() => setConsentError("consent_unavailable"));
     });
   }, [consentOpen]);
+
+  useEffect(() => {
+    if (!completionOpen) return;
+    queueMicrotask(() => {
+      void refreshManualCompletions().catch(() => setCompletionError("completion_unavailable"));
+    });
+  }, [completionOpen]);
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -109,22 +136,50 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     }
   }
 
+  async function completeManually(delivery: ManualDelivery) {
+    const confirmation = locale === "fr"
+      ? `Confirmer que ${delivery.id} a réellement été livré ?`
+      : locale === "nl"
+        ? `Bevestigen dat ${delivery.id} werkelijk is geleverd?`
+        : `Confirm that ${delivery.id} was physically delivered?`;
+    if (!window.confirm(confirmation)) return;
+    setCompletionBusy(delivery.id);
+    setCompletionError("");
+    try {
+      const response = await fetch("/api/deliveries/manual-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: delivery.id }),
+      });
+      if (!response.ok) throw new Error("completion_failed");
+      setManualDeliveries((items) => items.filter((item) => item.id !== delivery.id));
+      window.dispatchEvent(new Event("trackfleet-deliveries-changed"));
+    } catch {
+      setCompletionError("completion_failed");
+    } finally {
+      setCompletionBusy(null);
+    }
+  }
+
   const copy = locale === "fr"
     ? {
         button: "Agences", title: "Agences et dépôts", count: (value: number) => `${value} site${value > 1 ? "s" : ""}`,
         add: "Ajouter un site", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon d’arrivée (km)", save: "Enregistrer", saving: "Enregistrement…", close: "Fermer", error: "Impossible d’enregistrer ce site.",
         consentButton: "WhatsApp", consentTitle: "Consentements WhatsApp", consentIntro: "Retirez ici l’autorisation d’un client. Après retrait, TrackFleet n’enverra plus aucune mise à jour automatique pour ce colis.", active: "Actif", withdrawn: "Retiré", withdraw: "Retirer le consentement", withdrawing: "Retrait…", noConsents: "Aucun consentement WhatsApp enregistré.", consentError: "Impossible de mettre à jour le consentement.",
+        completionButton: "Clôture", completionTitle: "Clôture manuelle", completionIntro: "À utiliser seulement si le GPS ou SENDATRACK ne peut pas confirmer la fin du déchargement. L’action marque définitivement le colis comme livré.", complete: "Marquer livré", completing: "Clôture…", noActive: "Aucune livraison active.", completionError: "Impossible de clôturer cette livraison.",
       }
     : locale === "nl"
       ? {
           button: "Locaties", title: "Agentschappen en depots", count: (value: number) => `${value} locatie${value === 1 ? "" : "s"}`,
           add: "Locatie toevoegen", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", save: "Opslaan", saving: "Opslaan…", close: "Sluiten", error: "Locatie kon niet worden opgeslagen.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp-toestemmingen", consentIntro: "Trek hier de toestemming van een klant in. Daarna verstuurt TrackFleet geen automatische updates meer voor deze levering.", active: "Actief", withdrawn: "Ingetrokken", withdraw: "Toestemming intrekken", withdrawing: "Intrekken…", noConsents: "Geen WhatsApp-toestemmingen geregistreerd.", consentError: "Toestemming kon niet worden bijgewerkt.",
+          completionButton: "Afsluiten", completionTitle: "Handmatig afsluiten", completionIntro: "Alleen gebruiken wanneer GPS of SENDATRACK het einde van het lossen niet kan bevestigen. Deze actie markeert de zending definitief als geleverd.", complete: "Markeer geleverd", completing: "Afsluiten…", noActive: "Geen actieve leveringen.", completionError: "Deze levering kon niet worden afgesloten.",
         }
       : {
           button: "Sites", title: "Agencies and depots", count: (value: number) => `${value} site${value === 1 ? "" : "s"}`,
           add: "Add site", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", save: "Save", saving: "Saving…", close: "Close", error: "Could not save this site.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp consents", consentIntro: "Withdraw a customer’s permission here. TrackFleet will stop all automatic WhatsApp updates for that delivery.", active: "Active", withdrawn: "Withdrawn", withdraw: "Withdraw consent", withdrawing: "Withdrawing…", noConsents: "No WhatsApp consent recorded.", consentError: "Could not update consent.",
+          completionButton: "Complete", completionTitle: "Manual completion", completionIntro: "Use only when GPS or SENDATRACK cannot confirm the end of unloading. This action permanently marks the delivery as delivered.", complete: "Mark delivered", completing: "Completing…", noActive: "No active deliveries.", completionError: "Could not complete this delivery.",
         };
 
   const consentRows = consents.filter((item) => item.whatsappOptIn || item.withdrawn);
@@ -132,6 +187,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   return <>
     <button className="secondary-button" type="button" onClick={() => setOpen(true)}><span aria-hidden="true">▦</span> {copy.button}</button>
     <button className="secondary-button" type="button" onClick={() => setConsentOpen(true)}><span aria-hidden="true">◔</span> {copy.consentButton}</button>
+    <button className="secondary-button" type="button" onClick={() => setCompletionOpen(true)}><span aria-hidden="true">✓</span> {copy.completionButton}</button>
 
     {open && <div className="modal-backdrop">
       <section className="modal" role="dialog" aria-modal="true" aria-labelledby="sites-title">
@@ -163,6 +219,21 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
         </div>
         {consentError && <p className="login-error">{copy.consentError}</p>}
         <div className="modal-footer"><button type="button" onClick={() => setConsentOpen(false)}>{copy.close}</button></div>
+      </section>
+    </div>}
+
+    {completionOpen && <div className="modal-backdrop">
+      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="completion-title">
+        <div className="modal-header"><div><p className="eyebrow">TRACKFLEET · OPS</p><h2 id="completion-title">{copy.completionTitle}</h2><span>{copy.completionIntro}</span></div><button onClick={() => setCompletionOpen(false)} aria-label={copy.close}>×</button></div>
+        <div className="consent-list">
+          {manualDeliveries.length === 0 ? <p className="consent-empty">{copy.noActive}</p> : manualDeliveries.map((delivery) => <div className="consent-row" key={delivery.id}>
+            <div><strong>{delivery.customer}</strong><span>{delivery.id} · {delivery.destination} · {delivery.truck}</span></div>
+            <span className="consent-status active">{delivery.progress}%</span>
+            <button type="button" className="danger-button" disabled={completionBusy === delivery.id} onClick={() => void completeManually(delivery)}>{completionBusy === delivery.id ? copy.completing : copy.complete}</button>
+          </div>)}
+        </div>
+        {completionError && <p className="login-error">{copy.completionError}</p>}
+        <div className="modal-footer"><button type="button" onClick={() => setCompletionOpen(false)}>{copy.close}</button></div>
       </section>
     </div>}
   </>;
