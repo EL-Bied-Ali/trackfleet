@@ -102,6 +102,9 @@ export const companies = sqliteTable("companies", {
 export const sessions = sqliteTable("sessions", {
   tokenHash: text("token_hash").primaryKey(),
   companyId: text("company_id").notNull(),
+  accountLabel: text("account_label"),
+  userLabel: text("user_label"),
+  credentialsCiphertext: text("credentials_ciphertext"),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
 }, (table) => [
