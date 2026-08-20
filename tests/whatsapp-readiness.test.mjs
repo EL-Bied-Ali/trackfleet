@@ -13,7 +13,7 @@ const [demoRoute, readinessRoute, readinessHelper, templateHelper, automation, v
 ]);
 
 test("manual WhatsApp demo requires auth, explicit opt-in and explicit template", () => {
-  assert.match(demoRoute, /getCompanySession\(request\)/);
+  assert.match(demoRoute, /getDispatcherSession\(request\)/);
   assert.match(demoRoute, /authentication_required/);
   assert.match(demoRoute, /WHATSAPP_DEMO_ENABLED !== ["']true["']/);
   assert.match(demoRoute, /whatsapp_demo_disabled/);
@@ -22,7 +22,7 @@ test("manual WhatsApp demo requires auth, explicit opt-in and explicit template"
 });
 
 test("WhatsApp readiness endpoint is authenticated", () => {
-  assert.match(readinessRoute, /getCompanySession\(request\)/);
+  assert.match(readinessRoute, /getDispatcherSession\(request\)/);
   assert.match(readinessRoute, /verifyWhatsAppProvider\(\)/);
 });
 

@@ -65,6 +65,7 @@
     "test:automation-trip-sync": "node --test tests/automation-trip-sync.test.mjs",
     "test:mvp-flow": "node --experimental-strip-types --test tests/accelerated-mvp-flow.test.mjs",
     "test:agency-arrivals": "node --experimental-strip-types --test tests/all-agencies-arrival-whatsapp.test.mjs",
+    "test:agency-location": "node --experimental-strip-types --test tests/agency-location-access.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "test:trip-upsert-refresh": "node --test tests/trip-upsert-refresh.test.mjs",

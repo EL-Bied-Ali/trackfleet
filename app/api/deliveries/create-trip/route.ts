@@ -1,5 +1,5 @@
 import { store } from "trackfleet-delivery-store";
-import { getCompanySession } from "../../../lib/company-auth";
+import { getDispatcherSession } from "../../../lib/company-auth";
 import { firstStopRouteTemplateId, manualTripVehicleKey, validateNewPlannedTrip } from "../../../lib/planned-trip-creation";
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
@@ -7,7 +7,7 @@ import { getSendatrackSnapshot } from "../../../lib/sendatrack";
 
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
-  const session = await getCompanySession(request);
+  const session = await getDispatcherSession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
   const payload = await readJsonObject(request);
   if (!payload) return invalidJsonResponse();

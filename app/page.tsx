@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { localeOptions, translations, type Locale } from "./i18n";
 import InteractiveFleetMap from "./InteractiveFleetMap";
+import AgencyLocationSetup from "./AgencyLocationSetup";
 import SiteManager from "./SiteManager";
 import { classifyLoginError, type LoginErrorKind } from "./lib/login-error";
 import { originPreferenceKey, resolvePreferredOriginSite } from "./lib/origin-preference";
@@ -78,7 +79,7 @@ type MessageEvent = {
   time: string;
 };
 
-type CompanyIdentity = { account: string; user: string };
+type CompanyIdentity = { account: string; user: string; role: "dispatcher" | "agency"; siteId: string | null };
 type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; geofenceReady: boolean };
 
 const emptyDelivery: Delivery = {
@@ -174,6 +175,7 @@ export default function Home() {
   const [tripCreateManualTruck, setTripCreateManualTruck] = useState("");
   const [tripCreateBusy, setTripCreateBusy] = useState(false);
   const [messageEvents, setMessageEvents] = useState<MessageEvent[]>([]);
+  const [agencyLocationOpen, setAgencyLocationOpen] = useState(false);
   const t = translations[locale];
 
   useEffect(() => {
@@ -237,6 +239,10 @@ export default function Home() {
       setDefaultOriginSiteId("");
       return;
     }
+    if (company.role === "agency") {
+      setDefaultOriginSiteId(company.siteId ?? "");
+      return;
+    }
     const originIds = knownSites.filter((site) => site.roles.includes("origin")).map((site) => site.id);
     const saved = window.localStorage.getItem(originPreferenceKey(company));
     setDefaultOriginSiteId((current) => resolvePreferredOriginSite(saved, originIds, current));
@@ -295,7 +301,7 @@ export default function Home() {
     void refresh();
     const timer = window.setInterval(() => void refresh(true), 30_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [authState, locale]);
+  }, [authState, company?.role, locale]);
 
   useEffect(() => {
     function closeModalWithEscape(event: KeyboardEvent) {
@@ -571,7 +577,7 @@ export default function Home() {
     const manualTruck = String(form.get("manualTruck") ?? "").trim();
     const vehicleChoice = resolveCreationVehicle({ manualTruck, selectedVehicleId, vehicles: integration.vehicles });
     const truck = vehicleChoice.truck;
-    const originSiteId = String(form.get("originSiteId") ?? "").trim();
+    const originSiteId = company?.role === "agency" ? company.siteId ?? "" : String(form.get("originSiteId") ?? "").trim();
     if (company && originSiteId) {
       window.localStorage.setItem(originPreferenceKey(company), originSiteId);
       setDefaultOriginSiteId(originSiteId);
@@ -616,10 +622,26 @@ export default function Home() {
     }
   }
 
+  async function confirmAgencyArrival() {
+    if (company?.role !== "agency" || selected.destinationSiteId !== company.siteId) return;
+    try {
+      const response = await fetch("/api/deliveries/manual-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: selected.id, confirmArrival: true }),
+      });
+      if (!response.ok) throw new Error("arrival_confirmation_failed");
+      setToast(locale === "fr" ? "Arrivée confirmée. La clôture suivra après le déchargement." : locale === "nl" ? "Aankomst bevestigd. Afsluiting volgt na het lossen." : "Arrival confirmed. Completion will follow after unloading.");
+    } catch {
+      setToast(locale === "fr" ? "Impossible de confirmer cette arrivée." : locale === "nl" ? "Aankomst kon niet worden bevestigd." : "Could not confirm this arrival.");
+    }
+  }
+
   if (view === "customer" && publicTrackingState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view === "customer" && publicTrackingState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>Lien de suivi introuvable</h1><p>Vérifiez le lien reçu ou contactez l’entreprise qui vous l’a envoyé.</p></section></main>;
   if (view !== "customer" && authState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view !== "customer" && authState === "anonymous") return <LoginScreen locale={locale} busy={loginBusy} error={loginError} onLocale={changeLocale} onSubmit={login} />;
+  if (view !== "customer" && authState === "authenticated" && company?.role === "agency" && agencyLocationOpen) return <AgencyLocationSetup locale={locale} site={knownSites.find((site) => site.id === company.siteId) ?? null} onLocale={changeLocale} onLogout={() => void logout()} onBack={() => setAgencyLocationOpen(false)} />;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Données temporairement indisponibles" : locale === "nl" ? "Gegevens tijdelijk niet beschikbaar" : "Data temporarily unavailable"}</h1><p>{locale === "fr" ? "TrackFleet n’affiche aucune donnée de démonstration à la place de vos données réelles." : locale === "nl" ? "TrackFleet toont geen demogegevens in plaats van uw echte gegevens." : "TrackFleet will not show demo data in place of your real data."}</p><button className="primary-button" onClick={() => window.location.reload()}>{locale === "fr" ? "Réessayer" : locale === "nl" ? "Opnieuw proberen" : "Retry"}</button></section></main>;
 
@@ -804,7 +826,7 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div><h1>{t.greeting}</h1><p>{t.greetingSub}</p></div>
-          <div className="top-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} /><SiteManager locale={locale} /><button className="primary-button" onClick={() => setModalOpen(true)}><span>＋</span>{t.newDelivery}</button></div>
+          <div className="top-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} />{company?.role === "dispatcher" ? <SiteManager locale={locale} /> : <><button type="button" onClick={() => setAgencyLocationOpen(true)}>{locale === "fr" ? "Localiser l’agence" : locale === "nl" ? "Agentschap lokaliseren" : "Locate agency"}</button><button type="button" onClick={() => window.location.assign("/import")}>{locale === "fr" ? "Importer des colis" : locale === "nl" ? "Zendingen importeren" : "Import parcels"}</button></>}<button className="primary-button" onClick={() => setModalOpen(true)}><span>＋</span>{t.newDelivery}</button></div>
         </header>
 
         <div className="stats-grid">
@@ -822,7 +844,7 @@ export default function Home() {
             {showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p><strong>{vehicleLabel(selected)}</strong><small>{isUnassignedVehicle(selected) ? (locale === "fr" ? "Aucun camion confirmé" : locale === "nl" ? "Nog geen voertuig bevestigd" : "No truck confirmed yet") : selected.driver}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
               <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div></dl>{selected.estimatedArrivalAt && <div className="eta-explanation"><strong>{selectedEtaExplanation.sourceLabel}</strong><span>{selectedEtaExplanation.confidenceLabel}{selected.etaSource === "route-history" && selected.etaHistoricalSpeedKmh ? ` · ${selected.etaHistoricalSpeedKmh} km/h` : ""}</span></div>}
-              {selected.gpsSource !== "sendatrack" && <div style={{ marginTop: 10 }}>
+              {company?.role === "dispatcher" && selected.gpsSource !== "sendatrack" && <div style={{ marginTop: 10 }}>
                 {isUnassignedVehicle(selected) ? <small>{locale === "fr" ? "Affectez d’abord ce colis à un voyage planifié ci-dessous." : locale === "nl" ? "Wijs deze zending eerst toe aan een geplande rit hieronder." : "Assign this parcel to a planned trip below first."}</small> : integration.connected && integration.vehicles.length ? <>
                   {!vehicleLinkOpen ? <button className="copy-link" onClick={() => { setVehicleLinkOpen(true); setVehicleLinkSearch(selected.truck); setVehicleLinkChoice(""); }}>
                     {locale === "fr" ? "Associer le GPS du véhicule" : locale === "nl" ? "GPS van voertuig koppelen" : "Link vehicle GPS"}
@@ -837,6 +859,7 @@ export default function Home() {
                 </> : <small>{locale === "fr" ? "GPS en attente · SENDATRACK indisponible" : locale === "nl" ? "GPS in afwachting · SENDATRACK niet beschikbaar" : "Waiting for GPS · SENDATRACK unavailable"}</small>}
               </div>}
               <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
+              {company?.role === "agency" && selected.destinationSiteId === company.siteId && selected.status !== "Delivered" && <div className="popover-actions"><button type="button" onClick={() => void confirmAgencyArrival()}>{locale === "fr" ? "Confirmer l’arrivée du camion" : locale === "nl" ? "Aankomst vrachtwagen bevestigen" : "Confirm truck arrival"}</button></div>}
             </div>}
           </div>
           {features.whatsappDemoEnabled && deliveries.length > 0 && <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">
@@ -856,7 +879,7 @@ export default function Home() {
           </section>}
         </div>
 
-        {unassignedDeliveries.length > 0 && <section className="tours-panel" aria-label={locale === "fr" ? "Colis à affecter" : locale === "nl" ? "Toe te wijzen zendingen" : "Parcels to assign"}>
+        {company?.role === "dispatcher" && unassignedDeliveries.length > 0 && <section className="tours-panel" aria-label={locale === "fr" ? "Colis à affecter" : locale === "nl" ? "Toe te wijzen zendingen" : "Parcels to assign"}>
           <div className="panel-header"><div><h2>{locale === "fr" ? "Colis à affecter" : locale === "nl" ? "Toe te wijzen zendingen" : "Parcels to assign"}</h2><p>{locale === "fr" ? "Le camion n’est pas figé à l’entrée du colis. Une suggestion apparaît seulement si un voyage planifié compatible existe." : locale === "nl" ? "Het voertuig wordt niet vastgezet bij registratie. Een suggestie verschijnt alleen voor een compatibele geplande rit." : "The truck is not locked when the parcel is registered. A suggestion appears only when a compatible planned trip exists."}</p></div><span className="tour-count">{unassignedDeliveries.length}</span></div>
           <div className="tour-list">
             {unassignedDeliveries.map((delivery) => {
@@ -924,7 +947,7 @@ export default function Home() {
         </div>
       </section>
 
-      {modalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title"><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser."}</small></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row">{integration.connected && integration.vehicles.length ? <label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={UNASSIGNED_VEHICLE_ID}><option value={UNASSIGNED_VEHICLE_ID}>{locale === "fr" ? "À affecter plus tard (recommandé)" : locale === "nl" ? "Later toewijzen (aanbevolen)" : "Assign later (recommended)"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select><input name="manualTruck" placeholder={locale === "fr" ? "Camion absent ? Nom / plaque (optionnel)" : locale === "nl" ? "Voertuig ontbreekt? Naam / nummerplaat (optioneel)" : "Truck missing? Name / plate (optional)"} /><small>{locale === "fr" ? "Si vous saisissez un camion ici, il sera créé en attente GPS puis associé quand il apparaîtra dans SENDATRACK." : locale === "nl" ? "Als u hier een voertuig invoert, wordt het in afwachting van GPS aangemaakt en gekoppeld zodra het in SENDATRACK verschijnt." : "If you enter a truck here, it will be created waiting for GPS and linked when it appears in SENDATRACK."}</small></label> : <label>{t.assignTruck}<input name="manualTruck" placeholder={locale === "fr" ? "Optionnel · Ex. TRK-005 / plaque" : locale === "nl" ? "Optioneel · Bijv. TRK-005 / nummerplaat" : "Optional · E.g. TRK-005 / plate"} /><small>{locale === "fr" ? "Laissez vide si le camion n’est pas encore connu. Vous pourrez l’affecter plus tard." : locale === "nl" ? "Laat leeg als het voertuig nog niet bekend is. U kunt het later toewijzen." : "Leave blank if the truck is not known yet. You can assign it later."}</small></label>}<label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}><input type="checkbox" name="whatsappOptIn" style={{ width: 18, height: 18, marginTop: 2, flex: "0 0 auto" }} /><span>{locale === "fr" ? "Le client accepte de recevoir les mises à jour de ce colis sur WhatsApp" : locale === "nl" ? "De klant stemt ermee in leveringsupdates via WhatsApp te ontvangen" : "The customer agrees to receive delivery updates on WhatsApp"}<small style={{ display: "block", marginTop: 4 }}>{locale === "fr" ? "TrackFleet enverra uniquement les informations importantes : enregistrement, départ, retard important, approche et arrivée." : locale === "nl" ? "TrackFleet stuurt alleen belangrijke updates: registratie, vertrek, belangrijke vertraging, nadering en aankomst." : "TrackFleet will send only important updates: registration, departure, significant delay, approach and arrival."}</small></span></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
+      {modalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title"><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => setModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><label>{t.customerCompany}<input name="customer" required placeholder={t.customerPlaceholder} /></label><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} disabled={company?.role === "agency"} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin") && (company?.role !== "agency" || site.id === company.siteId)).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{company?.role === "agency" ? (locale === "fr" ? "Les colis enregistrés sont automatiquement rattachés à votre agence." : locale === "nl" ? "Geregistreerde zendingen worden automatisch aan uw agentschap gekoppeld." : "Registered parcels are automatically assigned to your agency.") : (locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser.")}</small></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-row">{integration.connected && integration.vehicles.length ? <label>{t.assignTruck}<select name="sendatrackVehicleId" defaultValue={UNASSIGNED_VEHICLE_ID}><option value={UNASSIGNED_VEHICLE_ID}>{locale === "fr" ? "À affecter plus tard (recommandé)" : locale === "nl" ? "Later toewijzen (aanbevolen)" : "Assign later (recommended)"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select><input name="manualTruck" placeholder={locale === "fr" ? "Camion absent ? Nom / plaque (optionnel)" : locale === "nl" ? "Voertuig ontbreekt? Naam / nummerplaat (optioneel)" : "Truck missing? Name / plate (optional)"} /><small>{locale === "fr" ? "Si vous saisissez un camion ici, il sera créé en attente GPS puis associé quand il apparaîtra dans SENDATRACK." : locale === "nl" ? "Als u hier een voertuig invoert, wordt het in afwachting van GPS aangemaakt en gekoppeld zodra het in SENDATRACK verschijnt." : "If you enter a truck here, it will be created waiting for GPS and linked when it appears in SENDATRACK."}</small></label> : <label>{t.assignTruck}<input name="manualTruck" placeholder={locale === "fr" ? "Optionnel · Ex. TRK-005 / plaque" : locale === "nl" ? "Optioneel · Bijv. TRK-005 / nummerplaat" : "Optional · E.g. TRK-005 / plate"} /><small>{locale === "fr" ? "Laissez vide si le camion n’est pas encore connu. Vous pourrez l’affecter plus tard." : locale === "nl" ? "Laat leeg als het voertuig nog niet bekend is. U kunt het later toewijzen." : "Leave blank if the truck is not known yet. You can assign it later."}</small></label>}<label>{t.expectedArrival}<input name="plannedArrivalAt" required type="datetime-local" /></label></div><label>{t.customerContact} <span>({t.optional})</span><input name="contact" placeholder={t.contactPlaceholder} /></label><label style={{ display: "flex", gap: 10, alignItems: "flex-start" }}><input type="checkbox" name="whatsappOptIn" style={{ width: 18, height: 18, marginTop: 2, flex: "0 0 auto" }} /><span>{locale === "fr" ? "Le client accepte de recevoir les mises à jour de ce colis sur WhatsApp" : locale === "nl" ? "De klant stemt ermee in leveringsupdates via WhatsApp te ontvangen" : "The customer agrees to receive delivery updates on WhatsApp"}<small style={{ display: "block", marginTop: 4 }}>{locale === "fr" ? "TrackFleet enverra uniquement les informations importantes : enregistrement, départ, retard important, approche et arrivée." : locale === "nl" ? "TrackFleet stuurt alleen belangrijke updates: registratie, vertrek, belangrijke vertraging, nadering en aankomst." : "TrackFleet will send only important updates: registration, departure, significant delay, approach and arrival."}</small></span></label><div className="modal-footer"><button type="button" onClick={() => setModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );

@@ -17,7 +17,10 @@ export async function GET(request: Request) {
   if (!session) return noStore({ error: "unauthorized" }, 401);
   const active = (await store.listForCompany(session.companyId))
     .filter((delivery) => delivery.status !== "Delivered");
-  const deliveries = await Promise.all(active.map(async (delivery) => {
+  const visible = session.role === "agency"
+    ? active.filter((delivery) => delivery.destinationSiteId === session.siteId)
+    : active;
+  const deliveries = await Promise.all(visible.map(async (delivery) => {
     const events = await store.listEvents(delivery.id);
     const recommendation = arrivalConfirmationRecommendation({ ...delivery, events });
     return {
@@ -45,12 +48,18 @@ export async function POST(request: Request) {
   if (payload.confirmArrival !== true && payload.confirmDelivered !== true) {
     return noStore({ error: "delivery_confirmation_required" }, 400);
   }
+  if (session.role === "agency" && payload.confirmDelivered === true) {
+    return noStore({ error: "dispatcher_confirmation_required" }, 403);
+  }
 
   try {
     if (payload.confirmArrival === true) {
       const delivery = (await store.listForCompany(session.companyId))
         .find((candidate) => candidate.id === deliveryId && candidate.status !== "Delivered");
       if (!delivery) return noStore({ error: "delivery_not_found_or_already_delivered" }, 404);
+      if (session.role === "agency" && delivery.destinationSiteId !== session.siteId) {
+        return noStore({ error: "agency_destination_mismatch" }, 403);
+      }
 
       const now = new Date();
       const unloadGraceMinutes = parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);

@@ -26,7 +26,7 @@ test("history page size is bounded and fetches one lookahead row", async () => {
 
 test("history API requires authentication and validates complete cursor pairs", async () => {
   const source = await readFile(routeUrl, "utf8");
-  assert.match(source, /getCompanySession\(request\)/);
+  assert.match(source, /getDispatcherSession\(request\)/);
   assert.match(source, /status: 401/);
   assert.match(source, /if \(!beforeCreatedAt \|\| !beforeId/);
   assert.match(source, /invalid_history_cursor/);

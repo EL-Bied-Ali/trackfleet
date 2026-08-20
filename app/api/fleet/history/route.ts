@@ -1,6 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { siteStore } from "trackfleet-site-store";
-import { getCompanySession } from "../../../lib/company-auth";
+import { getDispatcherSession } from "../../../lib/company-auth";
 import { reconstructFleetTrips } from "../../../lib/fleet-trip-reconstruction";
 
 const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -26,7 +26,7 @@ function error(error: string, status: number) {
 }
 
 export async function GET(request: Request) {
-  const session = await getCompanySession(request);
+  const session = await getDispatcherSession(request);
   if (!session) return error("authentication_required", 401);
 
   const url = new URL(request.url);

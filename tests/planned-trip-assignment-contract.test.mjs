@@ -8,7 +8,7 @@ const d1 = fs.readFileSync(new URL("../app/lib/delivery-store.cloudflare.ts", im
 const memory = fs.readFileSync(new URL("../app/lib/delivery-store.memory.ts", import.meta.url), "utf8");
 
 test("planned trip assignment is tenant checked and conflict safe", () => {
-  assert.match(api, /getCompanySession/);
+  assert.match(api, /getDispatcherSession/);
   assert.match(api, /store\.getTrip\(session\.companyId, tripId\)/);
   assert.match(api, /validatePlannedTripAssignment/);
   assert.match(pg, /trip_id IS NULL/);

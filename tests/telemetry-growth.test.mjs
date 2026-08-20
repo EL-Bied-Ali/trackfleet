@@ -23,7 +23,7 @@ test("telemetry SQL is tenant scoped and remains one database round trip", async
 
 test("storage operations endpoint requires a company session and never caches authentication failures", async () => {
   const source = await readFile(routeSource, "utf8");
-  assert.match(source, /getCompanySession\(request\)/);
+  assert.match(source, /getDispatcherSession\(request\)/);
   assert.match(source, /status: 401/);
   assert.match(source, /cache-control": "no-store"/);
   assert.match(source, /getTelemetryGrowthReport\(session\.companyId\)/);

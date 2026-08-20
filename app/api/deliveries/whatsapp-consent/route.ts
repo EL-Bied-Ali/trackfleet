@@ -1,10 +1,10 @@
 import { store } from "trackfleet-delivery-store";
-import { getCompanySession } from "../../../lib/company-auth";
+import { getDispatcherSession } from "../../../lib/company-auth";
 import { whatsappConsentWithdrawn } from "../../../lib/delivery-events";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 
 export async function GET(request: Request) {
-  const session = await getCompanySession(request);
+  const session = await getDispatcherSession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
 
   const deliveries = await store.listForCompany(session.companyId);
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
 
-  const session = await getCompanySession(request);
+  const session = await getDispatcherSession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
 
   let payload: { deliveryId?: unknown };

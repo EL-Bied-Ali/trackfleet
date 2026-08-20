@@ -1,5 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { getCompanySession } from "../../../lib/company-auth";
+import { getDispatcherSession } from "../../../lib/company-auth";
 import { sessionEncryptionKeyConfigured } from "../../../lib/session-encryption-key";
 import { isSendatrackConfigured } from "../../../lib/sendatrack";
 import { sendatrackTransportIsSecure } from "../../../lib/sendatrack-transport";
@@ -17,7 +17,7 @@ function json(body: Record<string, unknown>, status = 200) {
 }
 
 export async function GET(request: Request) {
-  const session = await getCompanySession(request);
+  const session = await getDispatcherSession(request);
   if (!session) return json({ error: "authentication_required" }, 401);
 
   const [storage, configuration] = await Promise.all([

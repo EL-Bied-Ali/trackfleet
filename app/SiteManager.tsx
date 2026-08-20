@@ -47,6 +47,8 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   const [consentBusy, setConsentBusy] = useState<string | null>(null);
   const [completionBusy, setCompletionBusy] = useState<string | null>(null);
   const [arrivalBusy, setArrivalBusy] = useState<string | null>(null);
+  const [accessBusy, setAccessBusy] = useState<string | null>(null);
+  const [accessMessage, setAccessMessage] = useState("");
   const [error, setError] = useState("");
   const [consentError, setConsentError] = useState("");
   const [completionError, setCompletionError] = useState("");
@@ -193,23 +195,47 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     }
   }
 
+  async function createAgencyAccess(site: Site) {
+    setAccessBusy(site.id);
+    setAccessMessage("");
+    try {
+      const response = await fetch("/api/auth/agency-enrollment", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ siteId: site.id }),
+      });
+      const data = await response.json() as { enrollmentUrl?: string };
+      if (!response.ok || !data.enrollmentUrl) throw new Error("access_failed");
+      try {
+        await navigator.clipboard.writeText(data.enrollmentUrl);
+        setAccessMessage(copy.accessCopied(site.label));
+      } catch {
+        window.prompt(copy.accessCopyFallback, data.enrollmentUrl);
+      }
+    } catch {
+      setAccessMessage(copy.accessError);
+    } finally {
+      setAccessBusy(null);
+    }
+  }
+
   const copy = locale === "fr"
     ? {
         button: "Agences", title: "Agences et dépôts", count: (value: number) => `${value} site${value > 1 ? "s" : ""}`,
-        add: "Ajouter un site", editTitle: "Modifier le site", edit: "Modifier", cancelEdit: "Annuler", update: "Mettre à jour", gpsReady: "GPS configuré", gpsMissing: "Coordonnées GPS manquantes", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon d’arrivée (km)", save: "Enregistrer", saving: "Enregistrement…", close: "Fermer", error: "Impossible d’enregistrer ce site.",
+        add: "Ajouter un site", editTitle: "Modifier le site", edit: "Modifier", agencyAccess: "Accès agence", creatingAccess: "Création…", accessCopied: (label: string) => `Lien temporaire copié pour ${label}. Il expire dans 30 minutes.`, accessCopyFallback: "Copiez ce lien d’activation agence", accessError: "Impossible de créer l’accès agence.", cancelEdit: "Annuler", update: "Mettre à jour", gpsReady: "GPS configuré", gpsMissing: "Coordonnées GPS manquantes", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon d’arrivée (km)", save: "Enregistrer", saving: "Enregistrement…", close: "Fermer", error: "Impossible d’enregistrer ce site.",
         consentButton: "WhatsApp", consentTitle: "Consentements WhatsApp", consentIntro: "Retirez ici l’autorisation d’un client. Après retrait, TrackFleet n’enverra plus aucune mise à jour automatique pour ce colis.", active: "Actif", withdrawn: "Retiré", withdraw: "Retirer le consentement", withdrawing: "Retrait…", noConsents: "Aucun consentement WhatsApp enregistré.", consentError: "Impossible de mettre à jour le consentement.",
         completionButton: "Arrivées", completionTitle: "Arrivées et clôture", completionIntro: "TrackFleet détecte l’arrivée automatiquement. Confirmez-la seulement quand le camion est bien sur place et que le GPS ne suffit pas; le délai de déchargement puis la clôture automatique continueront.", complete: "Marquer livré", completing: "Clôture…", confirmArrival: "Confirmer l’arrivée", confirmingArrival: "Confirmation…", automaticPending: "Détection automatique active", manualRecommended: "Confirmation recommandée", automaticConfirmed: "Arrivée détectée automatiquement", manualConfirmed: "Arrivée confirmée par un employé", noActive: "Aucune livraison active.", completionError: "Impossible de mettre à jour cette livraison.",
       }
     : locale === "nl"
       ? {
           button: "Locaties", title: "Agentschappen en depots", count: (value: number) => `${value} locatie${value === 1 ? "" : "s"}`,
-          add: "Locatie toevoegen", editTitle: "Locatie bewerken", edit: "Bewerken", cancelEdit: "Annuleren", update: "Bijwerken", gpsReady: "GPS ingesteld", gpsMissing: "GPS-coördinaten ontbreken", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", save: "Opslaan", saving: "Opslaan…", close: "Sluiten", error: "Locatie kon niet worden opgeslagen.",
+          add: "Locatie toevoegen", editTitle: "Locatie bewerken", edit: "Bewerken", agencyAccess: "Agentschapstoegang", creatingAccess: "Aanmaken…", accessCopied: (label: string) => `Tijdelijke link gekopieerd voor ${label}. Deze verloopt over 30 minuten.`, accessCopyFallback: "Kopieer deze activeringslink", accessError: "Agentschapstoegang kon niet worden aangemaakt.", cancelEdit: "Annuleren", update: "Bijwerken", gpsReady: "GPS ingesteld", gpsMissing: "GPS-coördinaten ontbreken", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", save: "Opslaan", saving: "Opslaan…", close: "Sluiten", error: "Locatie kon niet worden opgeslagen.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp-toestemmingen", consentIntro: "Trek hier de toestemming van een klant in. Daarna verstuurt TrackFleet geen automatische updates meer voor deze levering.", active: "Actief", withdrawn: "Ingetrokken", withdraw: "Toestemming intrekken", withdrawing: "Intrekken…", noConsents: "Geen WhatsApp-toestemmingen geregistreerd.", consentError: "Toestemming kon niet worden bijgewerkt.",
           completionButton: "Aankomsten", completionTitle: "Aankomsten en afsluiting", completionIntro: "TrackFleet detecteert aankomst automatisch. Bevestig alleen wanneer de vrachtwagen ter plaatse is en GPS onvoldoende is; de lostijd en automatische afsluiting gaan daarna door.", complete: "Markeer geleverd", completing: "Afsluiten…", confirmArrival: "Aankomst bevestigen", confirmingArrival: "Bevestigen…", automaticPending: "Automatische detectie actief", manualRecommended: "Bevestiging aanbevolen", automaticConfirmed: "Aankomst automatisch gedetecteerd", manualConfirmed: "Aankomst bevestigd door medewerker", noActive: "Geen actieve leveringen.", completionError: "Deze levering kon niet worden bijgewerkt.",
         }
       : {
           button: "Sites", title: "Agencies and depots", count: (value: number) => `${value} site${value === 1 ? "" : "s"}`,
-          add: "Add site", editTitle: "Edit site", edit: "Edit", cancelEdit: "Cancel", update: "Update", gpsReady: "GPS configured", gpsMissing: "GPS coordinates missing", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", save: "Save", saving: "Saving…", close: "Close", error: "Could not save this site.",
+          add: "Add site", editTitle: "Edit site", edit: "Edit", agencyAccess: "Agency access", creatingAccess: "Creating…", accessCopied: (label: string) => `Temporary link copied for ${label}. It expires in 30 minutes.`, accessCopyFallback: "Copy this agency activation link", accessError: "Could not create agency access.", cancelEdit: "Cancel", update: "Update", gpsReady: "GPS configured", gpsMissing: "GPS coordinates missing", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", save: "Save", saving: "Saving…", close: "Close", error: "Could not save this site.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp consents", consentIntro: "Withdraw a customer’s permission here. TrackFleet will stop all automatic WhatsApp updates for that delivery.", active: "Active", withdrawn: "Withdrawn", withdraw: "Withdraw consent", withdrawing: "Withdrawing…", noConsents: "No WhatsApp consent recorded.", consentError: "Could not update consent.",
           completionButton: "Arrivals", completionTitle: "Arrivals and completion", completionIntro: "TrackFleet detects arrival automatically. Confirm only when the truck is physically present and GPS is insufficient; unloading grace and automatic completion will then continue.", complete: "Mark delivered", completing: "Completing…", confirmArrival: "Confirm arrival", confirmingArrival: "Confirming…", automaticPending: "Automatic detection active", manualRecommended: "Confirmation recommended", automaticConfirmed: "Arrival detected automatically", manualConfirmed: "Arrival confirmed by employee", noActive: "No active deliveries.", completionError: "Could not update this delivery.",
         };
@@ -229,10 +255,11 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
             const gpsReady = typeof site.latitude === "number" && typeof site.longitude === "number";
             return <div key={site.id} style={{ padding: "9px 0", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 12, justifyContent: "space-between" }}>
               <div><strong>{site.label}</strong><div style={{ fontSize: 12, opacity: .7 }}>{site.address}</div><div style={{ fontSize: 12, marginTop: 3 }}>{gpsReady ? copy.gpsReady : copy.gpsMissing}</div></div>
-              <button type="button" onClick={() => { setError(""); setEditingSite(site); }}>{copy.edit}</button>
+              <div style={{ display: "flex", gap: 8 }}><button type="button" disabled={accessBusy === site.id} onClick={() => void createAgencyAccess(site)}>{accessBusy === site.id ? copy.creatingAccess : copy.agencyAccess}</button><button type="button" onClick={() => { setError(""); setEditingSite(site); }}>{copy.edit}</button></div>
             </div>;
           })}
         </div>
+        {accessMessage && <p className="agency-location-message" role="status">{accessMessage}</p>}
         <form key={editingSite?.id ?? "new-site"} onSubmit={save}>
           <h3 style={{ marginBottom: 12 }}>{editingSite ? copy.editTitle : copy.add}</h3>
           <div className="form-row"><label>{copy.label}<input name="label" required defaultValue={editingSite?.label ?? ""} /></label><label>{copy.city}<input name="city" required defaultValue={editingSite?.city ?? ""} /></label></div>

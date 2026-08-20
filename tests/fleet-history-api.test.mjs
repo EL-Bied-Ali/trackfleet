@@ -5,7 +5,7 @@ import test from "node:test";
 const route = fs.readFileSync(new URL("../app/api/fleet/history/route.ts", import.meta.url), "utf8");
 
 test("fleet history requires a company session and scopes reads to that company", () => {
-  assert.match(route, /getCompanySession\(request\)/);
+  assert.match(route, /getDispatcherSession\(request\)/);
   assert.match(route, /authentication_required/);
   assert.match(route, /store\.listFleetPositions\(session\.companyId, vehicleId/);
   assert.match(route, /siteStore\.listForCompany\(session\.companyId\)/);

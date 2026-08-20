@@ -1,4 +1,4 @@
-import { getCompanySession } from "../../../lib/company-auth";
+import { getDispatcherSession } from "../../../lib/company-auth";
 import { getWhatsAppConfigurationReadiness, verifyWhatsAppProvider } from "../../../lib/whatsapp-readiness";
 
 function json(body: Record<string, unknown>, status = 200) {
@@ -6,7 +6,7 @@ function json(body: Record<string, unknown>, status = 200) {
 }
 
 export async function GET(request: Request) {
-  const session = await getCompanySession(request);
+  const session = await getDispatcherSession(request);
   if (!session) return json({ error: "authentication_required" }, 401);
 
   const configuration = getWhatsAppConfigurationReadiness();

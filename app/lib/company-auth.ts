@@ -6,8 +6,14 @@ import {
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getSendatrackSnapshot, type SendatrackCredentials } from "./sendatrack";
 import { decodeSessionEncryptionKey } from "./session-encryption-key";
+import { knownSite } from "./known-sites";
+import { agencySiteIdFromUserLabel, agencyUserPrefix } from "./agency-access";
 
-export type CompanySession = {
+export type SessionAccess =
+  | { role: "dispatcher"; siteId: null }
+  | { role: "agency"; siteId: string };
+
+export type CompanySession = SessionAccess & {
   companyId: string;
   accountLabel: string;
   userLabel: string;
@@ -16,6 +22,7 @@ export type CompanySession = {
 
 const cookieName = "__Host-trackfleet_session";
 const sessionDurationSeconds = 7 * 24 * 60 * 60;
+const agencyEnrollmentDurationMs = 30 * 60 * 1000;
 
 type StoredCredentials = {
   accountID: string;
@@ -52,19 +59,27 @@ async function sha256(value: string) {
 }
 
 async function encryptionKey() {
+  const raw = await sessionSecretBytes();
+  const keyMaterial = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
+  return crypto.subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+async function sessionSecretBytes() {
   const encoded = runtimeEnv.TRACKFLEET_ENCRYPTION_KEY?.trim();
-  let raw: Uint8Array;
   if (encoded) {
     const dedicatedKey = decodeSessionEncryptionKey(encoded);
     if (!dedicatedKey) throw new Error("server_not_configured");
-    raw = dedicatedKey;
-  } else {
-    const fallbackSecret = runtimeEnv.SENDATRACK_PASSWORD;
-    if (!fallbackSecret) throw new Error("server_not_configured");
-    raw = await sha256Bytes(`trackfleet-session:${fallbackSecret}`);
+    return dedicatedKey;
   }
+  const fallbackSecret = runtimeEnv.SENDATRACK_PASSWORD;
+  if (!fallbackSecret) throw new Error("server_not_configured");
+  return sha256Bytes(`trackfleet-session:${fallbackSecret}`);
+}
+
+async function agencySigningKey() {
+  const raw = await sessionSecretBytes();
   const keyMaterial = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
-  return crypto.subtle.importKey("raw", keyMaterial, "AES-GCM", false, ["encrypt", "decrypt"]);
+  return crypto.subtle.importKey("raw", keyMaterial, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
 }
 
 async function encryptCredentials(credentials: StoredCredentials) {
@@ -148,8 +163,94 @@ export async function createCompanySession(credentials: SendatrackCredentials) {
 
   return {
     cookie: `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,
-    company: { account: normalized.accountID, user: normalized.user },
+    company: { account: normalized.accountID, user: normalized.user, role: "dispatcher" as const, siteId: null },
     vehicles: snapshot.vehicles,
+  };
+}
+
+type AgencyEnrollmentPayload = {
+  version: 1;
+  companyId: string;
+  accountLabel: string;
+  siteId: string;
+  expiresAt: number;
+  nonce: string;
+  credentialsCiphertext: string;
+};
+
+function bytesEqual(left: Uint8Array, right: Uint8Array) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
+async function signAgencyPayload(encodedPayload: string) {
+  const signature = await crypto.subtle.sign("HMAC", await agencySigningKey(), new TextEncoder().encode(encodedPayload));
+  return toBase64(new Uint8Array(signature));
+}
+
+export async function createAgencyEnrollmentToken(session: CompanySession, siteId: string) {
+  if (session.role !== "dispatcher" || !knownSite(siteId)) throw new Error("agency_enrollment_not_allowed");
+  const payload: AgencyEnrollmentPayload = {
+    version: 1,
+    companyId: session.companyId,
+    accountLabel: session.accountLabel,
+    siteId,
+    expiresAt: Date.now() + agencyEnrollmentDurationMs,
+    nonce: randomToken(12),
+    credentialsCiphertext: await encryptCredentials({
+      accountID: session.credentials.accountID,
+      user: session.credentials.user,
+      password: session.credentials.password,
+    }),
+  };
+  const encodedPayload = toBase64(new TextEncoder().encode(JSON.stringify(payload)));
+  return `${encodedPayload}.${await signAgencyPayload(encodedPayload)}`;
+}
+
+async function verifyAgencyEnrollmentToken(token: string): Promise<AgencyEnrollmentPayload> {
+  const [encodedPayload, suppliedSignature] = token.split(".");
+  if (!encodedPayload || !suppliedSignature || token.length > 2_000) throw new Error("invalid_agency_enrollment");
+  const expectedSignature = await signAgencyPayload(encodedPayload);
+  if (!bytesEqual(fromBase64(suppliedSignature), fromBase64(expectedSignature))) throw new Error("invalid_agency_enrollment");
+  const payload = JSON.parse(new TextDecoder().decode(fromBase64(encodedPayload))) as Partial<AgencyEnrollmentPayload>;
+  if (
+    payload.version !== 1
+    || typeof payload.companyId !== "string"
+    || typeof payload.accountLabel !== "string"
+    || typeof payload.siteId !== "string"
+    || typeof payload.expiresAt !== "number"
+    || typeof payload.nonce !== "string"
+    || typeof payload.credentialsCiphertext !== "string"
+    || payload.expiresAt < Date.now()
+    || payload.expiresAt > Date.now() + agencyEnrollmentDurationMs
+    || !knownSite(payload.siteId)
+  ) throw new Error("invalid_agency_enrollment");
+  const expectedCompanyId = await sha256(`sendatrack-account:${payload.accountLabel.toLowerCase()}`);
+  if (expectedCompanyId !== payload.companyId) throw new Error("invalid_agency_enrollment");
+  return payload as AgencyEnrollmentPayload;
+}
+
+export async function createAgencySessionFromEnrollment(token: string) {
+  const enrollment = await verifyAgencyEnrollmentToken(token);
+  const providerCredentials = await decryptCredentials(enrollment.credentialsCiphertext);
+  const sessionToken = randomToken(32);
+  const tokenHash = await sha256(`trackfleet-session-token:${sessionToken}`);
+  const expiresAt = new Date(Date.now() + sessionDurationSeconds * 1000);
+  if (providerCredentials.accountID.toLowerCase() !== enrollment.accountLabel.toLowerCase()) throw new Error("invalid_agency_enrollment");
+  const credentialsCiphertext = await encryptCredentials(providerCredentials);
+  await createServerSession({
+    tokenHash,
+    companyId: enrollment.companyId,
+    accountLabel: enrollment.accountLabel,
+    userLabel: `${agencyUserPrefix}${enrollment.siteId}`,
+    credentialsCiphertext,
+    expiresAt,
+  });
+  return {
+    cookie: `${cookieName}=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,
+    company: { account: enrollment.accountLabel, user: enrollment.siteId, role: "agency" as const, siteId: enrollment.siteId },
   };
 }
 
@@ -174,15 +275,25 @@ export async function getCompanySession(request: Request): Promise<CompanySessio
       return null;
     }
 
+    const agencySiteId = agencySiteIdFromUserLabel(stored.userLabel);
+
     return {
       companyId: stored.companyId,
       accountLabel: stored.accountLabel,
       userLabel: stored.userLabel,
       credentials,
+      ...(agencySiteId
+        ? { role: "agency" as const, siteId: agencySiteId }
+        : { role: "dispatcher" as const, siteId: null }),
     };
   } catch {
     return null;
   }
+}
+
+export async function getDispatcherSession(request: Request) {
+  const session = await getCompanySession(request);
+  return session?.role === "dispatcher" ? session : null;
 }
 
 export async function deleteCompanySession(request: Request) {

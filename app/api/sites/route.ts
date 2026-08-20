@@ -2,6 +2,7 @@ import { getCompanySession } from "../../lib/company-auth";
 import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { siteStore } from "trackfleet-site-store";
+import { agencyBrowserLocationIsAcceptable } from "../../lib/agency-access";
 
 type SiteRole = "origin" | "dropoff" | "replenishment" | "destination";
 
@@ -30,8 +31,8 @@ function siteJson(site: Awaited<ReturnType<typeof siteStore.listForCompany>>[num
 export async function GET(request: Request) {
   const session = await getCompanySession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
-  const sites = await siteStore.listForCompany(session.companyId);
-  return Response.json({ sites: sites.map(siteJson) }, { headers: { "cache-control": "no-store" } });
+  const companySites = await siteStore.listForCompany(session.companyId);
+  return Response.json({ sites: companySites.map(siteJson) }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -41,6 +42,24 @@ export async function POST(request: Request) {
 
   const payload = await readJsonObject(request);
   if (!payload) return invalidJsonResponse();
+  if (session.role === "agency") {
+    const site = (await siteStore.listForCompany(session.companyId)).find((candidate) => candidate.id === session.siteId);
+    const requestedId = String(payload.id ?? "").trim();
+    const latitude = Number(payload.latitude);
+    const longitude = Number(payload.longitude);
+    const accuracyMeters = Number(payload.coordinateAccuracyMeters);
+    if (!site || requestedId !== session.siteId) return Response.json({ error: "agency_site_mismatch" }, { status: 403 });
+    if (payload.coordinateSource !== "browser" || !agencyBrowserLocationIsAcceptable({ latitude, longitude, accuracyMeters })) {
+      return Response.json({ error: "browser_location_not_precise_enough" }, { status: 400 });
+    }
+    const updated = await siteStore.upsert({
+      ...site,
+      latitude,
+      longitude,
+    });
+    return Response.json({ site: siteJson(updated) }, { status: 201, headers: { "cache-control": "no-store" } });
+  }
+
   const label = String(payload.label ?? "").trim();
   const city = String(payload.city ?? "").trim();
   const address = String(payload.address ?? "").trim();

@@ -6,7 +6,7 @@ const previewRoute = fs.readFileSync(new URL("../app/api/whatsapp/preview/route.
 const automation = fs.readFileSync(new URL("../app/lib/whatsapp-automation.ts", import.meta.url), "utf8");
 
 test("WhatsApp preview requires an authenticated company session", () => {
-  assert.match(previewRoute, /getCompanySession\(request\)/);
+  assert.match(previewRoute, /getDispatcherSession\(request\)/);
   assert.match(previewRoute, /authentication_required/);
   assert.match(previewRoute, /status:\s*401/);
 });
