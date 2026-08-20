@@ -49,7 +49,7 @@ test("tenant export strips public tracking bearer tokens", () => {
 
 test("export endpoint is authenticated and scopes every primary read to the session company", async () => {
   const source = await readFile(routeUrl, "utf8");
-  assert.match(source, /getCompanySession\(request\)/);
+  assert.match(source, /getDispatcherSession\(request\)/);
   assert.match(source, /status: 401/);
   assert.match(source, /store\.listForCompany\(session\.companyId\)/);
   assert.match(source, /siteStore\.listForCompany\(session\.companyId\)/);

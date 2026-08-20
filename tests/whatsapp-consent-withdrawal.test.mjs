@@ -25,7 +25,7 @@ test("automatic notifications stop after consent withdrawal", () => {
 test("withdrawal endpoint is authenticated, tenant-scoped and origin protected", () => {
   assert.match(route, /requestIsSameOrigin\(request\)/);
   assert.match(route, /originRejectedResponse\(\)/);
-  assert.match(route, /getCompanySession\(request\)/);
+  assert.match(route, /getDispatcherSession\(request\)/);
   assert.match(route, /listForCompany\(session\.companyId\)/);
   assert.match(route, /recordEvent\(delivery\.id, "WHATSAPP_OPT_OUT"/);
 });

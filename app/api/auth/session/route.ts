@@ -4,7 +4,7 @@ import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/reques
 export async function GET(request: Request) {
   const session = await getCompanySession(request);
   if (!session) return Response.json({ authenticated: false }, { status: 401, headers: { "cache-control": "no-store" } });
-  return Response.json({ authenticated: true, company: { account: session.accountLabel, user: session.userLabel } }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ authenticated: true, company: { account: session.accountLabel, user: session.role === "agency" ? session.siteId : session.userLabel, role: session.role, siteId: session.siteId } }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function DELETE(request: Request) {

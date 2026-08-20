@@ -1,6 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { getCompanySession } from "../../../lib/company-auth";
+import { getDispatcherSession } from "../../../lib/company-auth";
 import { whatsappConsentWithdrawn } from "../../../lib/delivery-events";
 import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "../../../lib/notification-policy";
 import { buildAutomaticWhatsAppPayload } from "../../../lib/whatsapp-automation";
@@ -12,7 +12,7 @@ function maskRecipient(value: string) {
 }
 
 export async function GET(request: Request) {
-  const session = await getCompanySession(request);
+  const session = await getDispatcherSession(request);
   if (!session) {
     return Response.json({ error: "authentication_required" }, {
       status: 401,

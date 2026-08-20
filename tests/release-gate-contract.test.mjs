@@ -16,6 +16,7 @@ const criticalRegressionTests = [
   "delivery-idempotency.test.mjs",
   "accelerated-mvp-flow.test.mjs",
   "all-agencies-arrival-whatsapp.test.mjs",
+  "agency-location-access.test.mjs",
   "operational-alerts.test.mjs",
   "storage-schema-health.test.mjs",
   "quick-tools-navigation.test.mjs",

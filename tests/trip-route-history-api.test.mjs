@@ -6,7 +6,7 @@ const route = fs.readFileSync(new URL("../app/api/deliveries/route.ts", import.m
 
 test("dispatch API exposes tenant-safe completed route history", () => {
   assert.match(route, /summarizeCompletedTripRoutes\(allTripsForHistory\)/);
-  assert.match(route, /routeHistory,/);
+  assert.match(route, /routeHistory: session\.role === "dispatcher" \? routeHistory : \[\]/);
   assert.match(route, /destinationSiteIds: route\.destinationSiteIds/);
   assert.match(route, /destinations: route\.destinations/);
   assert.match(route, /tripCount: route\.tripCount/);

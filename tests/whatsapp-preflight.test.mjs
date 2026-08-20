@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const route = await readFile(new URL("../app/api/whatsapp/preflight/route.ts", import.meta.url), "utf8");
 
 test("WhatsApp production preflight requires an authenticated company session", () => {
-  assert.match(route, /getCompanySession\(request\)/);
+  assert.match(route, /getDispatcherSession\(request\)/);
   assert.match(route, /authentication_required/);
 });
 

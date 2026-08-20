@@ -15,6 +15,7 @@ import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progr
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
+import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { publicTrackingIsActive, publicTrackingTokenIsValid, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
@@ -305,7 +306,7 @@ export async function GET(request: Request) {
       });
     }
 
-    await processPendingNotifications(session.companyId, requestUrl.origin);
+    if (session.role === "dispatcher") await processPendingNotifications(session.companyId, requestUrl.origin);
 
     const allTripsForHistory = await store.listTrips(session.companyId, 500);
     const routeHistory = summarizeCompletedTripRoutes(allTripsForHistory).map((route) => ({
@@ -330,13 +331,17 @@ export async function GET(request: Request) {
       updatedAt: trip.updatedAt,
     }));
 
+    const visibleRows = session.role === "agency"
+      ? enrichedRows.filter((delivery) => agencyDeliveryIsVisible(delivery, session.siteId))
+      : enrichedRows;
+
     return Response.json({
-      deliveries: enrichedRows,
-      stopPlans: stopPlansWithLearning,
-      trips: tripHistory,
-      routeHistory,
+      deliveries: visibleRows,
+      stopPlans: session.role === "dispatcher" ? stopPlansWithLearning : [],
+      trips: session.role === "dispatcher" ? tripHistory : [],
+      routeHistory: session.role === "dispatcher" ? routeHistory : [],
       features: {
-        whatsappDemoEnabled: runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",
+        whatsappDemoEnabled: session.role === "dispatcher" && runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",
       },
       integration: {
         configured: integration.configured,
@@ -365,7 +370,8 @@ export async function POST(request: Request) {
     if (!payload) return invalidJsonResponse();
     const customer = String(payload.customer ?? "").trim();
     const destinationInput = String(payload.destination ?? "").trim();
-    const originSiteInput = String(payload.originSiteId ?? "").trim();
+    const submittedOriginSiteInput = String(payload.originSiteId ?? "").trim();
+    const originSiteInput = session.role === "agency" ? session.siteId : submittedOriginSiteInput;
     const destinationSiteId = String(payload.destinationSiteId ?? "").trim();
     const truck = String(payload.truck ?? "").trim();
     const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
@@ -433,6 +439,9 @@ export async function POST(request: Request) {
       const existing = await store.getPublic(idempotencyTrackingToken);
       if (existing) {
         if (existing.companyId !== session.companyId) throw new Error("idempotency_token_collision");
+        if (session.role === "agency" && !agencyDeliveryIsVisible(existing, session.siteId)) {
+          return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
+        }
         if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt })) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
@@ -481,6 +490,7 @@ export async function POST(request: Request) {
       if (idempotencyTrackingToken) {
         const existing = await store.getPublic(idempotencyTrackingToken).catch(() => null);
         if (existing?.companyId === session.companyId
+          && (session.role === "dispatcher" || agencyDeliveryIsVisible(existing, session.siteId))
           && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt })) {
           return idempotentReplayResponse(existing, session.companyId);
         }

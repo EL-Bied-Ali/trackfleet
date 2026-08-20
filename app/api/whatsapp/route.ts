@@ -1,5 +1,5 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
-import { getCompanySession } from "../../lib/company-auth";
+import { getDispatcherSession } from "../../lib/company-auth";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
 import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { requestIsSameOrigin } from "../../lib/request-origin";
@@ -33,7 +33,7 @@ async function enforceRateLimit(deliveryId: string, kind: WhatsAppKind) {
 export async function POST(request: Request) {
   try {
     if (!requestIsSameOrigin(request)) return json({ error: "origin_not_allowed" }, 403);
-    const session = await getCompanySession(request);
+    const session = await getDispatcherSession(request);
     if (!session) return json({ error: "authentication_required" }, 401);
     if (runtimeEnv.WHATSAPP_DEMO_ENABLED !== "true") return json({ error: "whatsapp_demo_disabled" }, 403);
 
