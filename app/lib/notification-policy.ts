@@ -15,7 +15,7 @@ const automaticWhatsAppEvents = new Set<DeliveryEventType>([
   "DEPARTED",
   "DELAY_DETECTED",
   "NEAR_DESTINATION",
-  "ARRIVED",
+  "ARRIVED_AT_SITE",
 ]);
 
 export function isAutomaticWhatsAppEvent(event: DeliveryEventType) {

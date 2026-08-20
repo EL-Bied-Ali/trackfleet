@@ -71,6 +71,8 @@ jobs:
         run: node --experimental-strip-types --test tests/delivery-idempotency.test.mjs
       - name: Verify accelerated MVP business flow
         run: node --experimental-strip-types --test tests/accelerated-mvp-flow.test.mjs
+      - name: Verify every agency arrival and WhatsApp business flow
+        run: node --experimental-strip-types --test tests/all-agencies-arrival-whatsapp.test.mjs tests/whatsapp-mvp-flow.test.mjs tests/delivery-completion.test.mjs
       - name: Verify operational alert detection
         run: node --test tests/operational-alerts.test.mjs
       - name: Verify storage schema compatibility checks

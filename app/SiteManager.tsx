@@ -31,6 +31,8 @@ type ManualDelivery = {
   truck: string;
   status: string;
   progress: number;
+  arrivalState: "automatic_pending" | "manual_recommended" | "automatic_confirmed" | "manual_confirmed";
+  arrivalReason: "in_transit" | "destination_coordinates_missing" | "gps_unavailable" | "gps_stale" | "gps_arrival_detected" | "manual_already_confirmed";
 };
 
 export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) {
@@ -44,6 +46,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   const [saving, setSaving] = useState(false);
   const [consentBusy, setConsentBusy] = useState<string | null>(null);
   const [completionBusy, setCompletionBusy] = useState<string | null>(null);
+  const [arrivalBusy, setArrivalBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [consentError, setConsentError] = useState("");
   const [completionError, setCompletionError] = useState("");
@@ -164,25 +167,51 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     }
   }
 
+  async function confirmArrival(delivery: ManualDelivery) {
+    const confirmation = locale === "fr"
+      ? `Confirmer que le camion de ${delivery.id} est physiquement arrivé à ${delivery.destination} ?`
+      : locale === "nl"
+        ? `Bevestigen dat de vrachtwagen voor ${delivery.id} fysiek is aangekomen in ${delivery.destination}?`
+        : `Confirm that the truck for ${delivery.id} has physically arrived at ${delivery.destination}?`;
+    if (!window.confirm(confirmation)) return;
+    setArrivalBusy(delivery.id);
+    setCompletionError("");
+    try {
+      const response = await fetch("/api/deliveries/manual-completion", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: delivery.id, confirmArrival: true }),
+      });
+      if (!response.ok) throw new Error("arrival_failed");
+      setManualDeliveries((items) => items.map((item) => item.id === delivery.id
+        ? { ...item, arrivalState: "manual_confirmed", arrivalReason: "manual_already_confirmed" }
+        : item));
+    } catch {
+      setCompletionError("arrival_failed");
+    } finally {
+      setArrivalBusy(null);
+    }
+  }
+
   const copy = locale === "fr"
     ? {
         button: "Agences", title: "Agences et dépôts", count: (value: number) => `${value} site${value > 1 ? "s" : ""}`,
         add: "Ajouter un site", editTitle: "Modifier le site", edit: "Modifier", cancelEdit: "Annuler", update: "Mettre à jour", gpsReady: "GPS configuré", gpsMissing: "Coordonnées GPS manquantes", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon d’arrivée (km)", save: "Enregistrer", saving: "Enregistrement…", close: "Fermer", error: "Impossible d’enregistrer ce site.",
         consentButton: "WhatsApp", consentTitle: "Consentements WhatsApp", consentIntro: "Retirez ici l’autorisation d’un client. Après retrait, TrackFleet n’enverra plus aucune mise à jour automatique pour ce colis.", active: "Actif", withdrawn: "Retiré", withdraw: "Retirer le consentement", withdrawing: "Retrait…", noConsents: "Aucun consentement WhatsApp enregistré.", consentError: "Impossible de mettre à jour le consentement.",
-        completionButton: "Clôture", completionTitle: "Clôture manuelle", completionIntro: "À utiliser seulement si le GPS ou SENDATRACK ne peut pas confirmer la fin du déchargement. L’action marque définitivement le colis comme livré.", complete: "Marquer livré", completing: "Clôture…", noActive: "Aucune livraison active.", completionError: "Impossible de clôturer cette livraison.",
+        completionButton: "Arrivées", completionTitle: "Arrivées et clôture", completionIntro: "TrackFleet détecte l’arrivée automatiquement. Confirmez-la seulement quand le camion est bien sur place et que le GPS ne suffit pas; le délai de déchargement puis la clôture automatique continueront.", complete: "Marquer livré", completing: "Clôture…", confirmArrival: "Confirmer l’arrivée", confirmingArrival: "Confirmation…", automaticPending: "Détection automatique active", manualRecommended: "Confirmation recommandée", automaticConfirmed: "Arrivée détectée automatiquement", manualConfirmed: "Arrivée confirmée par un employé", noActive: "Aucune livraison active.", completionError: "Impossible de mettre à jour cette livraison.",
       }
     : locale === "nl"
       ? {
           button: "Locaties", title: "Agentschappen en depots", count: (value: number) => `${value} locatie${value === 1 ? "" : "s"}`,
           add: "Locatie toevoegen", editTitle: "Locatie bewerken", edit: "Bewerken", cancelEdit: "Annuleren", update: "Bijwerken", gpsReady: "GPS ingesteld", gpsMissing: "GPS-coördinaten ontbreken", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", save: "Opslaan", saving: "Opslaan…", close: "Sluiten", error: "Locatie kon niet worden opgeslagen.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp-toestemmingen", consentIntro: "Trek hier de toestemming van een klant in. Daarna verstuurt TrackFleet geen automatische updates meer voor deze levering.", active: "Actief", withdrawn: "Ingetrokken", withdraw: "Toestemming intrekken", withdrawing: "Intrekken…", noConsents: "Geen WhatsApp-toestemmingen geregistreerd.", consentError: "Toestemming kon niet worden bijgewerkt.",
-          completionButton: "Afsluiten", completionTitle: "Handmatig afsluiten", completionIntro: "Alleen gebruiken wanneer GPS of SENDATRACK het einde van het lossen niet kan bevestigen. Deze actie markeert de zending definitief als geleverd.", complete: "Markeer geleverd", completing: "Afsluiten…", noActive: "Geen actieve leveringen.", completionError: "Deze levering kon niet worden afgesloten.",
+          completionButton: "Aankomsten", completionTitle: "Aankomsten en afsluiting", completionIntro: "TrackFleet detecteert aankomst automatisch. Bevestig alleen wanneer de vrachtwagen ter plaatse is en GPS onvoldoende is; de lostijd en automatische afsluiting gaan daarna door.", complete: "Markeer geleverd", completing: "Afsluiten…", confirmArrival: "Aankomst bevestigen", confirmingArrival: "Bevestigen…", automaticPending: "Automatische detectie actief", manualRecommended: "Bevestiging aanbevolen", automaticConfirmed: "Aankomst automatisch gedetecteerd", manualConfirmed: "Aankomst bevestigd door medewerker", noActive: "Geen actieve leveringen.", completionError: "Deze levering kon niet worden bijgewerkt.",
         }
       : {
           button: "Sites", title: "Agencies and depots", count: (value: number) => `${value} site${value === 1 ? "" : "s"}`,
           add: "Add site", editTitle: "Edit site", edit: "Edit", cancelEdit: "Cancel", update: "Update", gpsReady: "GPS configured", gpsMissing: "GPS coordinates missing", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", save: "Save", saving: "Saving…", close: "Close", error: "Could not save this site.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp consents", consentIntro: "Withdraw a customer’s permission here. TrackFleet will stop all automatic WhatsApp updates for that delivery.", active: "Active", withdrawn: "Withdrawn", withdraw: "Withdraw consent", withdrawing: "Withdrawing…", noConsents: "No WhatsApp consent recorded.", consentError: "Could not update consent.",
-          completionButton: "Complete", completionTitle: "Manual completion", completionIntro: "Use only when GPS or SENDATRACK cannot confirm the end of unloading. This action permanently marks the delivery as delivered.", complete: "Mark delivered", completing: "Completing…", noActive: "No active deliveries.", completionError: "Could not complete this delivery.",
+          completionButton: "Arrivals", completionTitle: "Arrivals and completion", completionIntro: "TrackFleet detects arrival automatically. Confirm only when the truck is physically present and GPS is insufficient; unloading grace and automatic completion will then continue.", complete: "Mark delivered", completing: "Completing…", confirmArrival: "Confirm arrival", confirmingArrival: "Confirming…", automaticPending: "Automatic detection active", manualRecommended: "Confirmation recommended", automaticConfirmed: "Arrival detected automatically", manualConfirmed: "Arrival confirmed by employee", noActive: "No active deliveries.", completionError: "Could not update this delivery.",
         };
 
   const consentRows = consents.filter((item) => item.whatsappOptIn || item.withdrawn);
@@ -239,11 +268,24 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       <section className="modal" role="dialog" aria-modal="true" aria-labelledby="completion-title">
         <div className="modal-header"><div><p className="eyebrow">TRACKFLEET · OPS</p><h2 id="completion-title">{copy.completionTitle}</h2><span>{copy.completionIntro}</span></div><button onClick={() => setCompletionOpen(false)} aria-label={copy.close}>×</button></div>
         <div className="consent-list">
-          {manualDeliveries.length === 0 ? <p className="consent-empty">{copy.noActive}</p> : manualDeliveries.map((delivery) => <div className="consent-row" key={delivery.id}>
-            <div><strong>{delivery.customer}</strong><span>{delivery.id} · {delivery.destination} · {delivery.truck}</span></div>
-            <span className="consent-status active">{delivery.progress}%</span>
-            <button type="button" className="danger-button" disabled={completionBusy === delivery.id} onClick={() => void completeManually(delivery)}>{completionBusy === delivery.id ? copy.completing : copy.complete}</button>
-          </div>)}
+          {manualDeliveries.length === 0 ? <p className="consent-empty">{copy.noActive}</p> : manualDeliveries.map((delivery) => {
+            const arrivalConfirmed = delivery.arrivalState === "automatic_confirmed" || delivery.arrivalState === "manual_confirmed";
+            const arrivalLabel = delivery.arrivalState === "manual_recommended"
+              ? copy.manualRecommended
+              : delivery.arrivalState === "automatic_confirmed"
+                ? copy.automaticConfirmed
+                : delivery.arrivalState === "manual_confirmed"
+                  ? copy.manualConfirmed
+                  : copy.automaticPending;
+            return <div className="consent-row" key={delivery.id}>
+              <div><strong>{delivery.customer}</strong><span>{delivery.id} · {delivery.destination} · {delivery.truck}</span><span>{arrivalLabel}</span></div>
+              <span className="consent-status active">{delivery.progress}%</span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {!arrivalConfirmed && <button type="button" className={delivery.arrivalState === "manual_recommended" ? "primary-button" : undefined} disabled={arrivalBusy === delivery.id} onClick={() => void confirmArrival(delivery)}>{arrivalBusy === delivery.id ? copy.confirmingArrival : copy.confirmArrival}</button>}
+                <button type="button" className="danger-button" disabled={completionBusy === delivery.id} onClick={() => void completeManually(delivery)}>{completionBusy === delivery.id ? copy.completing : copy.complete}</button>
+              </div>
+            </div>;
+          })}
         </div>
         {completionError && <p className="login-error">{copy.completionError}</p>}
         <div className="modal-footer"><button type="button" onClick={() => setCompletionOpen(false)}>{copy.close}</button></div>

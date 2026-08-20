@@ -49,6 +49,7 @@ export const deliveryEvents = sqliteTable("delivery_events", {
     "NEAR_DESTINATION",
     "DELAY_DETECTED",
     "ARRIVED_AT_SITE",
+    "MANUAL_ARRIVAL_CONFIRMED",
     "ARRIVED",
     "MANUAL_DELIVERED",
     "GPS_STALE",

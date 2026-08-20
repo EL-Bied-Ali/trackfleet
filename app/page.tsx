@@ -13,7 +13,7 @@ import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_VEHICLE_ID } fr
 import { suggestPlannedTrip } from "./lib/trip-suggestion";
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
-type DeliveryEventType = "REGISTERED" | "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
+type DeliveryEventType = "REGISTERED" | "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "ARRIVED_AT_SITE" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
 
 type Delivery = {
   id: string;
@@ -642,6 +642,7 @@ export default function Home() {
           PROGRESS_50: "Mi-parcours atteint",
           PROGRESS_75: "75% du trajet effectué",
           NEAR_DESTINATION: "Le camion approche",
+          ARRIVED_AT_SITE: "Camion arrivé à l’agence",
           DELAY_DETECTED: "Retard détecté",
           ARRIVED: "Livraison arrivée",
           GPS_STALE: "Position GPS ancienne",
@@ -664,6 +665,7 @@ export default function Home() {
           PROGRESS_50: "Halfway point reached",
           PROGRESS_75: "75% of the trip completed",
           NEAR_DESTINATION: "Truck is approaching",
+          ARRIVED_AT_SITE: "Truck arrived at the agency",
           DELAY_DETECTED: "Delay detected",
           ARRIVED: "Delivery arrived",
           GPS_STALE: "GPS position is old",
@@ -686,6 +688,7 @@ export default function Home() {
           PROGRESS_50: "Halverwege bereikt",
           PROGRESS_75: "75% van het traject voltooid",
           NEAR_DESTINATION: "Vrachtwagen nadert",
+          ARRIVED_AT_SITE: "Vrachtwagen aangekomen bij het agentschap",
           DELAY_DETECTED: "Vertraging gedetecteerd",
           ARRIVED: "Levering aangekomen",
           GPS_STALE: "GPS-positie is verouderd",

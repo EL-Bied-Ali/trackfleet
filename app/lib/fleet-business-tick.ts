@@ -68,6 +68,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
   let delayEvents = 0;
   let arrivalSiteEvents = 0;
   let automaticCompletions = 0;
+  const observedArrivalIds = new Set<string>();
 
   for (const transition of transitions) {
     for (const type of transition.events) {
@@ -75,10 +76,12 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
     }
 
     const delivery = transition.delivery;
+    const arrivalEvents = await store.listEvents(delivery.id);
+    const manuallyConfirmedArrival = arrivalEvents.some((event) => event.type === "MANUAL_ARRIVAL_CONFIRMED");
     const hasPosition = typeof delivery.latitude === "number"
       && typeof delivery.longitude === "number"
       && delivery.lastPositionAt instanceof Date;
-    let insideArrivalZone = false;
+    let insideArrivalZone = manuallyConfirmedArrival;
     if (hasPosition) {
       const positionAt = delivery.lastPositionAt!;
       const destinationPoint = destinationPointFor(
@@ -90,7 +93,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
       const distanceToDestinationKm = distanceKm([delivery.longitude!, delivery.latitude!], destinationPoint);
       const positionAgeMinutes = Math.max(0, (tickObservedAt.getTime() - positionAt.getTime()) / 60_000);
       const radiusKm = Math.max(0.05, Math.min(10, delivery.arrivalRadiusKm || 0.5));
-      insideArrivalZone = delivery.status !== "Loading"
+      insideArrivalZone = manuallyConfirmedArrival || delivery.status !== "Loading"
         && positionAgeMinutes <= 30
         && distanceToDestinationKm <= radiusKm
         && (delivery.speed ?? 0) <= 5;
@@ -100,6 +103,32 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
       companyId,
       deliveryId: delivery.id,
       insideArrivalZone,
+      observationAt: tickObservedAt,
+      unloadGraceMinutes,
+    });
+    observedArrivalIds.add(delivery.id);
+    if (completion.justEntered && await store.recordEvent(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
+      newEvents += 1;
+      arrivalSiteEvents += 1;
+    }
+    if (completion.deliveredNow) {
+      newEvents += 1;
+      automaticCompletions += 1;
+    }
+  }
+
+  // A human-confirmed arrival must keep advancing through unloading even when
+  // SENDATRACK has no fresh vehicle in this tick. The explicit confirmation is
+  // the arrival evidence; subsequent ticks only measure the configured grace.
+  const manualArrivalCandidates = await store.listForCompany(companyId);
+  for (const delivery of manualArrivalCandidates) {
+    if (delivery.status === "Delivered" || observedArrivalIds.has(delivery.id)) continue;
+    const events = await store.listEvents(delivery.id);
+    if (!events.some((event) => event.type === "MANUAL_ARRIVAL_CONFIRMED")) continue;
+    const completion = await observeArrivalCompletion({
+      companyId,
+      deliveryId: delivery.id,
+      insideArrivalZone: true,
       observationAt: tickObservedAt,
       unloadGraceMinutes,
     });
