@@ -23,5 +23,11 @@
       "database_name": "trackfleet-db",
       "database_id": "47058ea5-8699-4c70-baa6-95ff52b425e8"
     }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "SENDATRACK_TOKEN_CACHE",
+      "id": "2f58714723c64b30b4c09b85cac053ad"
+    }
   ]
 }

@@ -115,6 +115,81 @@ function credentialKey(auth: SendatrackCredentials) {
   return `${auth.accountID.trim().toLowerCase()}${separator}${auth.user.trim().toLowerCase()}${separator}${auth.password}`;
 }
 
+const tokenCacheTtlSeconds = 45 * 60;
+
+async function sha256Hex(value: string) {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+type TokenCacheKv = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options: { expirationTtl: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+};
+
+function tokenCacheKv() {
+  return (runtimeEnv as unknown as { SENDATRACK_TOKEN_CACHE?: TokenCacheKv }).SENDATRACK_TOKEN_CACHE ?? null;
+}
+
+async function kvCacheKey(key: string) {
+  // The in-memory key embeds the raw password (see credentialKey above).
+  // KV persists to disk and is listable, so it must never see that value
+  // directly -- only its hash.
+  return `sendatrack-token:${await sha256Hex(key)}`;
+}
+
+// cachedTokens is a plain in-memory Map, which only helps within a single
+// Worker isolate: Cloudflare Workers are stateless and isolates are
+// frequently recycled, so without KV backing this almost never survives
+// between requests -- every poll ends up re-authenticating with SENDATRACK
+// instead of reusing a token for the intended 45-minute window. KV is
+// optional (undefined on Vercel/local dev without the binding) so the
+// in-memory map remains a correct, if isolate-local, fallback there.
+async function readCachedToken(key: string) {
+  const cached = cachedTokens.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const kv = tokenCacheKv();
+  if (!kv) return null;
+  try {
+    const stored = await kv.get(await kvCacheKey(key));
+    if (!stored) return null;
+    cachedTokens.set(key, { value: stored, expiresAt: Date.now() + tokenCacheTtlSeconds * 1000 });
+    return stored;
+  } catch (error) {
+    console.error("[trackfleet:sendatrack] token cache read failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    return null;
+  }
+}
+
+async function writeCachedToken(key: string, token: string) {
+  cachedTokens.set(key, { value: token, expiresAt: Date.now() + tokenCacheTtlSeconds * 1000 });
+  const kv = tokenCacheKv();
+  if (!kv) return;
+  try {
+    await kv.put(await kvCacheKey(key), token, { expirationTtl: tokenCacheTtlSeconds });
+  } catch (error) {
+    console.error("[trackfleet:sendatrack] token cache write failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
+}
+
+async function deleteCachedToken(key: string) {
+  cachedTokens.delete(key);
+  const kv = tokenCacheKv();
+  if (!kv) return;
+  try {
+    await kv.delete(await kvCacheKey(key));
+  } catch (error) {
+    console.error("[trackfleet:sendatrack] token cache delete failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
+}
+
 function providerUnavailableStatus(status: number) {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
@@ -137,8 +212,8 @@ async function authenticationRejectedResponse(response: Response) {
 async function login(auth: SendatrackCredentials) {
   requireAllowedTransport();
   const key = credentialKey(auth);
-  const cachedToken = cachedTokens.get(key);
-  if (cachedToken && cachedToken.expiresAt > Date.now()) return cachedToken.value;
+  const cachedToken = await readCachedToken(key);
+  if (cachedToken) return cachedToken;
   if (!auth.accountID || !auth.user || !auth.password) return null;
   const response = await fetch(apiUrl("login"), {
     method: "POST",
@@ -166,7 +241,7 @@ async function login(auth: SendatrackCredentials) {
     });
     throw new Error("unexpected_response");
   }
-  cachedTokens.set(key, { value: token, expiresAt: Date.now() + 45 * 60 * 1000 });
+  await writeCachedToken(key, token);
   return token;
 }
 
@@ -177,7 +252,7 @@ async function requestFleetPayload(token: string, auth: SendatrackCredentials) {
     signal: AbortSignal.timeout(12_000),
   });
   if (response.status === 401) {
-    cachedTokens.delete(credentialKey(auth));
+    await deleteCachedToken(credentialKey(auth));
     throw new Error("authentication_failed");
   }
   if (!response.ok) throw new Error("service_unavailable");
@@ -258,7 +333,7 @@ export async function getSendatrackSnapshot(providedCredentials?: SendatrackCred
     } catch (error) {
       const code = error instanceof Error ? error.message : "service_unavailable";
       if (attempt < snapshotMaxAttempts && retryableSnapshotError(code)) {
-        cachedTokens.delete(credentialKey(auth));
+        await deleteCachedToken(credentialKey(auth));
         console.warn("[trackfleet:sendatrack] snapshot retry", { code, attempt });
         await waitBeforeSnapshotRetry();
         continue;
