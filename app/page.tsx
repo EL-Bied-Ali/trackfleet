@@ -847,6 +847,14 @@ export default function Home() {
           <button className="nav-item" disabled><Icon>◉</Icon>{t.customers}</button>
         </nav>
         <div className="sidebar-divider" />
+        <nav aria-label={locale === "fr" ? "Outils TrackFleet" : locale === "nl" ? "TrackFleet-tools" : "TrackFleet tools"}>
+          <a className="nav-item" href={`/operations?lang=${locale}`}><Icon>△</Icon>{t.operationsTool}</a>
+          <a className="nav-item" href={`/operations/history?lang=${locale}`}><Icon>≡</Icon>{t.historyTool}</a>
+          {company?.role === "dispatcher" && <a className="nav-item" href={`/operations/storage?lang=${locale}`}><Icon>▥</Icon>{t.storageTool}</a>}
+          {company?.role === "dispatcher" && <a className="nav-item" href="/api/operations/export"><Icon>⇩</Icon>{t.exportTool}</a>}
+          <a className="nav-item" href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
+        </nav>
+        <div className="sidebar-divider" />
         <nav>
           <button className="nav-item" disabled><Icon>⚙</Icon>{t.settings}</button>
           <button className="nav-item" disabled><Icon>?</Icon>{t.helpCentre}</button>

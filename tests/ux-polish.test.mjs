@@ -6,7 +6,7 @@ const page = fs.readFileSync("app/page.tsx", "utf8");
 const map = fs.readFileSync("app/InteractiveFleetMap.tsx", "utf8");
 const siteManager = fs.readFileSync("app/SiteManager.tsx", "utf8");
 const operations = fs.readFileSync("app/operations/page.tsx", "utf8");
-const quickTools = fs.readFileSync("app/QuickTools.tsx", "utf8");
+const i18n = fs.readFileSync("app/i18n.ts", "utf8");
 
 test("customer tracking never exposes an internal unassigned vehicle label or invented position", () => {
   assert.match(page, /const customerVehicleLabel = isUnassignedVehicle\(selected\)/);
@@ -15,11 +15,12 @@ test("customer tracking never exposes an internal unassigned vehicle label or in
   assert.match(map, /delivery\.id === selectedId && hasExactPosition\(delivery\)/);
 });
 
-test("quick tools react to in-app navigation and are localized", () => {
-  assert.match(quickTools, /window\.addEventListener\("popstate", syncLocation\)/);
-  assert.match(quickTools, /Opérations/);
-  assert.match(quickTools, /Historique/);
-  assert.match(quickTools, /Stockage/);
+test("quick tools live in the dispatcher sidebar and are localized", () => {
+  assert.match(i18n, /operationsTool: "Opérations"/);
+  assert.match(page, /a className="nav-item" href=\{`\/operations\?lang=\$\{locale\}`\}/);
+  assert.match(page, /a className="nav-item" href=\{`\/operations\/history\?lang=\$\{locale\}`\}/);
+  assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href=\{`\/operations\/storage\?lang=\$\{locale\}`\}/);
+  assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href="\/api\/operations\/export"/);
 });
 
 test("arrival completion hides unsafe actions until a real arrival is confirmed", () => {

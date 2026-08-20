@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import QuickTools from "./QuickTools";
 import "./globals.css";
 import "./dashboard-polish.css";
 
@@ -29,5 +28,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}<QuickTools /></body></html>;
+  return <html lang="en"><body>{children}</body></html>;
 }
