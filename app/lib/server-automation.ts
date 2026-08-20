@@ -44,7 +44,10 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     automationStartAt,
   });
 
-  const notifications = await processPendingNotifications(companyId, origin);
+  // The scheduled tick isn't blocking a dispatcher's page load, so it can
+  // afford to drain a larger slice of the backlog than an interactive
+  // request (see processPendingNotifications' default cap).
+  const notifications = await processPendingNotifications(companyId, origin, 20);
   let telemetryPruned = 0;
   const retention = telemetryRetentionPolicy(runtimeEnv.TRACKFLEET_TELEMETRY_RETENTION_DAYS);
   if (retention.valid && retention.days !== null) {

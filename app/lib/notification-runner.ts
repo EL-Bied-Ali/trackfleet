@@ -4,7 +4,16 @@ import { whatsappConsentWithdrawn } from "./delivery-events";
 import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
 import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
 
-export async function processPendingNotifications(companyId: string, origin: string) {
+// A dispatcher GET request must never be able to time out because of a
+// WhatsApp/Meta backlog: each send has its own multi-second timeout, and
+// with no cap here a large or currently-failing queue processed
+// sequentially can consume the entire request budget on its own, on top of
+// whatever SENDATRACK itself is doing. Anything past the cap stays pending
+// and is picked up by the next call -- either the next dispatcher request
+// or the 5-minute automation tick (app/lib/server-automation.ts).
+const defaultMaxNotificationsPerCall = 5;
+
+export async function processPendingNotifications(companyId: string, origin: string, maxPerCall = defaultMaxNotificationsPerCall) {
   const pending = await store.listPendingNotifications(companyId);
   let sent = 0;
   let failed = 0;
@@ -46,7 +55,7 @@ export async function processPendingNotifications(companyId: string, origin: str
     suppressed += 1;
   }
 
-  for (const item of actionable) {
+  for (const item of actionable.slice(0, maxPerCall)) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
 
