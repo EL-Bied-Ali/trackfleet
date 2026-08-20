@@ -33,3 +33,10 @@ test("wrangler.jsonc is the single source of Cloudflare compatibility flags", ()
   assert.doesNotMatch(viteConfig, /compatibility_flags/);
   assert.match(viteConfig, /const localBindingConfig = \{\s*main: "\.\/worker\/index\.ts",\s*\};/);
 });
+
+test("a one-time ?delivery= deep link does not keep overriding later manual selection", () => {
+  assert.match(pageSource, /requestedUrl\.searchParams\.delete\("delivery"\)/);
+  assert.match(pageSource, /window\.history\.replaceState\(\{\}, "", requestedUrl\)/);
+  const refreshBody = pageSource.slice(pageSource.indexOf("async function refresh"), pageSource.indexOf("void refresh();"));
+  assert.doesNotMatch(refreshBody, /setSelectedId\(\(current\) => requestedDeliveryId &&/);
+});

@@ -285,11 +285,20 @@ export default function Home() {
         } else if (!tracking) {
           setDeliveries(data.deliveries);
           setDispatchDataState("ready");
-          const requestedDeliveryId = new URLSearchParams(window.location.search).get("delivery");
-          setSelectedId((current) => requestedDeliveryId && data.deliveries.some((delivery) => delivery.id === requestedDeliveryId)
-            ? requestedDeliveryId
-            : data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === current) ? data.deliveries[0].id : current);
-          if (requestedDeliveryId && data.deliveries.some((delivery) => delivery.id === requestedDeliveryId)) setShowPopover(true);
+          const requestedUrl = new URL(window.location.href);
+          const requestedDeliveryId = requestedUrl.searchParams.get("delivery");
+          if (requestedDeliveryId) {
+            if (data.deliveries.some((delivery) => delivery.id === requestedDeliveryId)) {
+              setSelectedId(requestedDeliveryId);
+              setShowPopover(true);
+            }
+            // Consume the one-time deep link so later polls don't keep
+            // overriding whatever delivery the dispatcher selects next.
+            requestedUrl.searchParams.delete("delivery");
+            window.history.replaceState({}, "", requestedUrl);
+          } else {
+            setSelectedId((current) => data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === current) ? data.deliveries[0].id : current);
+          }
         }
         if (data.integration) setIntegration(data.integration);
         if (data.features) setFeatures(data.features);
