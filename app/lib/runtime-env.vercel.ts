@@ -2,6 +2,7 @@ import { normalizeEnvValue } from "./env-value";
 
 export type TrackFleetRuntimeEnv = {
   DB?: undefined;
+  SENDATRACK_TOKEN_CACHE?: undefined;
   DATABASE_URL?: string;
   SENDATRACK_ACCOUNT_ID?: string;
   SENDATRACK_USER?: string;

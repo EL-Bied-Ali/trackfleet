@@ -13,7 +13,7 @@ test("SENDATRACK snapshot retries transient provider failures only once", () => 
 });
 
 test("retry clears cached authentication state and remains bounded", () => {
-  assert.match(source, /cachedTokens\.delete\(credentialKey\(auth\)\);/);
+  assert.match(source, /await deleteCachedToken\(credentialKey\(auth\)\);/);
   assert.match(source, /await waitBeforeSnapshotRetry\(\);/);
   assert.match(source, /snapshot failed.*attempts: attempt/s);
   assert.doesNotMatch(source, /while\s*\(true\)/);
