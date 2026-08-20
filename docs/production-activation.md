@@ -45,15 +45,13 @@ On Cloudflare, read failover is authorized by default when no explicit override 
 
 ## GPS / business automation scheduler
 
-The workflow `.github/workflows/automation-tick.yml` calls `/api/automation/tick` for SENDATRACK synchronization and business automation. This is separate from the Worker Cron Triggers used for D1 maintenance.
+The Cloudflare Worker runs SENDATRACK synchronization and business automation natively every five minutes. Its scheduled handler calls the protected `/api/automation/tick` route with the Worker's own `CRON_SECRET`; GitHub does not execute production automation and does not need a duplicate cron secret.
 
 Configure repository settings:
 
-- Secret `TRACKFLEET_CRON_SECRET`: exactly the same value as the Worker `CRON_SECRET`.
-- Variable `TRACKFLEET_BASE_URL=https://trackfleet.chronoplan.workers.dev`.
-- Variable `TRACKFLEET_AUTOMATION_ENABLED=true`: set this last, only after `/api/health` passes the launch checks.
+- Optional variable `TRACKFLEET_BASE_URL=https://trackfleet.chronoplan.workers.dev` if the production hostname differs from the workflow default.
 
-Each scheduled run checks `/api/health` before calling `/api/automation/tick`. The server endpoint independently refuses unsafe automation, so both the scheduler and application enforce the safety boundary.
+The workflow `.github/workflows/automation-tick.yml` is a read-only heartbeat audit. After activation, `/api/health` must report `automation.live = true`; if it does not, use the bounded `automation.lastFailureCode` diagnostic. A successful heartbeat means the strict automation run completed with a connected SENDATRACK snapshot.
 
 ## Pre-client smoke test
 

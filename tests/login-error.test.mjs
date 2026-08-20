@@ -24,10 +24,12 @@ test("sanitizes malformed and unexpected login failures", () => {
   assert.deepEqual(publicLoginFailure(new Error("database_connection_string_here")), { status: 503, code: "login_failed" });
 });
 
-test("SENDATRACK login treats only 401 and 403 as credential rejection", () => {
+test("SENDATRACK login recognizes the provider's account-not-found rejection", () => {
   assert.match(sendatrack, /return status === 401 \|\| status === 403/);
+  assert.match(sendatrack, /response\.status !== 406/);
+  assert.match(sendatrack, /stringFrom\(payload\?\.message\)\.toLowerCase\(\) === "account not found"/);
   assert.match(sendatrack, /providerUnavailableStatus\(response\.status\)/);
-  assert.match(sendatrack, /authenticationRejectedStatus\(response\.status\)/);
+  assert.match(sendatrack, /await authenticationRejectedResponse\(response\)/);
   assert.match(sendatrack, /throw new Error\(["']unexpected_response["']\)/);
 });
 

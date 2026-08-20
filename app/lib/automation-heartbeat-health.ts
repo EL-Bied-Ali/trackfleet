@@ -34,6 +34,15 @@ export function automationHeartbeatStatus(
   return runtimeHeartbeatStatus(heartbeat, AUTOMATION_HEARTBEAT_STALE_AFTER_MS, now);
 }
 
+export function activeHeartbeatFailureCode<T>(
+  heartbeat: { lastSuccessAt: string | null; lastFailureAt: string | null },
+  failureCode: T | null,
+) {
+  if (!failureCode || !heartbeat.lastFailureAt) return null;
+  if (heartbeat.lastSuccessAt && heartbeat.lastSuccessAt >= heartbeat.lastFailureAt) return null;
+  return failureCode;
+}
+
 export function retentionHeartbeatStatus(
   heartbeat: {
     lastAttemptAt: Date | null;
