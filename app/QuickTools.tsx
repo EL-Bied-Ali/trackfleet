@@ -7,6 +7,7 @@ type QuickToolsState = "checking" | "hidden" | "visible";
 
 export default function QuickTools() {
   const [state, setState] = useState<QuickToolsState>("checking");
+  const [isDispatcher, setIsDispatcher] = useState(false);
   const [locationKey, setLocationKey] = useState("");
 
   useEffect(() => {
@@ -27,9 +28,15 @@ export default function QuickTools() {
     }
 
     void fetch("/api/auth/session", { cache: "no-store" })
-      .then((response) => {
+      .then(async (response) => {
         if (!active) return;
-        setState(response.ok ? "visible" : "hidden");
+        if (!response.ok) {
+          setState("hidden");
+          return;
+        }
+        const data = (await response.json().catch(() => null)) as { company?: { role?: string } } | null;
+        setIsDispatcher(data?.company?.role === "dispatcher");
+        setState("visible");
       })
       .catch(() => {
         if (active) setState("hidden");
@@ -57,14 +64,14 @@ export default function QuickTools() {
         <span aria-hidden="true">≡</span>
         <span>{copy.history}</span>
       </a>
-      <a href={`/operations/storage?lang=${encodeURIComponent(locale)}`} className={styles.tool} aria-label={copy.storage}>
+      {isDispatcher && <a href={`/operations/storage?lang=${encodeURIComponent(locale)}`} className={styles.tool} aria-label={copy.storage}>
         <span aria-hidden="true">▥</span>
         <span>{copy.storage}</span>
-      </a>
-      <a href="/api/operations/export" className={styles.tool} aria-label={copy.export}>
+      </a>}
+      {isDispatcher && <a href="/api/operations/export" className={styles.tool} aria-label={copy.export}>
         <span aria-hidden="true">⇩</span>
         <span>{copy.export}</span>
-      </a>
+      </a>}
       <a href={`/import?lang=${encodeURIComponent(locale)}`} className={styles.toolPrimary} aria-label={copy.import}>
         <span aria-hidden="true">＋</span>
         <span>{copy.import}</span>
