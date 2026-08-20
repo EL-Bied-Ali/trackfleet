@@ -1,13 +1,13 @@
-import { seedDeliveries } from "./delivery-seed";
-import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
-import { createDeliveryId } from "./delivery-id";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types";
-import { NotificationClaimState } from "./notification-claim-state";
-import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
-import type { SendatrackSnapshot } from "./sendatrack";
-import { matchDeliveryVehicle } from "./vehicle-linking";
+import { seedDeliveries } from "./delivery-seed.ts";
+import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events.ts";
+import { createDeliveryId } from "./delivery-id.ts";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types.ts";
+import { NotificationClaimState } from "./notification-claim-state.ts";
+import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress.ts";
+import type { SendatrackSnapshot } from "./sendatrack.ts";
+import { matchDeliveryVehicle } from "./vehicle-linking.ts";
 import { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";
-import type { TripRecord } from "./trip-record";
+import type { TripRecord } from "./trip-record.ts";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];

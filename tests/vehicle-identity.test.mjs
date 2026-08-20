@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { canonicalFleetVehicleId, hasPhysicalVehicleName, normalizePhysicalVehicleName, samePhysicalVehicle } from "../app/lib/vehicle-identity.ts";
 
-const automationSource = fs.readFileSync(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8");
+const automationSource = fs.readFileSync(new URL("../app/lib/fleet-business-tick.ts", import.meta.url), "utf8");
 
 test("plate-like vehicle names produce stable physical telemetry ids", () => {
   assert.equal(normalizePhysicalVehicleName(" 18799-B-2 "), "18799b2");

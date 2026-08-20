@@ -63,6 +63,7 @@
     "test:delay": "node --experimental-strip-types --test tests/delay-detection.test.mjs",
     "test:automation-delay": "node --experimental-strip-types --test tests/automation-delay.test.mjs",
     "test:automation-trip-sync": "node --test tests/automation-trip-sync.test.mjs",
+    "test:mvp-flow": "node --experimental-strip-types --test tests/accelerated-mvp-flow.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "test:trip-upsert-refresh": "node --test tests/trip-upsert-refresh.test.mjs",

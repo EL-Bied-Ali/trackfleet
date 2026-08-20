@@ -5,9 +5,10 @@ import "./unloading-delay-suppression.test.mjs";
 import "./unload-departure-guard.test.mjs";
 import { evaluateArrivalDwell, parseUnloadGraceMinutes } from "../app/lib/delivery-arrival.ts";
 
-const [routeProgress, serverAutomation, vercelCompletion, cloudflareCompletion, manualRoute, siteManager] = await Promise.all([
+const [routeProgress, serverAutomation, businessTick, vercelCompletion, cloudflareCompletion, manualRoute, siteManager] = await Promise.all([
   readFile(new URL("../app/lib/route-progress.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/fleet-business-tick.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-completion.vercel.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-completion.cloudflare.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/deliveries/manual-completion/route.ts", import.meta.url), "utf8"),
@@ -62,16 +63,17 @@ test("leaving the geofence or using stale GPS cancels the dwell", () => {
 });
 
 test("GPS alone can no longer finalize an active delivery", () => {
-  assert.match(routeProgress, /Keep active deliveries at\n\s{2}\/\/ 99% until one of those completion paths confirms delivery/);
+  assert.match(routeProgress, /Keep active deliveries at\r?\n\s{2}\/\/ 99% until one of those completion paths confirms delivery/);
   assert.match(routeProgress, /Math\.min\(99, Math\.max\(previousProgress, metrics\.progress\)\)/);
   assert.doesNotMatch(routeProgress, /distanceToDestinationKm <= safeArrivalRadiusKm && speed <= 5/);
 });
 
 test("automation applies arrival dwell before reloading deliveries", () => {
-  assert.match(serverAutomation, /observeArrivalCompletion/);
+  assert.match(serverAutomation, /runFleetBusinessTick/);
   assert.match(serverAutomation, /TRACKFLEET_UNLOAD_GRACE_MINUTES/);
-  assert.match(serverAutomation, /ARRIVED_AT_SITE/);
-  assert.match(serverAutomation, /const deliveries = await store\.listForCompany\(companyId\)/);
+  assert.match(businessTick, /observeArrivalCompletion/);
+  assert.match(businessTick, /ARRIVED_AT_SITE/);
+  assert.match(businessTick, /const deliveries = await store\.listForCompany\(companyId\)/);
 });
 
 test("both persistent runtimes reset continuity after a GPS observation gap", () => {

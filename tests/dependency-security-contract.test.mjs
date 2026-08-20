@@ -29,8 +29,8 @@ test("React server components stay above the July 2026 patched security floor", 
 });
 
 test("pnpm lockfile resolves the patched React RSC graph", () => {
-  assert.match(lockfile, /react:\n\s+specifier: 19\.2\.8\n\s+version: 19\.2\.8/);
-  assert.match(lockfile, /react-dom:\n\s+specifier: 19\.2\.8\n\s+version: 19\.2\.8\(react@19\.2\.8\)/);
-  assert.match(lockfile, /react-server-dom-webpack:\n\s+specifier: 19\.2\.8/);
+  assert.match(lockfile, /react:\r?\n\s+specifier: 19\.2\.8\r?\n\s+version: 19\.2\.8/);
+  assert.match(lockfile, /react-dom:\r?\n\s+specifier: 19\.2\.8\r?\n\s+version: 19\.2\.8\(react@19\.2\.8\)/);
+  assert.match(lockfile, /react-server-dom-webpack:\r?\n\s+specifier: 19\.2\.8/);
   assert.doesNotMatch(lockfile, /react-server-dom-webpack@19\.2\.6/);
 });
