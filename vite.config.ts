@@ -80,7 +80,6 @@ const deliveryCompletionPath = fileURLToPath(
 
 const localBindingConfig = {
   main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
 };
 
 export default defineConfig(async () => {

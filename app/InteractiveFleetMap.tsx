@@ -38,6 +38,8 @@ type Props = {
   onSelect?: (deliveryId: string) => void;
 };
 
+const EMPTY_LIVE_VEHICLES: LiveVehicle[] = [];
+
 const vehiclePositions: Record<string, [number, number]> = {
   "TF-2841": [-5.55, 35.92],
   "TF-2839": [-3.7, 40.42],
@@ -87,7 +89,7 @@ function overlapOffset(position: [number, number], occurrences: Map<string, numb
   return [Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius)];
 }
 
-export default function InteractiveFleetMap({ deliveries, liveVehicles = [], selectedId, customerMode = false, label, onSelect }: Props) {
+export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_LIVE_VEHICLES, selectedId, customerMode = false, label, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
   const maplibreRef = useRef<MapLibreModule | null>(null);
