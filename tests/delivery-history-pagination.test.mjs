@@ -24,13 +24,19 @@ test("history page size is bounded and fetches one lookahead row", async () => {
   assert.match(source, /rows\.length > limit/);
 });
 
-test("history API requires authentication and validates complete cursor pairs", async () => {
+test("history API accepts company sessions, scopes agency history and validates complete cursor pairs", async () => {
   const source = await readFile(routeUrl, "utf8");
-  assert.match(source, /getDispatcherSession\(request\)/);
+  assert.match(source, /getCompanySession\(request\)/);
+  assert.match(source, /session\.role === "agency" \? session\.siteId : null/);
   assert.match(source, /status: 401/);
   assert.match(source, /if \(!beforeCreatedAt \|\| !beforeId/);
   assert.match(source, /invalid_history_cursor/);
   assert.match(source, /cache-control": "no-store"/);
+});
+
+test("agency history is limited to parcels entering or leaving its own site", async () => {
+  const source = await readFile(queryUrl, "utf8");
+  assert.match(source, /origin_site_id = \$\{siteId\} OR destination_site_id = \$\{siteId\}/);
 });
 
 test("history UI appends pages using the server cursor rather than refetching the full archive", async () => {

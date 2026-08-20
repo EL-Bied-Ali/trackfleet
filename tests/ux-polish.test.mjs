@@ -30,6 +30,21 @@ test("arrival completion hides unsafe actions until a real arrival is confirmed"
 
 test("operational alerts provide a direct parcel action", () => {
   assert.match(operations, /viewDelivery: "Ouvrir le colis"/);
-  assert.match(operations, /delivery=\$\{encodeURIComponent\(alert\.deliveryId\)\}/);
+  assert.match(operations, /delivery=\$\{encodeURIComponent\(alert\.deliveryId!\)\}/);
+  assert.match(operations, /window\.location\.assign/);
   assert.match(page, /get\("delivery"\)/);
+});
+
+test("overlapping live trucks remain individually visible", () => {
+  assert.match(map, /function overlapOffset/);
+  assert.match(map, /markerOccurrences/);
+  assert.match(page, /className="fleet-roster"/);
+  assert.match(page, /integration\.vehicles\.map/);
+});
+
+test("agency management is searchable and keeps the edit form closed by default", () => {
+  assert.match(siteManager, /siteSearch/);
+  assert.match(siteManager, /siteFormOpen/);
+  assert.match(siteManager, /gpsReady/);
+  assert.match(siteManager, /gpsMissing/);
 });

@@ -75,10 +75,11 @@ test("agency location capture requests high accuracy, shows a map, and requires 
 });
 
 test("agency sessions can use parcel, fleet, and arrival APIs while administration remains dispatcher-only", async () => {
-  const [deliveries, sendatrack, completion] = await Promise.all([
+  const [deliveries, sendatrack, completion, history] = await Promise.all([
     read("../app/api/deliveries/route.ts"),
     read("../app/api/sendatrack/route.ts"),
     read("../app/api/deliveries/manual-completion/route.ts"),
+    read("../app/api/operations/history/route.ts"),
   ]);
   assert.match(deliveries, /getCompanySession\(request\)/);
   assert.match(deliveries, /agencyDeliveryIsVisible/);
@@ -87,6 +88,8 @@ test("agency sessions can use parcel, fleet, and arrival APIs while administrati
   assert.match(sendatrack, /getCompanySession\(request\)/);
   assert.match(completion, /delivery\.destinationSiteId !== session\.siteId/);
   assert.match(completion, /dispatcher_confirmation_required/);
+  assert.match(history, /getCompanySession\(request\)/);
+  assert.match(history, /session\.role === "agency" \? session\.siteId : null/);
 
   const dispatcherOnlyRoutes = [
     "../app/api/whatsapp/route.ts",
@@ -100,7 +103,6 @@ test("agency sessions can use parcel, fleet, and arrival APIs while administrati
     "../app/api/deliveries/link-vehicle/route.ts",
     "../app/api/operations/export/route.ts",
     "../app/api/operations/storage/route.ts",
-    "../app/api/operations/history/route.ts",
   ];
   for (const path of dispatcherOnlyRoutes) {
     const source = await read(path);

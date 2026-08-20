@@ -15,6 +15,10 @@ const requiredFields = [
   "destination_latitude",
   "destination_longitude",
   "arrival_radius_km",
+  "recipient_name",
+  "recipient_contact",
+  "recipient_whatsapp_opt_in",
+  "recipient_whatsapp_opt_in_at",
 ];
 
 const requiredDeliveryProperties = [
@@ -25,6 +29,10 @@ const requiredDeliveryProperties = [
   "delivery.destinationLatitude",
   "delivery.destinationLongitude",
   "delivery.arrivalRadiusKm",
+  "delivery.recipientName",
+  "delivery.recipientContact",
+  "delivery.recipientWhatsappOptIn",
+  "delivery.recipientWhatsappOptInAt",
 ];
 
 test("persistent delivery stores write site ids, coordinates, and arrival radius together", () => {
@@ -45,7 +53,7 @@ test("persistent delivery stores write site ids, coordinates, and arrival radius
 test("Postgres hydration restores site ids and origin/destination coordinates", () => {
   const source = fs.readFileSync("app/lib/delivery-store.postgres.ts", "utf8");
   const hydrateBlock = source.slice(source.indexOf("function hydrate(row: RawDelivery)"), source.indexOf("function hydrateEvent"));
-  for (const property of ["originSiteId", "originLatitude", "originLongitude", "destinationSiteId", "destinationLatitude", "destinationLongitude", "arrivalRadiusKm"]) {
+  for (const property of ["originSiteId", "originLatitude", "originLongitude", "destinationSiteId", "destinationLatitude", "destinationLongitude", "arrivalRadiusKm", "recipientName", "recipientContact", "recipientWhatsappOptIn", "recipientWhatsappOptInAt"]) {
     assert.ok(hydrateBlock.includes(property), `Postgres hydrate() does not restore ${property}`);
   }
 });

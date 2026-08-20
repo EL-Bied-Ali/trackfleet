@@ -22,13 +22,15 @@ export async function deliveryIdempotencyTrackingToken(companyId: string, key: s
 
 export function deliveryIdempotencyPayloadMatches(
   delivery: DeliveryRow,
-  input: { customer: string; destination: string; contact: string; eta: string; plannedArrivalAt: Date | null; weightKg?: number | null; priceAmount?: number | null; priceCurrency?: string | null },
+  input: { customer: string; destination: string; contact: string; recipientName?: string; recipientContact?: string; eta: string; plannedArrivalAt: Date | null; weightKg?: number | null; priceAmount?: number | null; priceCurrency?: string | null },
 ) {
   const existingPlanned = delivery.plannedArrivalAt?.getTime() ?? null;
   const requestedPlanned = input.plannedArrivalAt?.getTime() ?? null;
   return delivery.customer === input.customer
     && delivery.destination === input.destination
     && delivery.contact === input.contact
+    && (delivery.recipientName ?? "") === (input.recipientName ?? "")
+    && (delivery.recipientContact ?? "") === (input.recipientContact ?? "")
     && delivery.eta === input.eta
     && (delivery.weightKg ?? null) === (input.weightKg ?? null)
     && (delivery.priceAmount ?? null) === (input.priceAmount ?? null)

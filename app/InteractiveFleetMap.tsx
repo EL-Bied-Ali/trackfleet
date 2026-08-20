@@ -76,6 +76,17 @@ function compactVehicleLabel(name: string) {
   return normalized.length > 14 ? `${normalized.slice(0, 12)}…` : normalized;
 }
 
+function overlapOffset(position: [number, number], occurrences: Map<string, number>): [number, number] {
+  const key = `${position[0].toFixed(5)}:${position[1].toFixed(5)}`;
+  const index = occurrences.get(key) ?? 0;
+  occurrences.set(key, index + 1);
+  if (index === 0) return [0, 0];
+  const ringIndex = index - 1;
+  const angle = (ringIndex % 8) * (Math.PI / 4);
+  const radius = 30 + Math.floor(ringIndex / 8) * 24;
+  return [Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius)];
+}
+
 export default function InteractiveFleetMap({ deliveries, liveVehicles = [], selectedId, customerMode = false, label, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
@@ -171,6 +182,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
     const shownDeliveries = customerMode
       ? deliveries.filter((delivery) => delivery.id === selectedId && hasExactPosition(delivery))
       : deliveries;
+    const markerOccurrences = new Map<string, number>();
     const markers = shownDeliveries.map((delivery, index) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -179,7 +191,8 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
       button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}`);
       button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
-      return new maplibregl.Marker({ element: button, anchor: "bottom" }).setLngLat(positionFor(delivery, index)).addTo(map);
+      const position = positionFor(delivery, index);
+      return new maplibregl.Marker({ element: button, anchor: "bottom", offset: overlapOffset(position, markerOccurrences) }).setLngLat(position).addTo(map);
     });
 
     if (!customerMode) {
@@ -196,7 +209,8 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
         marker.setAttribute("role", "img");
         marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);
         marker.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(vehicle.name)}</em>`;
-        markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom" }).setLngLat([vehicle.longitude, vehicle.latitude]).addTo(map));
+        const position: [number, number] = [vehicle.longitude, vehicle.latitude];
+        markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom", offset: overlapOffset(position, markerOccurrences) }).setLngLat(position).addTo(map));
       }
     }
 

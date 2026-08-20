@@ -14,6 +14,8 @@ export type DeliveryHistoryItem = {
   destination: string;
   truck: string;
   contact: string;
+  recipientName: string;
+  recipientContact: string;
   weightKg: number | null;
   priceAmount: number | null;
   priceCurrency: "EUR" | "MAD" | null;
@@ -32,6 +34,8 @@ type RawHistoryRow = {
   destination: string;
   truck: string;
   contact: string;
+  recipient_name: string | null;
+  recipient_contact: string | null;
   weight_kg: number | string | null;
   price_amount: number | string | null;
   price_currency: "EUR" | "MAD" | null;
@@ -58,6 +62,8 @@ function hydrate(row: RawHistoryRow): DeliveryHistoryItem {
     destination: row.destination,
     truck: row.truck,
     contact: row.contact,
+    recipientName: row.recipient_name ?? "",
+    recipientContact: row.recipient_contact ?? "",
     weightKg: row.weight_kg == null ? null : Number(row.weight_kg),
     priceAmount: row.price_amount == null ? null : Number(row.price_amount),
     priceCurrency: row.price_currency === "EUR" || row.price_currency === "MAD" ? row.price_currency : null,
@@ -68,17 +74,19 @@ function hydrate(row: RawHistoryRow): DeliveryHistoryItem {
 
 export async function listDeliveredHistory(
   companyId: string,
-  options: { limit?: number; cursor?: DeliveryHistoryCursor | null } = {},
+  options: { limit?: number; cursor?: DeliveryHistoryCursor | null; siteId?: string | null } = {},
 ) {
   const limit = normalizePageSize(options.limit);
   const queryLimit = limit + 1;
   const cursor = options.cursor ?? null;
+  const siteId = options.siteId ?? null;
   const rows = cursor
     ? await sql`
-        SELECT id, customer, destination, truck, contact, weight_kg, price_amount, price_currency, planned_arrival_at, created_at
+        SELECT id, customer, destination, truck, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, planned_arrival_at, created_at
         FROM deliveries
         WHERE company_id = ${companyId}
           AND status = 'Delivered'
+          AND (${siteId}::text IS NULL OR origin_site_id = ${siteId} OR destination_site_id = ${siteId})
           AND (
             created_at < ${cursor.beforeCreatedAt}
             OR (created_at = ${cursor.beforeCreatedAt} AND id < ${cursor.beforeId})
@@ -87,10 +95,11 @@ export async function listDeliveredHistory(
         LIMIT ${queryLimit}
       ` as RawHistoryRow[]
     : await sql`
-        SELECT id, customer, destination, truck, contact, weight_kg, price_amount, price_currency, planned_arrival_at, created_at
+        SELECT id, customer, destination, truck, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, planned_arrival_at, created_at
         FROM deliveries
         WHERE company_id = ${companyId}
           AND status = 'Delivered'
+          AND (${siteId}::text IS NULL OR origin_site_id = ${siteId} OR destination_site_id = ${siteId})
         ORDER BY created_at DESC, id DESC
         LIMIT ${queryLimit}
       ` as RawHistoryRow[];

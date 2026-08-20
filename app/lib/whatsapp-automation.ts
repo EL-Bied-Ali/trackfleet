@@ -10,10 +10,21 @@ export { automaticWhatsAppMessage } from "./whatsapp-message";
 
 const metaRequestTimeoutMs = 10_000;
 
-function recipientFrom(delivery: DeliveryRow) {
-  // Automatic customer notifications must only use the contact attached to
-  // this delivery. Never fall back to the demo recipient in production logic.
-  return normalizeCustomerPhone(delivery.contact) ?? "";
+function recipientsFrom(delivery: DeliveryRow) {
+  // Notifications only use contacts attached to this tenant's delivery. A
+  // phone may appear as sender and recipient; de-duplicate it before sending.
+  const candidates = [
+    { name: delivery.customer, phone: delivery.contact, consent: delivery.whatsappOptIn === true },
+    { name: delivery.recipientName ?? "", phone: delivery.recipientContact ?? "", consent: delivery.recipientWhatsappOptIn === true },
+  ];
+  const seen = new Set<string>();
+  return candidates.flatMap((candidate) => {
+    if (!candidate.consent) return [];
+    const phone = normalizeCustomerPhone(candidate.phone) ?? "";
+    if (!phone || seen.has(phone)) return [];
+    seen.add(phone);
+    return [{ name: candidate.name || delivery.customer, phone }];
+  });
 }
 
 export type AutomaticWhatsAppPayload = {
@@ -42,9 +53,9 @@ export function buildAutomaticWhatsAppPayload(
   trackingUrl: string,
 ): { payload: AutomaticWhatsAppPayload | null; reason: AutomaticPayloadBuildReason } {
   if (!isAutomaticWhatsAppEvent(event)) return { payload: null, reason: "internal_event" };
-  if (delivery.whatsappOptIn !== true) return { payload: null, reason: "consent_missing" };
+  if (delivery.whatsappOptIn !== true && delivery.recipientWhatsappOptIn !== true) return { payload: null, reason: "consent_missing" };
 
-  const recipient = recipientFrom(delivery);
+  const recipient = recipientsFrom(delivery)[0];
   if (!recipient) return { payload: null, reason: "recipient_missing" };
 
   const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
@@ -56,7 +67,7 @@ export function buildAutomaticWhatsAppPayload(
     reason: "ok",
     payload: {
       messaging_product: "whatsapp",
-      to: recipient,
+      to: recipient.phone,
       type: "template",
       template: {
         name: templateName,
@@ -64,7 +75,7 @@ export function buildAutomaticWhatsAppPayload(
         components: [{
           type: "body",
           parameters: [
-            { type: "text", text: delivery.customer },
+            { type: "text", text: recipient.name },
             { type: "text", text: delivery.id },
             { type: "text", text: message },
           ],
@@ -87,19 +98,32 @@ export async function sendAutomaticWhatsAppNotification(
 
   const built = buildAutomaticWhatsAppPayload(event, delivery, trackingUrl);
   if (!built.payload) return { sent: false, reason: built.reason };
-
-  const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+  const recipients = recipientsFrom(delivery);
+  const responses = await Promise.all(recipients.map((recipient) => fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(built.payload),
+    body: JSON.stringify({
+      ...built.payload,
+      to: recipient.phone,
+      template: {
+        ...built.payload!.template,
+        components: [{
+          ...built.payload!.template.components[0],
+          parameters: [
+            { type: "text" as const, text: recipient.name },
+            ...built.payload!.template.components[0].parameters.slice(1),
+          ],
+        }],
+      },
+    }),
     signal: AbortSignal.timeout(metaRequestTimeoutMs),
-  });
+  })));
 
-  if (!response.ok) {
+  if (responses.some((response) => !response.ok)) {
     console.error("[trackfleet:whatsapp] automatic notification failed", {
       deliveryId: delivery.id,
       event,
-      status: response.status,
+      statuses: responses.map((response) => response.status),
     });
     return { sent: false, reason: "provider_error" as const };
   }
@@ -107,6 +131,7 @@ export async function sendAutomaticWhatsAppNotification(
   console.info("[trackfleet:whatsapp] automatic notification sent", {
     deliveryId: delivery.id,
     event,
+    recipients: recipients.length,
   });
   return { sent: true as const };
 }

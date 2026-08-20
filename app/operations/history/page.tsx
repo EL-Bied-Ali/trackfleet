@@ -8,6 +8,8 @@ type HistoryItem = {
   destination: string;
   truck: string;
   contact: string;
+  recipientName: string;
+  recipientContact: string;
   plannedArrivalAt: string | null;
   createdAt: string;
 };
@@ -86,11 +88,12 @@ export default function DeliveryHistoryPage() {
           <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 16 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead><tr style={{ background: "#f9fafb", textAlign: "left" }}>
-                {['ID', 'Client', 'Destination', 'Camion', 'Arrivée prévue', 'Créée le'].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>{label}</th>)}
+                {['ID', 'Client', 'Destinataire', 'Destination', 'Camion', 'Arrivée prévue', 'Créée le'].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>{label}</th>)}
               </tr></thead>
               <tbody>{items.map((item) => <tr key={item.id}>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6", fontFamily: "monospace" }}>{item.id}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.customer}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.recipientName || "—"}{item.recipientContact ? <small style={{ display: "block", color: "#6b7280" }}>{item.recipientContact}</small> : null}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.destination}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.truck}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.plannedArrivalAt ? new Date(item.plannedArrivalAt).toLocaleString(dateLocale) : "—"}</td>

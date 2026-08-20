@@ -24,7 +24,9 @@ test("preview and real sending use the same payload builder", () => {
   assert.match(previewRoute, /buildAutomaticWhatsAppPayload/);
   assert.match(automation, /export function buildAutomaticWhatsAppPayload/);
   assert.match(automation, /const built = buildAutomaticWhatsAppPayload\(event, delivery, trackingUrl\)/);
-  assert.match(automation, /body:\s*JSON\.stringify\(built\.payload\)/);
+  assert.match(automation, /body:\s*JSON\.stringify\(\{/);
+  assert.match(automation, /\.\.\.built\.payload/);
+  assert.match(automation, /to: recipient\.phone/);
 });
 
 test("preview reports the same configured template language as real sending", () => {

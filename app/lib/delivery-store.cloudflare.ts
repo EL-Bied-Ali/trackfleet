@@ -17,7 +17,7 @@ type RawDelivery = {
   id: string; customer: string; originSiteId: string | null; originLatitude: number | null; originLongitude: number | null; destinationSiteId: string | null; destination: string;
   destinationLatitude: number | null; destinationLongitude: number | null; arrivalRadiusKm: number | null;
   truck: string; driver: string; status: DeliveryStatus; eta: string; plannedArrivalAt: number | null;
-  progress: number; color: string; contact: string; weightKg: number | null; priceAmount: number | null; priceCurrency: "EUR" | "MAD" | null; whatsappOptIn: number | null; whatsappOptInAt: number | null;
+  progress: number; color: string; contact: string; recipientName: string | null; recipientContact: string | null; weightKg: number | null; priceAmount: number | null; priceCurrency: "EUR" | "MAD" | null; whatsappOptIn: number | null; whatsappOptInAt: number | null; recipientWhatsappOptIn: number | null; recipientWhatsappOptInAt: number | null;
   sendatrackVehicleId: string; latitude: number | null; longitude: number | null; speed: number | null;
   lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; tripId: string | null; createdAt: number;
 };
@@ -35,9 +35,13 @@ function hydrate(row: RawDelivery): DeliveryRow {
     weightKg: row.weightKg ?? null,
     priceAmount: row.priceAmount ?? null,
     priceCurrency: row.priceCurrency === "EUR" || row.priceCurrency === "MAD" ? row.priceCurrency : null,
+    recipientName: row.recipientName ?? "",
+    recipientContact: row.recipientContact ?? "",
     plannedArrivalAt: row.plannedArrivalAt ? new Date(row.plannedArrivalAt) : null,
     whatsappOptIn: row.whatsappOptIn === 1,
     whatsappOptInAt: row.whatsappOptInAt ? new Date(row.whatsappOptInAt) : null,
+    recipientWhatsappOptIn: row.recipientWhatsappOptIn === 1,
+    recipientWhatsappOptInAt: row.recipientWhatsappOptInAt ? new Date(row.recipientWhatsappOptInAt) : null,
     lastPositionAt: row.lastPositionAt ? new Date(row.lastPositionAt) : null,
     createdAt: new Date(row.createdAt),
   };
@@ -56,9 +60,10 @@ function explicitOrigin(delivery: DeliveryRow): [number, number] | null {
 
 const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_latitude AS originLatitude, origin_longitude AS originLongitude, destination_site_id AS destinationSiteId, destination,
   destination_latitude AS destinationLatitude, destination_longitude AS destinationLongitude, arrival_radius_km AS arrivalRadiusKm,
-  truck, driver, status, eta, planned_arrival_at AS plannedArrivalAt, progress, color, contact,
+  truck, driver, status, eta, planned_arrival_at AS plannedArrivalAt, progress, color, contact, recipient_name AS recipientName, recipient_contact AS recipientContact,
   weight_kg AS weightKg, price_amount AS priceAmount, price_currency AS priceCurrency,
   whatsapp_opt_in AS whatsappOptIn, whatsapp_opt_in_at AS whatsappOptInAt,
+  recipient_whatsapp_opt_in AS recipientWhatsappOptIn, recipient_whatsapp_opt_in_at AS recipientWhatsappOptInAt,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
   last_position_at AS lastPositionAt, gps_source AS gpsSource, company_id AS companyId,
   tracking_token AS trackingToken, trip_id AS tripId, created_at AS createdAt`;
@@ -252,17 +257,19 @@ export const store: DeliveryStore = {
       ...input,
       whatsappOptIn: input.whatsappOptIn === true,
       whatsappOptInAt: input.whatsappOptIn === true ? (input.whatsappOptInAt ?? new Date()) : null,
+      recipientWhatsappOptIn: input.recipientWhatsappOptIn === true,
+      recipientWhatsappOptInAt: input.recipientWhatsappOptIn === true ? (input.recipientWhatsappOptInAt ?? new Date()) : null,
       id: createDeliveryId(),
       createdAt: new Date(),
     };
     await db().prepare(`INSERT INTO deliveries
       (id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-       truck, driver, status, eta, planned_arrival_at, progress, color, contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
+       truck, driver, status, eta, planned_arrival_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.originLatitude, delivery.originLongitude, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
         delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null,
-        delivery.progress, delivery.color, delivery.contact, delivery.weightKg ?? null, delivery.priceAmount ?? null, delivery.priceCurrency ?? null, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
+        delivery.progress, delivery.color, delivery.contact, delivery.recipientName ?? "", delivery.recipientContact ?? "", delivery.weightKg ?? null, delivery.priceAmount ?? null, delivery.priceCurrency ?? null, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.recipientWhatsappOptIn === true ? 1 : 0, delivery.recipientWhatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
         delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.createdAt.getTime()).run();
     return delivery;

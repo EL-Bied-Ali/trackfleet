@@ -50,12 +50,13 @@ test("new parcel creation immediately queues registration and processes notifica
   assert.match(deliveryRoute, /processPendingNotifications\(session\.companyId, new URL\(request\.url\)\.origin\)/);
 });
 
-test("WhatsApp consent is explicit, voluntary and persisted on parcel creation", () => {
+test("WhatsApp consent is explicit for new numbers, remembered, and persisted for both contacts", () => {
   assert.match(page, /type=["']checkbox["'] name=["']whatsappOptIn["']/);
   assert.doesNotMatch(page, /type=["']checkbox["'] name=["']whatsappOptIn["'][^>]*defaultChecked/);
   assert.match(page, /form\.get\(["']whatsappOptIn["']\) === ["']on["']/);
   assert.match(deliveryRoute, /payload\.whatsappOptIn === true/);
-  assert.match(deliveryRoute, /WhatsApp consent requires a valid customer phone number/);
+  assert.match(deliveryRoute, /rememberedConsentForPhone/);
+  assert.match(deliveryRoute, /recipientWhatsappOptIn/);
   assert.match(deliveryRoute, /whatsappOptInAt: whatsappOptIn \? new Date\(\) : null/);
   assert.match(postgresStore, /whatsapp_opt_in boolean NOT NULL DEFAULT false/);
   assert.match(postgresStore, /whatsapp_opt_in_at timestamptz/);
@@ -65,11 +66,20 @@ test("WhatsApp consent is explicit, voluntary and persisted on parcel creation",
   assert.match(cloudflareStore, /delivery\.whatsappOptInAt\?\.getTime\(\) \?\? null/);
   assert.match(schema, /whatsappOptIn: integer\(["']whatsapp_opt_in["']/);
   assert.match(schema, /whatsappOptInAt: integer\(["']whatsapp_opt_in_at["']/);
+  assert.match(schema, /recipientWhatsappOptIn: integer\(["']recipient_whatsapp_opt_in["']/);
+  assert.match(schema, /recipientWhatsappOptInAt: integer\(["']recipient_whatsapp_opt_in_at["']/);
 });
 
 test("automatic WhatsApp payload refuses missing consent", () => {
-  assert.match(whatsapp, /delivery\.whatsappOptIn !== true/);
+  assert.match(whatsapp, /delivery\.whatsappOptIn !== true && delivery\.recipientWhatsappOptIn !== true/);
   assert.match(whatsapp, /reason: ["']consent_missing["']/);
+});
+
+test("automatic WhatsApp delivery targets sender and receiver without duplicate numbers", () => {
+  assert.match(whatsapp, /delivery\.recipientName/);
+  assert.match(whatsapp, /delivery\.recipientContact/);
+  assert.match(whatsapp, /new Set<string>\(\)/);
+  assert.match(whatsapp, /Promise\.all/);
 });
 
 test("scheduler provides a safe registration fallback without messaging historical parcels", () => {
@@ -107,7 +117,7 @@ test("automatic customer links require a private tracking token and never fall b
 
 test("public tracking uses an explicit allowlist and never returns internal consent/contact fields", () => {
   assert.match(deliveryRoute, /publicDeliveryView\(enriched\)/);
-  for (const field of ["companyId", "contact", "trackingToken", "whatsappOptIn", "whatsappOptInAt"]) {
+  for (const field of ["companyId", "contact", "recipientName", "recipientContact", "trackingToken", "whatsappOptIn", "whatsappOptInAt", "recipientWhatsappOptIn", "recipientWhatsappOptInAt"]) {
     assert.doesNotMatch(publicView, new RegExp(`\\b${field}\\s*:`), `${field} must not be projected publicly`);
   }
 });

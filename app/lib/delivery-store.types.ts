@@ -24,11 +24,15 @@ export type DeliveryRow = {
   progress: number;
   color: string;
   contact: string;
+  recipientName?: string;
+  recipientContact?: string;
   weightKg?: number | null;
   priceAmount?: number | null;
   priceCurrency?: DeliveryPriceCurrency | null;
   whatsappOptIn?: boolean;
   whatsappOptInAt?: Date | null;
+  recipientWhatsappOptIn?: boolean;
+  recipientWhatsappOptInAt?: Date | null;
   sendatrackVehicleId: string;
   latitude: number | null;
   longitude: number | null;

@@ -4,7 +4,7 @@ import { siteStore } from "trackfleet-site-store";
 import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
-import { customerFacingEvent } from "../../lib/delivery-events";
+import { customerFacingEvent, whatsappConsentWithdrawn } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
@@ -142,6 +142,20 @@ function optionalNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function rememberedConsentForPhone(deliveries: DeliveryRow[], phone: string) {
+  if (!phone) return false;
+  for (const delivery of deliveries) {
+    const customerMatches = normalizeCustomerPhone(delivery.contact) === phone;
+    const recipientMatches = normalizeCustomerPhone(delivery.recipientContact ?? "") === phone;
+    if (!customerMatches && !recipientMatches) continue;
+    const events = await store.listEvents(delivery.id);
+    if (whatsappConsentWithdrawn(events)) return false;
+    if ((customerMatches && delivery.whatsappOptIn === true)
+      || (recipientMatches && delivery.recipientWhatsappOptIn === true)) return true;
+  }
+  return false;
 }
 
 async function idempotentReplayResponse(delivery: DeliveryRow, companyId: string) {
@@ -378,6 +392,8 @@ export async function POST(request: Request) {
     const eta = String(payload.eta ?? "").trim();
     const plannedArrivalRaw = String(payload.plannedArrivalAt ?? "").trim();
     const contactInput = String(payload.contact ?? "").trim();
+    const recipientName = String(payload.recipientName ?? "").trim();
+    const recipientContactInput = String(payload.recipientContact ?? "").trim();
     const weightProvided = payload.weightKg !== null && payload.weightKg !== undefined && String(payload.weightKg).trim() !== "";
     const priceProvided = payload.priceAmount !== null && payload.priceAmount !== undefined && String(payload.priceAmount).trim() !== "";
     const weightInput = optionalNumber(payload.weightKg);
@@ -393,6 +409,8 @@ export async function POST(request: Request) {
       || eta.length > 16
       || plannedArrivalRaw.length > 64
       || contactInput.length > 40
+      || recipientName.length > 160
+      || recipientContactInput.length > 40
     ) {
       return Response.json({ error: "delivery fields exceed allowed length" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
@@ -431,10 +449,24 @@ export async function POST(request: Request) {
     if (contact === null) {
       return Response.json({ error: "contact must use an international phone format, for example +212... or +32..." }, { status: 400 });
     }
-    const whatsappOptIn = payload.whatsappOptIn === true;
-    if (whatsappOptIn && !contact) {
-      return Response.json({ error: "WhatsApp consent requires a valid customer phone number" }, { status: 400 });
+    const recipientContact = normalizeCustomerPhone(recipientContactInput);
+    if (recipientContact === null) {
+      return Response.json({ error: "recipientContact must use an international phone format, for example +212... or +32..." }, { status: 400 });
     }
+    if (Boolean(recipientName) !== Boolean(recipientContact)) {
+      return Response.json({ error: "recipientName and recipientContact must be provided together" }, { status: 400 });
+    }
+    const explicitWhatsappConsent = payload.whatsappOptIn === true;
+    if (explicitWhatsappConsent && !contact && !recipientContact) {
+      return Response.json({ error: "WhatsApp consent requires at least one valid phone number" }, { status: 400 });
+    }
+    const existingDeliveries = await store.listForCompany(session.companyId);
+    const [customerConsentRemembered, recipientConsentRemembered] = await Promise.all([
+      rememberedConsentForPhone(existingDeliveries, contact),
+      rememberedConsentForPhone(existingDeliveries, recipientContact),
+    ]);
+    const whatsappOptIn = Boolean(contact) && (explicitWhatsappConsent || customerConsentRemembered);
+    const recipientWhatsappOptIn = Boolean(recipientContact) && (explicitWhatsappConsent || recipientConsentRemembered);
 
     const requestedDestinationLatitude = optionalNumber(payload.destinationLatitude);
     const requestedDestinationLongitude = optionalNumber(payload.destinationLongitude);
@@ -462,7 +494,7 @@ export async function POST(request: Request) {
         if (session.role === "agency" && !agencyDeliveryIsVisible(existing, session.siteId)) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
-        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
+        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
         return idempotentReplayResponse(existing, session.companyId);
@@ -496,11 +528,15 @@ export async function POST(request: Request) {
         eta: normalizedEta,
         plannedArrivalAt,
         contact,
+        recipientName,
+        recipientContact,
         weightKg,
         priceAmount,
         priceCurrency,
         whatsappOptIn,
         whatsappOptInAt: whatsappOptIn ? new Date() : null,
+        recipientWhatsappOptIn,
+        recipientWhatsappOptInAt: recipientWhatsappOptIn ? new Date() : null,
         sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
         companyId: session.companyId,
         trackingToken: idempotencyTrackingToken ?? createTrackingToken(),
@@ -514,7 +550,7 @@ export async function POST(request: Request) {
         const existing = await store.getPublic(idempotencyTrackingToken).catch(() => null);
         if (existing?.companyId === session.companyId
           && (session.role === "dispatcher" || agencyDeliveryIsVisible(existing, session.siteId))
-          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
+          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
           return idempotentReplayResponse(existing, session.companyId);
         }
       }
