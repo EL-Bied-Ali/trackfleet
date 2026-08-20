@@ -11,6 +11,8 @@ test("quick tools are hidden outside the authenticated dashboard and on public t
   assert.match(source, /url\.searchParams\.has\("tracking"\)/);
   assert.match(source, /fetch\("\/api\/auth\/session"/);
   assert.match(source, /response\.ok \? "visible" : "hidden"/);
+  assert.match(source, /window\.addEventListener\("popstate", syncLocation\)/);
+  assert.match(source, /\[locationKey\]/);
 });
 
 test("quick tools expose operations, history, storage, export and bulk import only after becoming visible", async () => {
