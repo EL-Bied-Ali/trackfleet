@@ -1,4 +1,5 @@
 export const MAX_BULK_DELIVERY_ROWS = 100;
+const UNASSIGNED_TRUCK = "__unassigned__";
 
 export type BulkDeliveryDraft = {
   rowNumber: number;
@@ -104,7 +105,7 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
   for (const header of headers) {
     if (!acceptedHeaders.has(header)) errors.push(`Unsupported CSV header: ${header}`);
   }
-  for (const required of ["customer", "destination", "planned_arrival_at", "truck"]) {
+  for (const required of ["customer", "destination", "planned_arrival_at"]) {
     if (!headers.includes(required)) errors.push(`Missing required CSV header: ${required}`);
   }
   if (errors.length) return { rows: [], errors };
@@ -144,13 +145,12 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
 
     if (!customer) errors.push(`Row ${rowNumber}: customer is required`);
     if (!destination) errors.push(`Row ${rowNumber}: destination is required`);
-    if (!truck) errors.push(`Row ${rowNumber}: truck is required`);
     if (!plannedArrivalAt) errors.push(`Row ${rowNumber}: planned_arrival_at is invalid`);
     if (whatsappOptIn === null) errors.push(`Row ${rowNumber}: whatsapp_opt_in must be true/false, yes/no, oui/non or 1/0`);
     if (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) errors.push(`Row ${rowNumber}: weight_kg must be greater than 0 and at most 100000`);
     if (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) errors.push(`Row ${rowNumber}: price_amount must be greater than 0 and at most 10000000`);
     if ((priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) errors.push(`Row ${rowNumber}: price_currency must be EUR or MAD and supplied together with price_amount`);
-    if (!customer || !destination || !truck || !plannedArrivalAt || whatsappOptIn === null || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) || (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) || (priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) continue;
+    if (!customer || !destination || !plannedArrivalAt || whatsappOptIn === null || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) || (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) || (priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) continue;
 
     rows.push({
       rowNumber,
@@ -160,7 +160,7 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
       destinationSiteId: get(values, "destination_site_id"),
       plannedArrivalAt,
       contact: get(values, "contact"),
-      truck,
+      truck: truck || UNASSIGNED_TRUCK,
       sendatrackVehicleId: get(values, "sendatrack_vehicle_id"),
       whatsappOptIn,
       weightKg: weightKg === null ? null : Math.round(weightKg * 1000) / 1000,

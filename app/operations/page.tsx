@@ -18,7 +18,7 @@ function localeFromUrl(): Locale {
 
 const copy = {
   fr: {
-    eyebrow: "CENTRE D’OPÉRATIONS", title: "Anomalies à traiter", back: "Retour au dashboard", import: "Import CSV", refresh: "Actualiser",
+    eyebrow: "CENTRE D’OPÉRATIONS", title: "Anomalies à traiter", back: "Retour au tableau de bord", import: "Importer un CSV", refresh: "Actualiser", viewDelivery: "Ouvrir le colis",
     critical: "Critiques", high: "Haute priorité", medium: "À surveiller", affected: "Colis concernés", all: "Toutes", updated: "Dernière mise à jour",
     loading: "Analyse de la flotte…", emptyTitle: "Aucune anomalie importante", emptyBody: "Les livraisons actives ne nécessitent pas d’intervention pour le moment.",
     errorTitle: "Données indisponibles", errorBody: "Impossible de charger l’état opérationnel. Réessayez dans quelques instants.",
@@ -33,7 +33,7 @@ const copy = {
     },
   },
   en: {
-    eyebrow: "OPERATIONS CENTER", title: "Issues requiring attention", back: "Back to dashboard", import: "CSV import", refresh: "Refresh",
+    eyebrow: "OPERATIONS CENTER", title: "Issues requiring attention", back: "Back to dashboard", import: "CSV import", refresh: "Refresh", viewDelivery: "Open parcel",
     critical: "Critical", high: "High priority", medium: "Monitor", affected: "Affected parcels", all: "All", updated: "Last updated",
     loading: "Analysing fleet…", emptyTitle: "No material operational issues", emptyBody: "Active deliveries do not require intervention right now.",
     errorTitle: "Data unavailable", errorBody: "Unable to load operational state. Try again shortly.",
@@ -48,7 +48,7 @@ const copy = {
     },
   },
   nl: {
-    eyebrow: "OPERATIECENTRUM", title: "Afwijkingen die aandacht vragen", back: "Terug naar dashboard", import: "CSV import", refresh: "Vernieuwen",
+    eyebrow: "OPERATIECENTRUM", title: "Afwijkingen die aandacht vragen", back: "Terug naar dashboard", import: "CSV import", refresh: "Vernieuwen", viewDelivery: "Zending openen",
     critical: "Kritiek", high: "Hoge prioriteit", medium: "Opvolgen", affected: "Betrokken zendingen", all: "Alle", updated: "Laatst bijgewerkt",
     loading: "Wagenpark analyseren…", emptyTitle: "Geen belangrijke afwijkingen", emptyBody: "Actieve leveringen vereisen momenteel geen interventie.",
     errorTitle: "Gegevens niet beschikbaar", errorBody: "De operationele status kon niet worden geladen. Probeer straks opnieuw.",
@@ -112,7 +112,7 @@ export default function OperationsPage() {
           <article className={styles.summaryCard}><span>{t.critical}</span><strong>{summary.critical}</strong></article><article className={styles.summaryCard}><span>{t.high}</span><strong>{summary.high}</strong></article><article className={styles.summaryCard}><span>{t.medium}</span><strong>{summary.medium}</strong></article><article className={styles.summaryCard}><span>{t.affected}</span><strong>{summary.affectedDeliveries}</strong></article>
         </section>
         <div className={styles.toolbar}><div className={styles.filters}>{(["all", "critical", "high", "medium"] as SeverityFilter[]).map((severity) => <button key={severity} className={filter === severity ? styles.filterActive : styles.filter} onClick={() => setFilter(severity)}>{severity === "all" ? t.all : severity === "critical" ? t.critical : severity === "high" ? t.high : t.medium}</button>)}</div><span className={styles.updated}>{t.updated}: {updatedAt?.toLocaleTimeString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span></div>
-        {visible.length === 0 ? <section className={styles.empty}><h2>{t.emptyTitle}</h2><p>{t.emptyBody}</p></section> : <section className={styles.list}>{visible.map((alert) => <article key={alert.id} className={`${styles.alert} ${styles[alert.severity]}`}><span className={styles.severity}>{alert.severity === "critical" ? t.critical : alert.severity === "high" ? t.high : t.medium}</span><div className={styles.alertBody}><strong>{t.labels[alert.kind]}</strong><p>{t.descriptions[alert.kind](alert as never)}{alert.destination ? ` · ${alert.destination}` : ""}</p></div><span className={styles.deliveryId}>{alert.deliveryId ?? "SYSTEM"}</span></article>)}</section>}
+        {visible.length === 0 ? <section className={styles.empty}><h2>{t.emptyTitle}</h2><p>{t.emptyBody}</p></section> : <section className={styles.list}>{visible.map((alert) => <article key={alert.id} className={`${styles.alert} ${styles[alert.severity]}`}><span className={styles.severity}>{alert.severity === "critical" ? t.critical : alert.severity === "high" ? t.high : t.medium}</span><div className={styles.alertBody}><strong>{t.labels[alert.kind]}</strong><p>{t.descriptions[alert.kind](alert as never)}{alert.destination ? ` · ${alert.destination}` : ""}</p></div><div className={styles.alertActions}><span className={styles.deliveryId}>{alert.deliveryId ?? "SYSTEM"}</span>{alert.deliveryId && <Link className={styles.alertLink} href={`/?lang=${locale}&delivery=${encodeURIComponent(alert.deliveryId)}`}>{t.viewDelivery}</Link>}</div></article>)}</section>}
       </>}
     </div></main>
   );

@@ -281,7 +281,11 @@ export default function Home() {
         } else if (!tracking) {
           setDeliveries(data.deliveries);
           setDispatchDataState("ready");
-          setSelectedId((current) => data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === current) ? data.deliveries[0].id : current);
+          const requestedDeliveryId = new URLSearchParams(window.location.search).get("delivery");
+          setSelectedId((current) => requestedDeliveryId && data.deliveries.some((delivery) => delivery.id === requestedDeliveryId)
+            ? requestedDeliveryId
+            : data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === current) ? data.deliveries[0].id : current);
+          if (requestedDeliveryId && data.deliveries.some((delivery) => delivery.id === requestedDeliveryId)) setShowPopover(true);
         }
         if (data.integration) setIntegration(data.integration);
         if (data.features) setFeatures(data.features);
@@ -452,6 +456,7 @@ export default function Home() {
     link.searchParams.set("lang", locale);
     window.history.pushState({}, "", link);
     setView("customer");
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   function openDispatchView() {
@@ -459,6 +464,7 @@ export default function Home() {
     dashboardUrl.searchParams.set("lang", locale);
     window.history.pushState({}, "", dashboardUrl);
     setView("dispatch");
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   function changeLocale(nextLocale: Locale) {
@@ -466,6 +472,7 @@ export default function Home() {
     const nextUrl = new URL(window.location.href);
     nextUrl.searchParams.set("lang", nextLocale);
     window.history.replaceState({}, "", nextUrl);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   async function login(event: React.FormEvent<HTMLFormElement>) {
@@ -742,6 +749,9 @@ export default function Home() {
       delayMinutes: selected.etaDelayMinutes,
       historyTrips: selected.etaHistoryTrips,
     }, locale);
+    const customerVehicleLabel = isUnassignedVehicle(selected)
+      ? (locale === "fr" ? "Véhicule pas encore affecté" : locale === "nl" ? "Voertuig nog niet toegewezen" : "Vehicle not assigned yet")
+      : selected.truck;
 
     return (
       <main className="customer-page">
@@ -781,14 +791,14 @@ export default function Home() {
 
           <div className="customer-grid">
             <div className="map customer-map">
-              <InteractiveFleetMap deliveries={deliveries} selectedId={selectedId} customerMode label={`${routeDirection} · ${selected.truck}`} />
+              <InteractiveFleetMap deliveries={deliveries} selectedId={selectedId} customerMode label={`${routeDirection} · ${customerVehicleLabel}`} />
               <div className="map-live"><i className={selected.gpsFresh ? "" : "fallback"} /> {gpsText}</div>
             </div>
 
             <aside className="journey-card">
               <div className="journey-title">
                 <div className="mini-truck">▰</div>
-                <div><strong>{selected.truck}</strong><span>{t.yourVehicle}</span></div>
+                <div><strong>{customerVehicleLabel}</strong><span>{t.yourVehicle}</span></div>
               </div>
               <div className="timeline">
                 {deliveryEvents.length > 0 ? deliveryEvents.map((event) => (
@@ -917,7 +927,7 @@ export default function Home() {
           <div className="panel-header"><div><h2>{locale === "fr" ? "Tournées actives" : locale === "nl" ? "Actieve ritten" : "Active tours"}</h2><p>{locale === "fr" ? "La même séquence d’agences réutilise automatiquement la même route" : locale === "nl" ? "Dezelfde volgorde van locaties hergebruikt automatisch dezelfde route" : "The same stop sequence automatically reuses the same route"}</p></div><span className="tour-count">{stopPlans.length}</span></div>
           <div className="tour-list">
             {stopPlans.map((plan) => <article className="tour-card" key={activeTourKey(plan)}>
-              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? "livraison(s)" : locale === "nl" ? "levering(en)" : "delivery(ies)"} · {tourCustomerCount(plan)} {locale === "fr" ? "client(s)" : locale === "nl" ? "klant(en)" : "customer(s)"}</small></div>{plan.learning && <div className="eta-explanation"><strong>{plan.learning.stage === "ready" ? (locale === "fr" ? "Route apprise" : locale === "nl" ? "Route geleerd" : "Route learned") : (locale === "fr" ? "Apprentissage de la route" : locale === "nl" ? "Route wordt geleerd" : "Learning route")}</strong><span>{plan.learning.historicalTrips}/{plan.learning.requiredTrips} {locale === "fr" ? "voyages" : locale === "nl" ? "ritten" : "trips"}{plan.learning.futureStops > 0 ? ` · ${plan.learning.learnedStops}/${plan.learning.futureStops} ${locale === "fr" ? "arrêts appris" : locale === "nl" ? "stops geleerd" : "stops learned"}` : ""}{plan.learning.unconfiguredStops > 0 ? ` · ${plan.learning.unconfiguredStops} ${locale === "fr" ? "sans coordonnées exactes" : locale === "nl" ? "zonder exacte coördinaten" : "missing exact coordinates"}` : ""}</span>{plan.learning.medianEffectiveSpeedKmh !== null && <span>{locale === "fr" ? "Vitesse médiane" : locale === "nl" ? "Mediane snelheid" : "Median speed"}: {plan.learning.medianEffectiveSpeedKmh} km/h{plan.learning.medianDelayMinutes !== null ? ` · ${locale === "fr" ? "retard médian" : locale === "nl" ? "mediane vertraging" : "median delay"}: ${plan.learning.medianDelayMinutes > 0 ? "+" : ""}${plan.learning.medianDelayMinutes} min` : ""}</span>}</div>}
+              <div className="tour-card-head"><div><strong>{plan.truck}</strong><span>{activeTourDisplayId(plan)} · {plan.routeTemplateId}</span></div><small>{tourDeliveryCount(plan)} {locale === "fr" ? (tourDeliveryCount(plan) === 1 ? "livraison" : "livraisons") : locale === "nl" ? (tourDeliveryCount(plan) === 1 ? "levering" : "leveringen") : (tourDeliveryCount(plan) === 1 ? "delivery" : "deliveries")} · {tourCustomerCount(plan)} {locale === "fr" ? (tourCustomerCount(plan) === 1 ? "client" : "clients") : locale === "nl" ? (tourCustomerCount(plan) === 1 ? "klant" : "klanten") : (tourCustomerCount(plan) === 1 ? "customer" : "customers")}</small></div>{plan.learning && <div className="eta-explanation"><strong>{plan.learning.stage === "ready" ? (locale === "fr" ? "Route apprise" : locale === "nl" ? "Route geleerd" : "Route learned") : (locale === "fr" ? "Apprentissage de la route" : locale === "nl" ? "Route wordt geleerd" : "Learning route")}</strong><span>{plan.learning.historicalTrips}/{plan.learning.requiredTrips} {locale === "fr" ? "voyages" : locale === "nl" ? "ritten" : "trips"}{plan.learning.futureStops > 0 ? ` · ${plan.learning.learnedStops}/${plan.learning.futureStops} ${locale === "fr" ? "arrêts appris" : locale === "nl" ? "stops geleerd" : "stops learned"}` : ""}{plan.learning.unconfiguredStops > 0 ? ` · ${plan.learning.unconfiguredStops} ${locale === "fr" ? "sans coordonnées exactes" : locale === "nl" ? "zonder exacte coördinaten" : "missing exact coordinates"}` : ""}</span>{plan.learning.medianEffectiveSpeedKmh !== null && <span>{locale === "fr" ? "Vitesse médiane" : locale === "nl" ? "Mediane snelheid" : "Median speed"}: {plan.learning.medianEffectiveSpeedKmh} km/h{plan.learning.medianDelayMinutes !== null ? ` · ${locale === "fr" ? "retard médian" : locale === "nl" ? "mediane vertraging" : "median delay"}: ${plan.learning.medianDelayMinutes > 0 ? "+" : ""}${plan.learning.medianDelayMinutes} min` : ""}</span>}</div>}
               <div className="tour-stops">{stopSequence(plan).map((stop) => <button type="button" className="tour-stop" key={stop.siteId} onClick={() => { const firstDelivery = stop.deliveryIds.find((id) => deliveries.some((delivery) => delivery.id === id)); if (firstDelivery) { setSelectedId(firstDelivery); setShowPopover(true); } }}><i>{stop.sequence}</i><span><strong>{stop.destination}</strong><small>{stop.deliveryIds.length} {locale === "fr" ? "colis" : locale === "nl" ? "zending(en)" : "parcel(s)"}{stop.plannedArrivalAt ? ` · ${new Date(stop.plannedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}</small></span></button>)}</div>
             </article>)}
           </div>

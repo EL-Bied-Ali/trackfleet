@@ -42,11 +42,30 @@
 
 @media (max-width: 720px) {
   .tools {
-    right: 12px;
-    bottom: 12px;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
   }
   .tool,
   .toolPrimary {
-    padding: 0 10px;
+    min-width: 0;
+    min-height: 44px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 2px;
+    overflow: hidden;
+    font-size: 10px;
+    text-align: center;
+  }
+  .tool > span:last-child,
+  .toolPrimary > span:last-child {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }

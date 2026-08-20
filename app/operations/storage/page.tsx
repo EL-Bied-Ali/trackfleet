@@ -18,9 +18,9 @@ type Report = { available: boolean; generatedAt: string; metrics: Metric[] };
 type Locale = "fr" | "en" | "nl";
 
 const labels = {
-  fr: { title: "Croissance des données", subtitle: "Volume de télémétrie pour votre entreprise", back: "Retour aux opérations", total: "Total", day: "24 h", week: "7 jours", month: "Projection 30 jours", oldest: "Plus ancienne donnée", refreshed: "Actualisé", unavailable: "Rapport indisponible" },
-  en: { title: "Data growth", subtitle: "Telemetry volume for your company", back: "Back to operations", total: "Total", day: "24h", week: "7 days", month: "30-day projection", oldest: "Oldest data", refreshed: "Updated", unavailable: "Report unavailable" },
-  nl: { title: "Datagroei", subtitle: "Telemetrievolume voor uw bedrijf", back: "Terug naar operaties", total: "Totaal", day: "24 u", week: "7 dagen", month: "Projectie 30 dagen", oldest: "Oudste data", refreshed: "Bijgewerkt", unavailable: "Rapport niet beschikbaar" },
+  fr: { eyebrow: "TRACKFLEET · STOCKAGE", title: "Croissance des données", subtitle: "Volume de télémétrie pour votre entreprise", back: "Retour aux opérations", total: "Total", day: "24 h", week: "7 jours", month: "Projection 30 jours", oldest: "Plus ancienne donnée", refreshed: "Actualisé", rows: "lignes", unavailable: "Rapport indisponible" },
+  en: { eyebrow: "TRACKFLEET · STORAGE", title: "Data growth", subtitle: "Telemetry volume for your company", back: "Back to operations", total: "Total", day: "24h", week: "7 days", month: "30-day projection", oldest: "Oldest data", refreshed: "Updated", rows: "rows", unavailable: "Report unavailable" },
+  nl: { eyebrow: "TRACKFLEET · OPSLAG", title: "Datagroei", subtitle: "Telemetrievolume voor uw bedrijf", back: "Terug naar operaties", total: "Totaal", day: "24 u", week: "7 dagen", month: "Projectie 30 dagen", oldest: "Oudste data", refreshed: "Bijgewerkt", rows: "rijen", unavailable: "Rapport niet beschikbaar" },
 } as const;
 
 const metricLabels = {
@@ -77,7 +77,7 @@ export default function StorageOperationsPage() {
     <main className={styles.page}>
       <div className={styles.shell}>
         <header className={styles.header}>
-          <div><p className={styles.eyebrow}>TRACKFLEET STORAGE</p><h1>{t.title}</h1><p>{t.subtitle}</p></div>
+          <div><p className={styles.eyebrow}>{t.eyebrow}</p><h1>{t.title}</h1><p>{t.subtitle}</p></div>
           <Link className={styles.button} href={`/operations?lang=${locale}`}>{t.back}</Link>
         </header>
 
@@ -87,7 +87,7 @@ export default function StorageOperationsPage() {
         {state === "ready" && report ? (
           <>
             <section className={styles.overview}>
-              <article><span>{t.month}</span><strong>{totalProjected.toLocaleString()}</strong><small>rows</small></article>
+              <article><span>{t.month}</span><strong>{totalProjected.toLocaleString()}</strong><small>{t.rows}</small></article>
               <article><span>{t.refreshed}</span><strong>{new Date(report.generatedAt).toLocaleTimeString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { hour: "2-digit", minute: "2-digit" })}</strong></article>
             </section>
             <section className={styles.grid}>

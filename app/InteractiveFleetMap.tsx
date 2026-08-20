@@ -51,6 +51,10 @@ function positionFor(delivery: MapDelivery, index: number): [number, number] {
   return vehiclePositions[delivery.id] ?? corridor[Math.min(index + 1, corridor.length - 1)];
 }
 
+function hasExactPosition(delivery: MapDelivery) {
+  return typeof delivery.latitude === "number" && typeof delivery.longitude === "number";
+}
+
 function exactDestination(delivery: MapDelivery): [number, number] | null {
   return typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
     ? [delivery.destinationLongitude, delivery.destinationLatitude]
@@ -162,7 +166,11 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = [], sel
     const corridorSource = map.getSource("corridor") as GeoJSONSource | undefined;
     corridorSource?.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeCoordinates } });
 
-    const shownDeliveries = customerMode ? deliveries.filter((delivery) => delivery.id === selectedId) : deliveries;
+    // Never invent a truck position on the customer view. Until real GPS is
+    // available the route and destination remain visible without a fake marker.
+    const shownDeliveries = customerMode
+      ? deliveries.filter((delivery) => delivery.id === selectedId && hasExactPosition(delivery))
+      : deliveries;
     const markers = shownDeliveries.map((delivery, index) => {
       const button = document.createElement("button");
       button.type = "button";

@@ -65,15 +65,15 @@ export default function DeliveryHistoryPage() {
 
   const dateLocale = language === "nl" ? "nl-BE" : language === "en" ? "en-GB" : "fr-BE";
   const copy = language === "nl"
-    ? { title: "Leveringsgeschiedenis", back: "Terug naar operations", empty: "Nog geen voltooide leveringen.", more: "Meer laden", loading: "Geschiedenis laden…", retry: "Opnieuw proberen", error: "Geschiedenis kon niet worden geladen." }
+    ? { eyebrow: "TRACKFLEET · HISTORIEK", title: "Leveringsgeschiedenis", back: "Terug naar operaties", empty: "Nog geen voltooide leveringen.", more: "Meer laden", loading: "Geschiedenis laden…", retry: "Opnieuw proberen", error: "Geschiedenis kon niet worden geladen." }
     : language === "en"
-      ? { title: "Delivery history", back: "Back to operations", empty: "No completed deliveries yet.", more: "Load more", loading: "Loading history…", retry: "Retry", error: "Unable to load delivery history." }
-      : { title: "Historique des livraisons", back: "Retour aux opérations", empty: "Aucune livraison terminée pour le moment.", more: "Charger plus", loading: "Chargement de l’historique…", retry: "Réessayer", error: "Impossible de charger l’historique." };
+      ? { eyebrow: "TRACKFLEET · HISTORY", title: "Delivery history", back: "Back to operations", empty: "No completed deliveries yet.", more: "Load more", loading: "Loading history…", retry: "Retry", error: "Unable to load delivery history." }
+      : { eyebrow: "TRACKFLEET · HISTORIQUE", title: "Historique des livraisons", back: "Retour aux opérations", empty: "Aucune livraison terminée pour le moment.", more: "Charger plus", loading: "Chargement de l’historique…", retry: "Réessayer", error: "Impossible de charger l’historique." };
 
   return (
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 24px 64px", fontFamily: "system-ui", color: "#111827" }}>
       <header style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", marginBottom: 24 }}>
-        <div><p style={{ margin: 0, color: "#6b7280", fontSize: 12, fontWeight: 700, letterSpacing: ".12em" }}>TRACKFLEET · HISTORY</p><h1 style={{ margin: "6px 0" }}>{copy.title}</h1></div>
+        <div><p style={{ margin: 0, color: "#6b7280", fontSize: 12, fontWeight: 700, letterSpacing: ".12em" }}>{copy.eyebrow}</p><h1 style={{ margin: "6px 0" }}>{copy.title}</h1></div>
         <a href={`/operations?lang=${language}`} style={{ color: "#111827", fontWeight: 700 }}>{copy.back}</a>
       </header>
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MAX_BULK_DELIVERY_ROWS, parseBulkDeliveryCsv } from "../app/lib/bulk-delivery-import.ts";
+import { UNASSIGNED_TRUCK } from "../app/lib/delivery-vehicle-choice.ts";
 
 test("parses a quoted delivery CSV row", () => {
   const result = parseBulkDeliveryCsv([
@@ -22,8 +23,17 @@ test("reports invalid required fields before import", () => {
   ].join("\n"));
   assert.equal(result.rows.length, 0);
   assert.ok(result.errors.some((error) => error.includes("customer is required")));
-  assert.ok(result.errors.some((error) => error.includes("truck is required")));
   assert.ok(result.errors.some((error) => error.includes("planned_arrival_at is invalid")));
+});
+
+test("accepts a bulk parcel without a truck and queues it for assignment", () => {
+  const result = parseBulkDeliveryCsv([
+    "customer,destination,planned_arrival_at",
+    "Client sans camion,Casablanca,2026-08-20T14:00:00Z",
+  ].join("\n"));
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.rows[0].truck, UNASSIGNED_TRUCK);
+  assert.equal(result.rows[0].sendatrackVehicleId, "");
 });
 
 test("parses optional weight and EUR or MAD prices without inventing missing values", () => {

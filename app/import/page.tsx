@@ -7,6 +7,7 @@ import {
   parseBulkDeliveryCsv,
   type BulkDeliveryDraft,
 } from "../lib/bulk-delivery-import";
+import { UNASSIGNED_TRUCK } from "../lib/delivery-vehicle-choice";
 
 type ImportStatus = "pending" | "success" | "failed";
 type ImportRow = BulkDeliveryDraft & { idempotencyKey: string; status: ImportStatus; error?: string };
@@ -116,7 +117,7 @@ export default function BulkImportPage() {
           <h1 style={{ margin: "6px 0" }}>Importer des livraisons en masse</h1>
           <p style={{ margin: 0, color: "#6b7280" }}>Prévisualisez et validez jusqu’à 100 colis avant de les créer.</p>
         </div>
-        <Link href="/" style={{ color: "#111827", fontWeight: 700 }}>← Dashboard</Link>
+        <Link href="/?lang=fr" style={{ color: "#111827", fontWeight: 700 }}>← Tableau de bord</Link>
       </header>
 
       <section style={{ border: "1px solid #e5e7eb", borderRadius: 16, padding: 20, marginBottom: 20 }}>
@@ -129,7 +130,7 @@ export default function BulkImportPage() {
           {fileName && <span style={{ color: "#6b7280" }}>{fileName}</span>}
         </div>
         <p style={{ marginBottom: 0, color: "#6b7280", fontSize: 14 }}>
-          Colonnes obligatoires : <code>customer</code>, <code>destination</code>, <code>planned_arrival_at</code>, <code>truck</code>. Les autres colonnes sont facultatives.
+          Colonnes obligatoires : <code>customer</code>, <code>destination</code>, <code>planned_arrival_at</code>. Le camion et les autres colonnes sont facultatifs.
         </p>
       </section>
 
@@ -172,7 +173,7 @@ export default function BulkImportPage() {
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.weightKg == null ? "—" : `${row.weightKg} kg`}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.priceAmount == null ? "—" : `${row.priceAmount.toFixed(2)} ${row.priceCurrency}`}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{new Date(row.plannedArrivalAt).toLocaleString()}</td>
-                    <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.truck}</td>
+                    <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.truck === UNASSIGNED_TRUCK ? "À affecter" : row.truck}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.contact || "—"}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.whatsappOptIn ? "Oui" : "Non"}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6", maxWidth: 260 }}>

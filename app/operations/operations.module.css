@@ -177,6 +177,23 @@
   color: #667085;
 }
 
+.alertActions {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.alertLink {
+  color: #1f5f49;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.alertLink:hover {
+  text-decoration: underline;
+}
+
 .empty,
 .error,
 .loading {
@@ -199,4 +216,5 @@
   .toolbar { align-items: flex-start; flex-direction: column; }
   .alert { grid-template-columns: 1fr; gap: 8px; }
   .deliveryId { white-space: normal; }
+  .alertActions { justify-items: start; }
 }
