@@ -1,16 +1,18 @@
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const databaseName = process.env.TRACKFLEET_D1_DATABASE_NAME?.trim() || "trackfleet-db";
 const mode = process.argv.includes("--local") ? "--local" : "--remote";
-const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const wranglerBin = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 
 function execute(sql, { json = false } = {}) {
-  const args = ["exec", "wrangler", "d1", "execute", databaseName, mode, "--yes", "--command", sql];
+  const args = [wranglerBin, "d1", "execute", databaseName, mode, "--yes", "--command", sql];
   if (json) args.push("--json");
-  const output = execFileSync(pnpm, args, {
+  const output = execFileSync(process.execPath, args, {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"],
     env: process.env,
+    windowsHide: true,
   });
   return json ? JSON.parse(output) : output;
 }

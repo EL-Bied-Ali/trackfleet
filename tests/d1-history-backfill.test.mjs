@@ -37,6 +37,8 @@ test("history state schema is explicit and never created by the runtime backfill
   assert.match(schema, /cursor_created_at integer/);
   assert.match(schema, /cursor_id text/);
   assert.match(schema, /completed_at integer/);
+  assert.match(schema, /execFileSync\(process\.execPath/);
+  assert.doesNotMatch(schema, /pnpm\.cmd/);
   assert.doesNotMatch(source, /CREATE TABLE|ALTER TABLE|PRAGMA/i);
 });
 
