@@ -213,6 +213,13 @@ runStatements([
     last_success_at integer,
     last_failure_at integer
   )`,
+  `CREATE TABLE IF NOT EXISTS vehicle_aliases (
+    company_id text NOT NULL,
+    sendatrack_vehicle_id text NOT NULL,
+    alias text NOT NULL,
+    updated_at integer NOT NULL,
+    PRIMARY KEY (company_id, sendatrack_vehicle_id)
+  )`,
 ]);
 
 const deliveryColumns = columnsFor("deliveries");
