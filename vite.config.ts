@@ -43,6 +43,14 @@ const siteStorePath = fileURLToPath(
     import.meta.url,
   ),
 );
+const vehicleAliasStorePath = fileURLToPath(
+  new URL(
+    useCloudflarePostgresFailover || useSharedPostgres
+      ? "./app/lib/vehicle-alias-store.shared-postgres.ts"
+      : "./app/lib/vehicle-alias-store.cloudflare.ts",
+    import.meta.url,
+  ),
+);
 const loginRateLimitPath = fileURLToPath(
   new URL(
     useSharedPostgres ? "./app/lib/login-rate-limit.shared-postgres.ts" : "./app/lib/login-rate-limit.cloudflare.ts",
@@ -102,6 +110,7 @@ export default defineConfig(async () => {
         "trackfleet-delivery-store": deliveryStorePath,
         "trackfleet-delivery-store-full": fullDeliveryStorePath,
         "trackfleet-site-store": siteStorePath,
+        "trackfleet-vehicle-alias-store": vehicleAliasStorePath,
         "trackfleet-login-rate-limit": loginRateLimitPath,
         "trackfleet-automation-heartbeat": automationHeartbeatPath,
         "trackfleet-auth-session-store": authSessionStorePath,

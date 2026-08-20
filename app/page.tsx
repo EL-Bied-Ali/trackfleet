@@ -172,6 +172,9 @@ export default function Home() {
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
   const [knownSites, setKnownSites] = useState<KnownSite[]>([]);
   const [defaultOriginSiteId, setDefaultOriginSiteId] = useState("");
+  const [renamingVehicleId, setRenamingVehicleId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
   const [vehicleLinkOpen, setVehicleLinkOpen] = useState(false);
   const [vehicleLinkSearch, setVehicleLinkSearch] = useState("");
   const [vehicleLinkChoice, setVehicleLinkChoice] = useState("");
@@ -551,6 +554,29 @@ export default function Home() {
     }
   }
 
+  async function renameVehicle(sendatrackVehicleId: string) {
+    const alias = renameDraft.trim();
+    if (!alias) { setRenamingVehicleId(null); return; }
+    setRenameBusy(true);
+    try {
+      const response = await fetch("/api/vehicles/alias", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sendatrackVehicleId, alias }),
+      });
+      if (!response.ok) throw new Error("rename_failed");
+      setIntegration((current) => ({
+        ...current,
+        vehicles: current.vehicles.map((vehicle) => vehicle.id === sendatrackVehicleId ? { ...vehicle, name: alias } : vehicle),
+      }));
+      setRenamingVehicleId(null);
+    } catch {
+      setToast(locale === "fr" ? "Impossible de renommer ce véhicule. Réessayez." : locale === "nl" ? "Kan dit voertuig niet hernoemen. Probeer opnieuw." : "Couldn’t rename this vehicle. Please try again.");
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
   async function assignSuggestedTrip(deliveryId: string, tripId: string) {
     setTripAssignBusy(deliveryId);
     try {
@@ -889,7 +915,12 @@ export default function Home() {
             <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
             {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{vehicle.name}<small>{vehicle.speed} km/h</small></span>)}</div>}
             {showPopover && deliveries.length > 0 && <div className="truck-popover">
-              <div><span className="truck-badge">▰</span><p><strong>{vehicleLabel(selected)}</strong><small>{isUnassignedVehicle(selected) ? (locale === "fr" ? "Aucun camion confirmé" : locale === "nl" ? "Nog geen voertuig bevestigd" : "No truck confirmed yet") : driverLabel(selected.driver)}</small></p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
+              <div><span className="truck-badge">▰</span><p>
+                {renamingVehicleId && renamingVehicleId === selected.sendatrackVehicleId
+                  ? <span className="rename-truck"><input value={renameDraft} maxLength={60} disabled={renameBusy} onChange={(event) => setRenameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void renameVehicle(renamingVehicleId); if (event.key === "Escape") setRenamingVehicleId(null); }} /><button type="button" disabled={renameBusy} aria-label={locale === "fr" ? "Confirmer le nom" : locale === "nl" ? "Naam bevestigen" : "Confirm name"} onClick={() => void renameVehicle(renamingVehicleId)}>✓</button><button type="button" disabled={renameBusy} aria-label={t.cancel} onClick={() => setRenamingVehicleId(null)}>×</button></span>
+                  : <><strong>{vehicleLabel(selected)}</strong>{company?.role === "dispatcher" && !isUnassignedVehicle(selected) && integration.vehicles.some((vehicle) => vehicle.id === selected.sendatrackVehicleId) && <button type="button" className="rename-trigger" aria-label={locale === "fr" ? "Renommer ce véhicule" : locale === "nl" ? "Dit voertuig hernoemen" : "Rename this vehicle"} onClick={() => { setRenamingVehicleId(selected.sendatrackVehicleId ?? null); setRenameDraft(selected.truck); }}>✎</button>}</>}
+                <small>{isUnassignedVehicle(selected) ? (locale === "fr" ? "Aucun camion confirmé" : locale === "nl" ? "Nog geen voertuig bevestigd" : "No truck confirmed yet") : driverLabel(selected.driver)}</small>
+              </p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
               <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div>{selected.weightKg != null && <div><dt>{locale === "fr" ? "Poids" : locale === "nl" ? "Gewicht" : "Weight"}</dt><dd>{selected.weightKg.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { maximumFractionDigits: 3 })} kg</dd></div>}{selected.priceAmount != null && selected.priceCurrency && <div><dt>{locale === "fr" ? "Prix" : locale === "nl" ? "Prijs" : "Price"}</dt><dd>{selected.priceAmount.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {selected.priceCurrency}</dd></div>}</dl>{selected.estimatedArrivalAt && <div className="eta-explanation"><strong>{selectedEtaExplanation.sourceLabel}</strong><span>{selectedEtaExplanation.confidenceLabel}{selected.etaSource === "route-history" && selected.etaHistoricalSpeedKmh ? ` · ${selected.etaHistoricalSpeedKmh} km/h` : ""}</span></div>}
               {company?.role === "dispatcher" && selected.gpsSource !== "sendatrack" && <div style={{ marginTop: 10 }}>
                 {isUnassignedVehicle(selected) ? <small>{locale === "fr" ? "Affectez d’abord ce colis à un voyage planifié ci-dessous." : locale === "nl" ? "Wijs deze zending eerst toe aan een geplande rit hieronder." : "Assign this parcel to a planned trip below first."}</small> : integration.connected && integration.vehicles.length ? <>

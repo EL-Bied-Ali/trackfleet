@@ -1,6 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { siteStore } from "trackfleet-site-store";
+import { vehicleAliasStore } from "trackfleet-vehicle-alias-store";
 import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
@@ -233,7 +234,11 @@ export async function GET(request: Request) {
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
-    const companySites = await siteStore.listForCompany(session.companyId);
+    const [companySites, vehicleAliases] = await Promise.all([
+      siteStore.listForCompany(session.companyId),
+      vehicleAliasStore.listForCompany(session.companyId),
+    ]);
+    const vehicleAliasById = new Map(vehicleAliases.map((row) => [row.sendatrackVehicleId, row.alias]));
     const siteById = new Map(companySites.map((site) => [site.id, site]));
     const rowById = new Map(rows.map((row) => [row.id, row]));
     const stopPlans = buildTruckStopPlans(rows);
@@ -362,7 +367,7 @@ export async function GET(request: Request) {
         connected: integration.connected,
         vehicleCount: integration.vehicles.length,
         error: integration.error ?? null,
-        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude })),
+        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicleAliasById.get(vehicle.id) ?? vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude })),
       },
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
