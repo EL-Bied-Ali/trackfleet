@@ -228,3 +228,66 @@ test("accelerated multi-tick MVP flow exercises the production business core end
   assert.equal(finalReplay.automaticCompletions, 0);
   assert.equal((await memoryStore.listTrips(companyId))[0].status, "completed");
 });
+
+test("employee arrival confirmation completes after grace without waiting for another truck fix", async () => {
+  const manualCompanyId = "accelerated-manual-arrival-tenant";
+  const arrivalAt = new Date(baseTime + 40 * 60 * 60_000);
+  const delivery = await memoryStore.create({
+    customer: "Client agence",
+    originSiteId: "brussels-abattoir-45",
+    originLatitude: null,
+    originLongitude: null,
+    destinationSiteId: "marrakech-essaouira-12",
+    destination: "Marrakech · Boulevard Essaouira",
+    destinationLatitude: null,
+    destinationLongitude: null,
+    arrivalRadiusKm: 0.5,
+    truck: "TRUCK-MANUAL",
+    driver: "",
+    status: "In transit",
+    eta: arrivalAt.toISOString(),
+    plannedArrivalAt: arrivalAt,
+    progress: 95,
+    color: "#16a272",
+    contact: "+32470000000",
+    whatsappOptIn: true,
+    whatsappOptInAt: arrivalAt,
+    sendatrackVehicleId: "device-manual",
+    latitude: null,
+    longitude: null,
+    speed: null,
+    lastPositionAt: null,
+    gpsSource: "simulation",
+    companyId: manualCompanyId,
+    trackingToken: "manual-arrival-private-token-123456",
+    tripId: null,
+  });
+
+  const firstObservation = await observeArrivalCompletion({
+    companyId: manualCompanyId,
+    deliveryId: delivery.id,
+    insideArrivalZone: true,
+    observationAt: arrivalAt,
+    unloadGraceMinutes: 15,
+  });
+  assert.equal(firstObservation.justEntered, true);
+  await memoryStore.recordEvent(delivery.id, "MANUAL_ARRIVAL_CONFIRMED", 95);
+  await memoryStore.recordEvent(delivery.id, "ARRIVED_AT_SITE", 95);
+
+  const completed = await runFleetBusinessTick({
+    snapshot: { configured: true, connected: true, vehicles: [] },
+    companyId: manualCompanyId,
+    unloadGraceMinutes: 15,
+    store: memoryStore,
+    observeArrivalCompletion,
+    observedAt: new Date(arrivalAt.getTime() + 15 * 60_000),
+  });
+  const updated = (await memoryStore.listForCompany(manualCompanyId))[0];
+  assert.equal(completed.transitions, 0);
+  assert.equal(completed.automaticCompletions, 1);
+  assert.equal(updated.status, "Delivered");
+  const events = (await memoryStore.listEvents(delivery.id)).map((event) => event.type);
+  assert.equal(events.filter((event) => event === "MANUAL_ARRIVAL_CONFIRMED").length, 1);
+  assert.equal(events.filter((event) => event === "ARRIVED_AT_SITE").length, 1);
+  assert.equal(events.filter((event) => event === "ARRIVED").length, 1);
+});

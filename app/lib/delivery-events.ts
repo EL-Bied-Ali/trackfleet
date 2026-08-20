@@ -7,6 +7,7 @@ export type DeliveryEventType =
   | "PROGRESS_75"
   | "NEAR_DESTINATION"
   | "ARRIVED_AT_SITE"
+  | "MANUAL_ARRIVAL_CONFIRMED"
   | "DELAY_DETECTED"
   | "ARRIVED"
   | "MANUAL_DELIVERED"
@@ -66,7 +67,7 @@ export function customerFacingEvent(event: DeliveryEventType) {
   return event !== "GPS_STALE"
     && event !== "GPS_BASELINE"
     && event !== "WHATSAPP_OPT_OUT"
-    && event !== "ARRIVED_AT_SITE"
+    && event !== "MANUAL_ARRIVAL_CONFIRMED"
     && event !== "MANUAL_DELIVERED";
 }
 

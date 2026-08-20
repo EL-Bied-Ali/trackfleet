@@ -88,12 +88,17 @@ test("both persistent runtimes reset continuity after a GPS observation gap", ()
   }
 });
 
-test("manual completion is authenticated, same-origin and tenant scoped", () => {
+test("manual arrival and completion are authenticated, same-origin and tenant scoped", () => {
   assert.match(manualRoute, /requestIsSameOrigin\(request\)/);
   assert.match(manualRoute, /getCompanySession\(request\)/);
   assert.match(manualRoute, /completeDeliveryManually\(session\.companyId, deliveryId\)/);
   assert.match(manualRoute, /deliveryId\.length > 100/);
-  assert.match(manualRoute, /confirmDelivered !== true/);
+  assert.match(manualRoute, /confirmArrival !== true && payload\.confirmDelivered !== true/);
+  assert.match(manualRoute, /find\(\(candidate\) => candidate\.id === deliveryId/);
+  assert.match(manualRoute, /observeArrivalCompletion/);
+  assert.match(manualRoute, /MANUAL_ARRIVAL_CONFIRMED/);
+  assert.match(manualRoute, /recordEvent\(deliveryId, "ARRIVED_AT_SITE"/);
+  assert.match(manualRoute, /processPendingNotifications/);
   assert.match(manualRoute, /readJsonObject\(request\)/);
 });
 
@@ -103,4 +108,7 @@ test("manual completion UI requires explicit operator confirmation", () => {
   assert.match(siteManager, /confirmDelivered: true/);
   assert.match(siteManager, /window\.location\.reload\(\)/);
   assert.match(siteManager, /Marquer livré/);
+  assert.match(siteManager, /confirmArrival: true/);
+  assert.match(siteManager, /Confirmer l’arrivée/);
+  assert.match(siteManager, /Confirmation recommandée/);
 });

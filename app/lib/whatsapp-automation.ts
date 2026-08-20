@@ -4,6 +4,9 @@ import type { DeliveryEventType } from "./delivery-events";
 import type { DeliveryRow } from "./delivery-store.types";
 import { isAutomaticWhatsAppEvent } from "./notification-policy";
 import { whatsappTemplateLanguage } from "./whatsapp-template";
+import { automaticWhatsAppMessage } from "./whatsapp-message";
+
+export { automaticWhatsAppMessage } from "./whatsapp-message";
 
 const metaRequestTimeoutMs = 10_000;
 
@@ -11,29 +14,6 @@ function recipientFrom(delivery: DeliveryRow) {
   // Automatic customer notifications must only use the contact attached to
   // this delivery. Never fall back to the demo recipient in production logic.
   return normalizeCustomerPhone(delivery.contact) ?? "";
-}
-
-export function automaticWhatsAppMessage(event: DeliveryEventType, delivery: DeliveryRow, trackingUrl: string) {
-  switch (event) {
-    case "REGISTERED":
-      return `Votre colis ${delivery.id} a bien été enregistré pour ${delivery.destination}. Consultez son suivi et l'estimation d'arrivée ici : ${trackingUrl}`;
-    case "DEPARTED":
-      return `Votre colis ${delivery.id} est parti vers ${delivery.destination}. L'estimation d'arrivée est mise à jour ici : ${trackingUrl}`;
-    case "PROGRESS_25":
-      return `Votre colis ${delivery.id} poursuit son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`;
-    case "PROGRESS_50":
-      return `Votre colis ${delivery.id} poursuit son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`;
-    case "PROGRESS_75":
-      return `Votre colis ${delivery.id} poursuit son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`;
-    case "NEAR_DESTINATION":
-      return `Votre colis ${delivery.id} approche de ${delivery.destination}. Consultez les dernières informations ici : ${trackingUrl}`;
-    case "DELAY_DETECTED":
-      return `Le trajet de votre colis ${delivery.id} prend plus de temps que prévu. Consultez la nouvelle estimation ici : ${trackingUrl}`;
-    case "ARRIVED":
-      return `Votre colis ${delivery.id} est arrivé à ${delivery.destination}.`;
-    default:
-      return "";
-  }
 }
 
 export type AutomaticWhatsAppPayload = {

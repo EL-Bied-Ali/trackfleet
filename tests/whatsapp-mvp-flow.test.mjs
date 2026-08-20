@@ -11,7 +11,10 @@ const [deliveryEvents, deliveryRoute, automation, runner, whatsapp, page, public
     readFile(new URL("../app/lib/fleet-business-tick.ts", import.meta.url), "utf8"),
   ]).then((sources) => sources.join("\n")),
   readFile(new URL("../app/lib/notification-runner.ts", import.meta.url), "utf8"),
-  readFile(new URL("../app/lib/whatsapp-automation.ts", import.meta.url), "utf8"),
+  Promise.all([
+    readFile(new URL("../app/lib/whatsapp-automation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/whatsapp-message.ts", import.meta.url), "utf8"),
+  ]).then((sources) => sources.join("\n")),
   readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/public-delivery-view.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8"),
@@ -20,10 +23,10 @@ const [deliveryEvents, deliveryRoute, automation, runner, whatsapp, page, public
 ]);
 
 test("MVP WhatsApp pushes only high-value customer states", () => {
-  for (const event of ["REGISTERED", "DEPARTED", "DELAY_DETECTED", "NEAR_DESTINATION", "ARRIVED"]) {
+  for (const event of ["REGISTERED", "DEPARTED", "DELAY_DETECTED", "NEAR_DESTINATION", "ARRIVED_AT_SITE"]) {
     assert.equal(isAutomaticWhatsAppEvent(event), true, `${event} should be pushed`);
   }
-  for (const event of ["GPS_BASELINE", "GPS_STALE", "PROGRESS_25", "PROGRESS_50", "PROGRESS_75"]) {
+  for (const event of ["GPS_BASELINE", "GPS_STALE", "PROGRESS_25", "PROGRESS_50", "PROGRESS_75", "ARRIVED", "MANUAL_ARRIVAL_CONFIRMED"]) {
     assert.equal(isAutomaticWhatsAppEvent(event), false, `${event} should stay out of WhatsApp`);
   }
 });
@@ -116,4 +119,10 @@ test("registration, departure and delay copy direct customers to self-service tr
   assert.match(whatsapp, /case ["']DELAY_DETECTED["']/);
   assert.match(whatsapp, /trackingUrl/);
   assert.doesNotMatch(whatsapp, /WHATSAPP_DEMO_RECIPIENT/);
+});
+
+test("arrival-at-site notifies once before unloading completion", () => {
+  assert.match(whatsapp, /case ["']ARRIVED_AT_SITE["']/);
+  assert.equal(isAutomaticWhatsAppEvent("ARRIVED_AT_SITE"), true);
+  assert.equal(isAutomaticWhatsAppEvent("ARRIVED"), false);
 });
