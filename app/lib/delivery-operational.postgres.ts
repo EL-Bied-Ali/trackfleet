@@ -28,11 +28,15 @@ type RawDelivery = {
   progress: number | string;
   color: string;
   contact: string;
+  recipient_name: string | null;
+  recipient_contact: string | null;
   weight_kg: number | string | null;
   price_amount: number | string | null;
   price_currency: "EUR" | "MAD" | null;
   whatsapp_opt_in: boolean | null;
   whatsapp_opt_in_at: string | Date | null;
+  recipient_whatsapp_opt_in: boolean | null;
+  recipient_whatsapp_opt_in_at: string | Date | null;
   sendatrack_vehicle_id: string;
   latitude: number | string | null;
   longitude: number | string | null;
@@ -71,11 +75,15 @@ function hydrate(row: RawDelivery): DeliveryRow {
     progress: Number(row.progress),
     color: row.color,
     contact: row.contact,
+    recipientName: row.recipient_name ?? "",
+    recipientContact: row.recipient_contact ?? "",
     weightKg: numberOrNull(row.weight_kg),
     priceAmount: numberOrNull(row.price_amount),
     priceCurrency: row.price_currency === "EUR" || row.price_currency === "MAD" ? row.price_currency : null,
     whatsappOptIn: row.whatsapp_opt_in === true,
     whatsappOptInAt: row.whatsapp_opt_in_at ? new Date(row.whatsapp_opt_in_at) : null,
+    recipientWhatsappOptIn: row.recipient_whatsapp_opt_in === true,
+    recipientWhatsappOptInAt: row.recipient_whatsapp_opt_in_at ? new Date(row.recipient_whatsapp_opt_in_at) : null,
     sendatrackVehicleId: row.sendatrack_vehicle_id,
     latitude: numberOrNull(row.latitude),
     longitude: numberOrNull(row.longitude),

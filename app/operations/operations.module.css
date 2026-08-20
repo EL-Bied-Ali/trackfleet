@@ -184,10 +184,15 @@
 }
 
 .alertLink {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: #1f5f49;
   font-size: 13px;
   font-weight: 800;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .alertLink:hover {

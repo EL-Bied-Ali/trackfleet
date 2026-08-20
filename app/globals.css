@@ -193,9 +193,22 @@ td > strong, td > span { display: block; }td > strong { font-size: 10px; }td > s
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(17,36,29,.52); backdrop-filter: blur(4px); }
 .modal { width: min(480px, 100%); overflow: hidden; border-radius: 16px; background: white; box-shadow: 0 24px 70px rgba(10,35,26,.25); animation: modal-in .22s ease-out; }
+.site-manager-modal { width: min(880px, 100%); max-height: min(860px, calc(100vh - 40px)); overflow: auto; }
+.site-manager-toolbar { display: flex; gap: 10px; padding: 16px 27px; border-bottom: 1px solid var(--line); }
+.site-manager-toolbar input { min-width: 0; flex: 1; height: 42px; padding: 0 13px; border: 1px solid #dce4df; border-radius: 9px; }
+.site-manager-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-height: 420px; overflow: auto; padding: 18px 27px; }
+.site-manager-card { display: grid; gap: 14px; padding: 15px; border: 1px solid #e1e7e3; border-radius: 13px; background: #fbfcfb; }
+.site-manager-card strong { display: block; margin: 8px 0 4px; font-size: 14px; }
+.site-manager-card p { margin: 0; color: #6b7972; font-size: 12px; line-height: 1.45; }
+.site-gps-status { display: inline-flex; padding: 4px 7px; border-radius: 999px; font-size: 10px; font-weight: 750; }
+.site-gps-status.ready { background: #e5f4ec; color: #24634d; }.site-gps-status.missing { background: #fff1d6; color: #825b08; }
+.site-manager-actions { display: flex; gap: 8px; flex-wrap: wrap; }.site-manager-actions button { min-height: 36px; padding: 0 11px; border: 1px solid #d5ded9; border-radius: 8px; background: white; color: #34443c; cursor: pointer; }
+.site-manager-form { border-top: 1px solid var(--line); }.site-manager-footer { padding: 0 27px 20px; }
+.fleet-roster { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 3; display: flex; gap: 7px; overflow-x: auto; padding: 7px; border: 1px solid rgba(213,224,218,.9); border-radius: 11px; background: rgba(255,255,255,.94); box-shadow: 0 5px 16px rgba(21,49,39,.08); scrollbar-width: thin; }
+.fleet-roster > span { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding: 6px 8px; border-radius: 8px; background: #f5f8f6; color: #30463d; font-size: 10px; font-weight: 700; }.fleet-roster > span > i { width: 6px; height: 6px; border-radius: 50%; background: #2f8b68; }.fleet-roster small { color: #819087; font-weight: 500; }
 @keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(.98); } }
 .modal-header { display: flex; justify-content: space-between; padding: 25px 27px 20px; border-bottom: 1px solid var(--line); }.modal-header h2 { margin: 3px 0 5px; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }.modal-header > div > span { color: var(--muted); font-size: 11px; }.modal-header > button { align-self: flex-start; border: 0; background: transparent; color: #718078; font-size: 22px; cursor: pointer; }.eyebrow { margin: 0; color: #368064; font-size: 8.5px; font-weight: 800; letter-spacing: 1.5px; }
-.modal form { display: grid; gap: 14px; padding: 22px 27px 25px; }.modal label { display: grid; gap: 6px; color: #46564e; font-size: 10px; font-weight: 650; }.modal label > span { color: #98a29d; font-weight: 400; }.modal input, .modal select { width: 100%; height: 41px; padding: 0 12px; border: 1px solid #dce4df; border-radius: 8px; outline: 0; color: var(--ink); background: white; font-size: 11px; }.modal input:focus, .modal select:focus { border-color: #6da68f; box-shadow: 0 0 0 3px #e4f1eb; }.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.price-input { display: grid; grid-template-columns: minmax(0, 1fr) 86px; gap: 8px; }.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }.modal-footer > button:first-child { border: 0; background: transparent; color: #6f7d76; font-size: 11px; cursor: pointer; }
+.modal form { display: grid; gap: 14px; padding: 22px 27px 25px; }.modal label { display: grid; gap: 6px; color: #46564e; font-size: 10px; font-weight: 650; }.modal label > span { color: #98a29d; font-weight: 400; }.modal input, .modal select { width: 100%; height: 41px; padding: 0 12px; border: 1px solid #dce4df; border-radius: 8px; outline: 0; color: var(--ink); background: white; font-size: 11px; }.modal input:focus, .modal select:focus { border-color: #6da68f; box-shadow: 0 0 0 3px #e4f1eb; }.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }.form-section { display: grid; gap: 10px; padding: 14px; border: 1px solid #e4e7ec; border-radius: 14px; background: #fafbfc; }.form-section > strong { font-size: 14px; }.consent-choice { display: flex !important; gap: 10px; align-items: flex-start; padding: 13px 14px; border: 1px solid #d9e6df; border-radius: 12px; background: #f5faf7; }.consent-choice input { width: 18px !important; height: 18px; margin-top: 2px; flex: 0 0 auto; }.consent-choice small { display: block; margin-top: 4px; font-weight: 400; }.price-input { display: grid; grid-template-columns: minmax(0, 1fr) 86px; gap: 8px; }.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; }.modal-footer > button:first-child { border: 0; background: transparent; color: #6f7d76; font-size: 11px; cursor: pointer; }
 .toast { position: fixed; z-index: 70; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 10px; color: white; background: #173f34; box-shadow: 0 10px 30px rgba(18,53,41,.26); font-size: 11px; animation: toast-in .25s ease-out; }.toast span { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; color: #19543f; background: #bde4d0; font-size: 10px; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
@@ -228,6 +241,8 @@ td > strong, td > span { display: block; }td > strong { font-size: 10px; }td > s
   .topbar > div:first-child { width: 100%; flex: 1 0 100%; }
   .topbar h1 { max-width: none; }
   .top-actions { width: 100%; justify-content: space-between; margin-top: 10px; }
+  .site-manager-toolbar { padding: 14px 18px; flex-direction: column; }
+  .site-manager-list { grid-template-columns: 1fr; max-height: 48vh; padding: 14px 18px; }
 }
 
 @media (max-width: 430px) {

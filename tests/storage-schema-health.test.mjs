@@ -37,6 +37,10 @@ test("schema contract protects columns added by later TrackFleet features", asyn
   for (const key of [
     "deliveries.trip_id",
     "deliveries.whatsapp_opt_in",
+    "deliveries.recipient_name",
+    "deliveries.recipient_contact",
+    "deliveries.recipient_whatsapp_opt_in",
+    "deliveries.recipient_whatsapp_opt_in_at",
     "delivery_eta_observations.route_template_id",
     "delivery_eta_observations.trip_instance_id",
     "sessions.company_id",

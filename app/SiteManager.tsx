@@ -42,6 +42,8 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   const [completionOpen, setCompletionOpen] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [editingSite, setEditingSite] = useState<Site | null>(null);
+  const [siteFormOpen, setSiteFormOpen] = useState(false);
+  const [siteSearch, setSiteSearch] = useState("");
   const [consents, setConsents] = useState<ConsentDelivery[]>([]);
   const [manualDeliveries, setManualDeliveries] = useState<ManualDelivery[]>([]);
   const [saving, setSaving] = useState(false);
@@ -118,6 +120,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       if (!response.ok) throw new Error("save_failed");
       await refresh();
       setEditingSite(null);
+      setSiteFormOpen(false);
       formElement.reset();
       window.dispatchEvent(new Event("trackfleet-sites-changed"));
     } catch {
@@ -242,26 +245,28 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
         };
 
   const consentRows = consents.filter((item) => item.whatsappOptIn || item.withdrawn);
+  const visibleSites = sites.filter((site) => `${site.label} ${site.city} ${site.address}`.toLocaleLowerCase().includes(siteSearch.trim().toLocaleLowerCase()));
 
   return <>
-    <button className="secondary-button" type="button" onClick={() => { setEditingSite(null); setOpen(true); }}><span aria-hidden="true">▦</span> {copy.button}</button>
+    <button className="secondary-button" type="button" onClick={() => { setEditingSite(null); setSiteFormOpen(false); setOpen(true); }}><span aria-hidden="true">▦</span> {copy.button}</button>
     <button className="secondary-button" type="button" onClick={() => setConsentOpen(true)}><span aria-hidden="true">◔</span> {copy.consentButton}</button>
     <button className="secondary-button" type="button" onClick={() => setCompletionOpen(true)}><span aria-hidden="true">✓</span> {copy.completionButton}</button>
 
     {open && <div className="modal-backdrop">
-      <section className="modal" role="dialog" aria-modal="true" aria-labelledby="sites-title">
-        <div className="modal-header"><div><p className="eyebrow">TRACKFLEET</p><h2 id="sites-title">{copy.title}</h2><span>{copy.count(sites.length)}</span></div><button onClick={() => { setEditingSite(null); setOpen(false); }} aria-label={copy.close}>×</button></div>
-        <div style={{ maxHeight: 220, overflow: "auto", marginBottom: 16 }}>
-          {sites.map((site) => {
+      <section className="modal site-manager-modal" role="dialog" aria-modal="true" aria-labelledby="sites-title">
+        <div className="modal-header"><div><p className="eyebrow">TRACKFLEET</p><h2 id="sites-title">{copy.title}</h2><span>{copy.count(sites.length)} · {sites.filter((site) => typeof site.latitude !== "number" || typeof site.longitude !== "number").length} {locale === "fr" ? "à géolocaliser" : locale === "nl" ? "zonder GPS" : "need GPS"}</span></div><button onClick={() => { setEditingSite(null); setSiteFormOpen(false); setOpen(false); }} aria-label={copy.close}>×</button></div>
+        <div className="site-manager-toolbar"><input aria-label={locale === "fr" ? "Rechercher une agence" : locale === "nl" ? "Agentschap zoeken" : "Search agencies"} value={siteSearch} onChange={(event) => setSiteSearch(event.target.value)} placeholder={locale === "fr" ? "Rechercher par ville, nom ou adresse" : locale === "nl" ? "Zoeken op stad, naam of adres" : "Search by city, name or address"} /><button className="primary-button" type="button" onClick={() => { setEditingSite(null); setSiteFormOpen(true); }}>{copy.add}</button></div>
+        <div className="site-manager-list">
+          {visibleSites.map((site) => {
             const gpsReady = typeof site.latitude === "number" && typeof site.longitude === "number";
-            return <div key={site.id} style={{ padding: "9px 0", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 12, justifyContent: "space-between" }}>
-              <div><strong>{site.label}</strong><div style={{ fontSize: 12, opacity: .7 }}>{site.address}</div><div style={{ fontSize: 12, marginTop: 3 }}>{gpsReady ? copy.gpsReady : copy.gpsMissing}</div></div>
-              <div style={{ display: "flex", gap: 8 }}><button type="button" disabled={accessBusy === site.id} onClick={() => void createAgencyAccess(site)}>{accessBusy === site.id ? copy.creatingAccess : copy.agencyAccess}</button><button type="button" onClick={() => { setError(""); setEditingSite(site); }}>{copy.edit}</button></div>
-            </div>;
+            return <article key={site.id} className="site-manager-card">
+              <div><span className={`site-gps-status ${gpsReady ? "ready" : "missing"}`}>{gpsReady ? copy.gpsReady : copy.gpsMissing}</span><strong>{site.label}</strong><p>{site.address}</p></div>
+              <div className="site-manager-actions"><button type="button" disabled={accessBusy === site.id} onClick={() => void createAgencyAccess(site)}>{accessBusy === site.id ? copy.creatingAccess : copy.agencyAccess}</button><button type="button" onClick={() => { setError(""); setEditingSite(site); setSiteFormOpen(true); }}>{copy.edit}</button></div>
+            </article>;
           })}
         </div>
         {accessMessage && <p className="agency-location-message" role="status">{accessMessage}</p>}
-        <form key={editingSite?.id ?? "new-site"} onSubmit={save}>
+        {siteFormOpen && <form className="site-manager-form" key={editingSite?.id ?? "new-site"} onSubmit={save}>
           <h3 style={{ marginBottom: 12 }}>{editingSite ? copy.editTitle : copy.add}</h3>
           <div className="form-row"><label>{copy.label}<input name="label" required defaultValue={editingSite?.label ?? ""} /></label><label>{copy.city}<input name="city" required defaultValue={editingSite?.city ?? ""} /></label></div>
           <label>{copy.address}<input name="address" required defaultValue={editingSite?.address ?? ""} /></label>
@@ -269,11 +274,11 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
           <div className="form-row"><label>{copy.lat}<input name="latitude" type="number" step="any" defaultValue={editingSite?.latitude ?? ""} /></label><label>{copy.lon}<input name="longitude" type="number" step="any" defaultValue={editingSite?.longitude ?? ""} /></label></div>
           {error && <p className="login-error">{copy.error}</p>}
           <div className="modal-footer">
-            {editingSite && <button type="button" onClick={() => { setError(""); setEditingSite(null); }}>{copy.cancelEdit}</button>}
-            <button type="button" onClick={() => { setEditingSite(null); setOpen(false); }}>{copy.close}</button>
+            <button type="button" onClick={() => { setError(""); setEditingSite(null); setSiteFormOpen(false); }}>{copy.cancelEdit}</button>
             <button className="primary-button" disabled={saving}>{saving ? copy.saving : editingSite ? copy.update : copy.save}</button>
           </div>
-        </form>
+        </form>}
+        {!siteFormOpen && <div className="modal-footer site-manager-footer"><button type="button" onClick={() => { setEditingSite(null); setOpen(false); }}>{copy.close}</button></div>}
       </section>
     </div>}
 

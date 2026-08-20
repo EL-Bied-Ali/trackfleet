@@ -9,6 +9,8 @@ export type BulkDeliveryDraft = {
   destinationSiteId: string;
   plannedArrivalAt: string;
   contact: string;
+  recipientName: string;
+  recipientContact: string;
   truck: string;
   sendatrackVehicleId: string;
   whatsappOptIn: boolean;
@@ -29,6 +31,8 @@ const acceptedHeaders = new Set([
   "destination_site_id",
   "planned_arrival_at",
   "contact",
+  "recipient_name",
+  "recipient_contact",
   "truck",
   "sendatrack_vehicle_id",
   "whatsapp_opt_in",
@@ -135,6 +139,8 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     const planned = get(values, "planned_arrival_at");
     const plannedArrivalAt = normalizedIsoDate(planned);
     const whatsappRaw = get(values, "whatsapp_opt_in");
+    const recipientName = get(values, "recipient_name");
+    const recipientContact = get(values, "recipient_contact");
     const whatsappOptIn = boolValue(whatsappRaw);
     const weightRaw = get(values, "weight_kg");
     const priceRaw = get(values, "price_amount");
@@ -147,10 +153,11 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     if (!destination) errors.push(`Row ${rowNumber}: destination is required`);
     if (!plannedArrivalAt) errors.push(`Row ${rowNumber}: planned_arrival_at is invalid`);
     if (whatsappOptIn === null) errors.push(`Row ${rowNumber}: whatsapp_opt_in must be true/false, yes/no, oui/non or 1/0`);
+    if (Boolean(recipientName) !== Boolean(recipientContact)) errors.push(`Row ${rowNumber}: recipient_name and recipient_contact must be supplied together`);
     if (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) errors.push(`Row ${rowNumber}: weight_kg must be greater than 0 and at most 100000`);
     if (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) errors.push(`Row ${rowNumber}: price_amount must be greater than 0 and at most 10000000`);
     if ((priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) errors.push(`Row ${rowNumber}: price_currency must be EUR or MAD and supplied together with price_amount`);
-    if (!customer || !destination || !plannedArrivalAt || whatsappOptIn === null || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) || (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) || (priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) continue;
+    if (!customer || !destination || !plannedArrivalAt || whatsappOptIn === null || Boolean(recipientName) !== Boolean(recipientContact) || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) || (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) || (priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) continue;
 
     rows.push({
       rowNumber,
@@ -160,6 +167,8 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
       destinationSiteId: get(values, "destination_site_id"),
       plannedArrivalAt,
       contact: get(values, "contact"),
+      recipientName,
+      recipientContact,
       truck: truck || UNASSIGNED_TRUCK,
       sendatrackVehicleId: get(values, "sendatrack_vehicle_id"),
       whatsappOptIn,
@@ -172,6 +181,6 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
 }
 
 export const BULK_DELIVERY_CSV_TEMPLATE = [
-  "customer,destination,planned_arrival_at,truck,contact,whatsapp_opt_in,weight_kg,price_amount,price_currency,origin_site_id,destination_site_id,sendatrack_vehicle_id",
-  'Client Exemple,"Casablanca, Maroc",2026-08-20T14:00:00+02:00,TRUCK-01,+212600000000,false,12.5,45,EUR,,,',
+  "customer,destination,planned_arrival_at,truck,contact,recipient_name,recipient_contact,whatsapp_opt_in,weight_kg,price_amount,price_currency,origin_site_id,destination_site_id,sendatrack_vehicle_id",
+  'Client Exemple,"Casablanca, Maroc",2026-08-20T14:00:00+02:00,TRUCK-01,+212600000000,Destinataire Exemple,+212611111111,false,12.5,45,EUR,,,',
 ].join("\n");

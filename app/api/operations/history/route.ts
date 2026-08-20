@@ -1,4 +1,4 @@
-import { getDispatcherSession } from "../../../lib/company-auth";
+import { getCompanySession } from "../../../lib/company-auth";
 import {
   DELIVERY_HISTORY_DEFAULT_PAGE_SIZE,
   DELIVERY_HISTORY_MAX_PAGE_SIZE,
@@ -23,7 +23,7 @@ function parsedCursor(url: URL) {
 }
 
 export async function GET(request: Request) {
-  const session = await getDispatcherSession(request);
+  const session = await getCompanySession(request);
   if (!session) {
     return Response.json(
       { error: "authentication_required" },
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const page = await listDeliveredHistory(session.companyId, { limit, cursor });
+    const page = await listDeliveredHistory(session.companyId, { limit, cursor, siteId: session.role === "agency" ? session.siteId : null });
     return Response.json(page, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     console.error("[trackfleet:delivery-history] history read failed", {
