@@ -27,6 +27,5 @@ test("obsolete starter preview is absent from the production application", () =>
   }
   assert.match(layout, /import "\.\/globals\.css"/);
   assert.match(layout, /import "\.\/dashboard-polish\.css"/);
-  assert.match(layout, /<QuickTools \/>/);
   assert.doesNotMatch(layout, /_sites-preview|SkeletonPreview/);
 });

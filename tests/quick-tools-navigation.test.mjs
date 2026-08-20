@@ -2,43 +2,33 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const quickToolsUrl = new URL("../app/QuickTools.tsx", import.meta.url);
+const pageUrl = new URL("../app/page.tsx", import.meta.url);
 const layoutUrl = new URL("../app/layout.tsx", import.meta.url);
+const i18nUrl = new URL("../app/i18n.ts", import.meta.url);
 
-test("quick tools are hidden outside the authenticated dashboard and on public tracking links", async () => {
-  const source = await readFile(quickToolsUrl, "utf8");
-  assert.match(source, /url\.pathname !== "\/"/);
-  assert.match(source, /url\.searchParams\.has\("tracking"\)/);
-  assert.match(source, /fetch\("\/api\/auth\/session"/);
-  assert.match(source, /setState\("visible"\)/);
-  assert.match(source, /window\.addEventListener\("popstate", syncLocation\)/);
-  assert.match(source, /\[locationKey\]/);
-});
-
-test("quick tools expose operations, history, storage, export and bulk import only after becoming visible", async () => {
-  const source = await readFile(quickToolsUrl, "utf8");
-  assert.match(source, /if \(state !== "visible"\) return null/);
-  assert.match(source, /\/operations\?lang=/);
-  assert.match(source, /\/operations\/history\?lang=/);
-  assert.match(source, /\/operations\/storage\?lang=/);
-  assert.match(source, /\/api\/operations\/export/);
-  assert.match(source, /\/import\?lang=/);
-});
-
-test("root layout mounts quick tools once for the application", async () => {
-  const source = await readFile(layoutUrl, "utf8");
-  assert.match(source, /import QuickTools from "\.\/QuickTools"/);
-  assert.match(source, /<QuickTools \/>/);
+test("quick tools render as native sidebar nav items, not a separate floating component", async () => {
+  const page = await readFile(pageUrl, "utf8");
+  assert.match(page, /a className="nav-item" href=\{`\/operations\?lang=\$\{locale\}`\}/);
+  assert.match(page, /a className="nav-item" href=\{`\/operations\/history\?lang=\$\{locale\}`\}/);
+  assert.match(page, /a className="nav-item" href=\{`\/import\?lang=\$\{locale\}`\}/);
 });
 
 test("storage and export tools are hidden from non-dispatcher (agency) sessions", async () => {
-  const source = await readFile(quickToolsUrl, "utf8");
-  assert.match(source, /setIsDispatcher\(data\?\.company\?\.role === "dispatcher"\)/);
-  assert.match(source, /\{isDispatcher && <a href=\{`\/operations\/storage/);
-  assert.match(source, /\{isDispatcher && <a href="\/api\/operations\/export"/);
-  // Operations, history and import stay visible to every authenticated role.
-  assert.match(source, /<nav[^]*?<a href=\{`\/operations\?lang=/);
-  assert.doesNotMatch(source, /isDispatcher && <a href=\{`\/operations\?lang=/);
-  assert.doesNotMatch(source, /isDispatcher && <a href=\{`\/operations\/history/);
-  assert.doesNotMatch(source, /isDispatcher && <a href=\{`\/import/);
+  const page = await readFile(pageUrl, "utf8");
+  assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href=\{`\/operations\/storage\?lang=\$\{locale\}`\}/);
+  assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href="\/api\/operations\/export"/);
+});
+
+test("quick tools translations exist for every locale", async () => {
+  const i18n = await readFile(i18nUrl, "utf8");
+  assert.match(i18n, /operationsTool: "Operations".*historyTool: "History".*storageTool: "Storage".*exportTool: "Export".*importTool: "Import"/);
+  assert.match(i18n, /operationsTool: "Opérations".*historyTool: "Historique".*storageTool: "Stockage".*exportTool: "Exporter".*importTool: "Importer"/);
+  assert.match(i18n, /operationsTool: "Operaties".*historyTool: "Historiek".*storageTool: "Opslag".*exportTool: "Exporteren".*importTool: "Importeren"/);
+});
+
+test("the old standalone QuickTools component is gone and not mounted in the root layout", async () => {
+  const layout = await readFile(layoutUrl, "utf8");
+  assert.doesNotMatch(layout, /QuickTools/);
+  await assert.rejects(readFile(new URL("../app/QuickTools.tsx", import.meta.url)));
+  await assert.rejects(readFile(new URL("../app/quick-tools.module.css", import.meta.url)));
 });
