@@ -75,6 +75,8 @@ jobs:
         run: node --test tests/storage-schema-health.test.mjs
       - name: Verify SENDATRACK transport fails closed
         run: node --test tests/sendatrack-transport-guard.test.mjs
+      - name: Verify bounded SENDATRACK snapshot retry
+        run: node --test tests/sendatrack-bounded-retry.test.mjs
       - name: Verify automation provider connectivity contract
         run: node --test tests/automation-provider-connectivity.test.mjs
       - name: Verify public tracking privacy contract
