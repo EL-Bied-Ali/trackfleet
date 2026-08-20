@@ -46,6 +46,8 @@ test("D1 schema preparation is explicit and outside runtime adapters", () => {
   assert.match(d1SchemaPreparation, /CREATE TABLE IF NOT EXISTS automation_runtime_state/);
   assert.match(d1SchemaPreparation, /CREATE TABLE IF NOT EXISTS telemetry_retention_state/);
   assert.match(d1SchemaPreparation, /CREATE TABLE IF NOT EXISTS delivery_arrival_state/);
+  assert.match(d1SchemaPreparation, /execFileSync\(process\.execPath, args/);
+  assert.doesNotMatch(d1SchemaPreparation, /pnpm\.cmd/);
 });
 
 test("runtime heartbeat adapters never perform schema DDL", () => {
