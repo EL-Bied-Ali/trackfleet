@@ -28,6 +28,9 @@ type RawDelivery = {
   progress: number | string;
   color: string;
   contact: string;
+  weight_kg: number | string | null;
+  price_amount: number | string | null;
+  price_currency: "EUR" | "MAD" | null;
   whatsapp_opt_in: boolean | null;
   whatsapp_opt_in_at: string | Date | null;
   sendatrack_vehicle_id: string;
@@ -68,6 +71,9 @@ function hydrate(row: RawDelivery): DeliveryRow {
     progress: Number(row.progress),
     color: row.color,
     contact: row.contact,
+    weightKg: numberOrNull(row.weight_kg),
+    priceAmount: numberOrNull(row.price_amount),
+    priceCurrency: row.price_currency === "EUR" || row.price_currency === "MAD" ? row.price_currency : null,
     whatsappOptIn: row.whatsapp_opt_in === true,
     whatsappOptInAt: row.whatsapp_opt_in_at ? new Date(row.whatsapp_opt_in_at) : null,
     sendatrackVehicleId: row.sendatrack_vehicle_id,

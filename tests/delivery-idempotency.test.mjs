@@ -30,6 +30,9 @@ function sampleDelivery(overrides = {}) {
     progress: 0,
     color: "#000000",
     contact: "+32123456789",
+    weightKg: 12.5,
+    priceAmount: 45,
+    priceCurrency: "EUR",
     sendatrackVehicleId: "",
     latitude: null,
     longitude: null,
@@ -71,10 +74,16 @@ test("payload replay requires the normalized identity fields and ETA to match", 
     contact: "+32123456789",
     eta: "15:30",
     plannedArrivalAt: new Date("2026-08-19T15:30:00.000Z"),
+    weightKg: 12.5,
+    priceAmount: 45,
+    priceCurrency: "EUR",
   };
   assert.equal(deliveryIdempotencyPayloadMatches(delivery, same), true);
   assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, customer: "Client B" }), false);
   assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, eta: "15:31" }), false);
+  assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, weightKg: 13 }), false);
+  assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, priceAmount: 46 }), false);
+  assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, priceCurrency: "MAD" }), false);
   assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, plannedArrivalAt: new Date("2026-08-19T15:31:00.000Z") }), false);
 });
 

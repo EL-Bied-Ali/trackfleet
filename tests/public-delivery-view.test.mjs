@@ -10,6 +10,9 @@ const source = {
   whatsappOptIn: true,
   whatsappOptInAt: new Date("2026-08-20T00:00:00.000Z"),
   destination: "Tanger Med",
+  weightKg: 12.5,
+  priceAmount: 450,
+  priceCurrency: "MAD",
   destinationLatitude: 35.858923,
   destinationLongitude: -5.532664,
   arrivalRadiusKm: 0.5,
@@ -65,6 +68,8 @@ test("public delivery view exposes only the customer tracking allow-list", () =>
     "longitude",
     "plannedArrivalAt",
     "positionAgeMinutes",
+    "priceAmount",
+    "priceCurrency",
     "progress",
     "remainingDistanceKm",
     "routeDistanceKm",
@@ -72,6 +77,7 @@ test("public delivery view exposes only the customer tracking allow-list", () =>
     "status",
     "trackingExpiresAt",
     "truck",
+    "weightKg",
   ].sort());
 
   for (const forbidden of [

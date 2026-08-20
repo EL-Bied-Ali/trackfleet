@@ -66,7 +66,7 @@ jobs:
       - name: Verify batched-read behavior
         run: node --test tests/micro-batcher.test.mjs tests/postgres-read-batching.test.mjs
       - name: Verify bulk delivery CSV import
-        run: node --test tests/bulk-delivery-import.test.mjs
+        run: node --test tests/bulk-delivery-import.test.mjs tests/delivery-commercial-fields.test.mjs
       - name: Verify delivery creation idempotency
         run: node --experimental-strip-types --test tests/delivery-idempotency.test.mjs
       - name: Verify accelerated MVP business flow

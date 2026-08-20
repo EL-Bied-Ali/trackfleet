@@ -34,6 +34,9 @@ type RawDelivery = {
   progress: number;
   color: string;
   contact: string;
+  weight_kg: number | string | null;
+  price_amount: number | string | null;
+  price_currency: "EUR" | "MAD" | null;
   whatsapp_opt_in: boolean | null;
   whatsapp_opt_in_at: string | Date | null;
   sendatrack_vehicle_id: string;
@@ -87,6 +90,9 @@ function hydrate(row: RawDelivery): DeliveryRow {
     progress: Number(row.progress),
     color: row.color,
     contact: row.contact,
+    weightKg: numberOrNull(row.weight_kg),
+    priceAmount: numberOrNull(row.price_amount),
+    priceCurrency: row.price_currency === "EUR" || row.price_currency === "MAD" ? row.price_currency : null,
     whatsappOptIn: row.whatsapp_opt_in === true,
     whatsappOptInAt: row.whatsapp_opt_in_at ? new Date(row.whatsapp_opt_in_at) : null,
     sendatrackVehicleId: row.sendatrack_vehicle_id,
@@ -157,6 +163,9 @@ async function ensureSchema() {
       progress integer NOT NULL DEFAULT 0,
       color text NOT NULL DEFAULT '#916ed7',
       contact text NOT NULL DEFAULT '',
+      weight_kg double precision,
+      price_amount numeric(12,2),
+      price_currency text,
       whatsapp_opt_in boolean NOT NULL DEFAULT false,
       whatsapp_opt_in_at timestamptz,
       sendatrack_vehicle_id text NOT NULL DEFAULT '',
@@ -176,6 +185,9 @@ async function ensureSchema() {
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS trip_id text`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS whatsapp_opt_in boolean NOT NULL DEFAULT false`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS whatsapp_opt_in_at timestamptz`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS weight_kg double precision`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS price_amount numeric(12,2)`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS price_currency text`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)`;
     await sql`CREATE TABLE IF NOT EXISTS delivery_events (
@@ -259,11 +271,11 @@ async function ensureSchema() {
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
         id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-        truck, driver, status, eta, planned_arrival_at, progress, color, contact, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
+        truck, driver, status, eta, planned_arrival_at, progress, color, contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
         latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at
       ) VALUES (
         ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
-        ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
+        ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
         ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.createdAt.toISOString()}
       ) ON CONFLICT (id) DO NOTHING`;
     }
@@ -563,11 +575,11 @@ export const postgresStore: DeliveryStore = {
     };
     await sql`INSERT INTO deliveries (
       id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-      truck, driver, status, eta, planned_arrival_at, progress, color, contact, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
+      truck, driver, status, eta, planned_arrival_at, progress, color, contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, sendatrack_vehicle_id,
       latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at
     ) VALUES (
       ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
-      ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
+      ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
       ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.createdAt.toISOString()}
     )`;
     return delivery;

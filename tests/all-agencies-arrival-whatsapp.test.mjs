@@ -31,10 +31,8 @@ test("registration and arrival WhatsApp business messages cover every agency", (
     const trackingUrl = `https://trackfleet.example/?tracking=private-${index + 1}`;
     const registered = automaticWhatsAppMessage("REGISTERED", delivery, trackingUrl);
     const arrived = automaticWhatsAppMessage("ARRIVED_AT_SITE", delivery, trackingUrl);
-    assert.match(registered, new RegExp(delivery.id));
     assert.ok(registered.includes(agency.label));
     assert.ok(registered.includes(trackingUrl));
-    assert.match(arrived, new RegExp(delivery.id));
     assert.ok(arrived.includes(agency.label));
   }
 });

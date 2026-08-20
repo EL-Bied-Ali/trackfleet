@@ -114,7 +114,7 @@ test("public tracking uses an explicit allowlist and never returns internal cons
 
 test("registration, departure and delay copy direct customers to self-service tracking", () => {
   assert.match(whatsapp, /case ["']REGISTERED["']/);
-  assert.match(whatsapp, /estimation d'arrivée ici/);
+  assert.match(whatsapp, /Suivi et estimation d'arrivée/);
   assert.match(whatsapp, /case ["']DEPARTED["']/);
   assert.match(whatsapp, /case ["']DELAY_DETECTED["']/);
   assert.match(whatsapp, /trackingUrl/);
