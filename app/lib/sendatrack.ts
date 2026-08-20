@@ -107,7 +107,12 @@ function findToken(value: unknown, depth = 0): string | null {
 }
 
 function credentialKey(auth: SendatrackCredentials) {
-  return `${auth.accountID.trim().toLowerCase()}\u0000${auth.user.trim().toLowerCase()}`;
+  // Must include the password: this key gates whether login() trusts a
+  // cached token without recontacting SENDATRACK. Keying on account+user
+  // alone let any password succeed for up to 45 minutes after one real
+  // login, because the password was never actually re-verified.
+  const separator = String.fromCharCode(0);
+  return `${auth.accountID.trim().toLowerCase()}${separator}${auth.user.trim().toLowerCase()}${separator}${auth.password}`;
 }
 
 function providerUnavailableStatus(status: number) {
