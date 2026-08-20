@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { automationMissingRequirements } from "../app/lib/automation-health.ts";
-import { automationHeartbeatStatus, AUTOMATION_HEARTBEAT_STALE_AFTER_MS } from "../app/lib/automation-heartbeat-health.ts";
+import { activeHeartbeatFailureCode, automationHeartbeatStatus, AUTOMATION_HEARTBEAT_STALE_AFTER_MS } from "../app/lib/automation-heartbeat-health.ts";
 import { decodeSessionEncryptionKey, sessionEncryptionKeyConfigured } from "../app/lib/session-encryption-key.ts";
 
 await import("./telemetry-retention.test.mjs");
@@ -120,6 +120,17 @@ test("scheduler heartbeat becomes stale after three missed five-minute ticks", (
   assert.equal(stale.fresh, false);
 });
 
+test("health clears an old provider failure after a newer successful tick", () => {
+  assert.equal(activeHeartbeatFailureCode({
+    lastSuccessAt: "2026-08-19T00:10:00.000Z",
+    lastFailureAt: "2026-08-19T00:05:00.000Z",
+  }, "sendatrack_authentication_failed"), null);
+  assert.equal(activeHeartbeatFailureCode({
+    lastSuccessAt: "2026-08-19T00:05:00.000Z",
+    lastFailureAt: "2026-08-19T00:10:00.000Z",
+  }, "sendatrack_authentication_failed"), "sendatrack_authentication_failed");
+});
+
 test("automation tick records best-effort attempt, success and failure heartbeats", () => {
   assert.match(tickRoute, /recordAutomationAttempt/);
   assert.match(tickRoute, /recordAutomationSuccess/);
@@ -148,6 +159,7 @@ test("health provider readiness includes explicit security, Meta, scheduler and 
   assert.match(healthRoute, /WHATSAPP_TEMPLATE_LANGUAGE/);
   assert.match(healthRoute, /heartbeatAvailable/);
   assert.match(healthRoute, /live: heartbeatAvailable \? heartbeat\.fresh : null/);
+  assert.match(healthRoute, /activeHeartbeatFailureCode/);
   assert.match(healthRoute, /telemetryRetentionPolicy/);
   assert.match(healthRoute, /telemetryRetention,/);
 });

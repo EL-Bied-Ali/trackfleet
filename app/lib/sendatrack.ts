@@ -116,6 +116,17 @@ function authenticationRejectedStatus(status: number) {
   return status === 401 || status === 403;
 }
 
+async function authenticationRejectedResponse(response: Response) {
+  if (authenticationRejectedStatus(response.status)) return true;
+  if (response.status !== 406) return false;
+  try {
+    const payload = asRecord(await response.json());
+    return stringFrom(payload?.message).toLowerCase() === "account not found";
+  } catch {
+    return false;
+  }
+}
+
 async function login(auth: SendatrackCredentials) {
   requireAllowedTransport();
   const key = credentialKey(auth);
@@ -136,7 +147,7 @@ async function login(auth: SendatrackCredentials) {
       retryAfter: response.headers.get("retry-after"),
     });
     if (providerUnavailableStatus(response.status)) throw new Error("service_unavailable");
-    if (authenticationRejectedStatus(response.status)) throw new Error("authentication_failed");
+    if (await authenticationRejectedResponse(response)) throw new Error("authentication_failed");
     throw new Error("unexpected_response");
   }
   const payload = await response.json() as unknown;
