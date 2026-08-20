@@ -10,7 +10,7 @@ test("quick tools are hidden outside the authenticated dashboard and on public t
   assert.match(source, /url\.pathname !== "\/"/);
   assert.match(source, /url\.searchParams\.has\("tracking"\)/);
   assert.match(source, /fetch\("\/api\/auth\/session"/);
-  assert.match(source, /response\.ok \? "visible" : "hidden"/);
+  assert.match(source, /setState\("visible"\)/);
   assert.match(source, /window\.addEventListener\("popstate", syncLocation\)/);
   assert.match(source, /\[locationKey\]/);
 });
@@ -29,4 +29,16 @@ test("root layout mounts quick tools once for the application", async () => {
   const source = await readFile(layoutUrl, "utf8");
   assert.match(source, /import QuickTools from "\.\/QuickTools"/);
   assert.match(source, /<QuickTools \/>/);
+});
+
+test("storage and export tools are hidden from non-dispatcher (agency) sessions", async () => {
+  const source = await readFile(quickToolsUrl, "utf8");
+  assert.match(source, /setIsDispatcher\(data\?\.company\?\.role === "dispatcher"\)/);
+  assert.match(source, /\{isDispatcher && <a href=\{`\/operations\/storage/);
+  assert.match(source, /\{isDispatcher && <a href="\/api\/operations\/export"/);
+  // Operations, history and import stay visible to every authenticated role.
+  assert.match(source, /<nav[^]*?<a href=\{`\/operations\?lang=/);
+  assert.doesNotMatch(source, /isDispatcher && <a href=\{`\/operations\?lang=/);
+  assert.doesNotMatch(source, /isDispatcher && <a href=\{`\/operations\/history/);
+  assert.doesNotMatch(source, /isDispatcher && <a href=\{`\/import/);
 });
