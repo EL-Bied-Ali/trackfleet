@@ -1,20 +1,43 @@
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const databaseName = process.env.TRACKFLEET_D1_DATABASE_NAME?.trim() || "trackfleet-db";
 const mode = process.argv.includes("--local") ? "--local" : "--remote";
 const wranglerBin = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 
-function execute(sql, { json = false } = {}) {
+const maxAttempts = 3;
+const retryDelayMs = 3000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function execute(sql, { json = false } = {}) {
   const args = [wranglerBin, "d1", "execute", databaseName, mode, "--yes", "--command", sql];
   if (json) args.push("--json");
-  const output = execFileSync(process.execPath, args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "inherit"],
-    env: process.env,
-    windowsHide: true,
-  });
-  return json ? JSON.parse(output) : output;
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const { stdout } = await execFileAsync(process.execPath, args, {
+        encoding: "utf8",
+        env: process.env,
+        windowsHide: true,
+        maxBuffer: 32 * 1024 * 1024,
+      });
+      return json ? JSON.parse(stdout) : stdout;
+    } catch (error) {
+      lastError = error;
+      if (error?.stderr) process.stderr.write(error.stderr);
+      if (attempt < maxAttempts) {
+        console.warn(`[d1-schema] wrangler call failed (attempt ${attempt}/${maxAttempts}), retrying in ${retryDelayMs}ms`);
+        await sleep(retryDelayMs);
+      }
+    }
+  }
+  throw lastError;
 }
 
 function rowsFromWrangler(payload) {
@@ -26,9 +49,9 @@ function rowsFromWrangler(payload) {
   return [];
 }
 
-function columnsFor(table) {
+async function columnsFor(table) {
   return new Set(
-    rowsFromWrangler(execute(`PRAGMA table_info(${table})`, { json: true }))
+    rowsFromWrangler(await execute(`PRAGMA table_info(${table})`, { json: true }))
       .map((row) => String(row?.name ?? ""))
       .filter(Boolean),
   );
@@ -40,14 +63,14 @@ function addMissingColumn(statements, table, columns, name, definition) {
   statements.push(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
 }
 
-function runStatements(statements) {
+async function runStatements(statements) {
   const sql = statements.filter(Boolean).join(";\n");
-  if (sql) execute(sql);
+  if (sql) await execute(sql);
 }
 
 console.log(`[d1-schema] preparing ${databaseName} (${mode.slice(2)})`);
 
-runStatements([
+await runStatements([
   `CREATE TABLE IF NOT EXISTS deliveries (
     id text PRIMARY KEY NOT NULL,
     customer text NOT NULL,
@@ -222,10 +245,10 @@ runStatements([
   )`,
 ]);
 
-const deliveryColumns = columnsFor("deliveries");
-const etaColumns = columnsFor("delivery_eta_observations");
-const sessionColumns = columnsFor("sessions");
-const arrivalColumns = columnsFor("delivery_arrival_state");
+const deliveryColumns = await columnsFor("deliveries");
+const etaColumns = await columnsFor("delivery_eta_observations");
+const sessionColumns = await columnsFor("sessions");
+const arrivalColumns = await columnsFor("delivery_arrival_state");
 const alterations = [];
 
 for (const [name, definition] of [
@@ -271,9 +294,9 @@ for (const [name, definition] of [
 ]) addMissingColumn(alterations, "sessions", sessionColumns, name, definition);
 
 addMissingColumn(alterations, "delivery_arrival_state", arrivalColumns, "last_observed_at", "integer");
-runStatements(alterations);
+await runStatements(alterations);
 
-runStatements([
+await runStatements([
   "UPDATE delivery_arrival_state SET last_observed_at = arrived_at WHERE last_observed_at IS NULL",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)",
