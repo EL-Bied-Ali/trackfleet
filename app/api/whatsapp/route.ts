@@ -63,7 +63,9 @@ export async function POST(request: Request) {
     }
     if (!(await enforceRateLimit(deliveryId, kind))) return json({ error: "Please wait before sending another demo message" }, 429);
 
-    const thirdValue = kind === "tracking" ? trackingUrl : `Arrived at ${destination}`;
+    const thirdValue = kind === "tracking"
+      ? `Enregistré pour ${destination}. Suivi : ${trackingUrl}`
+      : `Arrivé à ${destination}.`;
     const response = await fetch(`https://graph.facebook.com/${graphApiVersion}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },

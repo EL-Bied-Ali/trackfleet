@@ -9,6 +9,9 @@ const defaults = {
   destinationLongitude: null,
   arrivalRadiusKm: 0.5,
   plannedArrivalAt: null,
+  weightKg: null,
+  priceAmount: null,
+  priceCurrency: null,
 };
 
 export const seedDeliveries: DeliveryRow[] = [

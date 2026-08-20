@@ -3,6 +3,7 @@ import type { SendatrackSnapshot, SendatrackVehicle } from "./sendatrack";
 import type { TripRecord, UpsertTripInput } from "./trip-record";
 
 export type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
+export type DeliveryPriceCurrency = "EUR" | "MAD";
 
 export type DeliveryRow = {
   id: string;
@@ -23,6 +24,9 @@ export type DeliveryRow = {
   progress: number;
   color: string;
   contact: string;
+  weightKg?: number | null;
+  priceAmount?: number | null;
+  priceCurrency?: DeliveryPriceCurrency | null;
   whatsappOptIn?: boolean;
   whatsappOptInAt?: Date | null;
   sendatrackVehicleId: string;

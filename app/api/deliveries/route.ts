@@ -378,6 +378,11 @@ export async function POST(request: Request) {
     const eta = String(payload.eta ?? "").trim();
     const plannedArrivalRaw = String(payload.plannedArrivalAt ?? "").trim();
     const contactInput = String(payload.contact ?? "").trim();
+    const weightProvided = payload.weightKg !== null && payload.weightKg !== undefined && String(payload.weightKg).trim() !== "";
+    const priceProvided = payload.priceAmount !== null && payload.priceAmount !== undefined && String(payload.priceAmount).trim() !== "";
+    const weightInput = optionalNumber(payload.weightKg);
+    const priceInput = optionalNumber(payload.priceAmount);
+    const priceCurrencyInput = String(payload.priceCurrency ?? "").trim().toUpperCase();
     if (
       customer.length > 160
       || destinationInput.length > 500
@@ -391,6 +396,21 @@ export async function POST(request: Request) {
     ) {
       return Response.json({ error: "delivery fields exceed allowed length" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
+    if (weightProvided && (weightInput === null || weightInput <= 0 || weightInput > 100000)) {
+      return Response.json({ error: "weightKg must be greater than 0 and at most 100000" }, { status: 400 });
+    }
+    if (priceProvided && (priceInput === null || priceInput <= 0 || priceInput > 10000000)) {
+      return Response.json({ error: "priceAmount must be greater than 0 and at most 10000000" }, { status: 400 });
+    }
+    if (priceProvided !== (priceCurrencyInput !== "")) {
+      return Response.json({ error: "priceAmount and priceCurrency must be provided together" }, { status: 400 });
+    }
+    if (priceCurrencyInput && priceCurrencyInput !== "EUR" && priceCurrencyInput !== "MAD") {
+      return Response.json({ error: "priceCurrency must be EUR or MAD" }, { status: 400 });
+    }
+    const weightKg = weightInput === null ? null : Math.round(weightInput * 1000) / 1000;
+    const priceAmount = priceInput === null ? null : Math.round(priceInput * 100) / 100;
+    const priceCurrency = priceCurrencyInput === "EUR" || priceCurrencyInput === "MAD" ? priceCurrencyInput : null;
     const companySites = await siteStore.listForCompany(session.companyId);
     const originSelection = resolveExplicitCompanySite(companySites, originSiteInput);
     if (originSelection.invalid) return Response.json({ error: "origin site is not available for this company" }, { status: 400 });
@@ -442,7 +462,7 @@ export async function POST(request: Request) {
         if (session.role === "agency" && !agencyDeliveryIsVisible(existing, session.siteId)) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
-        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt })) {
+        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
         return idempotentReplayResponse(existing, session.companyId);
@@ -476,6 +496,9 @@ export async function POST(request: Request) {
         eta: normalizedEta,
         plannedArrivalAt,
         contact,
+        weightKg,
+        priceAmount,
+        priceCurrency,
         whatsappOptIn,
         whatsappOptInAt: whatsappOptIn ? new Date() : null,
         sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
@@ -491,7 +514,7 @@ export async function POST(request: Request) {
         const existing = await store.getPublic(idempotencyTrackingToken).catch(() => null);
         if (existing?.companyId === session.companyId
           && (session.role === "dispatcher" || agencyDeliveryIsVisible(existing, session.siteId))
-          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt })) {
+          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
           return idempotentReplayResponse(existing, session.companyId);
         }
       }

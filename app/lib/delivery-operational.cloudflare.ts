@@ -32,6 +32,9 @@ type RawDelivery = {
   progress: number;
   color: string;
   contact: string;
+  weightKg: number | null;
+  priceAmount: number | null;
+  priceCurrency: "EUR" | "MAD" | null;
   whatsappOptIn: number | null;
   whatsappOptInAt: number | null;
   sendatrackVehicleId: string;
@@ -62,6 +65,9 @@ function hydrate(row: RawDelivery): DeliveryRow {
     destinationLatitude: row.destinationLatitude ?? null,
     destinationLongitude: row.destinationLongitude ?? null,
     arrivalRadiusKm: row.arrivalRadiusKm ?? 0.5,
+    weightKg: row.weightKg ?? null,
+    priceAmount: row.priceAmount ?? null,
+    priceCurrency: row.priceCurrency === "EUR" || row.priceCurrency === "MAD" ? row.priceCurrency : null,
     plannedArrivalAt: row.plannedArrivalAt ? new Date(row.plannedArrivalAt) : null,
     whatsappOptIn: row.whatsappOptIn === 1,
     whatsappOptInAt: row.whatsappOptInAt ? new Date(row.whatsappOptInAt) : null,
@@ -75,6 +81,7 @@ const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_lati
   destination_latitude AS destinationLatitude, destination_longitude AS destinationLongitude,
   arrival_radius_km AS arrivalRadiusKm, truck, driver, status, eta,
   planned_arrival_at AS plannedArrivalAt, progress, color, contact,
+  weight_kg AS weightKg, price_amount AS priceAmount, price_currency AS priceCurrency,
   whatsapp_opt_in AS whatsappOptIn, whatsapp_opt_in_at AS whatsappOptInAt,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
   last_position_at AS lastPositionAt, gps_source AS gpsSource, company_id AS companyId,

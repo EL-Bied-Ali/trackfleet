@@ -26,6 +26,30 @@ test("reports invalid required fields before import", () => {
   assert.ok(result.errors.some((error) => error.includes("planned_arrival_at is invalid")));
 });
 
+test("parses optional weight and EUR or MAD prices without inventing missing values", () => {
+  const result = parseBulkDeliveryCsv([
+    "customer,destination,planned_arrival_at,truck,weight_kg,price_amount,price_currency",
+    "Client EUR,Casa,2026-08-20T14:00:00Z,T1,12.3456,45.678,EUR",
+    "Client MAD,Tanger,2026-08-21T14:00:00Z,T2,,,",
+  ].join("\n"));
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.rows.map(({ weightKg, priceAmount, priceCurrency }) => ({ weightKg, priceAmount, priceCurrency })), [
+    { weightKg: 12.346, priceAmount: 45.68, priceCurrency: "EUR" },
+    { weightKg: null, priceAmount: null, priceCurrency: null },
+  ]);
+});
+
+test("rejects incomplete or unsupported commercial values", () => {
+  const result = parseBulkDeliveryCsv([
+    "customer,destination,planned_arrival_at,truck,weight_kg,price_amount,price_currency",
+    "A,Casa,2026-08-20T14:00:00Z,T1,-1,20,USD",
+    "B,Casa,2026-08-20T14:00:00Z,T1,2,,MAD",
+  ].join("\n"));
+  assert.equal(result.rows.length, 0);
+  assert.ok(result.errors.some((error) => error.includes("weight_kg")));
+  assert.ok(result.errors.filter((error) => error.includes("price_currency")).length >= 2);
+});
+
 test("rejects unknown headers rather than silently dropping data", () => {
   const result = parseBulkDeliveryCsv([
     "customer,destination,planned_arrival_at,truck,secret_note",
