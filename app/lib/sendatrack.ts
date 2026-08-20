@@ -27,6 +27,8 @@ export type SendatrackLegacyHistoryIdentity = {
 
 const defaultApiUrl = "http://backend2.sendatrack.com/sendatrack/public/api/";
 const cachedTokens = new Map<string, { value: string; expiresAt: number }>();
+const snapshotMaxAttempts = 2;
+const snapshotRetryDelayMs = 750;
 
 function environmentCredentials(): SendatrackCredentials {
   return {
@@ -184,6 +186,14 @@ async function requestFleet(token: string, auth: SendatrackCredentials) {
   return vehicles;
 }
 
+function retryableSnapshotError(code: string) {
+  return code === "authentication_failed" || code === "service_unavailable" || code === "unexpected_response";
+}
+
+async function waitBeforeSnapshotRetry() {
+  await new Promise((resolve) => setTimeout(resolve, snapshotRetryDelayMs));
+}
+
 export function isSendatrackConfigured() {
   const auth = environmentCredentials();
   return Boolean(auth.accountID && auth.user && auth.password);
@@ -225,27 +235,38 @@ export async function getSendatrackLegacyHistoryIdentity(): Promise<SendatrackLe
 export async function getSendatrackSnapshot(providedCredentials?: SendatrackCredentials): Promise<SendatrackSnapshot> {
   const auth = providedCredentials ?? environmentCredentials();
   if (!auth.accountID || !auth.user || !auth.password) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
-  try {
-    let token = await login(auth);
-    if (!token) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
+
+  for (let attempt = 1; attempt <= snapshotMaxAttempts; attempt += 1) {
     try {
-      const vehicles = await requestFleet(token, auth);
-      return { configured: true, connected: true, vehicles };
-    } catch (error) {
-      if (error instanceof Error && error.message === "authentication_failed") {
-        token = await login(auth);
-        if (token) return { configured: true, connected: true, vehicles: await requestFleet(token, auth) };
+      let token = await login(auth);
+      if (!token) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
+      try {
+        const vehicles = await requestFleet(token, auth);
+        return { configured: true, connected: true, vehicles };
+      } catch (error) {
+        if (error instanceof Error && error.message === "authentication_failed") {
+          token = await login(auth);
+          if (token) return { configured: true, connected: true, vehicles: await requestFleet(token, auth) };
+        }
+        throw error;
       }
-      throw error;
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "service_unavailable";
+      if (attempt < snapshotMaxAttempts && retryableSnapshotError(code)) {
+        cachedTokens.delete(credentialKey(auth));
+        console.warn("[trackfleet:sendatrack] snapshot retry", { code, attempt });
+        await waitBeforeSnapshotRetry();
+        continue;
+      }
+      console.error("[trackfleet:sendatrack] snapshot failed", { code, attempts: attempt });
+      return {
+        configured: true,
+        connected: false,
+        vehicles: [],
+        error: code === "authentication_failed" ? "authentication_failed" : code === "unexpected_response" ? "unexpected_response" : "service_unavailable",
+      };
     }
-  } catch (error) {
-    const code = error instanceof Error ? error.message : "service_unavailable";
-    console.error("[trackfleet:sendatrack] snapshot failed", { code });
-    return {
-      configured: true,
-      connected: false,
-      vehicles: [],
-      error: code === "authentication_failed" ? "authentication_failed" : code === "unexpected_response" ? "unexpected_response" : "service_unavailable",
-    };
   }
+
+  return { configured: true, connected: false, vehicles: [], error: "service_unavailable" };
 }
