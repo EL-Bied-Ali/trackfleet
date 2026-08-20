@@ -6,7 +6,7 @@ const types = fs.readFileSync(new URL("../app/lib/delivery-store.types.ts", impo
 const postgres = fs.readFileSync(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8");
 const cloudflare = fs.readFileSync(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8");
 const memory = fs.readFileSync(new URL("../app/lib/delivery-store.memory.ts", import.meta.url), "utf8");
-const automation = fs.readFileSync(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8");
+const automation = fs.readFileSync(new URL("../app/lib/fleet-business-tick.ts", import.meta.url), "utf8");
 const schema = fs.readFileSync(new URL("../db/schema.ts", import.meta.url), "utf8");
 
 test("fleet history is tenant scoped and deduplicated by physical vehicle timestamp", () => {

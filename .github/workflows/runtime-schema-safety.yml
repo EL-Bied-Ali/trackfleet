@@ -69,6 +69,8 @@ jobs:
         run: node --test tests/bulk-delivery-import.test.mjs
       - name: Verify delivery creation idempotency
         run: node --experimental-strip-types --test tests/delivery-idempotency.test.mjs
+      - name: Verify accelerated MVP business flow
+        run: node --experimental-strip-types --test tests/accelerated-mvp-flow.test.mjs
       - name: Verify operational alert detection
         run: node --test tests/operational-alerts.test.mjs
       - name: Verify storage schema compatibility checks

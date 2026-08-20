@@ -6,7 +6,10 @@ import { isAutomaticWhatsAppEvent } from "../app/lib/notification-policy.ts";
 const [deliveryEvents, deliveryRoute, automation, runner, whatsapp, page, publicView, postgresStore, cloudflareStore, schema] = await Promise.all([
   readFile(new URL("../app/lib/delivery-events.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8"),
-  readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8"),
+  Promise.all([
+    readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/fleet-business-tick.ts", import.meta.url), "utf8"),
+  ]).then((sources) => sources.join("\n")),
   readFile(new URL("../app/lib/notification-runner.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/whatsapp-automation.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
