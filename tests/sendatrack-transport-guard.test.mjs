@@ -26,11 +26,11 @@ test("SENDATRACK HTTP requires an explicit risk override before credentials or b
 
   const login = functionBody(source, "async function login", "async function requestFleetPayload");
   const loginGuard = login.indexOf("requireAllowedTransport();");
-  const credentialFetch = login.indexOf("fetch(apiUrl(\"login\")");
+  const credentialFetch = login.indexOf("sendatrackFetch(apiUrl(\"login\")");
   assert.ok(loginGuard >= 0 && credentialFetch >= 0 && loginGuard < credentialFetch, "login must enforce the transport policy before sending credentials");
 
   const fleet = functionBody(source, "async function requestFleetPayload", "async function requestFleet(");
   const fleetGuard = fleet.indexOf("requireAllowedTransport();");
-  const bearerFetch = fleet.indexOf("fetch(apiUrl(\"list?\")");
+  const bearerFetch = fleet.indexOf("sendatrackFetch(apiUrl(\"list?\")");
   assert.ok(fleetGuard >= 0 && bearerFetch >= 0 && fleetGuard < bearerFetch, "fleet requests must enforce the transport policy before sending bearer tokens");
 });
