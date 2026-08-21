@@ -75,6 +75,28 @@ test("standby failure preserves the original primary outage error", async () => 
   assert.equal(observedStandbyError, true);
 });
 
+test("a subrequest-limit primary failure fails fast without wasting budget on a futile fallback", async () => {
+  // Regression guard: approveFailover and standbyRead are each their own
+  // subrequest. When the primary read failed because the invocation already
+  // exceeded Cloudflare's per-invocation subrequest limit, every one of
+  // those would fail for the identical reason -- reproduced live via
+  // wrangler tail, where this cascade was itself occasionally the thing
+  // that tipped an otherwise-fine invocation over the edge. A genuine
+  // Postgres outage (any other error message) must still fail over normally.
+  const subrequestError = new Error("Error connecting to database: Error: Too many subrequests by single Worker invocation. To configure this limit, refer to https://developers.cloudflare.com/workers/wrangler/configuration/#limits");
+  let approvals = 0;
+  let standbyReads = 0;
+
+  await assert.rejects(() => executeReadFailover({
+    primaryRead: async () => { throw subrequestError; },
+    approveFailover: async () => { approvals += 1; return true; },
+    standbyRead: async () => { standbyReads += 1; return "should-not-run"; },
+  }), (error) => error === subrequestError);
+
+  assert.equal(approvals, 0);
+  assert.equal(standbyReads, 0);
+});
+
 test("active read-only lease blocks mutations but keeps reads available", () => {
   assert.equal(shouldBlockMutationDuringReadFailover("GET", true), false);
   assert.equal(shouldBlockMutationDuringReadFailover("HEAD", true), false);
