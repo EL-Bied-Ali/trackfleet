@@ -24,7 +24,7 @@ test("Vercel and Cloudflare expose the same baseline security headers", () => {
 
 test("Cloudflare applies security headers to both images and app responses", () => {
   assert.match(cloudflareWorker, /return withSecurityHeaders\(response\)/);
-  assert.match(cloudflareWorker, /return withSecurityHeaders\(await handler\.fetch\(request, env, ctx\)\)/);
+  assert.match(cloudflareWorker, /const response = await handler\.fetch\(request, env, ctx\);/);
 });
 
 test("production installs are locked to the committed dependency graph", () => {
