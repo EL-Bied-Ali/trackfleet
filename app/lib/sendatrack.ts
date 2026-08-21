@@ -190,6 +190,70 @@ async function deleteCachedToken(key: string) {
   }
 }
 
+type SendatrackFetchInit = { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal };
+type RelayConfig = { url: string; secret: string };
+
+const relayUrlCacheKey = "sendatrack-relay:url";
+
+// The relay (see relay/README.md) runs on a device with a residential/mobile
+// IP and self-registers its current address here via POST
+// /api/sendatrack/relay, since a free Cloudflare quick tunnel's URL changes
+// every time the relay process restarts. SENDATRACK_RELAY_URL is an optional
+// static override for a future stable (named-tunnel) address -- when unset,
+// the most recently registered dynamic URL is used instead.
+export async function setRelayUrl(url: string) {
+  const kv = tokenCacheKv();
+  if (!kv) throw new Error("relay_storage_unavailable");
+  await kv.put(relayUrlCacheKey, url, { expirationTtl: 60 * 60 * 24 });
+}
+
+async function dynamicRelayUrl(): Promise<string | null> {
+  const kv = tokenCacheKv();
+  if (!kv) return null;
+  try {
+    return await kv.get(relayUrlCacheKey);
+  } catch {
+    return null;
+  }
+}
+
+async function relayConfig(): Promise<RelayConfig | null> {
+  const secret = runtimeEnv.SENDATRACK_RELAY_SECRET?.trim();
+  if (!secret) return null;
+  const url = runtimeEnv.SENDATRACK_RELAY_URL?.trim() || await dynamicRelayUrl();
+  if (!url) return null;
+  return { url, secret };
+}
+
+// SENDATRACK's own network rejects requests from Cloudflare's (and most
+// cloud/datacenter) IP ranges -- observed as 408s from Cloudflare's edge and
+// a fast 406 "Account not found" from another datacenter network, while the
+// same credentials work fine from residential/mobile connections. When a
+// relay is configured, route the actual SENDATRACK call through it instead
+// of calling backend2.sendatrack.com directly from the Worker.
+async function relayFetch(relay: RelayConfig, targetUrl: string, init: SendatrackFetchInit) {
+  const response = await fetch(relay.url, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${relay.secret}` },
+    body: JSON.stringify({
+      url: targetUrl,
+      method: init.method ?? "GET",
+      headers: init.headers ?? {},
+      body: init.body ?? null,
+    }),
+    signal: init.signal,
+  });
+  if (!response.ok) throw new Error("service_unavailable");
+  const payload = await response.json() as { status: number; headers: Record<string, string>; body: string };
+  return new Response(payload.body, { status: payload.status, headers: payload.headers });
+}
+
+async function sendatrackFetch(targetUrl: string, init: SendatrackFetchInit) {
+  const relay = await relayConfig();
+  if (relay) return relayFetch(relay, targetUrl, init);
+  return fetch(targetUrl, init);
+}
+
 function providerUnavailableStatus(status: number) {
   return status === 408 || status === 425 || status === 429 || status >= 500;
 }
@@ -215,7 +279,7 @@ async function login(auth: SendatrackCredentials) {
   const cachedToken = await readCachedToken(key);
   if (cachedToken) return cachedToken;
   if (!auth.accountID || !auth.user || !auth.password) return null;
-  const response = await fetch(apiUrl("login"), {
+  const response = await sendatrackFetch(apiUrl("login"), {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ ...auth, machin: "trackfleet-connector", remember: true, force: false }),
@@ -247,7 +311,7 @@ async function login(auth: SendatrackCredentials) {
 
 async function requestFleetPayload(token: string, auth: SendatrackCredentials) {
   requireAllowedTransport();
-  const response = await fetch(apiUrl("list?"), {
+  const response = await sendatrackFetch(apiUrl("list?"), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
   });
