@@ -278,3 +278,7 @@ td > strong, td > span { display: block; }td > strong { font-size: 10px; }td > s
 .tour-stop strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .tour-stop small { margin-top: 3px; color: #8a9690; font-size: 8.5px; }
 @media (max-width: 760px) { .tour-card-head { align-items: flex-start; flex-direction: column; }.tour-stop { min-width: 170px; } }
+.eta-explanation { margin-top: 8px; }
+.eta-explanation strong, .eta-explanation span { display: block; }
+.eta-explanation strong { font-size: 11px; }
+.eta-explanation span { margin-top: 3px; color: #8a9690; font-size: 10px; }

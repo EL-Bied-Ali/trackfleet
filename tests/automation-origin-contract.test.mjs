@@ -52,6 +52,22 @@ test("tracking links inherit the stable tick request origin and require private 
   assert.doesNotMatch(runner, /trackingToken \|\| item\.delivery\.id/);
 });
 
+test("scheduled ticks construct their internal request against the real production origin, never a placeholder hostname", () => {
+  // Regression guard: the internal Request objects worker/index.ts builds to
+  // invoke handler.fetch() in-process used a fake "trackfleet.internal"
+  // hostname. That never touches the network (Cron Triggers call the
+  // Worker's own fetch handler directly), but notification-maintenance-tick
+  // derives the customer-facing WhatsApp tracking link's base URL from that
+  // same request's origin -- so every automatically-sent tracking link was a
+  // dead, unclickable "https://trackfleet.internal/?tracking=..." URL.
+  // Reproduced live: the first real WhatsApp sends after the token fix all
+  // carried this broken link.
+  assert.match(worker, /const productionOrigin = "https:\/\/trackfleet\.chronoplan\.workers\.dev";/);
+  assert.match(worker, /new Request\(`\$\{productionOrigin\}\/api\/automation\/tick`/);
+  assert.match(worker, /new Request\(`\$\{productionOrigin\}\/api\/automation\/notification-tick`/);
+  assert.doesNotMatch(worker, /trackfleet\.internal/);
+});
+
 test("expensive deployed browser smoke test is manual-only", () => {
   assert.match(smokeWorkflow, /workflow_dispatch:/);
   assert.doesNotMatch(smokeWorkflow, /\n\s+push:/);
