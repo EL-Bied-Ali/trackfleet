@@ -5,6 +5,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
 import { parseUnloadGraceMinutes } from "./delivery-arrival";
 import { runFleetBusinessTick } from "./fleet-business-tick";
+import { rotatedVehicleBatch } from "./fleet-tick-rotation";
 import { processPendingNotifications } from "./notification-runner";
 import { parseAutomationStartAt } from "./notification-policy";
 import { getSendatrackSnapshot } from "./sendatrack";
@@ -35,8 +36,16 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
   const companyId = await companyIdForAccount(accountID);
   const unloadGraceMinutes = parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
   const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
+  // Below ~10 vehicles this is a no-op (the whole fleet processes every
+  // tick, same as always). Above it, only a rotating subset gets fully
+  // processed each tick -- see fleet-tick-rotation.ts -- so per-tick
+  // subrequest cost stays bounded as the fleet grows, at the cost of full
+  // freshness across the whole fleet taking a couple of ticks instead of
+  // one. This only applies to the scheduled tick; a dispatcher's own
+  // dashboard load (/api/deliveries) always processes the full live fleet.
+  const rotatedSnapshot = { ...snapshot, vehicles: rotatedVehicleBatch(snapshot.vehicles) };
   const business = await runFleetBusinessTick({
-    snapshot,
+    snapshot: rotatedSnapshot,
     companyId,
     unloadGraceMinutes,
     store,
