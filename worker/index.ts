@@ -32,6 +32,17 @@ interface ScheduledController {
   noRetry(): void;
 }
 
+// Used only to construct the Request object for the in-process handler.fetch()
+// calls below -- this never touches the network (Cloudflare Cron Triggers
+// invoke the Worker's own fetch handler directly, not a real HTTP request),
+// so it's purely a URL to parse for routing. It must be the real production
+// origin, not a placeholder: notification-tick derives the customer-facing
+// tracking link's base URL from this request's origin (see
+// notification-maintenance-tick.ts), so a fake hostname here shipped broken,
+// unclickable WhatsApp tracking links straight to customers -- reproduced
+// live the first time a real notification successfully sent.
+const productionOrigin = "https://trackfleet.chronoplan.workers.dev";
+
 const automationCron = "*/5 * * * *";
 const notificationMaintenanceCron = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
 const operationalReconciliationCron = "*/15 * * * *";
@@ -69,7 +80,7 @@ async function runAutomationTick(env: Env, ctx: ExecutionContext) {
   const secret = env.CRON_SECRET?.trim();
   if (!secret) throw new Error("cron_secret_missing");
 
-  const response = await handler.fetch(new Request("https://trackfleet.internal/api/automation/tick", {
+  const response = await handler.fetch(new Request(`${productionOrigin}/api/automation/tick`, {
     headers: { authorization: `Bearer ${secret}` },
   }), env, ctx);
   if (!response.ok) throw new Error(`automation_tick_http_${response.status}`);
@@ -80,7 +91,7 @@ async function runNotificationMaintenanceTick(env: Env, ctx: ExecutionContext) {
   const secret = env.CRON_SECRET?.trim();
   if (!secret) throw new Error("cron_secret_missing");
 
-  const response = await handler.fetch(new Request("https://trackfleet.internal/api/automation/notification-tick", {
+  const response = await handler.fetch(new Request(`${productionOrigin}/api/automation/notification-tick`, {
     headers: { authorization: `Bearer ${secret}` },
   }), env, ctx);
   if (!response.ok) throw new Error(`notification_tick_http_${response.status}`);

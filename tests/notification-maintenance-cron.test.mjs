@@ -17,7 +17,7 @@ test("notification maintenance runs on its own cron, offset from fleet sync", ()
   assert.match(wrangler, /"2,7,12,17,22,27,32,37,42,47,52,57 \* \* \* \*"/);
   assert.match(worker, /const notificationMaintenanceCron = "2,7,12,17,22,27,32,37,42,47,52,57 \* \* \* \*";/);
   assert.match(worker, /cron === notificationMaintenanceCron[\s\S]*await runNotificationMaintenanceTick\(env, ctx\)/);
-  assert.match(worker, /https:\/\/trackfleet\.internal\/api\/automation\/notification-tick/);
+  assert.match(worker, /new Request\(`\$\{productionOrigin\}\/api\/automation\/notification-tick`/);
 });
 
 test("fleet sync no longer sends notifications or prunes telemetry itself", () => {

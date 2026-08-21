@@ -17,7 +17,7 @@ test("Cloudflare schedules automation and standby maintenance as separate invoca
 test("native automation cron uses the Worker secret and the protected internal tick route", () => {
   assert.match(worker, /cron === automationCron[\s\S]*await runAutomationTick\(env, ctx\)/);
   assert.match(worker, /env\.CRON_SECRET\?\.trim\(\)/);
-  assert.match(worker, /https:\/\/trackfleet\.internal\/api\/automation\/tick/);
+  assert.match(worker, /new Request\(`\$\{productionOrigin\}\/api\/automation\/tick`/);
   assert.match(worker, /authorization: `Bearer \$\{secret\}`/);
   assert.match(worker, /if \(!response\.ok\) throw new Error\(`automation_tick_http_\$\{response\.status\}`\)/);
 });

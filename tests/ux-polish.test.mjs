@@ -7,6 +7,16 @@ const map = fs.readFileSync("app/InteractiveFleetMap.tsx", "utf8");
 const siteManager = fs.readFileSync("app/SiteManager.tsx", "utf8");
 const operations = fs.readFileSync("app/operations/page.tsx", "utf8");
 const i18n = fs.readFileSync("app/i18n.ts", "utf8");
+const globalsCss = fs.readFileSync("app/globals.css", "utf8");
+
+test("the unassigned-parcel suggestion label and its detail text render on separate lines, not run together", () => {
+  // Regression guard: .eta-explanation had no CSS at all, so its <strong>
+  // title and following <span> detail rendered as adjacent inline elements
+  // with no space between them -- e.g. "No safe suggestionThe parcel simply
+  // remains waiting for assignment." with no gap. Found live on the
+  // production dashboard.
+  assert.match(globalsCss, /\.eta-explanation strong, \.eta-explanation span \{ display: block; \}/);
+});
 
 test("customer tracking never exposes an internal unassigned vehicle label or invented position", () => {
   assert.match(page, /const customerVehicleLabel = isUnassignedVehicle\(selected\)/);
