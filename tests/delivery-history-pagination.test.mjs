@@ -46,3 +46,11 @@ test("history UI appends pages using the server cursor rather than refetching th
   assert.match(source, /append \? \[\.\.\.current, \.\.\.page\.items\] : page\.items/);
   assert.match(source, /limit: "50"/);
 });
+
+test("history table renders the declared weight and computed price columns the API already returns", async () => {
+  // Regression guard: the API projected weightKg/priceAmount/priceCurrency
+  // long before this UI ever rendered them.
+  const source = await readFile(pageUrl, "utf8");
+  assert.match(source, /item\.weightKg == null \? "—" : `\$\{item\.weightKg\} kg`/);
+  assert.match(source, /item\.priceAmount == null \? "—" : `\$\{item\.priceAmount\.toFixed\(2\)\} \$\{item\.priceCurrency\}`/);
+});

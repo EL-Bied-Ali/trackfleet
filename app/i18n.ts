@@ -10,7 +10,7 @@ export const translations = {
   en: {
     language: "Language", secureLink: "Secure tracking link", deliveryLabel: "DELIVERY", estimatedArrival: "Estimated arrival window",
     overview: "Overview", fleet: "Fleet", deliveries: "Deliveries", customers: "Customers", settings: "Settings", helpCentre: "Help centre", dispatcher: "Dispatcher",
-    operationsTool: "Operations", historyTool: "History", storageTool: "Storage", exportTool: "Export", importTool: "Import",
+    operationsTool: "Operations", historyTool: "History", storageTool: "Storage", revenueTool: "Revenue", exportTool: "Export", importTool: "Import",
     gpsActive: "GPS simulation active", gpsBody: "Connect your provider when the device details are ready.", gpsLocked: "Connection settings unlock when provider details are added",
     gpsConnected: "SENDATRACK connected", gpsConnectedBody: (count: number) => `${count} vehicles synchronized automatically.`, gpsAutomatic: "AUTOMATIC SYNC", gpsIssue: "SENDATRACK reconnecting", gpsIssueBody: "Live fleet positions are temporarily unavailable while the connector retries.", gpsPending: "SENDATRACK connector ready", gpsPendingBody: "Add the protected account details to activate live positions.", gpsFallback: "SAFE DEMO FALLBACK", sendatrack: "SENDATRACK", positionsAutomatic: "Live positions synchronized automatically", sendatrackRefreshing: "SENDATRACK positions refresh automatically every 30 seconds", sendatrackLive: (count: number) => `${count} SENDATRACK vehicles reporting`,
     greeting: "Good afternoon", greetingSub: "Here’s what’s moving across your fleet today.", newDelivery: "New delivery",
@@ -35,7 +35,7 @@ export const translations = {
   fr: {
     language: "Langue", secureLink: "Lien de suivi sécurisé", deliveryLabel: "LIVRAISON", estimatedArrival: "Créneau d’arrivée estimé",
     overview: "Vue d’ensemble", fleet: "Flotte", deliveries: "Livraisons", customers: "Clients", settings: "Paramètres", helpCentre: "Centre d’aide", dispatcher: "Répartiteur",
-    operationsTool: "Opérations", historyTool: "Historique", storageTool: "Stockage", exportTool: "Exporter", importTool: "Importer",
+    operationsTool: "Opérations", historyTool: "Historique", storageTool: "Stockage", revenueTool: "Revenus", exportTool: "Exporter", importTool: "Importer",
     gpsActive: "Simulation GPS active", gpsBody: "Connectez votre fournisseur lorsque les informations des appareils sont disponibles.", gpsLocked: "Les paramètres seront disponibles après l’ajout du fournisseur",
     gpsConnected: "SENDATRACK connecté", gpsConnectedBody: (count: number) => `${count} véhicules synchronisés automatiquement.`, gpsAutomatic: "SYNCHRONISATION AUTOMATIQUE", gpsIssue: "Reconnexion à SENDATRACK", gpsIssueBody: "Les positions réelles de la flotte sont temporairement indisponibles pendant la reconnexion.", gpsPending: "Connecteur SENDATRACK prêt", gpsPendingBody: "Ajoutez les identifiants protégés pour activer les positions réelles.", gpsFallback: "MODE DÉMO SÉCURISÉ", sendatrack: "SENDATRACK", positionsAutomatic: "Positions réelles synchronisées automatiquement", sendatrackRefreshing: "Positions SENDATRACK actualisées automatiquement toutes les 30 secondes", sendatrackLive: (count: number) => `${count} véhicules SENDATRACK connectés`,
     greeting: "Bonjour", greetingSub: "Voici les mouvements de votre flotte aujourd’hui.", newDelivery: "Nouvelle livraison",
@@ -60,7 +60,7 @@ export const translations = {
   nl: {
     language: "Taal", secureLink: "Beveiligde trackinglink", deliveryLabel: "LEVERING", estimatedArrival: "Verwacht aankomstvenster",
     overview: "Overzicht", fleet: "Wagenpark", deliveries: "Leveringen", customers: "Klanten", settings: "Instellingen", helpCentre: "Helpcentrum", dispatcher: "Planner",
-    operationsTool: "Operaties", historyTool: "Historiek", storageTool: "Opslag", exportTool: "Exporteren", importTool: "Importeren",
+    operationsTool: "Operaties", historyTool: "Historiek", storageTool: "Opslag", revenueTool: "Omzet", exportTool: "Exporteren", importTool: "Importeren",
     gpsActive: "GPS-simulatie actief", gpsBody: "Koppel uw provider zodra de toestelgegevens beschikbaar zijn.", gpsLocked: "Verbindingsinstellingen komen vrij zodra de provider is toegevoegd",
     gpsConnected: "SENDATRACK verbonden", gpsConnectedBody: (count: number) => `${count} voertuigen automatisch gesynchroniseerd.`, gpsAutomatic: "AUTOMATISCHE SYNCHRONISATIE", gpsIssue: "SENDATRACK maakt opnieuw verbinding", gpsIssueBody: "Liveposities van het wagenpark zijn tijdelijk niet beschikbaar terwijl opnieuw wordt verbonden.", gpsPending: "SENDATRACK-connector klaar", gpsPendingBody: "Voeg de beveiligde accountgegevens toe om liveposities te activeren.", gpsFallback: "VEILIGE DEMOMODUS", sendatrack: "SENDATRACK", positionsAutomatic: "Liveposities worden automatisch gesynchroniseerd", sendatrackRefreshing: "SENDATRACK-posities worden elke 30 seconden automatisch vernieuwd", sendatrackLive: (count: number) => `${count} SENDATRACK-voertuigen online`,
     greeting: "Goedemiddag", greetingSub: "Dit beweegt er vandaag in uw wagenpark.", newDelivery: "Nieuwe levering",

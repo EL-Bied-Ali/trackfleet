@@ -15,8 +15,6 @@ export type BulkDeliveryDraft = {
   sendatrackVehicleId: string;
   whatsappOptIn: boolean;
   weightKg: number | null;
-  priceAmount: number | null;
-  priceCurrency: "EUR" | "MAD" | null;
 };
 
 export type BulkDeliveryImportResult = {
@@ -37,8 +35,6 @@ const acceptedHeaders = new Set([
   "sendatrack_vehicle_id",
   "whatsapp_opt_in",
   "weight_kg",
-  "price_amount",
-  "price_currency",
 ]);
 
 function parseCsvRows(input: string) {
@@ -143,11 +139,7 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     const recipientContact = get(values, "recipient_contact");
     const whatsappOptIn = boolValue(whatsappRaw);
     const weightRaw = get(values, "weight_kg");
-    const priceRaw = get(values, "price_amount");
-    const currencyRaw = get(values, "price_currency").toUpperCase();
     const weightKg = weightRaw ? Number(weightRaw) : null;
-    const priceAmount = priceRaw ? Number(priceRaw) : null;
-    const priceCurrency = currencyRaw === "EUR" || currencyRaw === "MAD" ? currencyRaw : null;
 
     if (!customer) errors.push(`Row ${rowNumber}: customer is required`);
     if (!destination) errors.push(`Row ${rowNumber}: destination is required`);
@@ -155,9 +147,7 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     if (whatsappOptIn === null) errors.push(`Row ${rowNumber}: whatsapp_opt_in must be true/false, yes/no, oui/non or 1/0`);
     if (Boolean(recipientName) !== Boolean(recipientContact)) errors.push(`Row ${rowNumber}: recipient_name and recipient_contact must be supplied together`);
     if (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) errors.push(`Row ${rowNumber}: weight_kg must be greater than 0 and at most 100000`);
-    if (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) errors.push(`Row ${rowNumber}: price_amount must be greater than 0 and at most 10000000`);
-    if ((priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) errors.push(`Row ${rowNumber}: price_currency must be EUR or MAD and supplied together with price_amount`);
-    if (!customer || !destination || !plannedArrivalAt || whatsappOptIn === null || Boolean(recipientName) !== Boolean(recipientContact) || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) || (priceRaw && (!Number.isFinite(priceAmount) || priceAmount! <= 0 || priceAmount! > 10000000)) || (priceRaw && !priceCurrency) || (!priceRaw && currencyRaw)) continue;
+    if (!customer || !destination || !plannedArrivalAt || whatsappOptIn === null || Boolean(recipientName) !== Boolean(recipientContact) || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000))) continue;
 
     rows.push({
       rowNumber,
@@ -173,14 +163,12 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
       sendatrackVehicleId: get(values, "sendatrack_vehicle_id"),
       whatsappOptIn,
       weightKg: weightKg === null ? null : Math.round(weightKg * 1000) / 1000,
-      priceAmount: priceAmount === null ? null : Math.round(priceAmount * 100) / 100,
-      priceCurrency,
     });
   }
   return { rows, errors };
 }
 
 export const BULK_DELIVERY_CSV_TEMPLATE = [
-  "customer,destination,planned_arrival_at,truck,contact,recipient_name,recipient_contact,whatsapp_opt_in,weight_kg,price_amount,price_currency,origin_site_id,destination_site_id,sendatrack_vehicle_id",
-  'Client Exemple,"Casablanca, Maroc",2026-08-20T14:00:00+02:00,TRUCK-01,+212600000000,Destinataire Exemple,+212611111111,false,12.5,45,EUR,,,',
+  "customer,destination,planned_arrival_at,truck,contact,recipient_name,recipient_contact,whatsapp_opt_in,weight_kg,origin_site_id,destination_site_id,sendatrack_vehicle_id",
+  'Client Exemple,"Casablanca, Maroc",2026-08-20T14:00:00+02:00,TRUCK-01,+212600000000,Destinataire Exemple,+212611111111,false,12.5,,,',
 ].join("\n");
