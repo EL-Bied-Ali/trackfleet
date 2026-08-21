@@ -27,7 +27,11 @@ export class NotificationClaimState {
     this.claims.set(key, { attemptedAt: now, sent: true });
   }
 
-  release(key: string) {
-    if (!this.claims.get(key)?.sent) this.claims.delete(key);
-  }
+  // Deliberately a no-op: deleting the claim here would let a permanently
+  // failing send (e.g. an expired provider token) be retried on literally
+  // the very next call instead of after retryAfterMs, since claim()'s own
+  // stale-reclaim check has nothing left to compare against once the entry
+  // is gone. Leaving the claim in place lets that existing check govern
+  // retry timing correctly.
+  release(_key: string) {}
 }

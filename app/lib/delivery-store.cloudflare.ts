@@ -249,9 +249,12 @@ export const store: DeliveryStore = {
   async markNotificationSent(deliveryId, type) {
     await db().prepare(`UPDATE delivery_notifications SET sent_at = ? WHERE delivery_id = ? AND event_type = ? AND channel = 'whatsapp'`).bind(Date.now(), deliveryId, type).run();
   },
-  async releaseNotification(deliveryId, type) {
-    await db().prepare(`DELETE FROM delivery_notifications WHERE delivery_id = ? AND event_type = ? AND channel = 'whatsapp' AND sent_at IS NULL`).bind(deliveryId, type).run();
-  },
+  // Deliberately a no-op: deleting the row here would let a permanently
+  // failing send (e.g. an expired provider token) be reclaimed on literally
+  // the next call instead of after the stale window, since claimNotification's
+  // own "attempted_at < staleBefore" check would have nothing left to
+  // compare against once the row is gone.
+  async releaseNotification(_deliveryId, _type) {},
   async create(input: CreateDeliveryInput) {
     const delivery: DeliveryRow = {
       ...input,
