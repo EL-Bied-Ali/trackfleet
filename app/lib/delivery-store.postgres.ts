@@ -574,11 +574,12 @@ export const postgresStore: DeliveryStore = {
       WHERE delivery_id = ${deliveryId} AND event_type = ${type} AND channel = 'whatsapp'`;
   },
 
-  async releaseNotification(deliveryId, type) {
-    await ensureSchema();
-    await sql`DELETE FROM delivery_notifications
-      WHERE delivery_id = ${deliveryId} AND event_type = ${type} AND channel = 'whatsapp' AND sent_at IS NULL`;
-  },
+  // Deliberately a no-op: deleting the row here would let a permanently
+  // failing send (e.g. an expired provider token) be reclaimed on literally
+  // the next call instead of after the stale window above, since
+  // claimNotification's own "attempted_at < staleBefore" check would have
+  // nothing left to compare against once the row is gone.
+  async releaseNotification(_deliveryId, _type) {},
 
   async create(input: CreateDeliveryInput) {
     await ensureSchema();
