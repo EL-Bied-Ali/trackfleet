@@ -7,6 +7,7 @@ import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, va
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent, whatsappConsentWithdrawn } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
+import { computeDeliveryPrice } from "../../lib/delivery-pricing";
 import { resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { publicDeliveryView } from "../../lib/public-delivery-view";
@@ -400,10 +401,7 @@ export async function POST(request: Request) {
     const recipientName = String(payload.recipientName ?? "").trim();
     const recipientContactInput = String(payload.recipientContact ?? "").trim();
     const weightProvided = payload.weightKg !== null && payload.weightKg !== undefined && String(payload.weightKg).trim() !== "";
-    const priceProvided = payload.priceAmount !== null && payload.priceAmount !== undefined && String(payload.priceAmount).trim() !== "";
     const weightInput = optionalNumber(payload.weightKg);
-    const priceInput = optionalNumber(payload.priceAmount);
-    const priceCurrencyInput = String(payload.priceCurrency ?? "").trim().toUpperCase();
     if (
       customer.length > 160
       || destinationInput.length > 500
@@ -422,24 +420,17 @@ export async function POST(request: Request) {
     if (weightProvided && (weightInput === null || weightInput <= 0 || weightInput > 100000)) {
       return Response.json({ error: "weightKg must be greater than 0 and at most 100000" }, { status: 400 });
     }
-    if (priceProvided && (priceInput === null || priceInput <= 0 || priceInput > 10000000)) {
-      return Response.json({ error: "priceAmount must be greater than 0 and at most 10000000" }, { status: 400 });
-    }
-    if (priceProvided !== (priceCurrencyInput !== "")) {
-      return Response.json({ error: "priceAmount and priceCurrency must be provided together" }, { status: 400 });
-    }
-    if (priceCurrencyInput && priceCurrencyInput !== "EUR" && priceCurrencyInput !== "MAD") {
-      return Response.json({ error: "priceCurrency must be EUR or MAD" }, { status: 400 });
-    }
     const weightKg = weightInput === null ? null : Math.round(weightInput * 1000) / 1000;
-    const priceAmount = priceInput === null ? null : Math.round(priceInput * 100) / 100;
-    const priceCurrency = priceCurrencyInput === "EUR" || priceCurrencyInput === "MAD" ? priceCurrencyInput : null;
     const companySites = await siteStore.listForCompany(session.companyId);
     const originSelection = resolveExplicitCompanySite(companySites, originSiteInput);
     if (originSelection.invalid) return Response.json({ error: "origin site is not available for this company" }, { status: 400 });
     const destinationSelection = resolveExplicitCompanySite(companySites, destinationSiteId);
     if (destinationSelection.invalid) return Response.json({ error: "destination site is not available for this company" }, { status: 400 });
     const originSite = originSelection.site;
+    // Price is never taken from the client -- it's a fixed business rule
+    // (1.5 EUR/kg, or 15 MAD/kg when the parcel ships from Morocco) derived
+    // from the declared weight and the resolved origin site's country.
+    const { priceAmount, priceCurrency } = computeDeliveryPrice(weightKg, originSite?.country ?? null);
     const site = destinationSelection.site ?? findCompanySiteByText(companySites, destinationInput) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
     const parsedPlannedArrival = plannedArrivalRaw ? new Date(plannedArrivalRaw) : null;

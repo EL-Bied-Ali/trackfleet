@@ -8,6 +8,8 @@ import {
   type BulkDeliveryDraft,
 } from "../lib/bulk-delivery-import";
 import { UNASSIGNED_TRUCK } from "../lib/delivery-vehicle-choice";
+import { computeDeliveryPrice } from "../lib/delivery-pricing";
+import { knownSites } from "../lib/known-sites";
 
 type ImportStatus = "pending" | "success" | "failed";
 type ImportRow = BulkDeliveryDraft & { idempotencyKey: string; status: ImportStatus; error?: string };
@@ -42,8 +44,6 @@ async function importOne(row: ImportRow) {
       sendatrackVehicleId: row.sendatrackVehicleId,
       whatsappOptIn: row.whatsappOptIn,
       weightKg: row.weightKg,
-      priceAmount: row.priceAmount,
-      priceCurrency: row.priceCurrency,
     }),
   });
   const body = await response.json().catch(() => ({})) as { error?: string };
@@ -164,7 +164,7 @@ export default function BulkImportPage() {
           <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 16 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead><tr style={{ textAlign: "left", background: "#f9fafb" }}>
-                {['Ligne', 'Client', 'Destination', 'Poids', 'Prix', 'Arrivée prévue', 'Camion', 'Contact', 'WhatsApp', 'État'].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>{label}</th>)}
+                {['Ligne', 'Client', 'Destination', 'Poids', 'Prix estimé', 'Arrivée prévue', 'Camion', 'Contact', 'WhatsApp', 'État'].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>{label}</th>)}
               </tr></thead>
               <tbody>
                 {rows.map((row) => (
@@ -173,7 +173,11 @@ export default function BulkImportPage() {
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.customer}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.destination}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.weightKg == null ? "—" : `${row.weightKg} kg`}</td>
-                    <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.priceAmount == null ? "—" : `${row.priceAmount.toFixed(2)} ${row.priceCurrency}`}</td>
+                    <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{(() => {
+                      const originCountry = knownSites.find((site) => site.id === row.originSiteId)?.country ?? null;
+                      const { priceAmount, priceCurrency } = computeDeliveryPrice(row.weightKg, originCountry);
+                      return priceAmount == null ? "—" : `${priceAmount.toFixed(2)} ${priceCurrency}`;
+                    })()}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{new Date(row.plannedArrivalAt).toLocaleString()}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.truck === UNASSIGNED_TRUCK ? "À affecter" : row.truck}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.contact || "—"}</td>

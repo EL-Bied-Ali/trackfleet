@@ -10,6 +10,9 @@ type HistoryItem = {
   contact: string;
   recipientName: string;
   recipientContact: string;
+  weightKg: number | null;
+  priceAmount: number | null;
+  priceCurrency: "EUR" | "MAD" | null;
   plannedArrivalAt: string | null;
   createdAt: string;
 };
@@ -67,10 +70,10 @@ export default function DeliveryHistoryPage() {
 
   const dateLocale = language === "nl" ? "nl-BE" : language === "en" ? "en-GB" : "fr-BE";
   const copy = language === "nl"
-    ? { eyebrow: "TRACKFLEET · HISTORIEK", title: "Leveringsgeschiedenis", back: "Terug naar operaties", empty: "Nog geen voltooide leveringen.", more: "Meer laden", loading: "Geschiedenis laden…", retry: "Opnieuw proberen", error: "Geschiedenis kon niet worden geladen." }
+    ? { eyebrow: "TRACKFLEET · HISTORIEK", title: "Leveringsgeschiedenis", back: "Terug naar operaties", empty: "Nog geen voltooide leveringen.", more: "Meer laden", loading: "Geschiedenis laden…", retry: "Opnieuw proberen", error: "Geschiedenis kon niet worden geladen.", weight: "Gewicht", price: "Prijs" }
     : language === "en"
-      ? { eyebrow: "TRACKFLEET · HISTORY", title: "Delivery history", back: "Back to operations", empty: "No completed deliveries yet.", more: "Load more", loading: "Loading history…", retry: "Retry", error: "Unable to load delivery history." }
-      : { eyebrow: "TRACKFLEET · HISTORIQUE", title: "Historique des livraisons", back: "Retour aux opérations", empty: "Aucune livraison terminée pour le moment.", more: "Charger plus", loading: "Chargement de l’historique…", retry: "Réessayer", error: "Impossible de charger l’historique." };
+      ? { eyebrow: "TRACKFLEET · HISTORY", title: "Delivery history", back: "Back to operations", empty: "No completed deliveries yet.", more: "Load more", loading: "Loading history…", retry: "Retry", error: "Unable to load delivery history.", weight: "Weight", price: "Price" }
+      : { eyebrow: "TRACKFLEET · HISTORIQUE", title: "Historique des livraisons", back: "Retour aux opérations", empty: "Aucune livraison terminée pour le moment.", more: "Charger plus", loading: "Chargement de l’historique…", retry: "Réessayer", error: "Impossible de charger l’historique.", weight: "Poids", price: "Prix" };
 
   return (
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 24px 64px", fontFamily: "system-ui", color: "#111827" }}>
@@ -88,7 +91,7 @@ export default function DeliveryHistoryPage() {
           <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 16 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead><tr style={{ background: "#f9fafb", textAlign: "left" }}>
-                {['ID', 'Client', 'Destinataire', 'Destination', 'Camion', 'Arrivée prévue', 'Créée le'].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>{label}</th>)}
+                {['ID', 'Client', 'Destinataire', 'Destination', 'Camion', copy.weight, copy.price, 'Arrivée prévue', 'Créée le'].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>{label}</th>)}
               </tr></thead>
               <tbody>{items.map((item) => <tr key={item.id}>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6", fontFamily: "monospace" }}>{item.id}</td>
@@ -96,6 +99,8 @@ export default function DeliveryHistoryPage() {
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.recipientName || "—"}{item.recipientContact ? <small style={{ display: "block", color: "#6b7280" }}>{item.recipientContact}</small> : null}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.destination}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.truck}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.weightKg == null ? "—" : `${item.weightKg} kg`}</td>
+                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.priceAmount == null ? "—" : `${item.priceAmount.toFixed(2)} ${item.priceCurrency}`}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.plannedArrivalAt ? new Date(item.plannedArrivalAt).toLocaleString(dateLocale) : "—"}</td>
                 <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{new Date(item.createdAt).toLocaleString(dateLocale)}</td>
               </tr>)}</tbody>
