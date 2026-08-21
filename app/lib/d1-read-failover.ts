@@ -112,6 +112,11 @@ export function withD1ReadFailover<T>(
   });
 }
 
+function isSubrequestLimitError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Too many subrequests");
+}
+
 export async function suppressMaintenanceWriteDuringD1Failover<T>(
   scope: string,
   primaryWrite: () => Promise<T>,
@@ -120,6 +125,12 @@ export async function suppressMaintenanceWriteDuringD1Failover<T>(
   try {
     return await primaryWrite();
   } catch (primaryError) {
+    // approveAndActivateFailover() itself costs a readiness-check subrequest
+    // plus a lease-activation write -- both futile, and both burning budget
+    // an already-over-limit invocation doesn't have, when the primary write
+    // failed for that exact reason. See the matching guard in
+    // d1-read-failover-policy.ts; reproduced live via wrangler tail.
+    if (isSubrequestLimitError(primaryError)) throw primaryError;
     if (!(await approveAndActivateFailover())) throw primaryError;
     console.warn("[trackfleet:failover] primary maintenance write unavailable; preserving D1 as read-only", {
       scope,

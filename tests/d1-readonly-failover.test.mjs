@@ -56,6 +56,19 @@ test("delivery standby wrapper falls back only on reads and never calls D1 busin
   assert.match(delivery, /create: primaryStore\.create/);
 });
 
+test("a subrequest-limit maintenance-write failure fails fast without wasting budget activating the lease", () => {
+  // Regression guard: approveAndActivateFailover() costs a readiness-check
+  // subrequest plus a lease-activation write, both futile when the primary
+  // write already failed because the invocation ran out of subrequest
+  // budget -- and worse, incorrectly activating the read-only lease here
+  // locks the whole app into read-only for 5 minutes over a per-invocation
+  // budget issue that has nothing to do with Postgres actually being down.
+  const body = helper.slice(helper.indexOf("export async function suppressMaintenanceWriteDuringD1Failover"));
+  const isSubrequestLimitIndex = body.indexOf("if (isSubrequestLimitError(primaryError)) throw primaryError;");
+  const approveIndex = body.indexOf("if (!(await approveAndActivateFailover())) throw primaryError;");
+  assert.ok(isSubrequestLimitIndex >= 0 && approveIndex >= 0 && isSubrequestLimitIndex < approveIndex);
+});
+
 test("GET-side maintenance becomes no-op during failover without making D1 writable", () => {
   assert.match(delivery, /suppressMaintenanceWriteDuringD1Failover/);
   assert.match(delivery, /applySendatrackSnapshot/);
