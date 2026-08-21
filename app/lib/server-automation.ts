@@ -1,15 +1,12 @@
 import { observeArrivalCompletion } from "trackfleet-delivery-completion";
 import { store } from "trackfleet-delivery-store";
-import { pruneTelemetry } from "trackfleet-telemetry-retention";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
 import { parseUnloadGraceMinutes } from "./delivery-arrival";
 import { runFleetBusinessTick } from "./fleet-business-tick";
 import { rotatedVehicleBatch } from "./fleet-tick-rotation";
-import { processPendingNotifications } from "./notification-runner";
 import { parseAutomationStartAt } from "./notification-policy";
 import { getSendatrackSnapshot } from "./sendatrack";
-import { telemetryRetentionPolicy } from "./telemetry-retention";
 
 export type AutomationRunResult = {
   connected: boolean;
@@ -19,14 +16,14 @@ export type AutomationRunResult = {
   delayEvents: number;
   arrivalSiteEvents: number;
   automaticCompletions: number;
-  notificationsSent: number;
-  notificationFailures: number;
   etaObservations: number;
   fleetPositions: number;
-  telemetryPruned: number;
 };
 
-export async function runFleetAutomation(origin: string): Promise<AutomationRunResult> {
+// Notification sends and telemetry pruning run in their own separate
+// scheduled tick -- see notification-maintenance-tick.ts -- so they never
+// compete with fleet sync for the same subrequest budget.
+export async function runFleetAutomation(): Promise<AutomationRunResult> {
   const accountID = runtimeEnv.SENDATRACK_ACCOUNT_ID?.trim();
   if (!accountID) throw new Error("sendatrack_server_credentials_missing");
 
@@ -53,31 +50,6 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     automationStartAt,
   });
 
-  // Kept conservative even though this tick isn't blocking a page load: the
-  // scheduled tick already spends its own subrequest budget on fleet sync,
-  // ETA/business-tick logic and telemetry pruning above, all higher priority
-  // than notification retries. Observed in production: with the WhatsApp
-  // token invalid, a cap of 20 guaranteed-to-fail sends on top of that other
-  // work reliably blew Cloudflare's per-invocation subrequest limit on every
-  // single tick, which in turn kept tripping the D1 read-only failover
-  // safety net app-wide. A smaller cap still makes steady progress on the
-  // backlog (each failed item now waits out its own retry window before
-  // being attempted again -- see notification-claim-state.ts) without
-  // starving the rest of the tick.
-  const notifications = await processPendingNotifications(companyId, origin, 5);
-  let telemetryPruned = 0;
-  const retention = telemetryRetentionPolicy(runtimeEnv.TRACKFLEET_TELEMETRY_RETENTION_DAYS);
-  if (retention.valid && retention.days !== null) {
-    try {
-      const pruned = await pruneTelemetry(companyId, retention.days);
-      telemetryPruned = pruned.fleetPositions + pruned.tripPositions + pruned.etaObservations;
-    } catch (error) {
-      console.error("[trackfleet:automation] telemetry retention maintenance failed", {
-        message: error instanceof Error ? error.message : "unknown_error",
-      });
-    }
-  }
-
   console.info("[trackfleet:automation] tick", {
     vehicles: business.vehicles,
     transitions: business.transitions,
@@ -85,11 +57,8 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     delayEvents: business.delayEvents,
     arrivalSiteEvents: business.arrivalSiteEvents,
     automaticCompletions: business.automaticCompletions,
-    notificationsSent: notifications.sent,
-    notificationFailures: notifications.failed,
     etaObservations: business.etaObservations,
     fleetPositions: business.fleetPositions,
-    telemetryPruned,
   });
 
   return {
@@ -100,10 +69,7 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     delayEvents: business.delayEvents,
     arrivalSiteEvents: business.arrivalSiteEvents,
     automaticCompletions: business.automaticCompletions,
-    notificationsSent: notifications.sent,
-    notificationFailures: notifications.failed,
     etaObservations: business.etaObservations,
     fleetPositions: business.fleetPositions,
-    telemetryPruned,
   };
 }

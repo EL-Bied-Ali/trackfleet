@@ -14,7 +14,7 @@ import {
 
 const vercelSource = fs.readFileSync("app/lib/telemetry-retention.vercel.ts", "utf8");
 const cloudflareSource = fs.readFileSync("app/lib/telemetry-retention.cloudflare.ts", "utf8");
-const automationSource = fs.readFileSync("app/lib/server-automation.ts", "utf8");
+const automationSource = fs.readFileSync("app/lib/notification-maintenance-tick.ts", "utf8");
 const healthSource = fs.readFileSync("app/api/health/route.ts", "utf8");
 const envExample = fs.readFileSync(".env.example", "utf8");
 

@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 
 const runnerSource = await readFile(new URL("../app/lib/notification-runner.ts", import.meta.url), "utf8");
-const automationSource = await readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8");
+const maintenanceTickSource = await readFile(new URL("../app/lib/notification-maintenance-tick.ts", import.meta.url), "utf8");
 const deliveriesRoute = await readFile(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8");
 
 test("processPendingNotifications caps how many sends it attempts per call", () => {
@@ -27,14 +27,17 @@ test("uncapped items stay pending for the next call instead of being dropped", (
   assert.match(runnerSource, /return \{ pending: pending\.length, sent, failed, suppressed \};/);
 });
 
-test("the scheduled automation tick keeps its notification cap conservative to protect the rest of the tick's subrequest budget", () => {
-  // Regression guard: a cap of 20 here, on top of the same tick's fleet
-  // sync/business-tick/telemetry-pruning work, reliably blew Cloudflare's
-  // per-invocation subrequest limit on every tick once the WhatsApp token
-  // went invalid (every send attempted and failed), which kept tripping the
-  // D1 read-only failover safety net app-wide -- reproduced live via
-  // wrangler tail.
-  assert.match(automationSource, /processPendingNotifications\(companyId, origin, 5\)/);
+test("the notification maintenance tick keeps its cap conservative even though it no longer shares a budget with fleet sync", () => {
+  // Regression guard: a cap of 20 (on top of fleet sync/business-tick/
+  // telemetry-pruning work all sharing one invocation) reliably blew
+  // Cloudflare's per-invocation subrequest limit on every tick once the
+  // WhatsApp token went invalid (every send attempted and failed), which
+  // kept tripping the D1 read-only failover safety net app-wide --
+  // reproduced live via wrangler tail. Notification sends now run in their
+  // own tick (see notification-maintenance-tick.ts, no longer sharing a
+  // budget with fleet sync), but the cap stays conservative because each
+  // guaranteed-to-fail send still costs several subrequests on its own.
+  assert.match(maintenanceTickSource, /processPendingNotifications\(companyId, origin, 8\)/);
 });
 
 test("interactive dispatcher requests use the safe default cap", () => {
