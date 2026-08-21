@@ -27,8 +27,14 @@ test("uncapped items stay pending for the next call instead of being dropped", (
   assert.match(runnerSource, /return \{ pending: pending\.length, sent, failed, suppressed \};/);
 });
 
-test("the scheduled automation tick can drain a larger slice than an interactive request, since it isn't blocking a page load", () => {
-  assert.match(automationSource, /processPendingNotifications\(companyId, origin, 20\)/);
+test("the scheduled automation tick keeps its notification cap conservative to protect the rest of the tick's subrequest budget", () => {
+  // Regression guard: a cap of 20 here, on top of the same tick's fleet
+  // sync/business-tick/telemetry-pruning work, reliably blew Cloudflare's
+  // per-invocation subrequest limit on every tick once the WhatsApp token
+  // went invalid (every send attempted and failed), which kept tripping the
+  // D1 read-only failover safety net app-wide -- reproduced live via
+  // wrangler tail.
+  assert.match(automationSource, /processPendingNotifications\(companyId, origin, 5\)/);
 });
 
 test("interactive dispatcher requests use the safe default cap", () => {

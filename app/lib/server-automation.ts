@@ -44,10 +44,18 @@ export async function runFleetAutomation(origin: string): Promise<AutomationRunR
     automationStartAt,
   });
 
-  // The scheduled tick isn't blocking a dispatcher's page load, so it can
-  // afford to drain a larger slice of the backlog than an interactive
-  // request (see processPendingNotifications' default cap).
-  const notifications = await processPendingNotifications(companyId, origin, 20);
+  // Kept conservative even though this tick isn't blocking a page load: the
+  // scheduled tick already spends its own subrequest budget on fleet sync,
+  // ETA/business-tick logic and telemetry pruning above, all higher priority
+  // than notification retries. Observed in production: with the WhatsApp
+  // token invalid, a cap of 20 guaranteed-to-fail sends on top of that other
+  // work reliably blew Cloudflare's per-invocation subrequest limit on every
+  // single tick, which in turn kept tripping the D1 read-only failover
+  // safety net app-wide. A smaller cap still makes steady progress on the
+  // backlog (each failed item now waits out its own retry window before
+  // being attempted again -- see notification-claim-state.ts) without
+  // starving the rest of the tick.
+  const notifications = await processPendingNotifications(companyId, origin, 5);
   let telemetryPruned = 0;
   const retention = telemetryRetentionPolicy(runtimeEnv.TRACKFLEET_TELEMETRY_RETENTION_DAYS);
   if (retention.valid && retention.days !== null) {
