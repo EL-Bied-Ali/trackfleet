@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-const [workflow, tickRoute, worker, runner, smokeWorkflow] = await Promise.all([
+const [workflow, tickRoute, notificationTickRoute, worker, runner, smokeWorkflow] = await Promise.all([
   readFile(new URL("../.github/workflows/automation-tick.yml", import.meta.url), "utf8"),
   readFile(new URL("../app/api/automation/tick/route.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/api/automation/notification-tick/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/notification-runner.ts", import.meta.url), "utf8"),
   readFile(new URL("../.github/workflows/deployed-smoke-test.yml", import.meta.url), "utf8"),
@@ -42,7 +43,10 @@ test("GitHub audits readiness and liveness without executing production automati
 });
 
 test("tracking links inherit the stable tick request origin and require private tokens", () => {
-  assert.match(tickRoute, /runFleetAutomation\(new URL\(request\.url\)\.origin\)/);
+  // Notification sends (and their tracking-link origin) run in the separate
+  // notification maintenance tick, not the fleet-sync tick -- see
+  // notification-maintenance-tick.ts.
+  assert.match(notificationTickRoute, /runNotificationMaintenanceTick\(new URL\(request\.url\)\.origin\)/);
   assert.match(runner, /const trackingUrl = new URL\(origin\)/);
   assert.match(runner, /searchParams\.set\(["']tracking["'], item\.delivery\.trackingToken\)/);
   assert.doesNotMatch(runner, /trackingToken \|\| item\.delivery\.id/);

@@ -6,7 +6,7 @@ export type AutomationHeartbeat = {
   lastFailureAt: Date | null;
 };
 
-export type RuntimeHeartbeatJob = "fleet_tick" | "telemetry_retention";
+export type RuntimeHeartbeatJob = "fleet_tick" | "telemetry_retention" | "notification_tick";
 export type AutomationFailureCode =
   | "sendatrack_authentication_failed"
   | "sendatrack_service_unavailable"

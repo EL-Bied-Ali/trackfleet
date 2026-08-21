@@ -59,7 +59,7 @@ export async function GET(request: Request) {
 
   await bestEffortHeartbeat("attempt", recordAutomationAttempt);
   try {
-    const result = await runFleetAutomation(new URL(request.url).origin);
+    const result = await runFleetAutomation();
     await bestEffortHeartbeat("success", recordAutomationSuccess);
     return Response.json({ ok: true, ...result }, { headers: { "cache-control": "no-store" } });
   } catch (error) {

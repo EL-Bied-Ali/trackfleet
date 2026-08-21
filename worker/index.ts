@@ -33,6 +33,7 @@ interface ScheduledController {
 }
 
 const automationCron = "*/5 * * * *";
+const notificationMaintenanceCron = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
 const operationalReconciliationCron = "*/15 * * * *";
 const telemetryReconciliationCron = "5,20,35,50 * * * *";
 const historyBackfillCron = "10,25,40,55 * * * *";
@@ -75,9 +76,24 @@ async function runAutomationTick(env: Env, ctx: ExecutionContext) {
   console.info("[trackfleet:automation] scheduled tick completed", { status: response.status });
 }
 
+async function runNotificationMaintenanceTick(env: Env, ctx: ExecutionContext) {
+  const secret = env.CRON_SECRET?.trim();
+  if (!secret) throw new Error("cron_secret_missing");
+
+  const response = await handler.fetch(new Request("https://trackfleet.internal/api/automation/notification-tick", {
+    headers: { authorization: `Bearer ${secret}` },
+  }), env, ctx);
+  if (!response.ok) throw new Error(`notification_tick_http_${response.status}`);
+  console.info("[trackfleet:automation] scheduled notification maintenance tick completed", { status: response.status });
+}
+
 async function runScheduledTask(cron: string, env: Env, ctx: ExecutionContext) {
   if (cron === automationCron) {
     await runAutomationTick(env, ctx);
+    return;
+  }
+  if (cron === notificationMaintenanceCron) {
+    await runNotificationMaintenanceTick(env, ctx);
     return;
   }
   if (cron === operationalReconciliationCron) {
