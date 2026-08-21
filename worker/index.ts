@@ -6,6 +6,7 @@ import { reconcileD1Telemetry } from "../app/lib/d1-telemetry-reconciliation";
 import { backfillD1DeliveryHistory } from "../app/lib/d1-history-backfill";
 import { d1ReadFailoverActive } from "../app/lib/d1-read-failover";
 import { shouldBlockMutationDuringReadFailover } from "../app/lib/d1-read-failover-policy";
+import { flushD1MirrorQueue } from "../app/lib/d1-mirror-queue";
 
 interface Env {
   ASSETS: Fetcher;
@@ -118,7 +119,12 @@ const worker = {
       return readOnlyFailoverResponse();
     }
 
-    return withSecurityHeaders(await handler.fetch(request, env, ctx));
+    const response = await handler.fetch(request, env, ctx);
+    // Queued D1 mirror writes (see d1-mirror-queue.ts) are flushed as one
+    // batched subrequest after the response is already on its way, so
+    // batching doesn't add latency to the request itself.
+    ctx.waitUntil(flushD1MirrorQueue());
+    return withSecurityHeaders(response);
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
@@ -131,6 +137,11 @@ const worker = {
         message: error instanceof Error ? error.message : "unknown_error",
       });
       throw error;
+    } finally {
+      // Flush whatever mirror writes queued during this run, whether it
+      // succeeded or not, before the invocation ends -- there's no waitUntil
+      // extension point after a scheduled() call returns.
+      await flushD1MirrorQueue();
     }
   },
 };
