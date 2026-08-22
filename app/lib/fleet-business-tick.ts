@@ -170,6 +170,19 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
   const stableContexts = new Map<string, ReturnType<typeof stableEtaRouteContext>>();
   let etaObservations = 0;
   for (const delivery of deliveries) {
+    // listForCompany returns every delivery a company has ever created, not
+    // just active ones -- without this guard, ETA/registration/delay work
+    // (multiple DB round trips each) reprocesses the company's entire
+    // historical delivery volume on every tick forever, which was a major
+    // contributor to the automation tick reliably exceeding the Worker's
+    // subrequest budget. A delivered parcel is done: it needs no further ETA
+    // observations, delay detection, or trip-position logging, and a
+    // REGISTERED backfill notification arriving after the parcel already
+    // arrived would be a confusing, out-of-order message anyway. Trip
+    // completion detection below is unaffected -- it reads `deliveries`
+    // directly (via rowById) rather than this loop's stableContexts, and
+    // buildTruckStopPlans already excludes delivered deliveries from stops.
+    if (delivery.status === "Delivered") continue;
     let events = await eventsFor(delivery.id);
     const automationStartAt = input.automationStartAt ?? null;
     const registrationEligible = automationStartAt
