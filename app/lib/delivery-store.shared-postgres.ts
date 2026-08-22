@@ -23,10 +23,10 @@ async function mirrorDelivery(delivery: DeliveryRow) {
     const statement = db.prepare(`INSERT INTO deliveries (
       id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination,
       destination_latitude, destination_longitude, arrival_radius_km, truck, driver, status, eta,
-      planned_arrival_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at,
+      planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at,
       sendatrack_vehicle_id, latitude, longitude, speed, last_position_at, gps_source, company_id,
       tracking_token, trip_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       customer = excluded.customer,
       origin_site_id = excluded.origin_site_id,
@@ -42,6 +42,7 @@ async function mirrorDelivery(delivery: DeliveryRow) {
       status = excluded.status,
       eta = excluded.eta,
       planned_arrival_at = excluded.planned_arrival_at,
+      next_truck_departure_at = excluded.next_truck_departure_at,
       progress = excluded.progress,
       color = excluded.color,
       contact = excluded.contact,
@@ -79,6 +80,7 @@ async function mirrorDelivery(delivery: DeliveryRow) {
         delivery.status,
         delivery.eta,
         delivery.plannedArrivalAt?.getTime() ?? null,
+        delivery.nextTruckDepartureAt?.getTime() ?? null,
         delivery.progress,
         delivery.color,
         delivery.contact,

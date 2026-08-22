@@ -65,9 +65,10 @@ async function observeArrivalCompletion(input) {
 
 test("accelerated multi-tick MVP flow exercises the production business core end to end", async () => {
   const plannedArrivalAt = new Date(baseTime + 6 * 60 * 60_000);
+  const nextTruckDepartureAt = new Date(baseTime - 60 * 60_000);
   const csv = [
-    "customer,destination,planned_arrival_at,truck,origin_site_id,destination_site_id,sendatrack_vehicle_id",
-    `Client MVP,"Casablanca, MA",${plannedArrivalAt.toISOString()},TRUCK-42,brussels,casablanca,sendatrack-vehicle-42`,
+    "customer,destination,planned_arrival_at,next_truck_departure_at,truck,origin_site_id,destination_site_id,sendatrack_vehicle_id",
+    `Client MVP,"Casablanca, MA",${plannedArrivalAt.toISOString()},${nextTruckDepartureAt.toISOString()},TRUCK-42,brussels,casablanca,sendatrack-vehicle-42`,
   ].join("\n");
   const imported = parseBulkDeliveryCsv(csv);
   assert.deepEqual(imported.errors, []);
@@ -93,6 +94,7 @@ test("accelerated multi-tick MVP flow exercises the production business core end
       status: "Loading",
       eta: plannedArrivalAt.toISOString(),
       plannedArrivalAt,
+      nextTruckDepartureAt,
       progress: 0,
       color: "#16a272",
       contact: "",

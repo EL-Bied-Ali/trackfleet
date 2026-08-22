@@ -410,6 +410,7 @@ export async function POST(request: Request) {
     const sendatrackVehicleId = String(payload.sendatrackVehicleId ?? "").trim();
     const eta = String(payload.eta ?? "").trim();
     const plannedArrivalRaw = String(payload.plannedArrivalAt ?? "").trim();
+    const nextTruckDepartureRaw = String(payload.nextTruckDepartureAt ?? "").trim();
     const contactInput = String(payload.contact ?? "").trim();
     const recipientName = String(payload.recipientName ?? "").trim();
     const recipientContactInput = String(payload.recipientContact ?? "").trim();
@@ -424,6 +425,7 @@ export async function POST(request: Request) {
       || sendatrackVehicleId.length > 160
       || eta.length > 16
       || plannedArrivalRaw.length > 64
+      || nextTruckDepartureRaw.length > 64
       || contactInput.length > 40
       || recipientName.length > 160
       || recipientContactInput.length > 40
@@ -448,9 +450,11 @@ export async function POST(request: Request) {
     const destination = site?.address ?? destinationInput;
     const parsedPlannedArrival = plannedArrivalRaw ? new Date(plannedArrivalRaw) : null;
     const plannedArrivalAt = parsedPlannedArrival && Number.isFinite(parsedPlannedArrival.getTime()) ? parsedPlannedArrival : null;
+    const parsedNextTruckDeparture = nextTruckDepartureRaw ? new Date(nextTruckDepartureRaw) : null;
+    const nextTruckDepartureAt = parsedNextTruckDeparture && Number.isFinite(parsedNextTruckDeparture.getTime()) ? parsedNextTruckDeparture : null;
     const validLegacyEta = /^\d{2}:\d{2}$/.test(eta);
-    if (!customer || !destination || !truck || (!plannedArrivalAt && !validLegacyEta)) {
-      return Response.json({ error: "customer, destination, truck, and a valid planned arrival are required" }, { status: 400 });
+    if (!customer || !destination || !truck || (!plannedArrivalAt && !validLegacyEta) || !nextTruckDepartureAt) {
+      return Response.json({ error: "customer, destination, truck, a valid planned arrival, and the next truck departure date are required" }, { status: 400 });
     }
     const normalizedEta = validLegacyEta ? eta : plannedArrivalAt!.toISOString().slice(11, 16);
 
@@ -503,7 +507,7 @@ export async function POST(request: Request) {
         if (session.role === "agency" && !agencyDeliveryIsVisible(existing, session.siteId)) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
-        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
+        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency })) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
         return idempotentReplayResponse(existing, session.companyId);
@@ -536,6 +540,7 @@ export async function POST(request: Request) {
         truck: liveVehicle?.name ?? truck,
         eta: normalizedEta,
         plannedArrivalAt,
+        nextTruckDepartureAt,
         contact,
         recipientName,
         recipientContact,
@@ -559,7 +564,7 @@ export async function POST(request: Request) {
         const existing = await store.getPublic(idempotencyTrackingToken).catch(() => null);
         if (existing?.companyId === session.companyId
           && (session.role === "dispatcher" || agencyDeliveryIsVisible(existing, session.siteId))
-          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, weightKg, priceAmount, priceCurrency })) {
+          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency })) {
           return idempotentReplayResponse(existing, session.companyId);
         }
       }

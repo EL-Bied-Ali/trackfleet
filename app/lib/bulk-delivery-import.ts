@@ -8,6 +8,7 @@ export type BulkDeliveryDraft = {
   originSiteId: string;
   destinationSiteId: string;
   plannedArrivalAt: string;
+  nextTruckDepartureAt: string;
   contact: string;
   recipientName: string;
   recipientContact: string;
@@ -28,6 +29,7 @@ const acceptedHeaders = new Set([
   "origin_site_id",
   "destination_site_id",
   "planned_arrival_at",
+  "next_truck_departure_at",
   "contact",
   "recipient_name",
   "recipient_contact",
@@ -105,7 +107,7 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
   for (const header of headers) {
     if (!acceptedHeaders.has(header)) errors.push(`Unsupported CSV header: ${header}`);
   }
-  for (const required of ["customer", "destination", "planned_arrival_at", "origin_site_id"]) {
+  for (const required of ["customer", "destination", "planned_arrival_at", "next_truck_departure_at", "origin_site_id"]) {
     if (!headers.includes(required)) errors.push(`Missing required CSV header: ${required}`);
   }
   if (errors.length) return { rows: [], errors };
@@ -135,6 +137,8 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     const truck = get(values, "truck");
     const planned = get(values, "planned_arrival_at");
     const plannedArrivalAt = normalizedIsoDate(planned);
+    const nextDeparture = get(values, "next_truck_departure_at");
+    const nextTruckDepartureAt = normalizedIsoDate(nextDeparture);
     const whatsappRaw = get(values, "whatsapp_opt_in");
     const recipientName = get(values, "recipient_name");
     const recipientContact = get(values, "recipient_contact");
@@ -149,10 +153,11 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     // silently defaulting to EUR for a blank/unresolved origin.
     if (!originSiteId) errors.push(`Row ${rowNumber}: origin_site_id is required`);
     if (!plannedArrivalAt) errors.push(`Row ${rowNumber}: planned_arrival_at is invalid`);
+    if (!nextTruckDepartureAt) errors.push(`Row ${rowNumber}: next_truck_departure_at is invalid`);
     if (whatsappOptIn === null) errors.push(`Row ${rowNumber}: whatsapp_opt_in must be true/false, yes/no, oui/non or 1/0`);
     if (Boolean(recipientName) !== Boolean(recipientContact)) errors.push(`Row ${rowNumber}: recipient_name and recipient_contact must be supplied together`);
     if (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) errors.push(`Row ${rowNumber}: weight_kg must be greater than 0 and at most 100000`);
-    if (!customer || !destination || !originSiteId || !plannedArrivalAt || whatsappOptIn === null || Boolean(recipientName) !== Boolean(recipientContact) || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000))) continue;
+    if (!customer || !destination || !originSiteId || !plannedArrivalAt || !nextTruckDepartureAt || whatsappOptIn === null || Boolean(recipientName) !== Boolean(recipientContact) || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000))) continue;
 
     rows.push({
       rowNumber,
@@ -161,6 +166,7 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
       originSiteId,
       destinationSiteId: get(values, "destination_site_id"),
       plannedArrivalAt,
+      nextTruckDepartureAt,
       contact: get(values, "contact"),
       recipientName,
       recipientContact,
@@ -174,6 +180,6 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
 }
 
 export const BULK_DELIVERY_CSV_TEMPLATE = [
-  "customer,destination,planned_arrival_at,truck,contact,recipient_name,recipient_contact,whatsapp_opt_in,weight_kg,origin_site_id,destination_site_id,sendatrack_vehicle_id",
-  'Client Exemple,"Casablanca, Maroc",2026-08-20T14:00:00+02:00,TRUCK-01,+212600000000,Destinataire Exemple,+212611111111,false,12.5,brussels-abattoir-45,,',
+  "customer,destination,planned_arrival_at,next_truck_departure_at,truck,contact,recipient_name,recipient_contact,whatsapp_opt_in,weight_kg,origin_site_id,destination_site_id,sendatrack_vehicle_id",
+  'Client Exemple,"Casablanca, Maroc",2026-08-20T14:00:00+02:00,2026-08-19T09:00:00+02:00,TRUCK-01,+212600000000,Destinataire Exemple,+212611111111,false,12.5,brussels-abattoir-45,,',
 ].join("\n");

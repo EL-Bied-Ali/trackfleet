@@ -37,6 +37,7 @@ async function importOne(row: ImportRow) {
       originSiteId: row.originSiteId,
       destinationSiteId: row.destinationSiteId,
       plannedArrivalAt: row.plannedArrivalAt,
+      nextTruckDepartureAt: row.nextTruckDepartureAt,
       contact: row.contact,
       recipientName: row.recipientName,
       recipientContact: row.recipientContact,
