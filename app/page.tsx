@@ -12,6 +12,7 @@ import { activeTourDisplayId, activeTourKey, stopSequence, tourCustomerCount, to
 import { customerEtaNote, etaExplanation } from "./lib/eta-display";
 import { computeDeliveryPrice } from "./lib/delivery-pricing";
 import { knownSite as staticKnownSite } from "./lib/known-sites";
+import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "./lib/remembered-login";
 import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_VEHICLE_ID } from "./lib/delivery-vehicle-choice";
 import { suggestPlannedTrip } from "./lib/trip-suggestion";
 
@@ -130,19 +131,24 @@ function LanguageSwitcher({ locale, label, onChange }: { locale: Locale; label: 
 
 function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Locale; busy: boolean; error: LoginErrorKind | ""; onLocale: (locale: Locale) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
   const copy = {
-    fr: { eyebrow: "ESPACE ENTREPRISE", title: "Connectez votre flotte SENDATRACK", body: "Utilisez les mêmes identifiants que dans l’application SENDATRACK. Votre espace TrackFleet sera reconnu automatiquement.", account: "Compte", accountPlaceholder: "Compte SENDATRACK", user: "Utilisateur", userPlaceholder: "Utilisateur", password: "Mot de passe", submit: "Accéder à TrackFleet", loading: "Connexion…", invalidCredentials: "Identifiants SENDATRACK incorrects.", serviceUnavailable: "SENDATRACK est temporairement indisponible. Réessayez dans quelques instants.", loginFailed: "Connexion impossible. Réessayez.", privacy: "Connexion chiffrée côté TrackFleet · aucune donnée visible par vos clients" },
-    en: { eyebrow: "COMPANY PORTAL", title: "Connect your SENDATRACK fleet", body: "Use the same credentials as in the SENDATRACK app. Your TrackFleet workspace will be recognized automatically.", account: "Account", accountPlaceholder: "SENDATRACK account", user: "User", userPlaceholder: "User", password: "Password", submit: "Open TrackFleet", loading: "Connecting…", invalidCredentials: "Incorrect SENDATRACK credentials.", serviceUnavailable: "SENDATRACK is temporarily unavailable. Please try again shortly.", loginFailed: "Unable to sign in. Please try again.", privacy: "Encrypted by TrackFleet · credentials are never visible to customers" },
-    nl: { eyebrow: "BEDRIJFSPORTAAL", title: "Koppel uw SENDATRACK-wagenpark", body: "Gebruik dezelfde gegevens als in de SENDATRACK-app. Uw TrackFleet-ruimte wordt automatisch herkend.", account: "Account", accountPlaceholder: "SENDATRACK-account", user: "Gebruiker", userPlaceholder: "Gebruiker", password: "Wachtwoord", submit: "TrackFleet openen", loading: "Verbinden…", invalidCredentials: "Onjuiste SENDATRACK-gegevens.", serviceUnavailable: "SENDATRACK is tijdelijk niet beschikbaar. Probeer het zo opnieuw.", loginFailed: "Aanmelden mislukt. Probeer opnieuw.", privacy: "Versleuteld door TrackFleet · nooit zichtbaar voor klanten" },
+    fr: { eyebrow: "ESPACE ENTREPRISE", title: "Connectez votre flotte SENDATRACK", body: "Utilisez les mêmes identifiants que dans l’application SENDATRACK. Votre espace TrackFleet sera reconnu automatiquement.", account: "Compte", accountPlaceholder: "Compte SENDATRACK", user: "Utilisateur", userPlaceholder: "Utilisateur", password: "Mot de passe", remember: "Se souvenir de mon compte et utilisateur sur cet appareil", submit: "Accéder à TrackFleet", loading: "Connexion…", invalidCredentials: "Identifiants SENDATRACK incorrects.", serviceUnavailable: "SENDATRACK est temporairement indisponible. Réessayez dans quelques instants.", loginFailed: "Connexion impossible. Réessayez.", privacy: "Connexion chiffrée côté TrackFleet · aucune donnée visible par vos clients" },
+    en: { eyebrow: "COMPANY PORTAL", title: "Connect your SENDATRACK fleet", body: "Use the same credentials as in the SENDATRACK app. Your TrackFleet workspace will be recognized automatically.", account: "Account", accountPlaceholder: "SENDATRACK account", user: "User", userPlaceholder: "User", password: "Password", remember: "Remember my account and username on this device", submit: "Open TrackFleet", loading: "Connecting…", invalidCredentials: "Incorrect SENDATRACK credentials.", serviceUnavailable: "SENDATRACK is temporarily unavailable. Please try again shortly.", loginFailed: "Unable to sign in. Please try again.", privacy: "Encrypted by TrackFleet · credentials are never visible to customers" },
+    nl: { eyebrow: "BEDRIJFSPORTAAL", title: "Koppel uw SENDATRACK-wagenpark", body: "Gebruik dezelfde gegevens als in de SENDATRACK-app. Uw TrackFleet-ruimte wordt automatisch herkend.", account: "Account", accountPlaceholder: "SENDATRACK-account", user: "Gebruiker", userPlaceholder: "Gebruiker", password: "Wachtwoord", remember: "Mijn account en gebruiker op dit toestel onthouden", submit: "TrackFleet openen", loading: "Verbinden…", invalidCredentials: "Onjuiste SENDATRACK-gegevens.", serviceUnavailable: "SENDATRACK is tijdelijk niet beschikbaar. Probeer het zo opnieuw.", loginFailed: "Aanmelden mislukt. Probeer opnieuw.", privacy: "Versleuteld door TrackFleet · nooit zichtbaar voor klanten" },
   }[locale];
+  // LoginScreen only ever renders once the client-side session check has
+  // resolved to "anonymous" (see authState), so it's never part of the
+  // server-rendered HTML -- safe to read localStorage directly here.
+  const remembered = readRememberedLogin();
   return <main className="login-page">
     <header className="login-header"><span className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></span><LanguageSwitcher locale={locale} label="Language" onChange={onLocale} /></header>
     <section className="login-layout">
       <div className="login-story"><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p>{copy.body}</p><div className="login-route"><span>BE</span><i /><b>↗</b><i /><span>MA</span></div><small>Belgique · France · Espagne · Maroc</small></div>
       <form className="login-card" onSubmit={onSubmit}>
         <div className="login-provider"><span>⌖</span><div><strong>SENDATRACK</strong><small>GPS fleet connection</small></div></div>
-        <label>{copy.account}<input name="accountID" autoComplete="organization" required placeholder={copy.accountPlaceholder} /></label>
-        <label>{copy.user}<input name="user" autoComplete="username" required placeholder={copy.userPlaceholder} /></label>
+        <label>{copy.account}<input name="accountID" autoComplete="organization" required placeholder={copy.accountPlaceholder} defaultValue={remembered?.accountID ?? ""} /></label>
+        <label>{copy.user}<input name="user" autoComplete="username" required placeholder={copy.userPlaceholder} defaultValue={remembered?.user ?? ""} /></label>
         <label>{copy.password}<input name="password" type="password" autoComplete="current-password" required placeholder="••••••••" /></label>
+        <label className="consent-choice"><input type="checkbox" name="rememberLogin" defaultChecked /><span>{copy.remember}</span></label>
         {error && <p className="login-error" role="alert">{error === "invalid_credentials" ? copy.invalidCredentials : error === "service_unavailable" ? copy.serviceUnavailable : copy.loginFailed}</p>}
         <button className="login-submit" disabled={busy}>{busy ? copy.loading : copy.submit}<span>→</span></button>
         <p className="login-privacy">⌁ {copy.privacy}</p>
@@ -519,8 +525,11 @@ export default function Home() {
     setLoginBusy(true);
     setLoginError("");
     const form = new FormData(event.currentTarget);
+    const accountID = String(form.get("accountID") ?? "");
+    const user = String(form.get("user") ?? "");
+    const rememberLogin = form.get("rememberLogin") === "on";
     try {
-      const response = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountID: form.get("accountID"), user: form.get("user"), password: form.get("password") }) });
+      const response = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accountID, user, password: form.get("password") }) });
       const data = await response.json() as { company?: CompanyIdentity; error?: string };
       if (!response.ok) {
         setLoginError(classifyLoginError(response.status, data.error));
@@ -530,6 +539,8 @@ export default function Home() {
         setLoginError("login_failed");
         return;
       }
+      if (rememberLogin) saveRememberedLogin({ accountID, user });
+      else clearRememberedLogin();
       setCompany(data.company);
       setAuthState("authenticated");
     } catch {
