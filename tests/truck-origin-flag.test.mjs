@@ -44,11 +44,23 @@ test("origin country is resolved and passed only to the dispatcher's live fleet 
 
 test("clicking empty map area closes the truck info popover, not just its own close button", () => {
   // Regression guard: the popover previously only closed via its explicit X
-  // button. Truck marker buttons are separate DOM elements overlaid on the
-  // map canvas, so a click on one never reaches the map's own click
-  // listener -- onBackgroundClick only fires for clicks on empty map area,
-  // which is exactly when an open popover should dismiss.
+  // button. onBackgroundClick is meant to fire only for clicks on empty map
+  // area, which is exactly when an open popover should dismiss.
   assert.match(map, /onBackgroundClick\?: \(\) => void;/);
-  assert.match(map, /map\.on\("click", \(\) => onBackgroundClickRef\.current\?\.\(\)\);/);
+  assert.match(map, /map\.on\("click", \(event\) => \{/);
   assert.match(page, /onBackgroundClick=\{\(\) => setShowPopover\(false\)\}/);
+});
+
+test("clicking a truck marker does not also trigger the background-click handler on the same click", () => {
+  // Regression guard, reproduced live immediately after the fix above
+  // shipped: truck marker elements are DOM descendants of the map's own
+  // container (siblings of the canvas, not outside it), so a click on one
+  // still bubbles up into the map's click listener. Without excluding
+  // marker clicks, selecting a truck opened its popover via onSelect and
+  // the very same click then closed it again via onBackgroundClick --
+  // the popover appeared to never show up at all.
+  const clickHandler = map.slice(map.indexOf('map.on("click", (event) => {'));
+  const handlerBody = clickHandler.slice(0, clickHandler.indexOf("});") + 3);
+  assert.match(handlerBody, /const target = event\.originalEvent\?\.target as HTMLElement \| null;/);
+  assert.match(handlerBody, /if \(target\?\.closest\("\.maplibre-truck"\)\) return;/);
 });
