@@ -165,11 +165,18 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
         map.fitBounds([[-10.5, 29.5], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
         setMapRevision((revision) => revision + 1);
       });
-      // Truck markers are separate DOM elements overlaid on the map canvas,
-      // so a click on one never reaches this handler -- it only fires for
-      // clicks on empty map area, which is exactly when the open info
-      // popover (driven by onSelect above) should close.
-      map.on("click", () => onBackgroundClickRef.current?.());
+      // Truck marker elements sit inside the map's own container, so a
+      // click on one still bubbles up into this handler via the DOM (they
+      // are siblings-under-a-common-ancestor of the canvas, not outside the
+      // container) -- without the guard below, selecting a truck opened its
+      // popover via onSelect and then immediately closed it again via this
+      // handler on the very same click, making the popover appear broken.
+      // Only a click that didn't originate on a marker should close it.
+      map.on("click", (event) => {
+        const target = event.originalEvent?.target as HTMLElement | null;
+        if (target?.closest(".maplibre-truck")) return;
+        onBackgroundClickRef.current?.();
+      });
     })();
 
     return () => {
