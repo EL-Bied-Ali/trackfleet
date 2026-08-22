@@ -44,3 +44,12 @@ test("regional destinations reached only past the Casablanca relay are flagged a
     assert.notEqual(knownSites.find((site) => site.id === id)?.finalLegTrackingUnavailable, true, `${id} should not be flagged`);
   }
 });
+
+test("every untracked-final-leg site points to Casablanca as its relay hub", () => {
+  for (const id of ["marrakech-essaouira-12", "agadir-zaitoune-tikiouine-103a", "fquih-ben-salah-allal-ben-abdellah-197"]) {
+    assert.equal(knownSites.find((site) => site.id === id)?.relayHubSiteId, "casablanca-mohammed-vi-959", `${id} should point to the Casablanca relay hub`);
+  }
+  // The hub itself must be a real, resolvable site id.
+  const hubId = knownSites.find((site) => site.id === "marrakech-essaouira-12")?.relayHubSiteId;
+  assert.ok(knownSites.some((site) => site.id === hubId));
+});
