@@ -999,7 +999,7 @@ export default function Home() {
                 </div>
               )
             ) : <>
-              <InteractiveFleetMap deliveries={mapDeliveriesWithOrigin} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
+              <InteractiveFleetMap deliveries={mapDeliveriesWithOrigin} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} onBackgroundClick={() => setShowPopover(false)} />
               <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
               {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{vehicle.name}<small>{vehicle.speed} km/h</small></span>)}</div>}
             </>}
