@@ -50,6 +50,16 @@ export async function getManualArrivalDurationEstimates(companyId: string): Prom
   const relaySiteIds = relaySites.map((site) => site.id);
   const hubIds = [...new Set(relaySites.map((site) => site.relayHubSiteId))];
 
+  // fleet_position_observations accumulates every GPS tick for a vehicle's
+  // whole operational history. A delivery with no DEPARTED event falls back
+  // to its (possibly days-old) created_at as the window start, so an
+  // unbounded date-range join here can pull in tens of thousands of position
+  // rows for a single candidate and blow the Worker's CPU budget. Bounding to
+  // the most recent positions per delivery is safe: if final-leg tracking is
+  // genuinely unavailable past the hub, GPS pings stop once the truck goes
+  // off-grid, so the last-seen-near-hub ping is necessarily among the most
+  // recent ones in the window, not buried under older history.
+  const POSITION_ROWS_PER_DELIVERY = 2000;
   const [hubRows, candidateRows] = await Promise.all([
     sql`SELECT id, latitude, longitude FROM sites WHERE company_id = ${companyId} AND id = ANY(${hubIds}::text[])`,
     sql`
@@ -70,14 +80,24 @@ export async function getManualArrivalDurationEstimates(companyId: string): Prom
         SELECT delivery_id, destination_site_id, sendatrack_vehicle_id, arrived_at, fallback_started_at
         FROM ranked
         WHERE recency_rank <= ${MANUAL_ARRIVAL_SAMPLE_SIZE_PER_SITE}
+      ),
+      positions AS (
+        SELECT
+          t.delivery_id,
+          fpo.position_at,
+          fpo.latitude,
+          fpo.longitude,
+          ROW_NUMBER() OVER (PARTITION BY t.delivery_id ORDER BY fpo.position_at DESC) AS position_rank
+        FROM targets t
+        JOIN fleet_position_observations fpo
+          ON fpo.company_id = ${companyId}
+          AND fpo.vehicle_id = t.sendatrack_vehicle_id
+          AND fpo.position_at >= t.fallback_started_at
+          AND fpo.position_at <= t.arrived_at
       )
-      SELECT t.delivery_id, t.destination_site_id, t.arrived_at, t.fallback_started_at, fpo.position_at, fpo.latitude, fpo.longitude
+      SELECT t.delivery_id, t.destination_site_id, t.arrived_at, t.fallback_started_at, p.position_at, p.latitude, p.longitude
       FROM targets t
-      LEFT JOIN fleet_position_observations fpo
-        ON fpo.company_id = ${companyId}
-        AND fpo.vehicle_id = t.sendatrack_vehicle_id
-        AND fpo.position_at >= t.fallback_started_at
-        AND fpo.position_at <= t.arrived_at
+      LEFT JOIN positions p ON p.delivery_id = t.delivery_id AND p.position_rank <= ${POSITION_ROWS_PER_DELIVERY}
     `,
   ]) as [Array<{ id: string; latitude: number | string | null; longitude: number | string | null }>, RawRow[]];
 
