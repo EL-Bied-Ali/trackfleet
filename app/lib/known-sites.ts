@@ -15,6 +15,13 @@ export type KnownSite = {
   // possibly-stale or fabricated live estimate. See
   // app/lib/eta-display.ts (customerEtaNote) and app/lib/delay-detection.ts.
   finalLegTrackingUnavailable?: boolean;
+  // The known site id where GPS coverage effectively ends for a
+  // finalLegTrackingUnavailable destination -- the truck relay/handoff point.
+  // Used to measure the manual-arrival duration estimate from "last seen at
+  // the relay" rather than from the whole door-to-door journey, since the
+  // relay-to-destination leg is the actually-unknown part (the leg up to the
+  // relay already has a real GPS-based ETA). See manual-arrival-duration.postgres.ts.
+  relayHubSiteId?: string;
 };
 
 // Operational addresses supplied by the business. Coordinates stay null until
@@ -88,6 +95,7 @@ export const knownSites: KnownSite[] = [
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
+    relayHubSiteId: "casablanca-mohammed-vi-959",
   },
   {
     id: "agadir-zaitoune-tikiouine-103a",
@@ -100,6 +108,7 @@ export const knownSites: KnownSite[] = [
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
+    relayHubSiteId: "casablanca-mohammed-vi-959",
   },
   {
     id: "khouribga-mohamed-vi-30",
@@ -123,6 +132,7 @@ export const knownSites: KnownSite[] = [
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
+    relayHubSiteId: "casablanca-mohammed-vi-959",
   },
   {
     id: "casablanca-mohammed-vi-959",
