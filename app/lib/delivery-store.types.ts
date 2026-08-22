@@ -21,6 +21,12 @@ export type DeliveryRow = {
   status: DeliveryStatus;
   eta: string;
   plannedArrivalAt: Date | null;
+  // Employee-entered date/time the next relay truck is expected to depart
+  // (distinct from plannedArrivalAt, which is the customer-facing arrival
+  // estimate). Required at creation time going forward (see
+  // app/api/deliveries/route.ts), but nullable in the stored row since
+  // deliveries created before this field existed won't have it.
+  nextTruckDepartureAt: Date | null;
   progress: number;
   color: string;
   contact: string;

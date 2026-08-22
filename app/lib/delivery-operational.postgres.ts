@@ -25,6 +25,7 @@ type RawDelivery = {
   status: DeliveryStatus;
   eta: string;
   planned_arrival_at: string | Date | null;
+  next_truck_departure_at: string | Date | null;
   progress: number | string;
   color: string;
   contact: string;
@@ -72,6 +73,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     status: row.status,
     eta: row.eta,
     plannedArrivalAt: row.planned_arrival_at ? new Date(row.planned_arrival_at) : null,
+    nextTruckDepartureAt: row.next_truck_departure_at ? new Date(row.next_truck_departure_at) : null,
     progress: Number(row.progress),
     color: row.color,
     contact: row.contact,

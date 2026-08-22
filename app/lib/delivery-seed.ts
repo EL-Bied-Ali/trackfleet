@@ -9,6 +9,7 @@ const defaults = {
   destinationLongitude: null,
   arrivalRadiusKm: 0.5,
   plannedArrivalAt: null,
+  nextTruckDepartureAt: null,
   weightKg: null,
   priceAmount: null,
   priceCurrency: null,
