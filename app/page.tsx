@@ -64,6 +64,8 @@ type Delivery = {
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
   arrivalRadiusKm?: number;
+  manualArrivalEstimateHours?: number | null;
+  manualArrivalEstimateSampleCount?: number;
 };
 
 type DeliveryEventRow = {
@@ -354,7 +356,7 @@ export default function Home() {
     ? (locale === "fr" ? "Chauffeur à affecter" : locale === "nl" ? "Chauffeur toe te wijzen" : driver)
     : driver;
   const destinationSite = knownSites.find((site) => site.id === selected.destinationSiteId);
-  const selectedEtaExplanation = etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips, finalLegTrackingUnavailable: staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true }, locale);
+  const selectedEtaExplanation = etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips, finalLegTrackingUnavailable: staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true, manualArrivalEstimateHours: selected.manualArrivalEstimateHours, manualArrivalEstimateSampleCount: selected.manualArrivalEstimateSampleCount }, locale);
   const customerCopy = t.customerStatus[selected.status];
   const headingToMorocco = destinationSite?.country === "MA" || selected.destination.toUpperCase().includes("MAROC") || selected.destination.endsWith(", MA");
   const routeDirection = headingToMorocco ? t.belgiumToMorocco : t.moroccoToBelgium;
@@ -796,6 +798,8 @@ export default function Home() {
       delayMinutes: selected.etaDelayMinutes,
       historyTrips: selected.etaHistoryTrips,
       finalLegTrackingUnavailable: staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true,
+      manualArrivalEstimateHours: selected.manualArrivalEstimateHours,
+      manualArrivalEstimateSampleCount: selected.manualArrivalEstimateSampleCount,
     }, locale);
     const customerVehicleLabel = isUnassignedVehicle(selected)
       ? (locale === "fr" ? "Véhicule pas encore affecté" : locale === "nl" ? "Voertuig nog niet toegewezen" : "Vehicle not assigned yet")
