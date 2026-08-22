@@ -1,6 +1,7 @@
 import {
   createServerSession as createPrimarySession,
   deleteServerSession as deletePrimarySession,
+  renewServerSession as renewPrimarySession,
   getServerSession as getPrimarySession,
   type StoredCompanySession,
 } from "./auth-session-store.shared-postgres";
@@ -21,6 +22,10 @@ export async function getServerSession(tokenHash: string): Promise<StoredCompany
 
 export async function deleteServerSession(tokenHash: string) {
   return deletePrimarySession(tokenHash);
+}
+
+export async function renewServerSession(tokenHash: string, expiresAt: Date) {
+  return renewPrimarySession(tokenHash, expiresAt);
 }
 
 export type { StoredCompanySession };

@@ -3,6 +3,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import {
   createServerSession as createPrimarySession,
   deleteServerSession as deletePrimarySession,
+  renewServerSession as renewPrimarySession,
   getServerSession,
   type StoredCompanySession,
 } from "./auth-session-store.vercel";
@@ -67,6 +68,18 @@ async function mirrorDelete(tokenHash: string) {
   }
 }
 
+async function mirrorRenew(tokenHash: string, expiresAt: Date) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").bind(expiresAt.getTime(), tokenHash).run();
+  } catch (error) {
+    console.error("[trackfleet:replication] D1 session renewal mirror failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
+}
+
 export async function createServerSession(input: StoredCompanySession) {
   await createPrimarySession(input);
   await mirrorCreate(input);
@@ -75,6 +88,11 @@ export async function createServerSession(input: StoredCompanySession) {
 export async function deleteServerSession(tokenHash: string) {
   await deletePrimarySession(tokenHash);
   await mirrorDelete(tokenHash);
+}
+
+export async function renewServerSession(tokenHash: string, expiresAt: Date) {
+  await renewPrimarySession(tokenHash, expiresAt);
+  await mirrorRenew(tokenHash, expiresAt);
 }
 
 export { getServerSession };
