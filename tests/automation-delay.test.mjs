@@ -61,3 +61,13 @@ test("unloading dwell suppresses new delay alerts after arrival at the site", ()
   ];
   assert.equal(shouldCreateDelayEvent(delivery({ progress: 99 }), events), false);
 });
+
+test("never flags a delay for a destination reached only past the Casablanca GPS relay", () => {
+  const events = [event("DEPARTED", new Date("2026-08-16T08:00:00.000Z"))];
+  // Same inputs as the first passing test, which would otherwise detect a delay.
+  assert.equal(shouldCreateDelayEvent(delivery({ destinationSiteId: "marrakech-essaouira-12" }), events), false);
+  assert.equal(shouldCreateDelayEvent(delivery({ destinationSiteId: "agadir-zaitoune-tikiouine-103a" }), events), false);
+  assert.equal(shouldCreateDelayEvent(delivery({ destinationSiteId: "fquih-ben-salah-allal-ben-abdellah-197" }), events), false);
+  // A destination not flagged as untracked keeps normal delay detection.
+  assert.equal(shouldCreateDelayEvent(delivery({ destinationSiteId: "casablanca-mohammed-vi-959" }), events), true);
+});

@@ -8,6 +8,13 @@ export type KnownSite = {
   longitude: number | null;
   arrivalRadiusKm: number;
   roles: Array<"origin" | "dropoff" | "replenishment" | "destination">;
+  // True for regional destinations reached by a local/relay leg beyond
+  // Casablanca that our GPS-tracked trucks never physically visit -- live GPS
+  // pace, delay detection and ETA confidence are meaningless for that leg, so
+  // callers must show an explicit "not GPS-tracked" note instead of a
+  // possibly-stale or fabricated live estimate. See
+  // app/lib/eta-display.ts (customerEtaNote) and app/lib/delay-detection.ts.
+  finalLegTrackingUnavailable?: boolean;
 };
 
 // Operational addresses supplied by the business. Coordinates stay null until
@@ -80,6 +87,7 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    finalLegTrackingUnavailable: true,
   },
   {
     id: "agadir-zaitoune-tikiouine-103a",
@@ -91,6 +99,7 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    finalLegTrackingUnavailable: true,
   },
   {
     id: "khouribga-mohamed-vi-30",
@@ -113,6 +122,7 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    finalLegTrackingUnavailable: true,
   },
   {
     id: "casablanca-mohammed-vi-959",

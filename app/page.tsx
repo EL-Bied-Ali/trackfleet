@@ -11,6 +11,7 @@ import { rankVehicleSuggestions } from "./lib/vehicle-linking";
 import { activeTourDisplayId, activeTourKey, stopSequence, tourCustomerCount, tourDeliveryCount } from "./lib/tour-view";
 import { customerEtaNote, etaExplanation } from "./lib/eta-display";
 import { computeDeliveryPrice } from "./lib/delivery-pricing";
+import { knownSite as staticKnownSite } from "./lib/known-sites";
 import { isUnassignedVehicle, resolveCreationVehicle, UNASSIGNED_VEHICLE_ID } from "./lib/delivery-vehicle-choice";
 import { suggestPlannedTrip } from "./lib/trip-suggestion";
 
@@ -352,9 +353,9 @@ export default function Home() {
   const driverLabel = (driver: string) => driver === "To be assigned"
     ? (locale === "fr" ? "Chauffeur à affecter" : locale === "nl" ? "Chauffeur toe te wijzen" : driver)
     : driver;
-  const selectedEtaExplanation = etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips }, locale);
-  const customerCopy = t.customerStatus[selected.status];
   const destinationSite = knownSites.find((site) => site.id === selected.destinationSiteId);
+  const selectedEtaExplanation = etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips, finalLegTrackingUnavailable: staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true }, locale);
+  const customerCopy = t.customerStatus[selected.status];
   const headingToMorocco = destinationSite?.country === "MA" || selected.destination.toUpperCase().includes("MAROC") || selected.destination.endsWith(", MA");
   const routeDirection = headingToMorocco ? t.belgiumToMorocco : t.moroccoToBelgium;
   const creationOriginSiteId = company?.role === "agency" ? company.siteId : defaultOriginSiteId;
@@ -794,6 +795,7 @@ export default function Home() {
       source: selected.etaSource,
       delayMinutes: selected.etaDelayMinutes,
       historyTrips: selected.etaHistoryTrips,
+      finalLegTrackingUnavailable: staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true,
     }, locale);
     const customerVehicleLabel = isUnassignedVehicle(selected)
       ? (locale === "fr" ? "Véhicule pas encore affecté" : locale === "nl" ? "Voertuig nog niet toegewezen" : "Vehicle not assigned yet")
