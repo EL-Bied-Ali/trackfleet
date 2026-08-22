@@ -17,6 +17,7 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "companies", column: "credentials_ciphertext" },
   { table: "deliveries", column: "origin_site_id" },
   { table: "deliveries", column: "destination_site_id" },
+  { table: "deliveries", column: "next_truck_departure_at" },
   { table: "deliveries", column: "trip_id" },
   { table: "deliveries", column: "whatsapp_opt_in" },
   { table: "deliveries", column: "whatsapp_opt_in_at" },
