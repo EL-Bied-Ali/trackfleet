@@ -263,6 +263,15 @@ td > strong, td > span { display: block; }td > strong { font-size: 10px; }td > s
 /* Active multi-stop tours */
 .tours-panel { margin-bottom: 15px; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: white; box-shadow: 0 3px 9px rgba(25,51,42,.025); }
 .tour-count { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 14px; color: #1f6952; background: #e7f3ed; font-size: 10px; font-weight: 750; }
+.expected-parcels-list { display: grid; gap: 10px; padding: 0 17px 17px; }
+.expected-parcels-empty { padding: 0 17px 17px; color: #849189; font-size: 11px; }
+.expected-parcel-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px; border: 1px solid #e5ebe7; border-radius: 10px; background: #fbfcfb; }
+.expected-parcel-card > div:first-child { display: grid; gap: 3px; }
+.expected-parcel-card strong { font-size: 12px; }
+.expected-parcel-card > div:first-child > span { color: #849189; font-size: 9px; }
+.expected-parcel-meta { display: flex; flex-wrap: wrap; gap: 3px; font-size: 10px; color: #46564e; }
+.expected-parcel-meta span { display: block; }
+.expected-parcel-meta span:not(:last-child)::after { content: "·"; margin-left: 8px; color: #c3ccc7; }
 .tour-list { display: grid; gap: 10px; padding: 0 17px 17px; }
 .tour-card { padding: 14px; border: 1px solid #e5ebe7; border-radius: 10px; background: #fbfcfb; }
 .tour-card-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
