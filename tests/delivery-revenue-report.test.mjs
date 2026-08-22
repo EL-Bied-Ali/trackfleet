@@ -59,3 +59,32 @@ test("revenue dashboard fetches its own report endpoint and redirects unauthenti
   assert.match(page, /response\.status === 401/);
   assert.match(page, /window\.location\.assign/);
 });
+
+test("the revenue report includes a bounded, scoped, ordered list of recent parcels for the client-facing table", async () => {
+  // The dispatcher's business client cares about seeing "how much they've
+  // earned" alongside the actual parcels (sender, departure date, number,
+  // weight, status) -- not fleet-ops metrics like punctuality or frequent
+  // routes. This itemized list must stay scoped and bounded the same way
+  // the aggregate totals already are (no OFFSET, agency-site-scoped).
+  const source = await readFile(queryUrl, "utf8");
+  assert.match(source, /SELECT id, customer, created_at, weight_kg, price_amount, price_currency, status/);
+  assert.match(source, /ORDER BY created_at DESC/);
+  assert.match(source, /LIMIT \$\{RECENT_PARCELS_LIMIT\}/);
+  assert.doesNotMatch(source, /\bOFFSET\b/i);
+  assert.match(source, /recentParcels: DeliveryRevenueParcel\[\]/);
+});
+
+test("the revenue page renders an itemized parcels table with sender, departure date, weight and status", async () => {
+  const page = await readFile(pageUrl, "utf8");
+  assert.match(page, /report\.recentParcels\.map\(\(parcel\) =>/);
+  assert.match(page, /\{parcel\.customer\}/);
+  assert.match(page, /\{formatDate\(parcel\.createdAt, locale\)\}/);
+  assert.match(page, /\{parcel\.weightKg == null \? t\.noWeight : `\$\{parcel\.weightKg\} kg`\}/);
+  assert.match(page, /t\.statuses\[parcel\.status\]/);
+});
+
+test("the revenue page leads with a prominent all-time earned figure, not fleet-ops metrics", async () => {
+  const page = await readFile(pageUrl, "utf8");
+  assert.match(page, /heroTotals = report\?\.windows\.find\(\(window\) => window\.key === "allTime"\)\?\.totals/);
+  assert.match(page, /styles\.heroAmount/);
+});
