@@ -715,6 +715,21 @@ export default function Home() {
       setTruckDepartureIsStale(new Date(nextTruckDepartureInput).getTime() <= Date.now());
     }
     const whatsappOptIn = form.get("whatsappOptIn") === "on";
+    const contactRaw = String(form.get("contact") ?? "").trim();
+    const recipientContactRaw = String(form.get("recipientContact") ?? "").trim();
+    if (!whatsappOptIn && (contactRaw || recipientContactRaw)) {
+      // Easy to forget since the checkbox only appears once a number is
+      // typed -- confirm instead of silently registering a parcel whose
+      // brand-new number will never receive automatic WhatsApp updates.
+      // Numbers that already consented before are unaffected either way
+      // (TrackFleet recognizes them automatically regardless of this box).
+      const confirmMessage = locale === "fr"
+        ? "La case de consentement WhatsApp n'est pas cochée. Si ce numéro n'a jamais consenti auparavant, il ne recevra aucun message automatique. Continuer sans cocher ?"
+        : locale === "nl"
+        ? "Het WhatsApp-toestemmingsvakje is niet aangevinkt. Als dit nummer nog nooit toestemming gaf, ontvangt het geen automatische berichten. Doorgaan zonder aan te vinken?"
+        : "The WhatsApp consent checkbox isn't checked. If this number has never consented before, it won't receive any automatic messages. Continue without checking it?";
+      if (!window.confirm(confirmMessage)) return;
+    }
     const weightRaw = String(form.get("weightKg") ?? "").trim();
     const manualPriceRaw = String(form.get("manualPriceAmount") ?? "").trim();
     const draftDelivery = {
@@ -729,9 +744,9 @@ export default function Home() {
       sendatrackVehicleId: vehicleChoice.sendatrackVehicleId,
       plannedArrivalAt,
       nextTruckDepartureAt,
-      contact: String(form.get("contact")),
+      contact: contactRaw,
       recipientName: String(form.get("recipientName")),
-      recipientContact: String(form.get("recipientContact")),
+      recipientContact: recipientContactRaw,
       weightKg: weightRaw ? Number(weightRaw) : null,
       manualPriceAmount: !weightRaw && manualPriceRaw ? Number(manualPriceRaw) : null,
       whatsappOptIn,

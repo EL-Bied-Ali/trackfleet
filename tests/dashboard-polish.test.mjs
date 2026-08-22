@@ -76,6 +76,17 @@ test("the WhatsApp consent gate itself is untouched -- automatic messages still 
   assert.match(page, /name="whatsappOptIn"/);
 });
 
+test("submitting a new delivery with a phone number but an unchecked consent box asks for confirmation instead of silently skipping it", () => {
+  // The checkbox only appears once a number is typed, which made it easy to
+  // miss entirely. This doesn't check it automatically (that would defeat
+  // the point of real affirmative consent) -- it just makes sure a
+  // dispatcher can't submit past it without noticing.
+  assert.match(page, /if \(!whatsappOptIn && \(contactRaw \|\| recipientContactRaw\)\) \{/);
+  assert.match(page, /if \(!window\.confirm\(confirmMessage\)\) return;/);
+  assert.match(page, /contact: contactRaw,/);
+  assert.match(page, /recipientContact: recipientContactRaw,/);
+});
+
 test("the sidebar's real Outils TrackFleet nav (Operations/History/Revenue/Storage/Export/Import) is never hidden alongside the still-unimplemented placeholder nav", () => {
   // Regression guard, reproduced live: a broad ".sidebar nav + .sidebar-divider
   // + nav { display: none }" selector was written back when every nav after
