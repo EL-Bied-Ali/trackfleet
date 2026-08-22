@@ -40,3 +40,25 @@ test("dispatcher ETA explanation also flags an untracked final leg instead of a 
   assert.equal(result.sourceLabel, "Dernière étape non suivie par GPS");
   assert.equal(result.confidenceLabel, "");
 });
+
+test("an untracked final leg with enough employee-confirmed arrivals shows a rough duration estimate instead of a bare 'not tracked' note", () => {
+  assert.equal(
+    customerEtaNote({ finalLegTrackingUnavailable: true, manualArrivalEstimateHours: 48, manualArrivalEstimateSampleCount: 6, delayMinutes: 125 }, "en"),
+    "Estimate: usually about 2 days (based on 6 previous deliveries)",
+  );
+  assert.equal(
+    customerEtaNote({ finalLegTrackingUnavailable: true, manualArrivalEstimateHours: 6, manualArrivalEstimateSampleCount: 1 }, "en"),
+    "Live GPS tracking is not available for the final leg",
+    "one sample is below the minimum -- must not present it as a reliable estimate",
+  );
+  assert.equal(
+    customerEtaNote({ finalLegTrackingUnavailable: true, manualArrivalEstimateHours: 6, manualArrivalEstimateSampleCount: 3 }, "fr"),
+    "Estimation : généralement environ 6 h (3 livraisons précédentes)",
+  );
+});
+
+test("the dispatcher ETA explanation shows the same duration estimate with a sample-count confidence label", () => {
+  const result = etaExplanation({ finalLegTrackingUnavailable: true, manualArrivalEstimateHours: 30, manualArrivalEstimateSampleCount: 4 }, "en");
+  assert.equal(result.sourceLabel, "Employee-reported estimate · ~1 day");
+  assert.equal(result.confidenceLabel, "Based on 4 confirmed arrivals");
+});

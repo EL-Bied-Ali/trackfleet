@@ -10,6 +10,7 @@ const source = {
   whatsappOptIn: true,
   whatsappOptInAt: new Date("2026-08-20T00:00:00.000Z"),
   destination: "Tanger Med",
+  destinationSiteId: "tanger-med-ksar-al-majaz",
   weightKg: 12.5,
   priceAmount: 450,
   priceCurrency: "MAD",
@@ -42,6 +43,8 @@ const source = {
   etaHistoryTrips: 4,
   etaHistoricalSpeedKmh: 62,
   trackingExpiresAt: "2026-08-27T12:00:00.000Z",
+  manualArrivalEstimateHours: 48.5,
+  manualArrivalEstimateSampleCount: 6,
 };
 
 test("public delivery view exposes only the customer tracking allow-list", () => {
@@ -52,6 +55,7 @@ test("public delivery view exposes only the customer tracking allow-list", () =>
     "destination",
     "destinationLatitude",
     "destinationLongitude",
+    "destinationSiteId",
     "distanceToDestinationKm",
     "effectiveSpeedKmh",
     "estimatedArrivalAt",
@@ -66,6 +70,8 @@ test("public delivery view exposes only the customer tracking allow-list", () =>
     "lastPositionAt",
     "latitude",
     "longitude",
+    "manualArrivalEstimateHours",
+    "manualArrivalEstimateSampleCount",
     "plannedArrivalAt",
     "positionAgeMinutes",
     "priceAmount",

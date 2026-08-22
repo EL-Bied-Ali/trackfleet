@@ -8,6 +8,7 @@ import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent, whatsappConsentWithdrawn } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { computeDeliveryPrice } from "../../lib/delivery-pricing";
+import { getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate } from "../../lib/manual-arrival-duration.postgres";
 import { knownSite, resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { publicDeliveryView } from "../../lib/public-delivery-view";
@@ -63,6 +64,7 @@ function enrichDelivery<T extends {
   futureServiceMinutes = 0,
   historicalEffectiveSpeedKmh: number | null = null,
   historicalTripCount = 0,
+  manualArrivalEstimate: ManualArrivalDurationEstimate | null = null,
 ) {
   const origin = explicitOrigin(row);
   const baselineProgress = origin ? 0 : (events.find((event) => event.type === "GPS_BASELINE")?.progress ?? 0);
@@ -101,6 +103,8 @@ function enrichDelivery<T extends {
     etaHistoryTrips: historicalTripCount,
     etaHistoricalSpeedKmh: historicalEffectiveSpeedKmh === null ? null : Math.round(historicalEffectiveSpeedKmh),
     trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt }).toISOString() : null,
+    manualArrivalEstimateHours: manualArrivalEstimate?.medianHours ?? null,
+    manualArrivalEstimateSampleCount: manualArrivalEstimate?.sampleCount ?? 0,
   };
 }
 
@@ -118,9 +122,9 @@ async function enrichAndDetectDelay<T extends {
   lastPositionAt: Date | null;
   plannedArrivalAt?: Date | null;
   status: string;
-}>(row: T, futureServiceMinutes = 0, historicalEffectiveSpeedKmh: number | null = null, historicalTripCount = 0) {
+}>(row: T, futureServiceMinutes = 0, historicalEffectiveSpeedKmh: number | null = null, historicalTripCount = 0, manualArrivalEstimate: ManualArrivalDurationEstimate | null = null) {
   let events = await store.listEvents(row.id);
-  let delivery = enrichDelivery(row, events, futureServiceMinutes, historicalEffectiveSpeedKmh, historicalTripCount);
+  let delivery = enrichDelivery(row, events, futureServiceMinutes, historicalEffectiveSpeedKmh, historicalTripCount, manualArrivalEstimate);
   const delayDetected = shouldDetectDelay({
     eta: {
       estimatedArrivalAt: delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt) : null,
@@ -136,7 +140,7 @@ async function enrichAndDetectDelay<T extends {
 
   if (delayDetected && await store.recordEvent(row.id, "DELAY_DETECTED", row.progress)) {
     events = await store.listEvents(row.id);
-    delivery = enrichDelivery(row, events, futureServiceMinutes, historicalEffectiveSpeedKmh, historicalTripCount);
+    delivery = enrichDelivery(row, events, futureServiceMinutes, historicalEffectiveSpeedKmh, historicalTripCount, manualArrivalEstimate);
   }
 
   return { delivery, events };
@@ -222,7 +226,12 @@ export async function GET(request: Request) {
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await learnedStopMinutes(row.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, companyRows, learnedDwell);
-      const enriched = enrichDelivery(row, routeEvents, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount);
+      // Only worth the extra read for destinations beyond the GPS-tracked
+      // relay -- every other delivery already gets a real GPS-based ETA.
+      const manualArrivalEstimate = knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true
+        ? (await getManualArrivalDurationEstimates(row.companyId)).get(row.destinationSiteId!) ?? null
+        : null;
+      const enriched = enrichDelivery(row, routeEvents, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount, manualArrivalEstimate);
       return Response.json({
         deliveries: [publicDeliveryView(enriched)],
         events: routeEvents.filter((event) => customerFacingEvent(event.type)),
@@ -237,9 +246,10 @@ export async function GET(request: Request) {
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
-    const [companySites, vehicleAliases] = await Promise.all([
+    const [companySites, vehicleAliases, manualArrivalEstimates] = await Promise.all([
       siteStore.listForCompany(session.companyId),
       vehicleAliasStore.listForCompany(session.companyId),
+      getManualArrivalDurationEstimates(session.companyId),
     ]);
     const vehicleAliasById = new Map(vehicleAliases.map((row) => [row.sendatrackVehicleId, row.alias]));
     const siteById = new Map(companySites.map((site) => [site.id, site]));
@@ -276,7 +286,8 @@ export async function GET(request: Request) {
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await cachedLearnedDwell(routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, rows, learnedDwell);
-      return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount)).delivery;
+      const manualArrivalEstimate = row.destinationSiteId ? manualArrivalEstimates.get(row.destinationSiteId) ?? null : null;
+      return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount, manualArrivalEstimate)).delivery;
     }));
     const stopPlansWithLearning = await Promise.all(stopPlans.map(async (plan) => {
       const deliveryIds = plan.stops.flatMap((stop) => stop.deliveryIds);
@@ -560,7 +571,10 @@ export async function POST(request: Request) {
 
     const rows = await store.listForCompany(session.companyId);
     const serviceMinutes = pendingServiceMinutesBefore(delivery, rows);
-    const enriched = await enrichAndDetectDelay(delivery, serviceMinutes);
+    const newDeliveryManualArrivalEstimate = knownSite(delivery.destinationSiteId)?.finalLegTrackingUnavailable === true
+      ? (await getManualArrivalDurationEstimates(session.companyId)).get(delivery.destinationSiteId!) ?? null
+      : null;
+    const enriched = await enrichAndDetectDelay(delivery, serviceMinutes, null, 0, newDeliveryManualArrivalEstimate);
     return Response.json({ delivery: enriched.delivery, idempotentReplay: false }, { status: 201, headers: { "cache-control": "no-store" } });
   } catch (error) {
     return errorResponse(error);

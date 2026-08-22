@@ -15,6 +15,8 @@ type PublicDeliverySource = DeliveryRow & {
   etaHistoryTrips?: number;
   etaHistoricalSpeedKmh?: number | null;
   trackingExpiresAt?: string | null;
+  manualArrivalEstimateHours?: number | null;
+  manualArrivalEstimateSampleCount?: number;
 };
 
 /**
@@ -27,6 +29,12 @@ export function publicDeliveryView(delivery: PublicDeliverySource) {
     id: delivery.id,
     customer: delivery.customer,
     destination: delivery.destination,
+    // Only the catalog id (e.g. "marrakech-essaouira-12"), not more
+    // sensitive than the free-text destination address already exposed
+    // above. Needed client-side to resolve KnownSite.finalLegTrackingUnavailable
+    // so the tracking page can show an explicit "not GPS-tracked" note
+    // instead of implying live coverage that doesn't exist.
+    destinationSiteId: delivery.destinationSiteId ?? null,
     weightKg: delivery.weightKg ?? null,
     priceAmount: delivery.priceAmount ?? null,
     priceCurrency: delivery.priceCurrency ?? null,
@@ -55,5 +63,7 @@ export function publicDeliveryView(delivery: PublicDeliverySource) {
     etaHistoryTrips: delivery.etaHistoryTrips ?? 0,
     etaHistoricalSpeedKmh: delivery.etaHistoricalSpeedKmh ?? null,
     trackingExpiresAt: delivery.trackingExpiresAt ?? null,
+    manualArrivalEstimateHours: delivery.manualArrivalEstimateHours ?? null,
+    manualArrivalEstimateSampleCount: delivery.manualArrivalEstimateSampleCount ?? 0,
   };
 }
