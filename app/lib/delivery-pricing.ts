@@ -2,9 +2,11 @@ export type DeliveryPriceCurrency = "EUR" | "MAD";
 
 // Fixed business rate: 1.5 EUR/kg for parcels shipped from Belgium, 15 MAD/kg
 // for parcels shipped from Morocco. Price is derived from weight and origin
-// country, never entered manually, so every parcel is priced consistently
-// and the revenue dashboard can trust priceAmount/priceCurrency as billing
-// truth rather than a dispatcher's free-form guess.
+// country whenever a weight is declared, so most parcels are priced
+// consistently and the revenue dashboard can trust priceAmount/priceCurrency
+// as billing truth rather than a free-form guess. Bulky items without a
+// meaningful per-kg price (see route.ts's manualPriceAmount handling) are
+// the one case where a dispatcher enters the price directly instead.
 export const DELIVERY_PRICE_RATE_EUR_PER_KG = 1.5;
 export const DELIVERY_PRICE_RATE_MAD_PER_KG = 15;
 

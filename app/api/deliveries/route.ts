@@ -7,7 +7,7 @@ import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, va
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent, whatsappConsentWithdrawn } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
-import { computeDeliveryPrice } from "../../lib/delivery-pricing";
+import { computeDeliveryPrice, deliveryPriceCurrencyForOriginCountry } from "../../lib/delivery-pricing";
 import { getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate } from "../../lib/manual-arrival-duration.postgres";
 import { knownSite, resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
@@ -425,6 +425,8 @@ export async function POST(request: Request) {
     const recipientContactInput = String(payload.recipientContact ?? "").trim();
     const weightProvided = payload.weightKg !== null && payload.weightKg !== undefined && String(payload.weightKg).trim() !== "";
     const weightInput = optionalNumber(payload.weightKg);
+    const manualPriceProvided = payload.manualPriceAmount !== null && payload.manualPriceAmount !== undefined && String(payload.manualPriceAmount).trim() !== "";
+    const manualPriceInput = optionalNumber(payload.manualPriceAmount);
     if (
       customer.length > 160
       || destinationInput.length > 500
@@ -444,6 +446,9 @@ export async function POST(request: Request) {
     if (weightProvided && (weightInput === null || weightInput <= 0 || weightInput > 100000)) {
       return Response.json({ error: "weightKg must be greater than 0 and at most 100000" }, { status: 400 });
     }
+    if (manualPriceProvided && (manualPriceInput === null || manualPriceInput <= 0 || manualPriceInput > 1000000)) {
+      return Response.json({ error: "manualPriceAmount must be greater than 0 and at most 1000000" }, { status: 400 });
+    }
     const weightKg = weightInput === null ? null : Math.round(weightInput * 1000) / 1000;
     const companySites = await siteStore.listForCompany(session.companyId);
     const originSelection = resolveExplicitCompanySite(companySites, originSiteInput);
@@ -451,10 +456,17 @@ export async function POST(request: Request) {
     const destinationSelection = resolveExplicitCompanySite(companySites, destinationSiteId);
     if (destinationSelection.invalid) return Response.json({ error: "destination site is not available for this company" }, { status: 400 });
     const originSite = originSelection.site;
-    // Price is never taken from the client -- it's a fixed business rule
-    // (1.5 EUR/kg, or 15 MAD/kg when the parcel ships from Morocco) derived
-    // from the declared weight and the resolved origin site's country.
-    const { priceAmount, priceCurrency } = computeDeliveryPrice(weightKg, originSite?.country ?? null);
+    // Price is derived from the declared weight (1.5 EUR/kg, or 15 MAD/kg
+    // from Morocco) whenever a weight is given -- that's the trusted,
+    // never-client-supplied billing figure. Bulky items (washing machines,
+    // TVs, etc.) don't have a meaningful per-kg price, so when weight is
+    // left blank a dispatcher may enter a manual price instead; weight
+    // always wins over a manual price if both are somehow present.
+    const { priceAmount, priceCurrency } = weightKg !== null
+      ? computeDeliveryPrice(weightKg, originSite?.country ?? null)
+      : manualPriceInput !== null && manualPriceInput > 0
+        ? { priceAmount: Math.round(manualPriceInput * 100) / 100, priceCurrency: deliveryPriceCurrencyForOriginCountry(originSite?.country ?? null) }
+        : { priceAmount: null, priceCurrency: null };
     const site = destinationSelection.site ?? findCompanySiteByText(companySites, destinationInput) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
     const parsedPlannedArrival = plannedArrivalRaw ? new Date(plannedArrivalRaw) : null;
