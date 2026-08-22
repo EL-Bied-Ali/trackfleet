@@ -246,10 +246,19 @@ export async function GET(request: Request) {
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
+    // getManualArrivalDurationEstimates joins against a vehicle's entire GPS
+    // history and is real CPU-ms work regardless of how tight its own
+    // internal caps are (see manual-arrival-duration.postgres.ts) -- it's
+    // only ever useful when at least one non-Delivered delivery is actually
+    // headed to a relay-only site, so skip it entirely otherwise instead of
+    // paying that cost on every dispatcher page load unconditionally.
+    const needsManualArrivalEstimates = rows.some((row) => row.status !== "Delivered"
+      && row.destinationSiteId
+      && knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true);
     const [companySites, vehicleAliases, manualArrivalEstimates] = await Promise.all([
       siteStore.listForCompany(session.companyId),
       vehicleAliasStore.listForCompany(session.companyId),
-      getManualArrivalDurationEstimates(session.companyId),
+      needsManualArrivalEstimates ? getManualArrivalDurationEstimates(session.companyId) : Promise.resolve(new Map<string, ManualArrivalDurationEstimate>()),
     ]);
     const vehicleAliasById = new Map(vehicleAliases.map((row) => [row.sendatrackVehicleId, row.alias]));
     const siteById = new Map(companySites.map((site) => [site.id, site]));

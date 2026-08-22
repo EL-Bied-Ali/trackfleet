@@ -34,6 +34,20 @@ test("all three delivery-enrichment call sites (list, public tracking, and just-
   assert.match(route, /manualArrivalEstimateSampleCount: manualArrivalEstimate\?\.sampleCount \?\? 0/);
 });
 
+test("the dispatcher list endpoint skips the manual-arrival estimate query entirely when nothing active needs it", () => {
+  // Regression guard, reproduced live: getManualArrivalDurationEstimates
+  // joins against a vehicle's entire GPS history and is real CPU-ms work
+  // regardless of its own internal caps -- it was being called
+  // unconditionally on every dispatcher page load even for a company with
+  // zero active deliveries headed to a relay-only site, which is when its
+  // result is thrown away unused. A company with everything already
+  // Delivered (e.g. right after a cleanup) hit exactly this: the query ran
+  // for no reason and the Worker exceeded its CPU time limit.
+  const route = files["app/api/deliveries/route.ts"];
+  assert.match(route, /const needsManualArrivalEstimates = rows\.some\(\(row\) => row\.status !== "Delivered"\s*\n\s*&& row\.destinationSiteId\s*\n\s*&& knownSite\(row\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true\);/);
+  assert.match(route, /needsManualArrivalEstimates \? getManualArrivalDurationEstimates\(session\.companyId\) : Promise\.resolve\(new Map<string, ManualArrivalDurationEstimate>\(\)\)/);
+});
+
 test("public tracking exposes destinationSiteId and the manual-arrival estimate so the customer page can render the same note as the dispatcher", () => {
   // Regression guard: the customer-facing finalLegTrackingUnavailable note
   // shipped in an earlier PR silently never fired, because destinationSiteId
