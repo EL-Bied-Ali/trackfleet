@@ -19,7 +19,11 @@ type MapDelivery = {
   latitude?: number | null;
   longitude?: number | null;
   sendatrackVehicleId?: string;
+  originCountry?: "BE" | "MA" | null;
 };
+
+const originCountryFlag: Record<"BE" | "MA", string> = { BE: "🇧🇪", MA: "🇲🇦" };
+const originCountryLabel: Record<"BE" | "MA", string> = { BE: "Belgium", MA: "Morocco" };
 
 type LiveVehicle = {
   id: string;
@@ -190,8 +194,10 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
       button.type = "button";
       button.className = `maplibre-truck ${delivery.id === selectedId ? "selected" : ""}`;
       keepMarkerMapPositioning(button);
-      button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}`);
-      button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
+      const originFlag = delivery.originCountry ? originCountryFlag[delivery.originCountry] : null;
+      const originLabel = delivery.originCountry ? ` · from ${originCountryLabel[delivery.originCountry]}` : "";
+      button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}${originLabel}`);
+      button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>${originFlag ? `<span class="truck-origin-flag" aria-hidden="true">${originFlag}</span>` : ""}`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
       const position = positionFor(delivery, index);
       return new maplibregl.Marker({ element: button, anchor: "bottom", offset: overlapOffset(position, markerOccurrences) }).setLngLat(position).addTo(map);
