@@ -10,9 +10,7 @@ const logout = page.slice(start, end);
 test("logout clears tenant-scoped dashboard state", () => {
   for (const statement of [
     "setDeliveries([])",
-    "setStopPlans([])",
     "setTrips([])",
-    "setRouteHistory([])",
     "setDeliveryEvents([])",
     "setKnownSites([])",
     "setIntegration({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] })",

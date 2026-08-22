@@ -4,12 +4,11 @@ import test from "node:test";
 
 const page = fs.readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
 
-test("dispatch dashboard consumes and renders completed route history", () => {
-  assert.ok(page.includes('const [routeHistory, setRouteHistory] = useState<RouteHistoryItem[]>([]);'));
-  assert.ok(page.includes('routeHistory?: RouteHistoryItem[]'));
-  assert.ok(page.includes('if (!tracking) setRouteHistory(data.routeHistory ?? []);'));
-  assert.ok(page.includes('routeHistory.length > 0'));
-  assert.ok(page.includes('Routes fréquentes'));
-  assert.ok(page.includes('route.destinations.join(" → ")'));
-  assert.ok(page.includes('route.tripCount'));
+test("the dashboard no longer renders a separate route-history display panel", () => {
+  // The "Routes fréquentes" panel (and its sibling "Tournées actives" /
+  // "Voyages récents" panels) was removed as fleet-ops clutter neither the
+  // dispatcher nor an agency employee found useful -- see
+  // dashboard-role-priority.test.mjs for the replacement coverage.
+  assert.doesNotMatch(page, /Routes fréquentes/);
+  assert.doesNotMatch(page, /const \[routeHistory, setRouteHistory\]/);
 });
