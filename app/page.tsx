@@ -335,14 +335,24 @@ export default function Home() {
       } catch {
         const tracking = new URLSearchParams(window.location.search).get("tracking");
         if (tracking) setPublicTrackingState("error");
+        // A silent (background, every-30s) poll failure must never blank out
+        // an already-loaded dashboard over one transient blip -- the next
+        // poll retries automatically. Only the initial, non-silent load
+        // (nothing displayed yet) falls back to the full error screen.
+        // Reproduced live: a single missed background poll wiped the whole
+        // dispatcher view to "Data temporarily unavailable" with no warning,
+        // even though the backend was healthy again within seconds.
         if (active && !tracking) {
-          setDeliveries([]);
-          setStopPlans([]);
-          setTrips([]);
-          setRouteHistory([]);
-          setDispatchDataState("error");
+          if (!silent) {
+            setDeliveries([]);
+            setStopPlans([]);
+            setTrips([]);
+            setRouteHistory([]);
+            setDispatchDataState("error");
+          } else {
+            setToast(translations[locale].cloudReconnecting);
+          }
         }
-        if (active && !silent) setToast(translations[locale].cloudReconnecting);
       }
     }
     void refresh();
