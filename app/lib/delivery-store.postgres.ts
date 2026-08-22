@@ -3,7 +3,7 @@ import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import { createDeliveryId } from "./delivery-id";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
-import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
+import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics, resolveGpsBaselineProgress } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
 import { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
@@ -302,11 +302,6 @@ async function ensureSchema() {
   return schemaPromise;
 }
 
-async function baselineProgress(deliveryId: string) {
-  const rows = await sql`SELECT progress FROM delivery_events WHERE delivery_id = ${deliveryId} AND type = 'GPS_BASELINE' LIMIT 1` as Array<{ progress: number }>;
-  return rows[0] ? Number(rows[0].progress) : 0;
-}
-
 export const postgresStore: DeliveryStore = {
   async getPublic(tracking) {
     await ensureSchema();
@@ -326,6 +321,31 @@ export const postgresStore: DeliveryStore = {
     await ensureSchema();
     const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} AND status <> 'Delivered'` as RawDelivery[];
 
+    // Every non-Delivered delivery gets its GPS_BASELINE progress looked up
+    // here, one query per delivery, on every single tick -- a major
+    // contributor to a production incident where the automation tick
+    // reliably exceeded Cloudflare's per-invocation subrequest limit (see
+    // fleet-business-tick.ts for the related fixes). Fetching all of them in
+    // one batched query up front and looking up from a Map inside the loop
+    // is safe: for a delivery that's already linked (the common case), this
+    // is exactly the same row the per-delivery query would have returned,
+    // since nothing in this function writes GPS_BASELINE for it. For a
+    // delivery linking for the first time this tick (firstLink below), the
+    // batch was fetched *before* this tick's insert, so a missing map entry
+    // there means the insert below is genuinely new -- in which case the
+    // baseline is exactly the value being inserted, avoiding the read
+    // entirely. The one case that needs care: a delivery that already had a
+    // GPS_BASELINE row from some earlier link (e.g. via linkVehicle) losing
+    // and regaining sendatrack tracking looks like firstLink again, but its
+    // insert below is a no-op (ON CONFLICT DO NOTHING) -- the batch map
+    // already holds that pre-existing row, so it's used instead of the
+    // fresh (and in that case wrong) computed value.
+    const deliveryIds = rows.map((row) => row.id);
+    const baselineRows = deliveryIds.length
+      ? await sql`SELECT delivery_id, progress FROM delivery_events WHERE delivery_id = ANY(${deliveryIds}::text[]) AND type = 'GPS_BASELINE'` as Array<{ delivery_id: string; progress: number }>
+      : [];
+    const baselineProgressById = new Map(baselineRows.map((row) => [row.delivery_id, Number(row.progress)]));
+
     for (const raw of rows) {
       const delivery = hydrate(raw);
       const match = matchDeliveryVehicle(delivery, snapshot.vehicles);
@@ -340,7 +360,12 @@ export const postgresStore: DeliveryStore = {
       if (firstLink) {
         await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${absoluteMetrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
       }
-      const metrics = rebaseRouteMetrics(absoluteMetrics, origin ? 0 : await baselineProgress(delivery.id));
+      const baseline = resolveGpsBaselineProgress({
+        existingBaselineProgress: baselineProgressById.get(delivery.id),
+        firstLink,
+        freshlyComputedProgress: absoluteMetrics.progress,
+      });
+      const metrics = rebaseRouteMetrics(absoluteMetrics, origin ? 0 : baseline);
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
       const state = firstLink ? { status: "Loading" as const, progress: previousProgress } : deriveDeliveryState(delivery.status, metrics, vehicle.speed, previousProgress, delivery.arrivalRadiusKm, positionAgeMinutes);
       const events = firstLink ? [] : detectDeliveryEvents({

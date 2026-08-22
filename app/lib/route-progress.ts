@@ -196,6 +196,28 @@ export function rebaseRouteMetrics(metrics: RouteMetrics, baselineProgress: numb
   };
 }
 
+// Resolves the GPS_BASELINE progress to rebase a delivery's route metrics
+// from, without a per-delivery DB round trip. `existingBaselineProgress` is
+// whatever was already on record *before* this tick (batch-fetched once for
+// every delivery up front, rather than queried individually per delivery --
+// see delivery-store.postgres.ts's applySendatrackSnapshot for why that
+// mattered for a production subrequest-limit incident). The one case that
+// needs care: a delivery linking to GPS for the first time this tick
+// (firstLink) always attempts to insert its own absoluteMetrics.progress as
+// the baseline, but that insert is `ON CONFLICT (delivery_id, type) DO
+// NOTHING` -- so if a baseline already existed (e.g. from an earlier
+// linkVehicle call, or a prior link episode before this delivery's GPS
+// source got reset), the insert silently no-ops and the pre-existing value
+// must win, not the freshly computed one.
+export function resolveGpsBaselineProgress(input: {
+  existingBaselineProgress: number | undefined;
+  firstLink: boolean;
+  freshlyComputedProgress: number;
+}): number {
+  if (input.existingBaselineProgress !== undefined) return input.existingBaselineProgress;
+  return input.firstLink ? input.freshlyComputedProgress : 0;
+}
+
 export function deriveDeliveryState(
   currentStatus: "In transit" | "Delayed" | "Loading" | "Delivered",
   metrics: RouteMetrics,
