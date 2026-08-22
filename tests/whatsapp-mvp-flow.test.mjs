@@ -85,7 +85,7 @@ test("automatic WhatsApp delivery targets sender and receiver without duplicate 
 test("scheduler provides a safe registration fallback without messaging historical parcels", () => {
   assert.match(automation, /delivery\.createdAt\.getTime\(\) >= automationStartAt\.getTime\(\)/);
   assert.match(automation, /!events\.some\(\(event\) => event\.type === ["']REGISTERED["']\)/);
-  assert.match(automation, /recordEvent\(delivery\.id, ["']REGISTERED["']/);
+  assert.match(automation, /recordEvent(?:Tracked)?\(delivery\.id, ["']REGISTERED["']/);
 });
 
 test("notification runner filters low-value progress events before newest-event compaction", () => {

@@ -51,6 +51,29 @@ type FleetBusinessTickInput = {
 export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promise<FleetBusinessTickResult> {
   const { snapshot, companyId, unloadGraceMinutes, store, observeArrivalCompletion } = input;
   const tickObservedAt = input.observedAt ?? new Date();
+
+  // A single tick touches the same delivery's events from up to three
+  // separate loops below (transition handling, manual-arrival completion,
+  // and the per-delivery ETA/delay pass). Each store.listEvents call is a
+  // real DB round trip, and re-fetching unchanged events three times per
+  // delivery was a major contributor to a production outage where the tick
+  // exceeded the Worker's subrequest budget every single run. Caching per
+  // delivery within the tick -- and invalidating only when this tick itself
+  // inserts a new event for that delivery -- keeps results correct while
+  // cutting redundant round trips.
+  const eventsCache = new Map<string, Awaited<ReturnType<typeof store.listEvents>>>();
+  const eventsFor = async (deliveryId: string) => {
+    const cached = eventsCache.get(deliveryId);
+    if (cached) return cached;
+    const events = await store.listEvents(deliveryId);
+    eventsCache.set(deliveryId, events);
+    return events;
+  };
+  const recordEventTracked: typeof store.recordEvent = async (deliveryId, type, progress) => {
+    const inserted = await store.recordEvent(deliveryId, type, progress);
+    if (inserted) eventsCache.delete(deliveryId);
+    return inserted;
+  };
   const fleetPositionResults = await Promise.all(snapshot.vehicles.map((vehicle) => store.recordFleetPosition({
     companyId,
     vehicleId: canonicalFleetVehicleId(vehicle.name, vehicle.providerDeviceId || vehicle.id),
@@ -72,11 +95,11 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
 
   for (const transition of transitions) {
     for (const type of transition.events) {
-      if (await store.recordEvent(transition.delivery.id, type, transition.delivery.progress)) newEvents += 1;
+      if (await recordEventTracked(transition.delivery.id, type, transition.delivery.progress)) newEvents += 1;
     }
 
     const delivery = transition.delivery;
-    const arrivalEvents = await store.listEvents(delivery.id);
+    const arrivalEvents = await eventsFor(delivery.id);
     const manuallyConfirmedArrival = arrivalEvents.some((event) => event.type === "MANUAL_ARRIVAL_CONFIRMED");
     const hasPosition = typeof delivery.latitude === "number"
       && typeof delivery.longitude === "number"
@@ -107,7 +130,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
       unloadGraceMinutes,
     });
     observedArrivalIds.add(delivery.id);
-    if (completion.justEntered && await store.recordEvent(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
+    if (completion.justEntered && await recordEventTracked(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
       newEvents += 1;
       arrivalSiteEvents += 1;
     }
@@ -123,7 +146,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
   const manualArrivalCandidates = await store.listForCompany(companyId);
   for (const delivery of manualArrivalCandidates) {
     if (delivery.status === "Delivered" || observedArrivalIds.has(delivery.id)) continue;
-    const events = await store.listEvents(delivery.id);
+    const events = await eventsFor(delivery.id);
     if (!events.some((event) => event.type === "MANUAL_ARRIVAL_CONFIRMED")) continue;
     const completion = await observeArrivalCompletion({
       companyId,
@@ -132,7 +155,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
       observationAt: tickObservedAt,
       unloadGraceMinutes,
     });
-    if (completion.justEntered && await store.recordEvent(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
+    if (completion.justEntered && await recordEventTracked(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
       newEvents += 1;
       arrivalSiteEvents += 1;
     }
@@ -147,14 +170,14 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
   const stableContexts = new Map<string, ReturnType<typeof stableEtaRouteContext>>();
   let etaObservations = 0;
   for (const delivery of deliveries) {
-    let events = await store.listEvents(delivery.id);
+    let events = await eventsFor(delivery.id);
     const automationStartAt = input.automationStartAt ?? null;
     const registrationEligible = automationStartAt
       && delivery.createdAt.getTime() >= automationStartAt.getTime()
       && !events.some((event) => event.type === "REGISTERED");
-    if (registrationEligible && await store.recordEvent(delivery.id, "REGISTERED", delivery.progress)) {
+    if (registrationEligible && await recordEventTracked(delivery.id, "REGISTERED", delivery.progress)) {
       newEvents += 1;
-      events = await store.listEvents(delivery.id);
+      events = await eventsFor(delivery.id);
     }
     const previousEtaObservations = await store.listEtaObservations(delivery.id, 2000);
     const routeContext = stableEtaRouteContext(routeContexts.get(delivery.id) ?? null, previousEtaObservations, events);
@@ -174,7 +197,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
       });
     }
     if (!shouldCreateDelayEvent(delivery, events, deliveries)) continue;
-    if (await store.recordEvent(delivery.id, "DELAY_DETECTED", delivery.progress)) {
+    if (await recordEventTracked(delivery.id, "DELAY_DETECTED", delivery.progress)) {
       newEvents += 1;
       delayEvents += 1;
     }
