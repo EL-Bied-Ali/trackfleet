@@ -40,6 +40,11 @@ export async function createServerSession(input: StoredCompanySession) {
   await sql`DELETE FROM sessions WHERE expires_at < ${now}`;
 }
 
+export async function renewServerSession(tokenHash: string, expiresAt: Date) {
+  const sql = sqlClient();
+  await sql`UPDATE sessions SET expires_at = ${expiresAt.toISOString()} WHERE token_hash = ${tokenHash}`;
+}
+
 export async function getServerSession(tokenHash: string): Promise<StoredCompanySession | null> {
   const sql = sqlClient();
   const rows = await sql`SELECT token_hash, company_id, account_label, user_label, credentials_ciphertext, expires_at

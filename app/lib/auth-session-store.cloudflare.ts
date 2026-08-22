@@ -27,6 +27,11 @@ export async function createServerSession(input: StoredCompanySession) {
   ]);
 }
 
+export async function renewServerSession(tokenHash: string, expiresAt: Date) {
+  const db = database();
+  await db.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").bind(expiresAt.getTime(), tokenHash).run();
+}
+
 export async function getServerSession(tokenHash: string): Promise<StoredCompanySession | null> {
   const db = database();
   const row = await db.prepare(`SELECT token_hash AS tokenHash, company_id AS companyId, expires_at AS expiresAt,

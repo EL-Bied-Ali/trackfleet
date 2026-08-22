@@ -232,6 +232,19 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    // A continuously open tab never re-hits /api/auth/session after the
+    // initial load otherwise, so it would never benefit from sliding session
+    // renewal (company-auth.ts) and could still log out mid-use after 7
+    // days. Renewal itself only writes once the session is getting close to
+    // expiry, so polling this hourly is cheap in the common case.
+    if (authState !== "authenticated") return;
+    const timer = window.setInterval(() => {
+      void fetch("/api/auth/session", { cache: "no-store" }).catch(() => undefined);
+    }, 60 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [authState]);
+
+  useEffect(() => {
     if (authState !== "authenticated") return;
     let active = true;
     async function refreshSites() {

@@ -2,6 +2,7 @@ import {
   createServerSession,
   deleteServerSession,
   getServerSession,
+  renewServerSession,
 } from "trackfleet-auth-session-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getSendatrackSnapshot, type SendatrackCredentials } from "./sendatrack";
@@ -254,7 +255,14 @@ export async function createAgencySessionFromEnrollment(token: string) {
   };
 }
 
-export async function getCompanySession(request: Request): Promise<CompanySession | null> {
+type ResolvedSession = {
+  token: string;
+  tokenHash: string;
+  expiresAt: Date;
+  session: CompanySession;
+};
+
+async function resolveCompanySession(request: Request): Promise<ResolvedSession | null> {
   if (request.headers.get("sec-fetch-site")?.toLowerCase() === "cross-site") return null;
 
   const token = cookieValue(request);
@@ -278,16 +286,56 @@ export async function getCompanySession(request: Request): Promise<CompanySessio
     const agencySiteId = agencySiteIdFromUserLabel(stored.userLabel);
 
     return {
-      companyId: stored.companyId,
-      accountLabel: stored.accountLabel,
-      userLabel: stored.userLabel,
-      credentials,
-      ...(agencySiteId
-        ? { role: "agency" as const, siteId: agencySiteId }
-        : { role: "dispatcher" as const, siteId: null }),
+      token,
+      tokenHash,
+      expiresAt: stored.expiresAt,
+      session: {
+        companyId: stored.companyId,
+        accountLabel: stored.accountLabel,
+        userLabel: stored.userLabel,
+        credentials,
+        ...(agencySiteId
+          ? { role: "agency" as const, siteId: agencySiteId }
+          : { role: "dispatcher" as const, siteId: null }),
+      },
     };
   } catch {
     return null;
+  }
+}
+
+export async function getCompanySession(request: Request): Promise<CompanySession | null> {
+  const resolved = await resolveCompanySession(request);
+  return resolved?.session ?? null;
+}
+
+// A session only needs its expiry pushed back out once it's gotten this
+// close to expiring -- caps renewal writes to roughly once per day of
+// active use instead of on every single request, while a user who opens
+// the app at least once a week never actually hits the 7-day wall.
+const sessionRenewalWindowSeconds = 24 * 60 * 60;
+
+export async function getCompanySessionWithRenewal(request: Request): Promise<{ session: CompanySession; renewedCookie: string | null } | null> {
+  const resolved = await resolveCompanySession(request);
+  if (!resolved) return null;
+
+  const remainingSeconds = (resolved.expiresAt.getTime() - Date.now()) / 1000;
+  if (remainingSeconds >= sessionDurationSeconds - sessionRenewalWindowSeconds) {
+    return { session: resolved.session, renewedCookie: null };
+  }
+
+  try {
+    const newExpiresAt = new Date(Date.now() + sessionDurationSeconds * 1000);
+    await renewServerSession(resolved.tokenHash, newExpiresAt);
+    return {
+      session: resolved.session,
+      renewedCookie: `${cookieName}=${resolved.token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,
+    };
+  } catch (error) {
+    console.error("[trackfleet:auth] session renewal failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    return { session: resolved.session, renewedCookie: null };
   }
 }
 
