@@ -73,3 +73,19 @@ test("weight is entered by the dispatcher; price is shown as a computed preview,
   assert.match(publicView, /priceAmount: delivery\.priceAmount/);
   assert.match(publicView, /priceCurrency: delivery\.priceCurrency/);
 });
+
+test("bulky items without a declared weight let the dispatcher enter a manual price, but weight always wins when both are present", () => {
+  // Per-kg pricing makes no sense for a washing machine or a TV, so when
+  // weight is left blank the form exposes a manual price input instead of
+  // the read-only computed preview -- but the server must never let a
+  // manual price override a real weight-derived price.
+  const route = files["app/api/deliveries/route.ts"];
+  const page = files["app/page.tsx"];
+  assert.match(route, /manualPriceProvided = payload\.manualPriceAmount/);
+  assert.match(route, /manualPriceAmount must be greater than 0/);
+  assert.match(route, /weightKg !== null\s*\n\s*\? computeDeliveryPrice\(weightKg, originSite\?\.country \?\? null\)\s*\n\s*: manualPriceInput !== null && manualPriceInput > 0/);
+  assert.doesNotMatch(route, /payload\.priceAmount/);
+  assert.doesNotMatch(route, /payload\.priceCurrency/);
+  assert.match(page, /name="manualPriceAmount"/);
+  assert.match(page, /weightDraft \? \(locale === "fr" \? "Prix calculé"/);
+});
