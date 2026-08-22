@@ -43,12 +43,16 @@
   outline-offset: 1px;
 }
 
-/* The MVP exposes only the overview. Disabled future navigation looked like
-   broken product functionality, so keep it out of sight until those sections
-   are actually implemented. */
+/* Fleet/Deliveries/Customers/Settings/Help are still disabled placeholders
+   with no destination -- keep those specific buttons and the dividers out
+   of sight until they're implemented. This must NOT hide the "Outils
+   TrackFleet" nav (Operations/History/Revenue/Storage/Export/Import): those
+   are real, working pages and are the only way to reach them from the
+   sidebar. A previous, broader sibling selector (nav, divider, then any
+   nav) hid that entire nav by accident -- it matched any nav directly
+   after a divider, not just the still-unimplemented settings/help one. */
 .sidebar .nav-item:disabled,
-.sidebar .sidebar-divider,
-.sidebar nav + .sidebar-divider + nav {
+.sidebar .sidebar-divider {
   display: none;
 }
 

@@ -56,3 +56,17 @@ test("dashboard polish stylesheet is loaded after global styles", () => {
   assert.ok(globalIndex >= 0);
   assert.ok(polishIndex > globalIndex);
 });
+
+test("the sidebar's real Outils TrackFleet nav (Operations/History/Revenue/Storage/Export/Import) is never hidden alongside the still-unimplemented placeholder nav", () => {
+  // Regression guard, reproduced live: a broad ".sidebar nav + .sidebar-divider
+  // + nav { display: none }" selector was written back when every nav after
+  // the overview was an unimplemented placeholder. It matched ANY nav
+  // directly following a divider, not just the still-disabled settings/help
+  // one -- so once the Outils nav shipped with real, working links, this
+  // same rule silently hid it too, leaving the sidebar with no way to reach
+  // any other page.
+  assert.doesNotMatch(polish, /nav \+ \.sidebar-divider \+ nav/);
+  assert.match(polish, /\.sidebar \.nav-item:disabled,\s+\.sidebar \.sidebar-divider \{/);
+  assert.match(page, /aria-label=\{locale === "fr" \? "Outils TrackFleet"/);
+  assert.match(page, /href=\{`\/operations\?lang=\$\{locale\}`\}/);
+});
