@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics, routeForDestination } from "../app/lib/route-progress.ts";
+import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics, resolveGpsBaselineProgress, routeForDestination } from "../app/lib/route-progress.ts";
+
+test("resolveGpsBaselineProgress: an already-linked delivery uses its pre-existing baseline, matching a per-delivery query", () => {
+  const value = resolveGpsBaselineProgress({ existingBaselineProgress: 42, firstLink: false, freshlyComputedProgress: 90 });
+  assert.equal(value, 42);
+});
+
+test("resolveGpsBaselineProgress: an already-linked delivery with no baseline row on record falls back to 0, not the freshly computed progress", () => {
+  const value = resolveGpsBaselineProgress({ existingBaselineProgress: undefined, firstLink: false, freshlyComputedProgress: 90 });
+  assert.equal(value, 0);
+});
+
+test("resolveGpsBaselineProgress: a delivery linking to GPS for the first time uses the value it's about to insert", () => {
+  const value = resolveGpsBaselineProgress({ existingBaselineProgress: undefined, firstLink: true, freshlyComputedProgress: 17 });
+  assert.equal(value, 17);
+});
+
+test("resolveGpsBaselineProgress: a delivery that looks like a first link but already had a baseline row (e.g. re-linking after losing GPS) keeps the pre-existing value, since its own insert silently no-ops on conflict", () => {
+  const value = resolveGpsBaselineProgress({ existingBaselineProgress: 55, firstLink: true, freshlyComputedProgress: 17 });
+  assert.equal(value, 55);
+});
 
 test("calculates Morocco-bound progress along the shared corridor", () => {
   const start = calculateRouteMetrics(50.8503, 4.3517, "Casablanca, MA");
