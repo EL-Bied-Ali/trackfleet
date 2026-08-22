@@ -13,6 +13,16 @@ import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
 // or the 5-minute automation tick (app/lib/server-automation.ts).
 const defaultMaxNotificationsPerCall = 5;
 
+// The ignored (non-WhatsApp, e.g. progress-milestone) and superseded
+// (older duplicate) buckets don't call out to WhatsApp, but each item still
+// costs two DB round trips (claim + markSent) -- same subrequest-budget
+// exposure as the actionable cap above protects against, just cheaper per
+// item. Bounding them too keeps a sudden backlog (e.g. a large CSV import
+// landing many REGISTERED events at once, or automation having been
+// disabled for a while) from processing unbounded in one call; anything
+// past the cap is picked up next call, same as actionable.
+const maxHousekeepingItemsPerCall = 50;
+
 export async function processPendingNotifications(companyId: string, origin: string, maxPerCall = defaultMaxNotificationsPerCall) {
   const pending = await store.listPendingNotifications(companyId);
   let sent = 0;
@@ -38,7 +48,7 @@ export async function processPendingNotifications(companyId: string, origin: str
   // and arrival.
   const eligible = pending.filter((item) => isAutomaticWhatsAppEvent(item.event.type));
   const ignored = pending.filter((item) => !isAutomaticWhatsAppEvent(item.event.type));
-  for (const item of ignored) {
+  for (const item of ignored.slice(0, maxHousekeepingItemsPerCall)) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
     await store.markNotificationSent(item.delivery.id, item.event.type);
@@ -48,7 +58,7 @@ export async function processPendingNotifications(companyId: string, origin: str
   // If several useful customer events accumulated for the same delivery while
   // the provider/scheduler was unavailable, send only the newest useful state.
   const { actionable, superseded } = splitLatestPendingNotifications(eligible);
-  for (const item of superseded) {
+  for (const item of superseded.slice(0, maxHousekeepingItemsPerCall)) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
     await store.markNotificationSent(item.delivery.id, item.event.type);

@@ -19,6 +19,19 @@ test("processPendingNotifications caps how many sends it attempts per call", () 
   assert.match(runnerSource, /for \(const item of actionable\.slice\(0, maxPerCall\)\)/);
 });
 
+test("the ignored (non-WhatsApp) and superseded (older duplicate) housekeeping loops are also capped per call", () => {
+  // Regression guard: the actionable loop above was capped after a live
+  // "Worker exceeded resource limits" incident, but the ignored/superseded
+  // loops process the same underlying pending queue and were left uncapped
+  // -- each item still costs two DB round trips (claim + markSent), so a
+  // sudden backlog (a large CSV import landing many REGISTERED events at
+  // once, or automation having been disabled for a while) could reproduce
+  // the same failure mode through a different door.
+  assert.match(runnerSource, /const maxHousekeepingItemsPerCall = \d+;/);
+  assert.match(runnerSource, /for \(const item of ignored\.slice\(0, maxHousekeepingItemsPerCall\)\)/);
+  assert.match(runnerSource, /for \(const item of superseded\.slice\(0, maxHousekeepingItemsPerCall\)\)/);
+});
+
 test("uncapped items stay pending for the next call instead of being dropped", () => {
   // The cap must only limit how many are attempted per call, not shrink the
   // reported backlog or silently discard the rest -- claimNotification is
