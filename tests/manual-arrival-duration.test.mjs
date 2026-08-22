@@ -111,9 +111,22 @@ test("Postgres query scopes by company, joins confirmed-arrival/departure events
   assert.match(source, /departure\.type = 'DEPARTED'/);
   assert.match(source, /COALESCE\(departure\.created_at, d\.created_at\)/);
   assert.match(source, /recency_rank <= \$\{MANUAL_ARRIVAL_SAMPLE_SIZE_PER_SITE\}/);
-  assert.match(source, /LEFT JOIN fleet_position_observations fpo/);
+  assert.match(source, /JOIN fleet_position_observations fpo/);
   assert.match(source, /fpo\.vehicle_id = t\.sendatrack_vehicle_id/);
   assert.equal(MANUAL_ARRIVAL_SAMPLE_SIZE_PER_SITE, 10);
+});
+
+test("the fleet-position join is bounded per delivery, not left to scale with a vehicle's entire tracked history", async () => {
+  // Regression guard: fleet_position_observations holds every GPS tick ever
+  // recorded for a vehicle. A delivery with no DEPARTED event falls back to
+  // its (possibly days-old) created_at as the window start, so joining that
+  // table on an unbounded date range can return tens of thousands of rows
+  // for one candidate delivery -- enough to exceed the Worker's CPU budget
+  // even for a company with only a handful of deliveries total (this is what
+  // took production down after this feature shipped).
+  const source = await readFile(new URL("../app/lib/manual-arrival-duration.postgres.ts", import.meta.url), "utf8");
+  assert.match(source, /ROW_NUMBER\(\) OVER \(PARTITION BY t\.delivery_id ORDER BY fpo\.position_at DESC\) AS position_rank/);
+  assert.match(source, /LEFT JOIN positions p ON p\.delivery_id = t\.delivery_id AND p\.position_rank <= \$\{POSITION_ROWS_PER_DELIVERY\}/);
 });
 
 test("the relay vicinity radius is wider than the hub's precise arrival geofence, matching the NEAR_DESTINATION convention", async () => {
