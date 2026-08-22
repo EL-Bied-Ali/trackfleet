@@ -206,7 +206,7 @@ td > strong, td > span { display: block; }td > strong { font-size: 10px; }td > s
 .more-button { border: 0; background: transparent; color: #8c9791; cursor: pointer; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(17,36,29,.52); backdrop-filter: blur(4px); }
-.modal { width: min(480px, 100%); overflow: hidden; border-radius: 16px; background: white; box-shadow: 0 24px 70px rgba(10,35,26,.25); animation: modal-in .22s ease-out; }
+.modal { width: min(480px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; overflow-x: hidden; border-radius: 16px; background: white; box-shadow: 0 24px 70px rgba(10,35,26,.25); animation: modal-in .22s ease-out; }
 .site-manager-modal { width: min(880px, 100%); max-height: min(860px, calc(100vh - 40px)); overflow: auto; }
 .site-manager-toolbar { display: flex; gap: 10px; padding: 16px 27px; border-bottom: 1px solid var(--line); }
 .site-manager-toolbar input { min-width: 0; flex: 1; height: 42px; padding: 0 13px; border: 1px solid #dce4df; border-radius: 9px; }
