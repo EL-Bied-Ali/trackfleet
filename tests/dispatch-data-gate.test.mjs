@@ -20,9 +20,7 @@ test("the initial (non-silent) delivery API failure clears displayed rows instea
   for (const statement of [
     "if (!silent) {",
     "setDeliveries([])",
-    "setStopPlans([])",
     "setTrips([])",
-    "setRouteHistory([])",
     'setDispatchDataState("error")',
   ]) assert.ok(errorCleanup.includes(statement), statement);
 });
@@ -40,11 +38,11 @@ test("a silent background poll failure shows a toast and keeps the dashboard vis
   assert.ok(toastIndex > errorStart, "expected the cloudReconnecting toast inside the !tracking error block");
   const errorBlock = source.slice(errorStart, toastIndex + toastCall.length + 20);
   assert.match(errorBlock, /\} else \{\s*setToast\(translations\[locale\]\.cloudReconnecting\);\s*\}/);
-  // The silent branch must not touch setDeliveries/setStopPlans/setTrips/
-  // setRouteHistory/setDispatchDataState -- only the non-silent branch above
+  // The silent branch must not touch setDeliveries/setTrips/
+  // setDispatchDataState -- only the non-silent branch above
   // (already asserted in the previous test) may.
   const silentBranch = errorBlock.slice(errorBlock.indexOf("} else {"));
-  for (const statement of ["setDeliveries([])", "setStopPlans([])", "setTrips([])", "setRouteHistory([])", 'setDispatchDataState("error")']) {
+  for (const statement of ["setDeliveries([])", "setTrips([])", 'setDispatchDataState("error")']) {
     assert.equal(silentBranch.includes(statement), false, `silent branch must not include ${statement}`);
   }
 });

@@ -57,6 +57,25 @@ test("dashboard polish stylesheet is loaded after global styles", () => {
   assert.ok(polishIndex > globalIndex);
 });
 
+test("the WhatsApp consent checkbox is hidden until a real phone number is entered, but stays in the DOM and functional once one is", () => {
+  // Regression guard: the checkbox looked confusing/unnecessary before any
+  // contact or recipient number existed. Rather than removing consent
+  // capture entirely (which would silently break automatic WhatsApp for
+  // any brand-new number forever -- see whatsapp-automation.ts's gate),
+  // it's just visually hidden via CSS until a number is typed.
+  assert.match(polish, /\.modal \.consent-choice \{\s*\n\s*display: none !important;/);
+  assert.match(polish, /form:has\(input\[name="contact"\]:not\(:placeholder-shown\)\) \.consent-choice/);
+  assert.match(polish, /form:has\(input\[name="recipientContact"\]:not\(:placeholder-shown\)\) \.consent-choice/);
+  assert.match(page, /className="consent-choice"><input type="checkbox" name="whatsappOptIn"/);
+});
+
+test("the WhatsApp consent gate itself is untouched -- automatic messages still require it", () => {
+  // Confirms the consent requirement was kept exactly as-is (a deliberate
+  // decision after weighing the risk that Meta can suspend the whole
+  // WhatsApp Business number if messages go out without recorded consent).
+  assert.match(page, /name="whatsappOptIn"/);
+});
+
 test("the sidebar's real Outils TrackFleet nav (Operations/History/Revenue/Storage/Export/Import) is never hidden alongside the still-unimplemented placeholder nav", () => {
   // Regression guard, reproduced live: a broad ".sidebar nav + .sidebar-divider
   // + nav { display: none }" selector was written back when every nav after

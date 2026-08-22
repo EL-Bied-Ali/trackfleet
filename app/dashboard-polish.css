@@ -1,6 +1,20 @@
 /* Dashboard-only polish. Kept separate from globals.css so the visual pass can be
    reviewed and reverted independently from the product styles. */
 
+/* There's nothing to consent for until a phone number exists -- showing the
+   checkbox before any contact/recipient number is entered was confusing.
+   Reveal it once a real number is typed into either field; consent for an
+   already-remembered number still gets recognized automatically either way
+   (see the hint text), this only hides the manual checkbox itself. */
+.modal .consent-choice {
+  display: none !important;
+}
+
+.modal form:has(input[name="contact"]:not(:placeholder-shown)) .consent-choice,
+.modal form:has(input[name="recipientContact"]:not(:placeholder-shown)) .consent-choice {
+  display: flex !important;
+}
+
 .workspace {
   max-width: 1540px;
   margin: 0 auto;
