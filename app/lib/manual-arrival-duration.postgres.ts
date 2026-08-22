@@ -59,7 +59,18 @@ export async function getManualArrivalDurationEstimates(companyId: string): Prom
   // genuinely unavailable past the hub, GPS pings stop once the truck goes
   // off-grid, so the last-seen-near-hub ping is necessarily among the most
   // recent ones in the window, not buried under older history.
-  const POSITION_ROWS_PER_DELIVERY = 2000;
+  //
+  // 2000 (the original bound here) turned out to still be too generous:
+  // reproduced live via wrangler tail hours after that fix shipped -- up to
+  // MANUAL_ARRIVAL_SAMPLE_SIZE_PER_SITE (10) candidates per relay site,
+  // times up to 3 relay sites, times 2000 rows each is up to 60,000 GPS
+  // position rows deserialized and mapped in JS for one /api/deliveries
+  // request, which is real CPU-ms work regardless of how tight the SQL-side
+  // filter is -- and was enough on its own to exceed the Worker's CPU
+  // budget once enough real GPS history had accumulated. 150 is still very
+  // generous for "last ping before going off-grid" and cuts the worst case
+  // to 4,500 rows.
+  const POSITION_ROWS_PER_DELIVERY = 150;
   const [hubRows, candidateRows] = await Promise.all([
     sql`SELECT id, latitude, longitude FROM sites WHERE company_id = ${companyId} AND id = ANY(${hubIds}::text[])`,
     sql`
