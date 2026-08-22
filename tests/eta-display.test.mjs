@@ -28,3 +28,15 @@ test("customer copy distinguishes route history from live GPS pace", () => {
 test("material delay remains the primary customer ETA note", () => {
   assert.equal(customerEtaNote({ source: "route-history", historyTrips: 7, delayMinutes: 125 }, "en"), "+2 h");
 });
+
+test("an untracked final leg overrides even a material delay note, since the delay figure would be meaningless", () => {
+  assert.equal(customerEtaNote({ source: "route-history", historyTrips: 7, delayMinutes: 125, finalLegTrackingUnavailable: true }, "en"), "Live GPS tracking is not available for the final leg");
+  assert.equal(customerEtaNote({ source: "observed-pace", finalLegTrackingUnavailable: true }, "fr"), "Suivi GPS en direct non disponible pour la dernière étape");
+  assert.equal(customerEtaNote({ finalLegTrackingUnavailable: true }, "nl"), "Live GPS-tracking is niet beschikbaar voor het laatste traject");
+});
+
+test("dispatcher ETA explanation also flags an untracked final leg instead of a stale confidence label", () => {
+  const result = etaExplanation({ source: "observed-pace", confidence: "medium", finalLegTrackingUnavailable: true }, "fr");
+  assert.equal(result.sourceLabel, "Dernière étape non suivie par GPS");
+  assert.equal(result.confidenceLabel, "");
+});

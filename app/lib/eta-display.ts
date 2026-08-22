@@ -6,10 +6,22 @@ export function etaExplanation(input: {
   source?: EtaSource | null;
   confidence?: EtaConfidence | null;
   historyTrips?: number | null;
+  // See customerEtaNote: true when the destination is beyond a local/relay
+  // leg our GPS-tracked trucks never physically visit.
+  finalLegTrackingUnavailable?: boolean;
 }, locale: EtaDisplayLocale) {
   const source = input.source ?? "unavailable";
   const confidence = input.confidence ?? "none";
   const historyTrips = Math.max(0, Math.round(input.historyTrips ?? 0));
+
+  if (input.finalLegTrackingUnavailable) {
+    const untrackedLegLabel = {
+      fr: "Dernière étape non suivie par GPS",
+      en: "Final leg not GPS-tracked",
+      nl: "Laatste traject niet GPS-gevolgd",
+    };
+    return { sourceLabel: untrackedLegLabel[locale], confidenceLabel: "" };
+  }
 
   const copy = {
     fr: {
@@ -50,7 +62,19 @@ export function customerEtaNote(input: {
   source?: EtaSource | null;
   delayMinutes?: number | null;
   historyTrips?: number | null;
+  // True when the destination is only reached via a local/relay leg our
+  // GPS-tracked trucks never physically visit. Any delay/pace figure derived
+  // from a frozen last-known GPS position would be misleading, so this takes
+  // priority over the delay-minutes note below.
+  finalLegTrackingUnavailable?: boolean;
 }, locale: EtaDisplayLocale) {
+  const untrackedLegCopy = {
+    fr: "Suivi GPS en direct non disponible pour la dernière étape",
+    en: "Live GPS tracking is not available for the final leg",
+    nl: "Live GPS-tracking is niet beschikbaar voor het laatste traject",
+  };
+  if (input.finalLegTrackingUnavailable) return untrackedLegCopy[locale];
+
   const delayMinutes = input.delayMinutes ?? null;
   if (typeof delayMinutes === "number" && delayMinutes >= 60) return `+${Math.round(delayMinutes / 60)} h`;
 

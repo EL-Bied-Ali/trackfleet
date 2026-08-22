@@ -8,7 +8,7 @@ import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent, whatsappConsentWithdrawn } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { computeDeliveryPrice } from "../../lib/delivery-pricing";
-import { resolveKnownSite } from "../../lib/known-sites";
+import { knownSite, resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { publicDeliveryView } from "../../lib/public-delivery-view";
 import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
@@ -112,6 +112,7 @@ async function enrichAndDetectDelay<T extends {
   originLatitude?: number | null;
   originLongitude?: number | null;
   destination: string;
+  destinationSiteId?: string | null;
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
   lastPositionAt: Date | null;
@@ -130,6 +131,7 @@ async function enrichAndDetectDelay<T extends {
     },
     delivered: row.status === "Delivered" || events.some((event) => event.type === "ARRIVED_AT_SITE"),
     alreadyDetected: events.some((event) => event.type === "DELAY_DETECTED"),
+    finalLegTrackingUnavailable: knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true,
   });
 
   if (delayDetected && await store.recordEvent(row.id, "DELAY_DETECTED", row.progress)) {

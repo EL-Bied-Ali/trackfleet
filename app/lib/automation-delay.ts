@@ -1,6 +1,7 @@
 import type { DeliveryEventRow, DeliveryRow } from "./delivery-store.types.ts";
 import { shouldDetectDelay } from "./delay-detection.ts";
 import { estimateArrival } from "./eta-estimator.ts";
+import { knownSite } from "./known-sites.ts";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "./route-progress.ts";
 import { pendingServiceMinutesBefore } from "./truck-stop-plan.ts";
 
@@ -47,5 +48,6 @@ export function shouldCreateDelayEvent(row: DeliveryRow, events: DeliveryEventRo
     eta,
     delivered: false,
     alreadyDetected: false,
+    finalLegTrackingUnavailable: knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true,
   });
 }

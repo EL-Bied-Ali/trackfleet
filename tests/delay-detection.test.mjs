@@ -20,3 +20,11 @@ test("does not detect small, delivered, or duplicate delays", () => {
   assert.equal(shouldDetectDelay({ eta: baseEta, delivered: true, alreadyDetected: false }), false);
   assert.equal(shouldDetectDelay({ eta: baseEta, delivered: false, alreadyDetected: true }), false);
 });
+
+test("never raises a delay alert for a destination beyond the GPS-tracked leg", () => {
+  // A frozen last-known GPS position on an untracked relay leg would produce
+  // a huge, meaningless "delay" -- this must be suppressed regardless of how
+  // large eta.delayMinutes looks.
+  assert.equal(shouldDetectDelay({ eta: baseEta, delivered: false, alreadyDetected: false, finalLegTrackingUnavailable: true }), false);
+  assert.equal(shouldDetectDelay({ eta: { ...baseEta, delayMinutes: 100000 }, delivered: false, alreadyDetected: false, finalLegTrackingUnavailable: true }), false);
+});
