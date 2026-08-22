@@ -22,7 +22,11 @@ type MapDelivery = {
   originCountry?: "BE" | "MA" | null;
 };
 
-const originCountryFlag: Record<"BE" | "MA", string> = { BE: "🇧🇪", MA: "🇲🇦" };
+// Flag emoji (regional indicator sequences) render as blank/tofu on Windows
+// in most browsers instead of an actual flag picture -- reproduced live, the
+// badge showed as an empty circle. Coloring the marker itself after each
+// country's flag colors is reliable everywhere since it's plain CSS, not a
+// font-dependent glyph.
 const originCountryLabel: Record<"BE" | "MA", string> = { BE: "Belgium", MA: "Morocco" };
 
 type LiveVehicle = {
@@ -40,6 +44,7 @@ type Props = {
   customerMode?: boolean;
   label: string;
   onSelect?: (deliveryId: string) => void;
+  onBackgroundClick?: () => void;
 };
 
 const EMPTY_LIVE_VEHICLES: LiveVehicle[] = [];
@@ -93,9 +98,10 @@ function overlapOffset(position: [number, number], occurrences: Map<string, numb
   return [Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius)];
 }
 
-export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_LIVE_VEHICLES, selectedId, customerMode = false, label, onSelect }: Props) {
+export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_LIVE_VEHICLES, selectedId, customerMode = false, label, onSelect, onBackgroundClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
+  const onBackgroundClickRef = useRef(onBackgroundClick);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
@@ -105,6 +111,10 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
+
+  useEffect(() => {
+    onBackgroundClickRef.current = onBackgroundClick;
+  }, [onBackgroundClick]);
 
   useEffect(() => {
     let disposed = false;
@@ -155,6 +165,11 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
         map.fitBounds([[-10.5, 29.5], [6.0, 51.8]], { padding: customerMode ? 42 : 34, duration: 0 });
         setMapRevision((revision) => revision + 1);
       });
+      // Truck markers are separate DOM elements overlaid on the map canvas,
+      // so a click on one never reaches this handler -- it only fires for
+      // clicks on empty map area, which is exactly when the open info
+      // popover (driven by onSelect above) should close.
+      map.on("click", () => onBackgroundClickRef.current?.());
     })();
 
     return () => {
@@ -192,12 +207,12 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
     const markers = shownDeliveries.map((delivery, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `maplibre-truck ${delivery.id === selectedId ? "selected" : ""}`;
+      const originClass = delivery.originCountry ? `origin-${delivery.originCountry.toLowerCase()}` : "";
+      button.className = `maplibre-truck ${originClass} ${delivery.id === selectedId ? "selected" : ""}`;
       keepMarkerMapPositioning(button);
-      const originFlag = delivery.originCountry ? originCountryFlag[delivery.originCountry] : null;
       const originLabel = delivery.originCountry ? ` · from ${originCountryLabel[delivery.originCountry]}` : "";
       button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}${originLabel}`);
-      button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>${originFlag ? `<span class="truck-origin-flag" aria-hidden="true">${originFlag}</span>` : ""}`;
+      button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
       const position = positionFor(delivery, index);
       return new maplibregl.Marker({ element: button, anchor: "bottom", offset: overlapOffset(position, markerOccurrences) }).setLngLat(position).addTo(map);
