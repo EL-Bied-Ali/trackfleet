@@ -51,3 +51,28 @@ test("both ETA displays also pass the manual-arrival estimate fields, not just t
   assert.match(page, /manualArrivalEstimateHours: selected\.manualArrivalEstimateHours,\s*\n\s*manualArrivalEstimateSampleCount: selected\.manualArrivalEstimateSampleCount,/);
   assert.match(page, /manualArrivalEstimateHours: selected\.manualArrivalEstimateHours, manualArrivalEstimateSampleCount: selected\.manualArrivalEstimateSampleCount \}/);
 });
+
+test("an agency scoped to an untracked-final-leg site sees an expected-parcels list instead of the live fleet map", () => {
+  // A live truck-tracking map is actively misleading for a destination GPS
+  // coverage never reaches -- there's no confirmed vehicle to show, and the
+  // relay mechanics (single truck vs handoff) aren't even confirmed yet.
+  const page = files["app/page.tsx"];
+  assert.match(page, /const agencyMapUnavailable = company\?\.role === "agency" && staticKnownSite\(company\.siteId\)\?\.finalLegTrackingUnavailable === true;/);
+  assert.match(page, /const agencyIncomingDeliveries = agencyMapUnavailable\s*\n\s*\? deliveries\.filter\(\(delivery\) => delivery\.destinationSiteId === company\?\.siteId && delivery\.status !== "Delivered"\)/);
+  // The live map/roster/truck-popover branch must be skipped entirely when
+  // the map is unavailable, not merely visually hidden alongside it.
+  assert.match(page, /\{agencyMapUnavailable \? \(/);
+  assert.match(page, /!agencyMapUnavailable && showPopover && deliveries\.length > 0 && <div className="truck-popover">/);
+});
+
+test("each expected-parcel card reuses the same estimate note and arrival-confirmation action as everywhere else, keyed to that specific delivery", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /const note = customerEtaNote\(\{ finalLegTrackingUnavailable: true, manualArrivalEstimateHours: delivery\.manualArrivalEstimateHours, manualArrivalEstimateSampleCount: delivery\.manualArrivalEstimateSampleCount \}, locale\);/);
+  assert.match(page, /confirmArrivalForDelivery\(delivery\.id, delivery\.destinationSiteId\)/);
+  // The confirm action was generalized from the old selected-only
+  // confirmAgencyArrival to work per-row; the popover call site must have
+  // moved to the same generalized function, not kept a second copy.
+  assert.doesNotMatch(page, /function confirmAgencyArrival/);
+  assert.match(page, /async function confirmArrivalForDelivery\(deliveryId: string, destinationSiteId\?: string \| null\)/);
+  assert.match(page, /confirmArrivalForDelivery\(selected\.id, selected\.destinationSiteId\)/);
+});

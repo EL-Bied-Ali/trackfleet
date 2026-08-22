@@ -383,6 +383,15 @@ export default function Home() {
   const creationOriginCountry = knownSites.find((site) => site.id === creationOriginSiteId)?.country ?? null;
   const creationWeightValue = Number(weightDraft);
   const creationPricePreview = computeDeliveryPrice(Number.isFinite(creationWeightValue) && creationWeightValue > 0 ? creationWeightValue : null, creationOriginCountry);
+  // An agency at a relay-only destination (see KnownSite.finalLegTrackingUnavailable)
+  // has no live truck to show -- GPS coverage doesn't reach them, so the live
+  // fleet map would show nothing relevant or, worse, an unrelated truck. Show
+  // their expected parcels with the duration estimate instead of pretending
+  // a trackable vehicle exists for that leg.
+  const agencyMapUnavailable = company?.role === "agency" && staticKnownSite(company.siteId)?.finalLegTrackingUnavailable === true;
+  const agencyIncomingDeliveries = agencyMapUnavailable
+    ? deliveries.filter((delivery) => delivery.destinationSiteId === company?.siteId && delivery.status !== "Delivered")
+    : [];
   const visibleDeliveries = useMemo(() => {
     if (filter === "All deliveries") return deliveries;
     return deliveries.filter((delivery) => delivery.status === filter);
@@ -710,13 +719,13 @@ export default function Home() {
     }
   }
 
-  async function confirmAgencyArrival() {
-    if (company?.role !== "agency" || selected.destinationSiteId !== company.siteId) return;
+  async function confirmArrivalForDelivery(deliveryId: string, destinationSiteId?: string | null) {
+    if (company?.role !== "agency" || destinationSiteId !== company.siteId) return;
     try {
       const response = await fetch("/api/deliveries/manual-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deliveryId: selected.id, confirmArrival: true }),
+        body: JSON.stringify({ deliveryId, confirmArrival: true }),
       });
       if (!response.ok) throw new Error("arrival_confirmation_failed");
       setToast(locale === "fr" ? "Arrivée confirmée. La clôture suivra après le déchargement." : locale === "nl" ? "Aankomst bevestigd. Afsluiting volgt na het lossen." : "Arrival confirmed. Completion will follow after unloading.");
@@ -944,12 +953,39 @@ export default function Home() {
         </div>
 
         <div className="map-panel">
-          <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{vehicleLabel(delivery)}</option>)}</select></div></div>
+          {agencyMapUnavailable ? (
+            <div className="panel-header"><div><h2>{locale === "fr" ? "Colis attendus" : locale === "nl" ? "Verwachte pakketten" : "Parcels expected"}</h2><p>{locale === "fr" ? "Suivi GPS non disponible pour cette dernière étape · confirmez l’arrivée dès que le colis est sur place" : locale === "nl" ? "Geen GPS-tracking voor dit laatste traject · bevestig de aankomst zodra het pakket er is" : "No GPS tracking for this final leg · confirm arrival as soon as the parcel is physically present"}</p></div></div>
+          ) : (
+            <div className="panel-header"><div><h2>{t.liveFleet}</h2><p>{integration.connected ? t.sendatrackRefreshing : t.updatesEvery30}</p></div><div className="panel-actions"><select aria-label={t.findVehicle} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setShowPopover(true); }}>{deliveries.map((delivery) => <option key={delivery.id} value={delivery.id}>{vehicleLabel(delivery)}</option>)}</select></div></div>
+          )}
           <div className="map fleet-map">
-            <InteractiveFleetMap deliveries={mapDeliveries} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
-            <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
-            {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{vehicle.name}<small>{vehicle.speed} km/h</small></span>)}</div>}
-            {showPopover && deliveries.length > 0 && <div className="truck-popover">
+            {agencyMapUnavailable ? (
+              agencyIncomingDeliveries.length === 0 ? (
+                <p className="expected-parcels-empty">{locale === "fr" ? "Aucun colis attendu pour le moment." : locale === "nl" ? "Momenteel geen verwachte pakketten." : "No parcels expected right now."}</p>
+              ) : (
+                <div className="expected-parcels-list">
+                  {agencyIncomingDeliveries.map((delivery) => {
+                    const note = customerEtaNote({ finalLegTrackingUnavailable: true, manualArrivalEstimateHours: delivery.manualArrivalEstimateHours, manualArrivalEstimateSampleCount: delivery.manualArrivalEstimateSampleCount }, locale);
+                    return (
+                      <article className="expected-parcel-card" key={delivery.id}>
+                        <div><strong>{delivery.customer}</strong><span>{delivery.id}</span></div>
+                        <div className="expected-parcel-meta">
+                          {delivery.weightKg != null && <span>{delivery.weightKg.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { maximumFractionDigits: 3 })} kg</span>}
+                          {delivery.priceAmount != null && delivery.priceCurrency && <span>{delivery.priceAmount.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {delivery.priceCurrency}</span>}
+                          <span>{note}</span>
+                        </div>
+                        <button type="button" onClick={() => void confirmArrivalForDelivery(delivery.id, delivery.destinationSiteId)}>{locale === "fr" ? "Confirmer l’arrivée" : locale === "nl" ? "Aankomst bevestigen" : "Confirm arrival"}</button>
+                      </article>
+                    );
+                  })}
+                </div>
+              )
+            ) : <>
+              <InteractiveFleetMap deliveries={mapDeliveries} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} />
+              <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
+              {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{vehicle.name}<small>{vehicle.speed} km/h</small></span>)}</div>}
+            </>}
+            {!agencyMapUnavailable && showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p>
                 {renamingVehicleId && renamingVehicleId === selected.sendatrackVehicleId
                   ? <span className="rename-truck"><input value={renameDraft} maxLength={60} disabled={renameBusy} onChange={(event) => setRenameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void renameVehicle(renamingVehicleId); if (event.key === "Escape") setRenamingVehicleId(null); }} /><button type="button" disabled={renameBusy} aria-label={locale === "fr" ? "Confirmer le nom" : locale === "nl" ? "Naam bevestigen" : "Confirm name"} onClick={() => void renameVehicle(renamingVehicleId)}>✓</button><button type="button" disabled={renameBusy} aria-label={t.cancel} onClick={() => setRenamingVehicleId(null)}>×</button></span>
@@ -972,7 +1008,7 @@ export default function Home() {
                 </> : <small>{locale === "fr" ? "GPS en attente · SENDATRACK indisponible" : locale === "nl" ? "GPS in afwachting · SENDATRACK niet beschikbaar" : "Waiting for GPS · SENDATRACK unavailable"}</small>}
               </div>}
               <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
-              {company?.role === "agency" && selected.destinationSiteId === company.siteId && selected.status !== "Delivered" && <div className="popover-actions"><button type="button" onClick={() => void confirmAgencyArrival()}>{locale === "fr" ? "Confirmer l’arrivée du camion" : locale === "nl" ? "Aankomst vrachtwagen bevestigen" : "Confirm truck arrival"}</button></div>}
+              {company?.role === "agency" && selected.destinationSiteId === company.siteId && selected.status !== "Delivered" && <div className="popover-actions"><button type="button" onClick={() => void confirmArrivalForDelivery(selected.id, selected.destinationSiteId)}>{locale === "fr" ? "Confirmer l’arrivée du camion" : locale === "nl" ? "Aankomst vrachtwagen bevestigen" : "Confirm truck arrival"}</button></div>}
             </div>}
           </div>
           {features.whatsappDemoEnabled && deliveries.length > 0 && <section className="whatsapp-demo" aria-labelledby="whatsapp-demo-title">
