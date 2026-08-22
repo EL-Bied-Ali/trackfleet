@@ -132,7 +132,7 @@ export default function BulkImportPage() {
           {fileName && <span style={{ color: "#6b7280" }}>{fileName}</span>}
         </div>
         <p style={{ marginBottom: 0, color: "#6b7280", fontSize: 14 }}>
-          Colonnes obligatoires : <code>customer</code>, <code>destination</code>, <code>planned_arrival_at</code>. Le camion et les autres colonnes sont facultatifs.
+          Colonnes obligatoires : <code>customer</code>, <code>destination</code>, <code>planned_arrival_at</code>, <code>origin_site_id</code> (nécessaire pour calculer le prix). Le camion et les autres colonnes sont facultatifs.
         </p>
       </section>
 
