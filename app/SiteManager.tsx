@@ -210,11 +210,22 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       });
       const data = await response.json() as { enrollmentUrl?: string };
       if (!response.ok || !data.enrollmentUrl) throw new Error("access_failed");
+
+      // The link is already created and valid past this point -- a
+      // clipboard or prompt failure below is a delivery/UX problem, not a
+      // creation failure, and must never surface as "could not create
+      // agency access" (it previously did, via a shared catch block, which
+      // was actively misleading: the link had genuinely been created, just
+      // not successfully shown to the dispatcher).
       try {
         await navigator.clipboard.writeText(data.enrollmentUrl);
         setAccessMessage(copy.accessCopied(site.label));
       } catch {
-        window.prompt(copy.accessCopyFallback, data.enrollmentUrl);
+        try {
+          window.prompt(copy.accessCopyFallback, data.enrollmentUrl);
+        } catch {
+          setAccessMessage(`${copy.accessCopyFallback}: ${data.enrollmentUrl}`);
+        }
       }
     } catch {
       setAccessMessage(copy.accessError);
