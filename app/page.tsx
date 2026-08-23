@@ -1012,11 +1012,17 @@ export default function Home() {
       : selected.plannedArrivalAt
         ? new Date(selected.plannedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
         : selected.eta;
+    // Confirmed from real fleet GPS history (see KnownSite.finalLegTrackingUnavailable):
+    // past the relay hub, the truck's position is frozen/stale, so a live map
+    // and GPS-derived stats (progress/speed/remaining distance/GPS freshness)
+    // would show numbers that stopped meaning anything -- shown as a plain
+    // relay notice instead of a map that looks like it's just stuck.
+    const relayInEffect = staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true;
     const etaNote = customerEtaNote({
       source: selected.etaSource,
       delayMinutes: selected.etaDelayMinutes,
       historyTrips: selected.etaHistoryTrips,
-      finalLegTrackingUnavailable: staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true,
+      finalLegTrackingUnavailable: relayInEffect,
       manualArrivalEstimateHours: selected.manualArrivalEstimateHours,
       manualArrivalEstimateSampleCount: selected.manualArrivalEstimateSampleCount,
     }, locale);
@@ -1053,18 +1059,22 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
+          {!relayInEffect && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
             <article className="stat-card"><div className="stat-head"><span>{copy.progress}</span><Icon>↗</Icon></div><div><strong>{selected.progress}%</strong></div><div className="progress"><div><i style={{ width: `${selected.progress}%` }} /></div></div></article>
             <article className="stat-card"><div className="stat-head"><span>{copy.remaining}</span><Icon>◇</Icon></div><div><strong>{selected.remainingDistanceKm == null ? "—" : `${selected.remainingDistanceKm.toLocaleString(dateLocale)} km`}</strong></div><p>{selected.routeDistanceKm == null ? "" : `${Math.round(selected.routeDistanceKm).toLocaleString(dateLocale)} km total`}</p></article>
             <article className="stat-card"><div className="stat-head"><span>{copy.speed}</span><Icon>▰</Icon></div><div><strong>{selected.speed == null ? "—" : `${Math.round(selected.speed)} km/h`}</strong></div><p>{selected.status === "Delivered" ? t.statuses.Delivered : t.statuses[selected.status]}</p></article>
             <article className="stat-card"><div className="stat-head"><span>{copy.gps}</span><Icon>⌖</Icon></div><div><strong>{selected.gpsFresh ? "●" : selected.positionAgeMinutes == null ? "—" : "△"}</strong></div><p>{gpsText}</p></article>
-          </div>
+          </div>}
 
           <div className="customer-grid">
-            <div className="map customer-map">
+            {relayInEffect ? <div className="map customer-map relay-notice">
+              <Icon>⇄</Icon>
+              <strong>{locale === "fr" ? "La CTM a pris le relais" : locale === "nl" ? "CTM heeft dit traject overgenomen" : "CTM has taken over"}</strong>
+              <p>{locale === "fr" ? "Le suivi GPS en direct s'arrête au point de relais. Notre partenaire local achemine votre colis pour la dernière étape." : locale === "nl" ? "Live GPS-tracking stopt op het overslagpunt. Onze lokale partner brengt uw pakket voor het laatste traject." : "Live GPS tracking stops at the relay point. Our local partner carries your parcel for the final leg."}</p>
+            </div> : <div className="map customer-map">
               <InteractiveFleetMap deliveries={deliveries} selectedId={selectedId} customerMode label={`${routeDirection} · ${customerVehicleLabel}`} />
               <div className="map-live"><i className={selected.gpsFresh ? "" : "fallback"} /> {gpsText}</div>
-            </div>
+            </div>}
 
             <aside className="journey-card">
               <div className="journey-title">

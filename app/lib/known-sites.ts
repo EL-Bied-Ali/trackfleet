@@ -8,10 +8,14 @@ export type KnownSite = {
   longitude: number | null;
   arrivalRadiusKm: number;
   roles: Array<"origin" | "dropoff" | "replenishment" | "destination">;
-  // True for regional destinations reached by a local/relay leg beyond
-  // Casablanca that our GPS-tracked trucks never physically visit -- live GPS
-  // pace, delay detection and ETA confidence are meaningless for that leg, so
-  // callers must show an explicit "not GPS-tracked" note instead of a
+  // True for regional destinations reached by a local/relay leg beyond one of
+  // the two confirmed hub stops (Casablanca or the Tanger Med ferry
+  // crossing -- see relayHubSiteId) that our GPS-tracked trucks never
+  // physically visit -- confirmed from real fleet GPS history: those two
+  // are the only sites with a sustained position cluster, everything else
+  // Moroccan sees zero GPS presence. Live GPS pace, delay detection and ETA
+  // confidence are meaningless for that leg, so callers must show an
+  // explicit "not GPS-tracked" / relay-carrier note instead of a
   // possibly-stale or fabricated live estimate. See
   // app/lib/eta-display.ts (customerEtaNote) and app/lib/delay-detection.ts.
   finalLegTrackingUnavailable?: boolean;
@@ -61,6 +65,8 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    finalLegTrackingUnavailable: true,
+    relayHubSiteId: "tanger-med-ksar-al-majaz",
   },
   {
     id: "tetouan-cortoba-146",
@@ -72,6 +78,8 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    finalLegTrackingUnavailable: true,
+    relayHubSiteId: "tanger-med-ksar-al-majaz",
   },
   {
     id: "sale-hay-nasser-12bis",
@@ -83,6 +91,8 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    finalLegTrackingUnavailable: true,
+    relayHubSiteId: "casablanca-mohammed-vi-959",
   },
   {
     id: "marrakech-essaouira-12",
@@ -120,6 +130,8 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    finalLegTrackingUnavailable: true,
+    relayHubSiteId: "casablanca-mohammed-vi-959",
   },
   {
     id: "fquih-ben-salah-allal-ben-abdellah-197",
