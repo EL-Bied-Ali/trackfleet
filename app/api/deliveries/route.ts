@@ -29,6 +29,8 @@ import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-l
 import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/trip-record";
 import { summarizeCompletedTripRoutes } from "../../lib/trip-history-summary";
 
+const SHIPMENT_ID_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
+
 function errorResponse(error: unknown) {
   console.error("[trackfleet:deliveries] request failed", {
     message: error instanceof Error ? error.message : "unknown_error",
@@ -447,6 +449,16 @@ export async function POST(request: Request) {
     const weightInput = optionalNumber(payload.weightKg);
     const manualPriceProvided = payload.manualPriceAmount !== null && payload.manualPriceAmount !== undefined && String(payload.manualPriceAmount).trim() !== "";
     const manualPriceInput = optionalNumber(payload.manualPriceAmount);
+    // Client-generated (not server-assigned) so a dispatcher entering several
+    // parcels for one customer in one sitting can link them by generating one
+    // id up front and sending it with each parcel's create call -- each
+    // parcel is still its own independent request/resource, this is purely a
+    // grouping key stamped on each row. Optional: absent for ordinary
+    // single-parcel submissions.
+    const shipmentIdInput = String(payload.shipmentId ?? "").trim();
+    if (shipmentIdInput && !SHIPMENT_ID_PATTERN.test(shipmentIdInput)) {
+      return Response.json({ error: "shipmentId must be 8-128 characters of letters, numbers, '.', '_', ':' or '-'" }, { status: 400 });
+    }
     if (
       customer.length > 160
       || destinationInput.length > 500
@@ -595,6 +607,7 @@ export async function POST(request: Request) {
         sendatrackVehicleId: liveVehicle?.id ?? sendatrackVehicleId,
         companyId: session.companyId,
         trackingToken: idempotencyTrackingToken ?? createTrackingToken(),
+        shipmentId: shipmentIdInput || null,
         driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
         latitude: liveVehicle?.latitude ?? originLatitude, longitude: liveVehicle?.longitude ?? originLongitude,
         speed: liveVehicle?.speed ?? null, lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,

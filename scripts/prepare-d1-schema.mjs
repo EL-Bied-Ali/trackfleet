@@ -109,6 +109,7 @@ await runStatements([
     company_id text DEFAULT 'demo' NOT NULL,
     tracking_token text,
     trip_id text,
+    shipment_id text,
     created_at integer NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS delivery_events (
@@ -263,6 +264,7 @@ for (const [name, definition] of [
   ["planned_arrival_at", "integer"],
   ["next_truck_departure_at", "integer"],
   ["trip_id", "text"],
+  ["shipment_id", "text"],
   ["whatsapp_opt_in", "integer DEFAULT 0 NOT NULL"],
   ["whatsapp_opt_in_at", "integer"],
   ["recipient_name", "text DEFAULT '' NOT NULL"],
@@ -302,6 +304,7 @@ await runStatements([
   "UPDATE delivery_arrival_state SET last_observed_at = arrived_at WHERE last_observed_at IS NULL",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)",
+  "CREATE INDEX IF NOT EXISTS idx_deliveries_company_shipment ON deliveries(company_id, shipment_id)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)",
   "CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)",
   "CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)",

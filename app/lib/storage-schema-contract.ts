@@ -19,6 +19,7 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "deliveries", column: "destination_site_id" },
   { table: "deliveries", column: "next_truck_departure_at" },
   { table: "deliveries", column: "trip_id" },
+  { table: "deliveries", column: "shipment_id" },
   { table: "deliveries", column: "whatsapp_opt_in" },
   { table: "deliveries", column: "whatsapp_opt_in_at" },
   { table: "deliveries", column: "recipient_name" },

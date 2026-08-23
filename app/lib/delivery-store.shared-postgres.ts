@@ -25,8 +25,8 @@ async function mirrorDelivery(delivery: DeliveryRow) {
       destination_latitude, destination_longitude, arrival_radius_km, truck, driver, status, eta,
       planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at,
       sendatrack_vehicle_id, latitude, longitude, speed, last_position_at, gps_source, company_id,
-      tracking_token, trip_id, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      tracking_token, trip_id, shipment_id, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       customer = excluded.customer,
       origin_site_id = excluded.origin_site_id,
@@ -63,7 +63,8 @@ async function mirrorDelivery(delivery: DeliveryRow) {
       gps_source = excluded.gps_source,
       company_id = excluded.company_id,
       tracking_token = excluded.tracking_token,
-      trip_id = excluded.trip_id`);
+      trip_id = excluded.trip_id,
+      shipment_id = excluded.shipment_id`);
     queueD1Mirror(statement.bind(
         delivery.id,
         delivery.customer,
@@ -102,6 +103,7 @@ async function mirrorDelivery(delivery: DeliveryRow) {
         delivery.companyId,
         delivery.trackingToken,
         delivery.tripId ?? null,
+        delivery.shipmentId ?? null,
         delivery.createdAt.getTime(),
       ),
     );

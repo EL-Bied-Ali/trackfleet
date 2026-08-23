@@ -48,6 +48,12 @@ export type DeliveryRow = {
   companyId: string;
   trackingToken: string | null;
   tripId?: string | null;
+  // Client-generated per submission (not per delivery) so a dispatcher
+  // entering several parcels for one customer in one sitting can link them
+  // together -- each parcel still gets its own id/tracking/weight/price,
+  // this is purely a grouping key. Null for parcels created before this
+  // existed, or for any single-parcel submission (no siblings to link).
+  shipmentId?: string | null;
   createdAt: Date;
 };
 
