@@ -21,10 +21,13 @@ test("both customer and dispatcher ETA displays resolve the untracked-final-leg 
   // per-company data, so it must be resolved via staticKnownSite(id), not
   // the dynamic `destinationSite` lookup.
   assert.match(files["app/page.tsx"], /import \{ knownSite as staticKnownSite \} from "\.\/lib\/known-sites";/);
-  // The customer page resolves this once into a `relayInEffect` variable
-  // (reused by the map-replacement UI too -- see the CTM relay test below)
-  // rather than repeating the staticKnownSite(...) lookup inline.
-  assert.match(files["app/page.tsx"], /const relayInEffect = staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true;/);
+  // The customer page resolves the destination's flag into `relayDestination`
+  // (from the static catalog), then combines it with live GPS freshness into
+  // `relayInEffect` -- a relay-destined delivery still gets real live GPS for
+  // the Brussels-to-hub leg, so this must not be a blanket "this route always
+  // relays" switch (see the dynamic-relay test below).
+  assert.match(files["app/page.tsx"], /const relayDestination = staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true;/);
+  assert.match(files["app/page.tsx"], /const relayInEffect = relayDestination && selected\.positionAgeMinutes != null && !selected\.gpsFresh;/);
   assert.match(files["app/page.tsx"], /customerEtaNote\(\{[\s\S]{0,200}finalLegTrackingUnavailable: relayInEffect,/);
   assert.match(files["app/page.tsx"], /etaExplanation\(\{ source: selected\.etaSource, confidence: selected\.etaConfidence, historyTrips: selected\.etaHistoryTrips, finalLegTrackingUnavailable: staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true/);
 });
@@ -40,6 +43,21 @@ test("the customer tracking page replaces the live map and GPS stat cards with a
   assert.match(page, /\{!relayInEffect && <div style=\{\{ display: "grid", gridTemplateColumns: "repeat\(auto-fit, minmax\(160px, 1fr\)\)"/);
   assert.match(page, /\{relayInEffect \? <div className="map customer-map relay-notice">/);
   assert.match(page, /<InteractiveFleetMap deliveries=\{deliveries\} selectedId=\{selectedId\} customerMode/);
+});
+
+test("a relay-destined delivery still shows the real live map while GPS is fresh (the Brussels-to-hub leg), only switching to the CTM notice once positions go stale", () => {
+  // Reported live: the first version toggled the CTM notice purely off the
+  // destination (a fixed property of the delivery), which meant a customer
+  // shipping to Tétouan saw "CTM has taken over" from the moment the parcel
+  // was registered -- even while the truck was still in Belgium. The
+  // Brussels-to-hub leg is genuinely GPS-tracked like any other delivery, so
+  // this must key off live GPS freshness, not just the destination.
+  const page = files["app/page.tsx"];
+  assert.match(page, /selected\.positionAgeMinutes != null && !selected\.gpsFresh/);
+  // Before any GPS history exists yet (positionAgeMinutes still null -- an
+  // unassigned/not-yet-departed delivery), relayInEffect must stay false
+  // rather than jumping straight to the relay notice.
+  assert.doesNotMatch(page, /relayInEffect = relayDestination;/);
 });
 
 test("all three delivery-enrichment call sites (list, public tracking, and just-created) thread a manual-arrival duration estimate through", () => {

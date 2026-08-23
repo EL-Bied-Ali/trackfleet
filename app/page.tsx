@@ -1013,11 +1013,19 @@ export default function Home() {
         ? new Date(selected.plannedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
         : selected.eta;
     // Confirmed from real fleet GPS history (see KnownSite.finalLegTrackingUnavailable):
-    // past the relay hub, the truck's position is frozen/stale, so a live map
-    // and GPS-derived stats (progress/speed/remaining distance/GPS freshness)
+    // past the relay hub, the truck's position goes stale, so a live map and
+    // GPS-derived stats (progress/speed/remaining distance/GPS freshness)
     // would show numbers that stopped meaning anything -- shown as a plain
-    // relay notice instead of a map that looks like it's just stuck.
-    const relayInEffect = staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true;
+    // relay notice instead of a map that looks like it's just stuck. Dynamic,
+    // not a blanket "this route always relays" flag: a relay-destined
+    // delivery still gets real live GPS for the Brussels-to-hub leg (same as
+    // any other truck), so the live map stays up as long as positions keep
+    // arriving (gpsFresh) and only switches once they actually stop
+    // (positionAgeMinutes not null -- it has GPS history -- but stale). Before
+    // the truck has any GPS history yet (positionAgeMinutes null), the normal
+    // map still shows rather than jumping straight to the relay notice.
+    const relayDestination = staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true;
+    const relayInEffect = relayDestination && selected.positionAgeMinutes != null && !selected.gpsFresh;
     const etaNote = customerEtaNote({
       source: selected.etaSource,
       delayMinutes: selected.etaDelayMinutes,
