@@ -1,8 +1,11 @@
 import { siteStore } from "trackfleet-site-store";
 import {
+  agencyEnrollmentDurationMs,
   createAgencyEnrollmentToken,
   createAgencySessionFromEnrollment,
+  createShortEnrollmentCode,
   getDispatcherSession,
+  resolveShortEnrollmentCode,
 } from "../../../lib/company-auth";
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
@@ -16,7 +19,9 @@ export async function POST(request: Request) {
   const payload = await readJsonObject(request);
   if (!payload) return invalidJsonResponse();
 
-  const enrollmentToken = String(payload.token ?? "").trim();
+  const shortCode = String(payload.code ?? "").trim();
+  const rawToken = String(payload.token ?? "").trim();
+  const enrollmentToken = rawToken || (shortCode ? await resolveShortEnrollmentCode(shortCode) ?? "" : "");
   if (enrollmentToken) {
     try {
       const result = await createAgencySessionFromEnrollment(enrollmentToken);
@@ -34,6 +39,15 @@ export async function POST(request: Request) {
 
   const token = await createAgencyEnrollmentToken(session, siteId);
   const url = new URL("/agency/enroll", request.url);
-  url.hash = `token=${encodeURIComponent(token)}`;
+  // Short link when KV is available (production): a short, single-use code
+  // in the query string instead of the whole signed token in the fragment.
+  // Falls back to the full token link wherever KV isn't bound (e.g. local
+  // dev, Vercel) -- longer, but still fully functional.
+  const shortLinkCode = await createShortEnrollmentCode(token, Date.now() + agencyEnrollmentDurationMs);
+  if (shortLinkCode) {
+    url.searchParams.set("c", shortLinkCode);
+  } else {
+    url.hash = `token=${encodeURIComponent(token)}`;
+  }
   return json({ siteId, enrollmentUrl: url.toString(), expiresInMinutes: 30 });
 }
