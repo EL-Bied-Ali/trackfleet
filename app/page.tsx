@@ -164,6 +164,7 @@ export default function Home() {
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("All deliveries");
   const [searchQuery, setSearchQuery] = useState("");
+  const [openContactPopover, setOpenContactPopover] = useState<string | null>(null);
   const [showPopover, setShowPopover] = useState(true);
   const [creating, setCreating] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
@@ -268,6 +269,17 @@ export default function Home() {
     window.addEventListener("trackfleet-sites-changed", handleSitesChanged);
     return () => { active = false; window.removeEventListener("trackfleet-sites-changed", handleSitesChanged); };
   }, [authState]);
+
+  useEffect(() => {
+    if (!openContactPopover) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".contact-popover, .contact-trigger")) return;
+      setOpenContactPopover(null);
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [openContactPopover]);
 
   useEffect(() => {
     if (!company || !knownSites.length) {
@@ -1024,7 +1036,7 @@ export default function Home() {
           <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{locale === "fr" ? "Destinataire" : locale === "nl" ? "Ontvanger" : "Recipient"}</th>{company?.role === "dispatcher" && <th>{locale === "fr" ? "Agence" : locale === "nl" ? "Agentschap" : "Agency"}</th>}<th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th className="col-actions"><span className="sr-only">{t.tableActions}</span></th></tr></thead>
           {groupedDeliveries.map((group) => <tbody key={group.label}>
             <tr className="group-header-row"><td colSpan={100}><strong>{group.label}</strong><span>{group.deliveries.length} {locale === "fr" ? "colis" : locale === "nl" ? "pakketten" : group.deliveries.length === 1 ? "parcel" : "parcels"}</span></td></tr>
-            {group.deliveries.map((delivery) => <tr key={delivery.id} role="button" tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{registeredAtLabel(delivery)}</strong><span>{delivery.id}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.recipientName || "—"}</strong><span>{[delivery.contact, delivery.recipientContact].filter(Boolean).join(" · ") || "—"}</span></td>{company?.role === "dispatcher" && <td>{knownSites.find((site) => site.id === delivery.originSiteId)?.label ?? "—"}</td>}<td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td className="col-actions"><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}
+            {group.deliveries.map((delivery) => <tr key={delivery.id} role="button" tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{registeredAtLabel(delivery)}</strong><span>{delivery.id}</span></td><td className="contact-cell-wrap"><button type="button" className="customer-cell contact-trigger" onClick={(event) => { event.stopPropagation(); setOpenContactPopover((current) => current === `${delivery.id}:customer` ? null : `${delivery.id}:customer`); }}><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></button>{openContactPopover === `${delivery.id}:customer` && <div className="contact-popover"><strong>{locale === "fr" ? "Téléphone client" : locale === "nl" ? "Telefoon klant" : "Customer phone"}</strong>{delivery.contact ? <a href={`tel:${delivery.contact}`}>{delivery.contact}</a> : <span>—</span>}</div>}</td><td className="contact-cell-wrap"><button type="button" className="contact-trigger" onClick={(event) => { event.stopPropagation(); setOpenContactPopover((current) => current === `${delivery.id}:recipient` ? null : `${delivery.id}:recipient`); }}><strong>{delivery.recipientName || "—"}</strong></button>{openContactPopover === `${delivery.id}:recipient` && <div className="contact-popover"><strong>{locale === "fr" ? "Téléphone destinataire" : locale === "nl" ? "Telefoon ontvanger" : "Recipient phone"}</strong>{[delivery.contact, delivery.recipientContact].filter(Boolean).length > 0 ? [delivery.contact, delivery.recipientContact].filter(Boolean).map((number) => <a key={number} href={`tel:${number}`}>{number}</a>) : <span>—</span>}</div>}</td>{company?.role === "dispatcher" && <td>{knownSites.find((site) => site.id === delivery.originSiteId)?.label ?? "—"}</td>}<td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td className="col-actions"><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}
           </tbody>)}
         </table>}
       </div>

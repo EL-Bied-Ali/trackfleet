@@ -206,6 +206,14 @@ tbody tr:last-child td { border-bottom: 0; }.row-selected td { background: #fbfd
 tbody tr:focus-visible { outline: 2px solid #4c987b; outline-offset: -2px; }
 td > strong, td > span { display: block; }td > strong { font-size: 10px; }td > span { margin-top: 3px; color: #96a09b; font-size: 8px; }
 .customer-cell { display: flex; align-items: center; gap: 8px; }.customer-cell i { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; color: white; font-size: 7px; font-style: normal; font-weight: 750; }
+.contact-cell-wrap { position: relative; }
+.contact-trigger { display: flex; align-items: center; width: 100%; border: 0; background: transparent; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.contact-trigger:hover strong, .contact-trigger:hover span { text-decoration: underline; }
+.contact-popover { position: absolute; z-index: 20; top: 100%; left: 15px; margin-top: 4px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 8px 24px rgba(16,24,40,.12); white-space: nowrap; cursor: default; }
+.contact-popover strong { display: block; margin-bottom: 3px; color: #7d8983; font-size: 7px; font-weight: 650; text-transform: uppercase; letter-spacing: .4px; }
+.contact-popover a, .contact-popover span { display: block; color: var(--ink); font-size: 10px; font-weight: 650; text-decoration: none; }
+.contact-popover a + a { margin-top: 4px; }
+.contact-popover a:hover { text-decoration: underline; }
 .status { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; width: max-content; margin: 0; padding: 4px 7px; border-radius: 12px; font-size: 8px; font-weight: 650; }.status i { width: 5px; height: 5px; border-radius: 50%; }.status.transit { color: #167354; background: #e5f4ed; }.status.transit i { background: #1ea475; }.status.delayed { color: #a6681d; background: #fff1da; }.status.delayed i { background: #e29a34; }.status.loading { color: #7653a3; background: #f0eaf8; }.status.loading i { background: #916ed7; }.status.delivered { color: #6f7b75; background: #edf0ee; }.status.delivered i { background: #89938e; }
 .progress { display: flex; align-items: center; gap: 7px; }.progress > div { width: 65px; height: 4px; overflow: hidden; border-radius: 4px; background: #e7ece9; }.progress > div i { display: block; height: 100%; border-radius: inherit; background: #2b7b61; }.progress span { color: #7d8983; font-size: 8px; }
 .more-button { border: 0; background: transparent; color: #8c9791; cursor: pointer; }
