@@ -7,8 +7,8 @@ export type BulkDeliveryDraft = {
   destination: string;
   originSiteId: string;
   destinationSiteId: string;
-  plannedArrivalAt: string;
-  nextTruckDepartureAt: string;
+  plannedArrivalAt: string | null;
+  nextTruckDepartureAt: string | null;
   contact: string;
   recipientName: string;
   recipientContact: string;
@@ -107,7 +107,12 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
   for (const header of headers) {
     if (!acceptedHeaders.has(header)) errors.push(`Unsupported CSV header: ${header}`);
   }
-  for (const required of ["customer", "destination", "planned_arrival_at", "next_truck_departure_at", "origin_site_id"]) {
+  // planned_arrival_at/next_truck_departure_at are accepted columns but not
+  // required ones -- like the single-delivery creation form, a dispatcher
+  // doesn't need to know either date up front; both are editable afterward
+  // from the delivery table (per parcel, or once per truck group when
+  // several parcels share a destination).
+  for (const required of ["customer", "destination", "origin_site_id"]) {
     if (!headers.includes(required)) errors.push(`Missing required CSV header: ${required}`);
   }
   if (errors.length) return { rows: [], errors };
@@ -136,9 +141,9 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     const originSiteId = get(values, "origin_site_id");
     const truck = get(values, "truck");
     const planned = get(values, "planned_arrival_at");
-    const plannedArrivalAt = normalizedIsoDate(planned);
+    const plannedArrivalAt = planned ? normalizedIsoDate(planned) : null;
     const nextDeparture = get(values, "next_truck_departure_at");
-    const nextTruckDepartureAt = normalizedIsoDate(nextDeparture);
+    const nextTruckDepartureAt = nextDeparture ? normalizedIsoDate(nextDeparture) : null;
     const whatsappRaw = get(values, "whatsapp_opt_in");
     const recipientName = get(values, "recipient_name");
     const recipientContact = get(values, "recipient_contact");
@@ -152,12 +157,12 @@ export function parseBulkDeliveryCsv(input: string): BulkDeliveryImportResult {
     // delivery-pricing.ts) is computed from the real origin instead of
     // silently defaulting to EUR for a blank/unresolved origin.
     if (!originSiteId) errors.push(`Row ${rowNumber}: origin_site_id is required`);
-    if (!plannedArrivalAt) errors.push(`Row ${rowNumber}: planned_arrival_at is invalid`);
-    if (!nextTruckDepartureAt) errors.push(`Row ${rowNumber}: next_truck_departure_at is invalid`);
+    if (planned && !plannedArrivalAt) errors.push(`Row ${rowNumber}: planned_arrival_at is invalid`);
+    if (nextDeparture && !nextTruckDepartureAt) errors.push(`Row ${rowNumber}: next_truck_departure_at is invalid`);
     if (whatsappOptIn === null) errors.push(`Row ${rowNumber}: whatsapp_opt_in must be true/false, yes/no, oui/non or 1/0`);
     if (Boolean(recipientName) !== Boolean(recipientContact)) errors.push(`Row ${rowNumber}: recipient_name and recipient_contact must be supplied together`);
     if (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000)) errors.push(`Row ${rowNumber}: weight_kg must be greater than 0 and at most 100000`);
-    if (!customer || !destination || !originSiteId || !plannedArrivalAt || !nextTruckDepartureAt || whatsappOptIn === null || Boolean(recipientName) !== Boolean(recipientContact) || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000))) continue;
+    if (!customer || !destination || !originSiteId || (planned && !plannedArrivalAt) || (nextDeparture && !nextTruckDepartureAt) || whatsappOptIn === null || Boolean(recipientName) !== Boolean(recipientContact) || (weightRaw && (!Number.isFinite(weightKg) || weightKg! <= 0 || weightKg! > 100000))) continue;
 
     rows.push({
       rowNumber,
