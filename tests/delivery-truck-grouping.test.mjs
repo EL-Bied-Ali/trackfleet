@@ -34,14 +34,19 @@ test("the group header row gets its own mobile card-layout treatment instead of 
   assert.match(css, /\.group-header-row td \{ height: auto; padding: 9px 15px; background: #f5f8f6;/);
 });
 
-test("destination/ETA/progress are hoisted into the group header only when every parcel in the truck's group shares the same destination", () => {
+test("destination/ETA/progress are hoisted into the group header only when a truck has more than one parcel and they all share the same destination", () => {
   // Departure/arrival depend on the truck, not the individual parcel -- when
   // a truck's whole group is headed to one destination, repeating that
   // destination/ETA/progress on every row is the same duplication the old
   // vehicle column had. A truck relaying parcels to several destinations
   // keeps those columns per row since they're genuinely different there.
+  // A lone parcel has nothing to deduplicate against, so it must NOT hoist
+  // -- doing so just adds a header row for no space savings and hides the
+  // arrival/progress info from the only row that has it (reported live:
+  // single-parcel groups were spanning two lines with the data pulled up
+  // into an otherwise-empty-feeling header).
   assert.match(page, /const firstDestination = group\.deliveries\[0\]\?\.destination \|\| null;/);
-  assert.match(page, /const uniformDestination = firstDestination && group\.deliveries\.every\(\(delivery\) => delivery\.destination === firstDestination\)\s*\n\s*\? group\.deliveries\[0\]\s*\n\s*: null;/);
+  assert.match(page, /const uniformDestination = group\.deliveries\.length > 1 && firstDestination && group\.deliveries\.every\(\(delivery\) => delivery\.destination === firstDestination\)\s*\n\s*\? group\.deliveries\[0\]\s*\n\s*: null;/);
   assert.match(page, /return \{ \.\.\.group, uniformDestination \};/);
 });
 
