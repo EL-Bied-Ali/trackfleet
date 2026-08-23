@@ -23,10 +23,28 @@ test("unassigned parcels collect into their own trailing group instead of scatte
 
 test("each group renders as its own tbody with a header row showing the truck and parcel count, and the vehicle column is gone from data rows (redundant with the header)", () => {
   assert.match(page, /\{groupedDeliveries\.map\(\(group\) => <tbody key=\{group\.label\}>/);
-  assert.match(page, /<tr className="group-header-row"><td colSpan=\{100\}><strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
+  assert.match(page, /<tr className="group-header-row"><td colSpan=\{100\}>\{group\.numberLabel && <span className="truck-badge"[^>]*>\{group\.numberLabel\}<\/span>\}<strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
   // No more per-row <th>/<td> for the vehicle -- that information now lives
   // exactly once, in the group header, instead of once per row.
   assert.doesNotMatch(page, /<th>\{t\.tableVehicle\}<\/th>/);
+});
+
+test("the truck number gets its own colored badge in the group header, a different color per truck, instead of the plain text it used to be", () => {
+  // The little colored avatar previously on the Client cell was removed
+  // (every real delivery got the same default color there, so it wasn't
+  // actually distinguishing anything) -- reused for the truck number
+  // instead, where a distinct color per truck is actually useful. Untracked
+  // trucks and the unassigned group have no number, so they get no badge.
+  assert.match(page, /const truckBadgeColors = \[/);
+  assert.match(page, /function truckBadgeColor\(number: number \| null\) \{/);
+  assert.match(page, /truckNumber,\s*\n\s*numberLabel: truckNumber \? \(locale === "fr" \? `Camion \$\{truckNumber\}`/);
+  assert.match(page, /style=\{\{ background: truckBadgeColor\(group\.truckNumber\) \}\}/);
+  assert.match(css, /\.group-header-row \.truck-badge \{/);
+});
+
+test("the client cell no longer shows the little colored initials avatar", () => {
+  assert.doesNotMatch(page, /delivery\.customer\.split\(" "\)\.map\(\(word\) => word\[0\]\)/);
+  assert.doesNotMatch(css, /\.customer-cell i \{/);
 });
 
 test("the group header row gets its own mobile card-layout treatment instead of being forced into the 2-column grid meant for data rows", () => {
