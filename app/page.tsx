@@ -483,16 +483,18 @@ export default function Home() {
     return Array.from(groups.values())
       .map((group) => {
         // Destination/ETA/progress are derived from the same truck GPS
-        // position + destination, so when every parcel in the group shares
-        // one destination those values are identical too -- repeating them
-        // on every row was the same redundancy the departure-date label
-        // had. Hoisted into the group header instead, using any one
-        // delivery as the representative (they're all equal by definition
-        // here). A truck relaying parcels to several different
+        // position + destination, so when a group has more than one parcel
+        // and they all share one destination, those values are identical
+        // too -- repeating them on every row was the same redundancy the
+        // departure-date label had. Hoisted into the group header instead,
+        // using any one delivery as the representative (they're all equal
+        // by definition here). A lone parcel has nothing to deduplicate, so
+        // it stays on its own row instead of gaining a header for no
+        // reason. A truck relaying parcels to several different
         // destinations keeps this per row, same as before -- that's a real
         // difference between rows, not duplication.
         const firstDestination = group.deliveries[0]?.destination || null;
-        const uniformDestination = firstDestination && group.deliveries.every((delivery) => delivery.destination === firstDestination)
+        const uniformDestination = group.deliveries.length > 1 && firstDestination && group.deliveries.every((delivery) => delivery.destination === firstDestination)
           ? group.deliveries[0]
           : null;
         return { ...group, uniformDestination };
