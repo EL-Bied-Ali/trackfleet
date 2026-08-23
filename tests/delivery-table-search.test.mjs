@@ -12,13 +12,15 @@ test("the deliveries table has a search box that filters by customer, recipient 
   assert.match(page, /\[delivery\.id, delivery\.customer, delivery\.recipientName, delivery\.contact, delivery\.recipientContact, delivery\.destination\]/);
 });
 
-test("a friendly display label (departure date + origin country) sits alongside the real TF-id, which stays the actual key everywhere", () => {
-  // The real id must never be replaced -- it's still the tracking-link key,
-  // the database primary key and what support looks records up by. This
-  // label is purely a readable hint shown next to it.
-  assert.match(page, /const deliveryDisplayLabel = \(delivery: Delivery\) => \{/);
-  assert.match(page, /delivery\.nextTruckDepartureAt \?\? delivery\.plannedArrivalAt/);
-  assert.match(page, /<td><strong>\{deliveryDisplayLabel\(delivery\)\}<\/strong><span>\{delivery\.id\}<\/span><\/td>/);
+test("the Livraison column shows the real TF-id with its registration date, not a repeating departure-date label", () => {
+  // The departure-date + origin-country label repeated across most rows
+  // (many parcels naturally share a departure day/country), which read as
+  // noise rather than a useful identifier -- reported live. Replaced with
+  // the registration timestamp, and repetition is now handled by grouping
+  // rows under their shared truck instead (see delivery-truck-grouping.test.mjs).
+  assert.match(page, /const registeredAtLabel = \(delivery: Delivery\) => delivery\.createdAt/);
+  assert.match(page, /<td><strong>\{delivery\.id\}<\/strong><span>\{registeredAtLabel\(delivery\)\}<\/span><\/td>/);
+  assert.doesNotMatch(page, /deliveryDisplayLabel/);
 });
 
 test("the table shows a Destinataire column with the recipient name and both phone numbers", () => {

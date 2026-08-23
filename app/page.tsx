@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { localeOptions, translations, type Locale } from "./i18n";
 import InteractiveFleetMap from "./InteractiveFleetMap";
 import AgencyLocationSetup from "./AgencyLocationSetup";
@@ -68,6 +68,7 @@ type Delivery = {
   arrivalRadiusKm?: number;
   manualArrivalEstimateHours?: number | null;
   manualArrivalEstimateSampleCount?: number;
+  createdAt?: string;
 };
 
 type DeliveryEventRow = {
@@ -404,27 +405,18 @@ export default function Home() {
     const sorted = [...integration.vehicles].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
     return new Map(sorted.map((vehicle, index) => [vehicle.id, index + 1]));
   }, [integration.vehicles]);
-  const truckLabelWithNumber = (name: string, vehicleId?: string | null) => {
+  const truckLabelWithNumber = useCallback((name: string, vehicleId?: string | null) => {
     const number = vehicleId ? vehicleTruckNumbers.get(vehicleId) : undefined;
     if (!number) return name;
     const numberLabel = locale === "fr" ? `Camion ${number}` : locale === "nl" ? `Vrachtwagen ${number}` : `Truck ${number}`;
     return `${numberLabel} · ${name}`;
-  };
+  }, [locale, vehicleTruckNumbers]);
   const driverLabel = (driver: string) => driver === "To be assigned"
     ? (locale === "fr" ? "Chauffeur à affecter" : locale === "nl" ? "Chauffeur toe te wijzen" : driver)
     : driver;
-  // Cosmetic only -- the real TF-xxxx id stays the actual stable key
-  // everywhere (tracking links, database, support lookups) and is still
-  // shown alongside this. Duplicates across rows are expected and fine: a
-  // handful of parcels leaving the same agency on the same day will share
-  // this label, that's not a uniqueness guarantee, just a readable hint.
-  const deliveryDisplayLabel = (delivery: Delivery) => {
-    const dateSource = delivery.nextTruckDepartureAt ?? delivery.plannedArrivalAt;
-    if (!dateSource) return delivery.id;
-    const formatted = new Date(dateSource).toLocaleDateString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short" });
-    const country = knownSites.find((site) => site.id === delivery.originSiteId)?.country;
-    return country ? `${formatted} · ${country}` : formatted;
-  };
+  const registeredAtLabel = (delivery: Delivery) => delivery.createdAt
+    ? new Date(delivery.createdAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "—";
   const destinationSite = knownSites.find((site) => site.id === selected.destinationSiteId);
   const selectedEtaExplanation = etaExplanation({ source: selected.etaSource, confidence: selected.etaConfidence, historyTrips: selected.etaHistoryTrips, finalLegTrackingUnavailable: staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true, manualArrivalEstimateHours: selected.manualArrivalEstimateHours, manualArrivalEstimateSampleCount: selected.manualArrivalEstimateSampleCount }, locale);
   const customerCopy = t.customerStatus[selected.status];
@@ -453,6 +445,31 @@ export default function Home() {
     return statusFiltered.filter((delivery) => [delivery.id, delivery.customer, delivery.recipientName, delivery.contact, delivery.recipientContact, delivery.destination]
       .some((field) => field && field.toLowerCase().replace(/[^a-z0-9]/g, "").includes(query)));
   }, [deliveries, filter, searchQuery]);
+  // A delivery and its truck go together, so the table groups by truck
+  // instead of repeating the vehicle on every single row. Grouped by
+  // sendatrackVehicleId when the truck is a tracked SENDATRACK vehicle
+  // (falls back to the manually-entered truck name otherwise), with
+  // unassigned parcels collected into their own trailing group.
+  const groupedDeliveries = useMemo(() => {
+    const unassignedLabel = locale === "fr" ? "À affecter" : locale === "nl" ? "Toe te wijzen" : "To assign";
+    const groups = new Map<string, { label: string; sortKey: number; deliveries: Delivery[] }>();
+    for (const delivery of visibleDeliveries) {
+      const unassigned = isUnassignedVehicle(delivery);
+      const key = unassigned ? "__unassigned__" : (delivery.sendatrackVehicleId || delivery.truck);
+      let group = groups.get(key);
+      if (!group) {
+        const truckNumber = delivery.sendatrackVehicleId ? vehicleTruckNumbers.get(delivery.sendatrackVehicleId) : undefined;
+        group = {
+          label: unassigned ? unassignedLabel : truckLabelWithNumber(delivery.truck, delivery.sendatrackVehicleId),
+          sortKey: unassigned ? Number.MAX_SAFE_INTEGER : (truckNumber ?? Number.MAX_SAFE_INTEGER - 1),
+          deliveries: [],
+        };
+        groups.set(key, group);
+      }
+      group.deliveries.push(delivery);
+    }
+    return Array.from(groups.values()).sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label));
+  }, [visibleDeliveries, locale, vehicleTruckNumbers, truckLabelWithNumber]);
   const mapDeliveries = integration.connected
     ? deliveries.filter((delivery) => delivery.gpsSource === "sendatrack")
     : deliveries;
@@ -1004,8 +1021,11 @@ export default function Home() {
           <div><strong>{deliveries.length === 0 ? dashboardEmptyCopy.firstTitle : searchQuery.trim() ? (locale === "fr" ? "Aucun résultat" : locale === "nl" ? "Geen resultaten" : "No results") : dashboardEmptyCopy.filteredTitle}</strong><p>{deliveries.length === 0 ? dashboardEmptyCopy.firstBody : searchQuery.trim() ? (locale === "fr" ? "Aucune livraison ne correspond à cette recherche." : locale === "nl" ? "Geen levering komt overeen met deze zoekopdracht." : "No delivery matches this search.") : dashboardEmptyCopy.filteredBody}</p></div>
           <button type="button" className="primary-button" onClick={() => { if (deliveries.length === 0) { setModalOpen(true); } else { setFilter("All deliveries"); setSearchQuery(""); } }}>{deliveries.length === 0 ? dashboardEmptyCopy.firstAction : dashboardEmptyCopy.reset}</button>
         </div> : <table>
-          <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{locale === "fr" ? "Destinataire" : locale === "nl" ? "Ontvanger" : "Recipient"}</th>{company?.role === "dispatcher" && <th>{locale === "fr" ? "Agence" : locale === "nl" ? "Agentschap" : "Agency"}</th>}<th>{t.tableVehicle}</th><th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th className="col-actions"><span className="sr-only">{t.tableActions}</span></th></tr></thead>
-          <tbody>{visibleDeliveries.map((delivery) => <tr key={delivery.id} role="button" tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{deliveryDisplayLabel(delivery)}</strong><span>{delivery.id}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.recipientName || "—"}</strong><span>{[delivery.contact, delivery.recipientContact].filter(Boolean).join(" · ") || "—"}</span></td>{company?.role === "dispatcher" && <td>{knownSites.find((site) => site.id === delivery.originSiteId)?.label ?? "—"}</td>}<td><strong>{truckLabelWithNumber(vehicleLabel(delivery), delivery.sendatrackVehicleId)}</strong><span>{isUnassignedVehicle(delivery) ? (locale === "fr" ? "En attente d’affectation" : locale === "nl" ? "Wacht op toewijzing" : "Waiting for assignment") : delivery.gpsSource === "sendatrack" ? driverLabel(delivery.driver) : (locale === "fr" ? "GPS en attente" : locale === "nl" ? "GPS in afwachting" : "Waiting for GPS")}</span></td><td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td className="col-actions"><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}</tbody>
+          <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{locale === "fr" ? "Destinataire" : locale === "nl" ? "Ontvanger" : "Recipient"}</th>{company?.role === "dispatcher" && <th>{locale === "fr" ? "Agence" : locale === "nl" ? "Agentschap" : "Agency"}</th>}<th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th className="col-actions"><span className="sr-only">{t.tableActions}</span></th></tr></thead>
+          {groupedDeliveries.map((group) => <tbody key={group.label}>
+            <tr className="group-header-row"><td colSpan={100}><strong>{group.label}</strong><span>{group.deliveries.length} {locale === "fr" ? "colis" : locale === "nl" ? "pakketten" : group.deliveries.length === 1 ? "parcel" : "parcels"}</span></td></tr>
+            {group.deliveries.map((delivery) => <tr key={delivery.id} role="button" tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{delivery.id}</strong><span>{registeredAtLabel(delivery)}</span></td><td><div className="customer-cell"><i style={{ background: delivery.color }}>{delivery.customer.split(" ").map((word) => word[0]).slice(0,2).join("")}</i><span>{delivery.customer}</span></div></td><td><strong>{delivery.recipientName || "—"}</strong><span>{[delivery.contact, delivery.recipientContact].filter(Boolean).join(" · ") || "—"}</span></td>{company?.role === "dispatcher" && <td>{knownSites.find((site) => site.id === delivery.originSiteId)?.label ?? "—"}</td>}<td><span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span></td><td><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></td><td><div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div></td><td className="col-actions"><button className="more-button" aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button></td></tr>)}
+          </tbody>)}
         </table>}
       </div>
     </div>
