@@ -72,8 +72,8 @@ test("the group header shows the hoisted destination/ETA/progress, and per-row c
   assert.match(page, /\{group\.uniformDestination && <>/);
   assert.match(page, /<span className="group-header-destination">\{group\.uniformDestination\.destination\}<\/span>/);
   assert.match(page, /<span className="group-header-progress"><div className="progress">/);
-  assert.match(page, /\{group\.uniformDestination \? <span className="cell-hoisted">—<\/span> : <><strong>/);
-  assert.match(page, /\{group\.uniformDestination \? <span className="cell-hoisted">—<\/span> : <div className="progress">/);
+  assert.match(page, /\{!group\.uniformDestination && <div className="progress">/);
+  assert.match(page, /\{group\.uniformDestination \? <span className="cell-hoisted">—<\/span> : <span className="journey-eta"><strong>/);
 });
 
 test("the hoisted header pieces and blanked cells have their own CSS instead of relying on the base group-header text style", () => {
