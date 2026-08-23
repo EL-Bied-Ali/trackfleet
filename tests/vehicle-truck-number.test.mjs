@@ -12,13 +12,13 @@ test("each vehicle gets a stable, friendly 'Truck N' tag shown alongside its rea
   // display name/identifier everywhere, this is additive.
   assert.match(page, /const vehicleTruckNumbers = useMemo\(\(\) => \{/);
   assert.match(page, /sorted\.map\(\(vehicle, index\) => \[vehicle\.id, index \+ 1\]\)/);
-  assert.match(page, /const truckLabelWithNumber = \(name: string, vehicleId\?: string \| null\) => \{/);
+  assert.match(page, /const truckLabelWithNumber = useCallback\(\(name: string, vehicleId\?: string \| null\) => \{/);
   assert.match(page, /if \(!number\) return name;/);
 });
 
-test("the truck number tag appears in the fleet roster, the delivery table's vehicle column, and the truck popover", () => {
+test("the truck number tag appears in the fleet roster, the delivery table's truck-group headers, and the truck popover", () => {
   assert.match(page, /truckLabelWithNumber\(vehicle\.name, vehicle\.id\)/);
-  assert.match(page, /truckLabelWithNumber\(vehicleLabel\(delivery\), delivery\.sendatrackVehicleId\)/);
+  assert.match(page, /label: unassigned \? unassignedLabel : truckLabelWithNumber\(delivery\.truck, delivery\.sendatrackVehicleId\)/);
   assert.match(page, /truckLabelWithNumber\(vehicleLabel\(selected\), selected\.sendatrackVehicleId\)/);
 });
 
