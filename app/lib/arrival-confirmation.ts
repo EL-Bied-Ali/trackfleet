@@ -12,7 +12,8 @@ export type ArrivalConfirmationReason =
   | "gps_unavailable"
   | "gps_stale"
   | "gps_arrival_detected"
-  | "manual_already_confirmed";
+  | "manual_already_confirmed"
+  | "ctm_relay_in_progress";
 
 type ArrivalConfirmationInput = {
   status: string;
@@ -25,6 +26,19 @@ type ArrivalConfirmationInput = {
   longitude: number | null;
   lastPositionAt: Date | null;
   events: Array<{ type: DeliveryEventType }>;
+  // True when the destination is only reached via a local/relay leg our
+  // GPS-tracked trucks never physically visit (see KnownSite.finalLegTrackingUnavailable).
+  // GPS going stale or missing destination coordinates is the *expected*,
+  // permanent state for this leg -- not a problem needing a dispatcher's
+  // attention -- because fleet-business-tick.ts already runs a dedicated
+  // ~24h relay completion timer for it. Without this flag, this function
+  // recommended (and prominently highlighted) manual confirmation the
+  // moment GPS naturally went stale right after leaving the tracked hub --
+  // a dispatcher clicking it would fire the standard ~2h grace instead of
+  // the correct ~24h relay window, sending the customer a premature
+  // "arrived" WhatsApp message while the parcel was still genuinely in
+  // transit via the relay carrier.
+  finalLegTrackingUnavailable?: boolean;
   now?: Date;
 };
 
@@ -43,6 +57,10 @@ export function arrivalConfirmationRecommendation(input: ArrivalConfirmationInpu
   const arrivalPlausible = input.status !== "Loading"
     && (input.progress >= 90 || Boolean(input.plannedArrivalAt && input.plannedArrivalAt.getTime() <= now.getTime()));
   if (!arrivalPlausible) return { state: "automatic_pending", reason: "in_transit" };
+
+  if (input.finalLegTrackingUnavailable) {
+    return { state: "automatic_pending", reason: "ctm_relay_in_progress" };
+  }
 
   if (typeof input.destinationLatitude !== "number" || typeof input.destinationLongitude !== "number") {
     return { state: "manual_recommended", reason: "destination_coordinates_missing" };
