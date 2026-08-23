@@ -54,7 +54,7 @@ test("the journey editor popover has its own positioning context and styling", (
 
 test("status, progress and ETA are consolidated into a single Journey column instead of three separate ones", () => {
   assert.match(page, /<th>\{t\.tableJourney\}<\/th><th className="col-actions">/);
-  assert.match(page, /<td className="col-journey"><div className="journey-top"><span className=\{statusClass\[delivery\.status\]\}/);
+  assert.match(page, /<td className="col-journey"><span className=\{statusClass\[delivery\.status\]\}/);
   assert.doesNotMatch(page, /<th>\{t\.tableStatus\}<\/th>/);
-  assert.match(css, /\.col-journey \{ display: flex; flex-direction: column;/);
+  assert.match(css, /\.col-journey \{ display: flex; align-items: center;/);
 });

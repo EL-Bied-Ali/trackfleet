@@ -41,7 +41,7 @@ test("the map marker itself shows the truck number instead of the generic icon, 
   assert.match(map, /truckNumber\?: number \| null;/);
   assert.match(map, /<span aria-hidden="true">\$\{delivery\.truckNumber \?\? "▰"\}<\/span>/);
   assert.match(map, /<span aria-hidden="true">\$\{vehicle\.truckNumber \?\? "▰"\}<\/span>/);
-  assert.match(page, /truckNumber: delivery\.sendatrackVehicleId \? vehicleTruckNumbers\.get\(delivery\.sendatrackVehicleId\) \?\? null : null,/);
-  assert.match(page, /const liveVehiclesWithNumbers = integration\.vehicles\.map\(\(vehicle\) => \(\{ \.\.\.vehicle, truckNumber: vehicleTruckNumbers\.get\(vehicle\.id\) \?\? null \}\)\);/);
+  assert.match(page, /const truckNumber = delivery\.sendatrackVehicleId \? vehicleTruckNumbers\.get\(delivery\.sendatrackVehicleId\) \?\? null : null;/);
+  assert.match(page, /const truckNumber = vehicleTruckNumbers\.get\(vehicle\.id\) \?\? null;/);
   assert.match(page, /liveVehicles=\{liveVehiclesWithNumbers\}/);
 });

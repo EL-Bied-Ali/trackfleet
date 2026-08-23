@@ -121,14 +121,17 @@ a.nav-item { text-decoration: none; }
 .interactive-map-canvas .maplibregl-canvas { cursor: grab; }.interactive-map-canvas .maplibregl-canvas:active { cursor: grabbing; }
 .interactive-map-canvas .maplibregl-ctrl-top-right { top: 10px; right: 10px; }.interactive-map-canvas .maplibregl-ctrl-group { overflow: hidden; border: 1px solid #d5ddd8; border-radius: 8px; box-shadow: 0 3px 12px rgba(24,55,45,.14); }.interactive-map-canvas .maplibregl-ctrl button { width: 30px; height: 30px; background-color: rgba(255,255,255,.96); }
 .interactive-map-canvas .maplibregl-ctrl-attrib { color: #65736c; background: rgba(255,255,255,.82); font-size: 8px; }
-.maplibre-truck { position: relative; width: 38px; height: 38px; display: grid; place-items: center; padding: 0; border: 3px solid white; border-radius: 50%; color: white; background: #27745c; box-shadow: 0 5px 15px rgba(29,71,57,.32); cursor: pointer; }.maplibre-truck span { font-size: 13px; }.maplibre-truck b { position: absolute; top: -8px; right: -8px; width: 18px; height: 18px; display: grid; place-items: center; border: 2px solid white; border-radius: 50%; color: white; background: #173f34; font-size: 7px; }
-/* Origin-country color instead of a flag-emoji badge -- flag emoji render as
-   blank/tofu on Windows in most browsers, since they're font-dependent
-   regional-indicator glyphs rather than pictures. A CSS background color
-   works everywhere. Morocco's flag is a solid red field; Belgium's is a
-   black/yellow/red vertical tricolor, approximated as a 3-band gradient. */
-.maplibre-truck.origin-ma { background: #c1272d; }
-.maplibre-truck.origin-be { background: linear-gradient(90deg, #000000 0%, #000000 33%, #fae042 33%, #fae042 66%, #ed2939 66%, #ed2939 100%); }
+.maplibre-truck { position: relative; width: 38px; height: 38px; display: grid; place-items: center; padding: 0; border: 3px solid white; border-radius: 50%; color: white; background: #27745c; box-shadow: 0 5px 15px rgba(29,71,57,.32); cursor: pointer; }.maplibre-truck span { font-size: 13px; }
+/* Destination-country color instead of a flag-emoji badge -- flag emoji
+   render as blank/tofu on Windows in most browsers, since they're
+   font-dependent regional-indicator glyphs rather than pictures. A CSS
+   background color works everywhere. Morocco's flag is a solid red field;
+   Belgium's is a black/yellow/red vertical tricolor, approximated as a
+   3-band gradient. Sits as a small corner dot rather than the whole marker,
+   since the marker body itself is now colored to match the truck's own badge. */
+.maplibre-truck b.dest-flag { position: absolute; top: -5px; right: -5px; width: 13px; height: 13px; border: 2px solid white; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,.18); }
+.maplibre-truck b.dest-flag.dest-ma { background: #c1272d; }
+.maplibre-truck b.dest-flag.dest-be { background: linear-gradient(90deg, #000000 0%, #000000 33%, #fae042 33%, #fae042 66%, #ed2939 66%, #ed2939 100%); }
 .maplibre-truck.selected { background: #e29a34 !important; animation: truck-pulse 2s ease-in-out infinite; }
 .maplibre-truck.gps-only { cursor: default; background: #176eac; }.maplibre-truck.gps-only em { position: absolute; left: 50%; top: 41px; padding: 3px 6px; border-radius: 5px; color: #234338; background: rgba(255,255,255,.94); box-shadow: 0 2px 8px rgba(25,55,44,.14); transform: translateX(-50%); font-size: 7px; font-style: normal; font-weight: 800; white-space: nowrap; }.maplibre-truck.gps-only b { width: 22px; font-size: 5px; }
 .maplibre-destination { width: 33px; height: 33px; display: grid; place-items: center; border: 4px solid white; border-radius: 50% 50% 50% 8px; color: white; background: #e39a38; box-shadow: 0 5px 14px rgba(46,63,55,.24); transform: rotate(-35deg); font-size: 9px; }
@@ -174,21 +177,23 @@ a.nav-item { text-decoration: none; }
 .traffic-layer i:nth-of-type(1) { width: 25%; left: 31%; top: 47%; transform: rotate(-12deg); }
 .traffic-layer i:nth-of-type(2) { width: 18%; left: 58%; top: 56%; transform: rotate(47deg); }
 .traffic-layer i:nth-of-type(3) { width: 16%; left: 20%; top: 67%; transform: rotate(-41deg); }
-.truck-popover { position: absolute; left: 63%; top: 90px; z-index: 9; width: 215px; max-height: calc(100% - 144px); overflow-y: auto; padding: 13px; border: 1px solid #dce4df; border-radius: 10px; background: rgba(255,255,255,.97); box-shadow: 0 9px 28px rgba(26,55,45,.16); }
+.truck-popover { position: absolute; left: 63%; top: 90px; z-index: 9; width: 244px; max-height: calc(100% - 144px); overflow-y: auto; padding: 13px; border: 1px solid #dce4df; border-radius: 10px; background: rgba(255,255,255,.97); box-shadow: 0 9px 28px rgba(26,55,45,.16); }
 .truck-popover::before { content: ""; position: absolute; left: -6px; top: 24px; width: 10px; height: 10px; border-left: 1px solid #dce4df; border-bottom: 1px solid #dce4df; background: white; transform: rotate(45deg); }
 .truck-popover > div:first-child { display: flex; align-items: center; }
 .truck-badge { width: 30px; height: 30px; display: grid; place-items: center; margin-right: 9px; border-radius: 8px; color: white; background: var(--green); font-size: 12px; }
 .truck-number-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; color: white; font-size: 8px; font-weight: 750; font-style: normal; line-height: 1.4; white-space: nowrap; }
 .fleet-roster .truck-number-badge, .truck-popover .truck-number-badge { margin-right: 6px; }
-.truck-popover p { flex: 1; margin: 0; min-width: 0; }.truck-popover strong, .truck-popover small { display: block; }.truck-popover strong { font-size: 13px; }.truck-popover small { margin-top: 2px; color: #87928c; font-size: 11px; }
+.truck-popover p { flex: 1; margin: 0; min-width: 0; }.truck-popover strong, .truck-popover small { display: block; }.truck-popover strong { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 13px; }.truck-popover small { margin-top: 2px; color: #87928c; font-size: 11px; }
+.truck-name-text { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
 .rename-trigger { border: 0; margin-left: 5px; padding: 0; color: #93a099; background: transparent; font-size: 11px; cursor: pointer; vertical-align: middle; }
 .rename-trigger:hover { color: var(--green); }
 .rename-truck { display: flex; align-items: center; gap: 5px; }
 .rename-truck input { min-width: 0; flex: 1; padding: 3px 6px; border: 1px solid #cfe0d7; border-radius: 5px; font-size: 12px; }
 .rename-truck button { flex: 0 0 auto; border: 0; padding: 2px 5px; border-radius: 5px; background: #e8f3ee; color: #1e624d; font-size: 11px; cursor: pointer; }
 .truck-popover > div:first-child button { border: 0; background: transparent; color: #93a099; cursor: pointer; }
-.truck-popover dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding: 10px 0; margin: 10px 0; border-top: 1px solid #edf0ee; border-bottom: 1px solid #edf0ee; }
-.truck-popover dt { color: #929d97; font-size: 10px; }.truck-popover dd { display: flex; align-items: center; gap: 4px; margin: 3px 0 0; font-size: 11px; font-weight: 700; }.truck-popover dd i { width: 5px; height: 5px; border-radius: 50%; background: #20a876; }
+.truck-popover dl { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; padding: 10px 0; margin: 10px 0; border-top: 1px solid #edf0ee; border-bottom: 1px solid #edf0ee; }
+.truck-popover dl > div.dl-wide { grid-column: 1 / -1; }
+.truck-popover dt { color: #929d97; font-size: 10px; }.truck-popover dd { display: flex; align-items: center; gap: 4px; margin: 3px 0 0; overflow-wrap: anywhere; font-size: 11px; font-weight: 700; }.truck-popover dd i { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: #20a876; }
 .popover-actions { display: flex; gap: 6px; }.popover-actions button { height: 27px; flex: 1; border: 0; border-radius: 6px; background: #e8f3ee; color: #1e624d; font-size: 11px; font-weight: 650; cursor: pointer; }.popover-actions button.copy-link { flex: 0 0 60px; color: #506259; background: #f0f2f1; }
 .whatsapp-demo { display: grid; grid-template-columns: 1.15fr 1fr auto; align-items: center; gap: 24px; min-height: 106px; padding: 18px 21px; border-top: 1px solid var(--line); background: linear-gradient(90deg, #f7fcf9, #fff); }
 .whatsapp-demo-intro { display: flex; align-items: center; gap: 13px; min-width: 0; }.whatsapp-mark { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border-radius: 12px; color: white; background: #25a867; font-size: 20px; font-weight: 800; }.demo-title-line { display: flex; align-items: center; gap: 8px; }.demo-title-line h3 { margin: 0; font-size: 11px; }.demo-title-line > span { padding: 3px 6px; border-radius: 999px; color: #6e7d75; background: #e9efec; font-size: 6.5px; font-weight: 800; letter-spacing: .6px; }.whatsapp-demo-intro p { max-width: 330px; margin: 5px 0 0; color: #718078; font-size: 8.5px; line-height: 1.45; }
@@ -226,9 +231,9 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .contact-popover a:hover { text-decoration: underline; }
 .status { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; width: max-content; margin: 0; padding: 4px 7px; border-radius: 12px; font-size: 8px; font-weight: 650; }.status i { width: 5px; height: 5px; border-radius: 50%; }.status.transit { color: #167354; background: #e5f4ed; }.status.transit i { background: #1ea475; }.status.delayed { color: #a6681d; background: #fff1da; }.status.delayed i { background: #e29a34; }.status.loading { color: #7653a3; background: #f0eaf8; }.status.loading i { background: #916ed7; }.status.delivered { color: #6f7b75; background: #edf0ee; }.status.delivered i { background: #89938e; }
 .progress { display: flex; align-items: center; gap: 7px; }.progress > div { width: 65px; height: 4px; overflow: hidden; border-radius: 4px; background: #e7ece9; }.progress > div i { display: block; height: 100%; border-radius: inherit; background: #2b7b61; }.progress span { color: #7d8983; font-size: 8px; }
-.col-journey { display: flex; flex-direction: column; gap: 5px; justify-content: center; }
-.journey-top { display: flex; align-items: center; gap: 10px; }
-.journey-eta strong, .journey-eta span { display: block; }.journey-eta strong { font-size: 10px; }.journey-eta span { margin-top: 2px; color: #96a09b; font-size: 8px; }
+.col-journey { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
+.recipient-line { margin-top: 3px; }.recipient-line .contact-trigger span { color: #96a09b; font-size: 8px; }
 .more-button { border: 0; background: transparent; color: #8c9791; cursor: pointer; }
 .truck-editor-wrap { position: relative; display: inline-block; }
 .truck-editor-popover { position: absolute; z-index: 20; top: 100%; right: 0; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 8px 24px rgba(16,24,40,.12); white-space: nowrap; cursor: default; display: grid; gap: 6px; text-align: left; }

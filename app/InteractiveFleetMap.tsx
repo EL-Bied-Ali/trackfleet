@@ -20,14 +20,18 @@ type MapDelivery = {
   longitude?: number | null;
   sendatrackVehicleId?: string;
   originCountry?: "BE" | "MA" | null;
+  destinationCountry?: "BE" | "MA" | null;
   truckNumber?: number | null;
+  truckColor?: string | null;
 };
 
 // Flag emoji (regional indicator sequences) render as blank/tofu on Windows
-// in most browsers instead of an actual flag picture -- reproduced live, the
-// badge showed as an empty circle. Coloring the marker itself after each
-// country's flag colors is reliable everywhere since it's plain CSS, not a
-// font-dependent glyph.
+// in most browsers instead of an actual flag picture -- reproduced live, an
+// earlier flag badge showed as an empty circle. Coloring a small corner dot
+// after each country's flag colors is reliable everywhere since it's plain
+// CSS, not a font-dependent glyph. The marker body itself is colored to
+// match the truck's own badge color (see truckBadgeColor in page.tsx), so
+// the corner dot carries the destination signal instead.
 const originCountryLabel: Record<"BE" | "MA", string> = { BE: "Belgium", MA: "Morocco" };
 
 type LiveVehicle = {
@@ -37,6 +41,7 @@ type LiveVehicle = {
   latitude: number;
   longitude: number;
   truckNumber?: number | null;
+  truckColor?: string | null;
 };
 
 type Props = {
@@ -223,12 +228,14 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
     const markers = shownDeliveries.map((delivery, index) => {
       const button = document.createElement("button");
       button.type = "button";
-      const originClass = delivery.originCountry ? `origin-${delivery.originCountry.toLowerCase()}` : "";
-      button.className = `maplibre-truck ${originClass} ${delivery.id === selectedId ? "selected" : ""}`;
+      button.className = `maplibre-truck ${delivery.id === selectedId ? "selected" : ""}`;
+      if (delivery.truckColor) button.style.background = delivery.truckColor;
       keepMarkerMapPositioning(button);
       const originLabel = delivery.originCountry ? ` · from ${originCountryLabel[delivery.originCountry]}` : "";
-      button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}${originLabel}`);
-      button.innerHTML = `<span aria-hidden="true">${delivery.truckNumber ?? "▰"}</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
+      const destinationLabel = delivery.destinationCountry ? ` · to ${originCountryLabel[delivery.destinationCountry]}` : "";
+      button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}${originLabel}${destinationLabel}`);
+      const destFlag = delivery.destinationCountry ? `<b class="dest-flag dest-${delivery.destinationCountry.toLowerCase()}" aria-hidden="true"></b>` : "";
+      button.innerHTML = `<span aria-hidden="true">${delivery.truckNumber ?? "▰"}</span><em>${compactVehicleLabel(delivery.truck)}</em>${destFlag}`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
       const position = positionFor(delivery, index);
       return new maplibregl.Marker({ element: button, anchor: "bottom", offset: overlapOffset(map.project(position), markerOccurrences) }).setLngLat(position).addTo(map);
@@ -244,6 +251,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
         if (linkedVehicleIds.has(vehicle.id)) continue;
         const marker = document.createElement("div");
         marker.className = "maplibre-truck gps-only";
+        if (vehicle.truckColor) marker.style.background = vehicle.truckColor;
         keepMarkerMapPositioning(marker);
         marker.setAttribute("role", "img");
         marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);

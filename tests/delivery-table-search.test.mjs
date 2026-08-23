@@ -28,13 +28,16 @@ test("the Livraison column leads with the friendly registration date/time, with 
   assert.doesNotMatch(page, /deliveryDisplayLabel/);
 });
 
-test("the table shows a Destinataire column with the recipient name; the numbers are revealed on click instead of always shown", () => {
+test("the recipient name folds into the Client cell as a secondary line instead of its own always-visible Destinataire column", () => {
   // See delivery-contact-popover.test.mjs for the click-to-reveal behavior
   // itself -- both phone numbers used to always render as visible text in
-  // this column, which the client column never showed at all. Moved to a
-  // consistent click-to-reveal popup on both cells instead.
-  assert.match(page, /\{locale === "fr" \? "Destinataire" : locale === "nl" \? "Ontvanger" : "Recipient"\}/);
-  assert.match(page, /<strong>\{delivery\.recipientName \|\| "—"\}<\/strong><\/button>/);
+  // this column, which the client column never showed at all. The
+  // Destinataire column was also empty ("—") on most rows, wasting width
+  // and squeezing the Journey column -- reported live. Only rendered when
+  // there actually is a recipient name, instead of always showing "—".
+  assert.doesNotMatch(page, /\{locale === "fr" \? "Destinataire" : locale === "nl" \? "Ontvanger" : "Recipient"\}/);
+  assert.match(page, /\{delivery\.recipientName && <div className="recipient-line">/);
+  assert.match(page, /<span>→ \{delivery\.recipientName\}<\/span>/);
 });
 
 test("mobile card layout hides the actions column via a stable class, not a positional nth-child index", () => {
