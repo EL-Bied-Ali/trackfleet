@@ -87,8 +87,15 @@ function compactVehicleLabel(name: string) {
   return normalized.length > 14 ? `${normalized.slice(0, 12)}…` : normalized;
 }
 
-function overlapOffset(position: [number, number], occurrences: Map<string, number>): [number, number] {
-  const key = `${position[0].toFixed(5)}:${position[1].toFixed(5)}`;
+// Bucketed by projected SCREEN pixels, not raw lng/lat degrees. The
+// Belgium<->Morocco corridor map is zoomed out enough that vehicles several
+// kilometers apart in the same city can still land on the same or adjacent
+// pixel -- rounding raw coordinates only caught markers with near-identical
+// GPS fixes and missed this, silently stacking distinct trucks on top of
+// each other with no visual indication more than one was there.
+function overlapOffset(pixel: { x: number; y: number }, occurrences: Map<string, number>): [number, number] {
+  const bucketPx = 28;
+  const key = `${Math.round(pixel.x / bucketPx)}:${Math.round(pixel.y / bucketPx)}`;
   const index = occurrences.get(key) ?? 0;
   occurrences.set(key, index + 1);
   if (index === 0) return [0, 0];
@@ -222,7 +229,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
       button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
       const position = positionFor(delivery, index);
-      return new maplibregl.Marker({ element: button, anchor: "bottom", offset: overlapOffset(position, markerOccurrences) }).setLngLat(position).addTo(map);
+      return new maplibregl.Marker({ element: button, anchor: "bottom", offset: overlapOffset(map.project(position), markerOccurrences) }).setLngLat(position).addTo(map);
     });
 
     if (!customerMode) {
@@ -240,7 +247,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
         marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);
         marker.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(vehicle.name)}</em>`;
         const position: [number, number] = [vehicle.longitude, vehicle.latitude];
-        markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom", offset: overlapOffset(position, markerOccurrences) }).setLngLat(position).addTo(map));
+        markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom", offset: overlapOffset(map.project(position), markerOccurrences) }).setLngLat(position).addTo(map));
       }
     }
 
