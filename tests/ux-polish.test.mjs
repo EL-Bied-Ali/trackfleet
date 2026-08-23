@@ -53,6 +53,20 @@ test("overlapping live trucks remain individually visible", () => {
   assert.match(page, /integration\.vehicles\.map/);
 });
 
+test("overlap detection buckets by projected screen pixels, not raw GPS coordinates", () => {
+  // Regression guard, reproduced live: the corridor map spans Belgium to
+  // Morocco, zoomed out enough that vehicles several kilometers apart in
+  // the same city land on the same or adjacent screen pixel. Bucketing by
+  // raw lng/lat (rounded to 5 decimals, ~1m precision) only caught markers
+  // with near-identical GPS fixes and silently stacked distinct trucks with
+  // no visual indication -- three vehicles rendered at the exact same pixel
+  // on the live dashboard, leaving only one visible/clickable of the three.
+  assert.match(map, /function overlapOffset\(pixel: \{ x: number; y: number \}, occurrences: Map<string, number>\)/);
+  assert.doesNotMatch(map, /position\[0\]\.toFixed\(5\)/);
+  const projectedCallSites = map.match(/overlapOffset\(map\.project\(position\), markerOccurrences\)/g) ?? [];
+  assert.equal(projectedCallSites.length, 2, "both the delivery-linked and gps-only marker loops must project before bucketing");
+});
+
 test("agency management is searchable and keeps the edit form closed by default", () => {
   assert.match(siteManager, /siteSearch/);
   assert.match(siteManager, /siteFormOpen/);
