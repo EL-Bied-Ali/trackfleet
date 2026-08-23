@@ -21,11 +21,18 @@ test("receiver identity and phone are supported by form, API, CSV and both store
   assert.match(importer, /recipient_contact/);
 });
 
-test("remembered phone consent works for sender or receiver and honours opt-out", async () => {
+test("remembered phone consent works for sender or receiver and honours the most recent opt-out across every delivery for that number", async () => {
   const route = await read("../app/api/deliveries/route.ts");
   assert.match(route, /customerMatches/);
   assert.match(route, /recipientMatches/);
-  assert.match(route, /whatsappConsentWithdrawn\(events\)/);
+  // Regression guard: consent must be resolved per phone number across ALL
+  // matching deliveries (most recent grant vs most recent withdrawal), not
+  // by stopping at the first matching delivery -- that earlier approach let
+  // a withdrawal on one delivery be silently overridden by an older,
+  // still-active grant sitting on a different delivery for the same number.
+  assert.match(route, /event\.type === "WHATSAPP_OPT_OUT"/);
+  assert.match(route, /if \(!mostRecentGrant\) return false;/);
+  assert.match(route, /return !mostRecentWithdrawal \|\| mostRecentGrant > mostRecentWithdrawal;/);
   assert.match(route, /explicitWhatsappConsent \|\| customerConsentRemembered/);
   assert.match(route, /explicitWhatsappConsent \|\| recipientConsentRemembered/);
 });
