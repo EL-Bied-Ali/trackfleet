@@ -111,7 +111,7 @@ test("an agency scoped to an untracked-final-leg site sees an expected-parcels l
   // The live map/roster/truck-popover branch must be skipped entirely when
   // the map is unavailable, not merely visually hidden alongside it.
   assert.match(page, /\{agencyMapUnavailable \? \(/);
-  assert.match(page, /!agencyMapUnavailable && showPopover && deliveries\.length > 0 && <div className="truck-popover">/);
+  assert.match(page, /!agencyMapUnavailable && showPopover && \(selectedVehicle \|\| deliveries\.length > 0\) && <div className="truck-popover">/);
 });
 
 test("each expected-parcel card reuses the same estimate note and arrival-confirmation action as everywhere else, keyed to that specific delivery", () => {

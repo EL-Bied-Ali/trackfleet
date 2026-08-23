@@ -48,9 +48,11 @@ type Props = {
   deliveries: MapDelivery[];
   liveVehicles?: LiveVehicle[];
   selectedId: string;
+  selectedVehicleId?: string | null;
   customerMode?: boolean;
   label: string;
   onSelect?: (deliveryId: string) => void;
+  onSelectVehicle?: (vehicleId: string) => void;
   onBackgroundClick?: () => void;
 };
 
@@ -112,9 +114,10 @@ function overlapOffset(pixel: { x: number; y: number }, occurrences: Map<string,
   return [Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius)];
 }
 
-export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_LIVE_VEHICLES, selectedId, customerMode = false, label, onSelect, onBackgroundClick }: Props) {
+export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_LIVE_VEHICLES, selectedId, selectedVehicleId = null, customerMode = false, label, onSelect, onSelectVehicle, onBackgroundClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
+  const onSelectVehicleRef = useRef(onSelectVehicle);
   const onBackgroundClickRef = useRef(onBackgroundClick);
   const maplibreRef = useRef<MapLibreModule | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -125,6 +128,10 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
+
+  useEffect(() => {
+    onSelectVehicleRef.current = onSelectVehicle;
+  }, [onSelectVehicle]);
 
   useEffect(() => {
     onBackgroundClickRef.current = onBackgroundClick;
@@ -249,13 +256,18 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
       }));
       for (const vehicle of liveVehicles) {
         if (linkedVehicleIds.has(vehicle.id)) continue;
-        const marker = document.createElement("div");
-        marker.className = "maplibre-truck gps-only";
+        // No delivery is currently riding this vehicle, but the dispatcher
+        // still needs to see and act on it (check its speed, rename it) --
+        // reported live as a dead end on the map, since only delivery-linked
+        // markers were clickable before this.
+        const marker = document.createElement("button");
+        marker.type = "button";
+        marker.className = `maplibre-truck gps-only ${vehicle.id === selectedVehicleId ? "selected" : ""}`;
         if (vehicle.truckColor) marker.style.background = vehicle.truckColor;
         keepMarkerMapPositioning(marker);
-        marker.setAttribute("role", "img");
         marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);
         marker.innerHTML = `<span aria-hidden="true">${vehicle.truckNumber ?? "▰"}</span><em>${compactVehicleLabel(vehicle.name)}</em>`;
+        marker.addEventListener("click", () => onSelectVehicleRef.current?.(vehicle.id));
         const position: [number, number] = [vehicle.longitude, vehicle.latitude];
         markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom", offset: overlapOffset(map.project(position), markerOccurrences) }).setLngLat(position).addTo(map));
       }
@@ -272,7 +284,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
         .addTo(map);
     }
     markersRef.current = markers;
-  }, [customerMode, deliveries, liveVehicles, mapRevision, selectedId]);
+  }, [customerMode, deliveries, liveVehicles, mapRevision, selectedId, selectedVehicleId]);
 
   return <div ref={containerRef} className="interactive-map-canvas" role="application" aria-label={label} />;
 }
