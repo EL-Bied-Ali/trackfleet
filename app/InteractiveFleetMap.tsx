@@ -20,6 +20,7 @@ type MapDelivery = {
   longitude?: number | null;
   sendatrackVehicleId?: string;
   originCountry?: "BE" | "MA" | null;
+  truckNumber?: number | null;
 };
 
 // Flag emoji (regional indicator sequences) render as blank/tofu on Windows
@@ -35,6 +36,7 @@ type LiveVehicle = {
   speed: number;
   latitude: number;
   longitude: number;
+  truckNumber?: number | null;
 };
 
 type Props = {
@@ -226,7 +228,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
       keepMarkerMapPositioning(button);
       const originLabel = delivery.originCountry ? ` · from ${originCountryLabel[delivery.originCountry]}` : "";
       button.setAttribute("aria-label", `${delivery.truck} · ${delivery.destination}${originLabel}`);
-      button.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
+      button.innerHTML = `<span aria-hidden="true">${delivery.truckNumber ?? "▰"}</span><em>${compactVehicleLabel(delivery.truck)}</em>`;
       button.addEventListener("click", () => onSelectRef.current?.(delivery.id));
       const position = positionFor(delivery, index);
       return new maplibregl.Marker({ element: button, anchor: "bottom", offset: overlapOffset(map.project(position), markerOccurrences) }).setLngLat(position).addTo(map);
@@ -245,7 +247,7 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
         keepMarkerMapPositioning(marker);
         marker.setAttribute("role", "img");
         marker.setAttribute("aria-label", `${vehicle.name} · ${vehicle.speed} km/h`);
-        marker.innerHTML = `<span aria-hidden="true">▰</span><em>${compactVehicleLabel(vehicle.name)}</em>`;
+        marker.innerHTML = `<span aria-hidden="true">${vehicle.truckNumber ?? "▰"}</span><em>${compactVehicleLabel(vehicle.name)}</em>`;
         const position: [number, number] = [vehicle.longitude, vehicle.latitude];
         markers.push(new maplibregl.Marker({ element: marker, anchor: "bottom", offset: overlapOffset(map.project(position), markerOccurrences) }).setLngLat(position).addTo(map));
       }

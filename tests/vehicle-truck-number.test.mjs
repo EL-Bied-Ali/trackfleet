@@ -21,3 +21,16 @@ test("the truck number tag appears in the fleet roster, the delivery table's veh
   assert.match(page, /truckLabelWithNumber\(vehicleLabel\(delivery\), delivery\.sendatrackVehicleId\)/);
   assert.match(page, /truckLabelWithNumber\(vehicleLabel\(selected\), selected\.sendatrackVehicleId\)/);
 });
+
+test("the map marker itself shows the truck number instead of the generic icon, falling back to the icon when no number is known", () => {
+  const map = fs.readFileSync("app/InteractiveFleetMap.tsx", "utf8");
+  // Flag emoji rendered as blank/tofu on Windows in an earlier fix (see the
+  // comment above originCountryLabel) -- plain digits don't have that
+  // problem, so this is safe where an emoji badge wasn't.
+  assert.match(map, /truckNumber\?: number \| null;/);
+  assert.match(map, /<span aria-hidden="true">\$\{delivery\.truckNumber \?\? "▰"\}<\/span>/);
+  assert.match(map, /<span aria-hidden="true">\$\{vehicle\.truckNumber \?\? "▰"\}<\/span>/);
+  assert.match(page, /truckNumber: delivery\.sendatrackVehicleId \? vehicleTruckNumbers\.get\(delivery\.sendatrackVehicleId\) \?\? null : null,/);
+  assert.match(page, /const liveVehiclesWithNumbers = integration\.vehicles\.map\(\(vehicle\) => \(\{ \.\.\.vehicle, truckNumber: vehicleTruckNumbers\.get\(vehicle\.id\) \?\? null \}\)\);/);
+  assert.match(page, /liveVehicles=\{liveVehiclesWithNumbers\}/);
+});

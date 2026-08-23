@@ -12,7 +12,10 @@ const [mapSource, polish, layout, i18n, page] = await Promise.all([
 
 test("live map markers use one compact vehicle label instead of a GPS badge stack", () => {
   assert.match(mapSource, /compactVehicleLabel/);
-  assert.match(mapSource, /<span aria-hidden="true">▰<\/span><em>/);
+  // The marker's badge shows the friendly truck number when known, falling
+  // back to the generic icon glyph only when it isn't (see
+  // vehicle-truck-number.test.mjs for the full truck-number contract).
+  assert.match(mapSource, /<span aria-hidden="true">\$\{delivery\.truckNumber \?\? "▰"\}<\/span><em>/);
   assert.doesNotMatch(mapSource, /<b>GPS<\/b>/);
 });
 
