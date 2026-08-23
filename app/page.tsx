@@ -523,17 +523,13 @@ export default function Home() {
   const liveVehiclesWithNumbers = integration.vehicles.map((vehicle) => ({ ...vehicle, truckNumber: vehicleTruckNumbers.get(vehicle.id) ?? null }));
   const unassignedDeliveries = deliveries.filter((delivery) => delivery.status !== "Delivered" && isUnassignedVehicle(delivery));
   const tripSuggestions = new Map(unassignedDeliveries.map((delivery) => [delivery.id, suggestPlannedTrip(delivery, trips)]));
-  const completedWithPlan = deliveries.filter((delivery) => delivery.status === "Delivered" && delivery.etaDelayMinutes != null);
-  const onTimeRate = completedWithPlan.length
-    ? Math.round((completedWithPlan.filter((delivery) => (delivery.etaDelayMinutes ?? 0) <= 0).length / completedWithPlan.length) * 1000) / 10
-    : null;
-  const delayedCount = deliveries.filter((delivery) => delivery.status !== "Delivered" && (delivery.status === "Delayed" || (delivery.etaDelayMinutes ?? 0) >= 60)).length;
+  // Parcels sitting at the origin site accumulate under "Loading" until the
+  // truck they're relayed on actually departs -- this is the count/weight a
+  // dispatcher watches to decide when a truck is full enough to send out.
+  const loadingDeliveries = deliveries.filter((delivery) => delivery.status === "Loading");
+  const loadingWeightKg = loadingDeliveries.reduce((total, delivery) => total + (delivery.weightKg ?? 0), 0);
+  const storedTodayCount = deliveries.filter((delivery) => delivery.createdAt && new Date(delivery.createdAt).toDateString() === new Date().toDateString()).length;
   const vehicleLinkSuggestions = rankVehicleSuggestions(vehicleLinkSearch || selected?.truck || "", integration.vehicles);
-  const liveKpiCopy = {
-    fr: { completed: "terminées", noHistory: "Pas encore d'historique", onTimeBody: "Basé sur les livraisons suivies et terminées", onTimeEmpty: "Disponible après les premières livraisons terminées", noDelay: "Aucun retard ETA important détecté" },
-    en: { completed: "completed", noHistory: "No history yet", onTimeBody: "Based on completed tracked deliveries", onTimeEmpty: "Available after the first completed deliveries", noDelay: "No material ETA delay detected" },
-    nl: { completed: "voltooid", noHistory: "Nog geen historiek", onTimeBody: "Gebaseerd op voltooide gevolgde leveringen", onTimeEmpty: "Beschikbaar na de eerste voltooide leveringen", noDelay: "Geen belangrijke ETA-vertraging gedetecteerd" },
-  }[locale];
   const dashboardEmptyCopy = {
     fr: { firstTitle: "Aucune livraison enregistrée", firstBody: "Créez la première livraison pour générer son suivi privé et commencer l’historique opérationnel.", firstAction: "Créer la première livraison", filteredTitle: "Aucune livraison dans ce filtre", filteredBody: "Les livraisons existent, mais aucune ne correspond au statut sélectionné.", reset: "Afficher toutes les livraisons", trackingUnavailable: "Lien de suivi indisponible pour cet ancien enregistrement." },
     en: { firstTitle: "No deliveries yet", firstBody: "Create the first delivery to generate its private tracking link and start operational history.", firstAction: "Create first delivery", filteredTitle: "No deliveries in this filter", filteredBody: "Deliveries exist, but none match the selected status.", reset: "Show all deliveries", trackingUnavailable: "Tracking link unavailable for this legacy record." },
@@ -1114,9 +1110,9 @@ export default function Home() {
         </header>
 
         <div className="stats-grid">
-          <article className="stat-card"><div className="stat-head"><span>{t.activeDeliveries}</span><Icon>◇</Icon></div><div><strong>{deliveries.filter((delivery) => delivery.status !== "Delivered").length}</strong></div><p>{t.acrossVehicles}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.onTimeRate}</span><Icon>◷</Icon></div><div><strong>{onTimeRate == null ? "—" : `${onTimeRate}%`}</strong><em className="neutral">{completedWithPlan.length ? `${completedWithPlan.length} ${liveKpiCopy.completed}` : liveKpiCopy.noHistory}</em></div><p>{completedWithPlan.length ? liveKpiCopy.onTimeBody : liveKpiCopy.onTimeEmpty}</p></article>
-          <article className="stat-card"><div className="stat-head"><span>{t.delayed}</span><Icon>△</Icon></div><div><strong>{delayedCount}</strong>{delayedCount > 0 && <em className="warning">{t.needsAttention}</em>}</div><p>{delayedCount > 0 ? t.delayReasons : liveKpiCopy.noDelay}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.loadingParcels}</span><Icon>▤</Icon></div><div><strong>{loadingDeliveries.length}</strong></div><p>{t.loadingParcelsBody}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.loadingWeight}</span><Icon>⚖</Icon></div><div><strong>{loadingWeightKg.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { maximumFractionDigits: 1 })} kg</strong></div><p>{t.loadingWeightBody}</p></article>
+          <article className="stat-card"><div className="stat-head"><span>{t.storedToday}</span><Icon>▥</Icon></div><div><strong>{storedTodayCount}</strong></div><p>{t.storedTodayBody}</p></article>
           <article className="stat-card"><div className="stat-head"><span>{t.fleetStatus}</span><Icon>▰</Icon></div><div><strong>{integration.connected ? `${integration.vehicleCount} ${locale === "fr" ? "véhicules" : locale === "nl" ? "voertuigen" : "vehicles"}` : "—"}</strong><em className="neutral">{integration.connected ? t.sendatrack : (locale === "fr" ? "GPS indisponible" : locale === "nl" ? "GPS niet beschikbaar" : "GPS unavailable")}</em></div><p>{integration.connected ? t.positionsAutomatic : integration.configured ? t.gpsIssueBody : t.gpsPendingBody}</p></article>
         </div>
 
