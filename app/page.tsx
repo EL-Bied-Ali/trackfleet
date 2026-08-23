@@ -463,7 +463,9 @@ export default function Home() {
   const mapDeliveriesWithOrigin = mapDeliveries.map((delivery) => ({
     ...delivery,
     originCountry: knownSites.find((site) => site.id === delivery.originSiteId)?.country ?? null,
+    truckNumber: delivery.sendatrackVehicleId ? vehicleTruckNumbers.get(delivery.sendatrackVehicleId) ?? null : null,
   }));
+  const liveVehiclesWithNumbers = integration.vehicles.map((vehicle) => ({ ...vehicle, truckNumber: vehicleTruckNumbers.get(vehicle.id) ?? null }));
   const unassignedDeliveries = deliveries.filter((delivery) => delivery.status !== "Delivered" && isUnassignedVehicle(delivery));
   const tripSuggestions = new Map(unassignedDeliveries.map((delivery) => [delivery.id, suggestPlannedTrip(delivery, trips)]));
   const completedWithPlan = deliveries.filter((delivery) => delivery.status === "Delivered" && delivery.etaDelayMinutes != null);
@@ -1087,7 +1089,7 @@ export default function Home() {
                 </div>
               )
             ) : <>
-              <InteractiveFleetMap deliveries={mapDeliveriesWithOrigin} liveVehicles={integration.vehicles} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} onBackgroundClick={() => setShowPopover(false)} />
+              <InteractiveFleetMap deliveries={mapDeliveriesWithOrigin} liveVehicles={liveVehiclesWithNumbers} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} onBackgroundClick={() => setShowPopover(false)} />
               <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
               {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{truckLabelWithNumber(vehicle.name, vehicle.id)}<small>{vehicle.speed} km/h</small></span>)}</div>}
             </>}
