@@ -134,6 +134,7 @@ export interface DeliveryStore {
   listForCompany(companyId: string): Promise<DeliveryRow[]>;
   applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string): Promise<DeliveryTransition[]>;
   linkVehicle(deliveryId: string, companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow | null>;
+  updateSchedule(deliveryId: string, companyId: string, input: { plannedArrivalAt: Date | null; nextTruckDepartureAt: Date | null }): Promise<DeliveryRow | null>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;

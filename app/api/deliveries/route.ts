@@ -506,10 +506,15 @@ export async function POST(request: Request) {
     const parsedNextTruckDeparture = nextTruckDepartureRaw ? new Date(nextTruckDepartureRaw) : null;
     const nextTruckDepartureAt = parsedNextTruckDeparture && Number.isFinite(parsedNextTruckDeparture.getTime()) ? parsedNextTruckDeparture : null;
     const validLegacyEta = /^\d{2}:\d{2}$/.test(eta);
-    if (!customer || !destination || !truck || (!plannedArrivalAt && !validLegacyEta) || !nextTruckDepartureAt) {
-      return Response.json({ error: "customer, destination, truck, a valid planned arrival, and the next truck departure date are required" }, { status: 400 });
+    if (!customer || !destination || !truck) {
+      return Response.json({ error: "customer, destination, and truck are required" }, { status: 400 });
     }
-    const normalizedEta = validLegacyEta ? eta : plannedArrivalAt!.toISOString().slice(11, 16);
+    // Planned arrival and next-truck-departure both moved out of the
+    // creation form (too redundant re-entering them per parcel -- reported
+    // live) in favor of an editor in the delivery table, so neither is
+    // required here anymore; both are already handled as nullable
+    // throughout delay detection, ETA estimation and tracking-link expiry.
+    const normalizedEta = validLegacyEta ? eta : plannedArrivalAt ? plannedArrivalAt.toISOString().slice(11, 16) : "";
 
     const contact = normalizeCustomerPhone(contactInput);
     if (contact === null) {
