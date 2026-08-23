@@ -997,7 +997,18 @@ export default function Home() {
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Données temporairement indisponibles" : locale === "nl" ? "Gegevens tijdelijk niet beschikbaar" : "Data temporarily unavailable"}</h1><p>{locale === "fr" ? "TrackFleet n’affiche aucune donnée de démonstration à la place de vos données réelles." : locale === "nl" ? "TrackFleet toont geen demogegevens in plaats van uw echte gegevens." : "TrackFleet will not show demo data in place of your real data."}</p><button className="primary-button" onClick={() => window.location.reload()}>{locale === "fr" ? "Réessayer" : locale === "nl" ? "Opnieuw proberen" : "Retry"}</button></section></main>;
 
-  if (view === "customer") {
+  // Wrapped in a nested function (instead of inlining this JSX directly in
+  // the branch below) so V8 can lazily defer parsing/compiling its body --
+  // authState starts "loading" and view starts "dispatch" on every render,
+  // including the very first server-rendered one, so this branch is never
+  // taken during SSR. Reproduced live via `wrangler tail`: the Worker was
+  // intermittently exceeding its CPU time limit (Cloudflare error 1102) on
+  // GET / -- this file is ~1300 lines / ~100KB of source in one function,
+  // and V8 must fully compile a function's body the first time it's called.
+  // Deferring the two large, branch-only JSX trees (this one and the
+  // dashboard below) cuts what has to be compiled just to serve the tiny
+  // loading shell that every SSR request actually renders.
+  function renderCustomerView() {
     const copy = {
       fr: {
         progress: "Trajet effectué",
@@ -1177,7 +1188,11 @@ export default function Home() {
       </main>
     );
   }
+  if (view === "customer") return renderCustomerView();
 
+  // See the comment on renderCustomerView above -- same reasoning, deferring
+  // this compile cost too since it's also never reached during SSR.
+  function renderDashboard() {
   const deliveriesPanel = (
     <div className="deliveries-panel">
       <div className="panel-header delivery-head"><div><h2>{t.todaysDeliveries}</h2><p>{t.shownCompleted(visibleDeliveries.length, deliveries.filter((delivery) => delivery.status === "Delivered").length)}</p></div><div className="panel-actions"><input type="search" className="table-search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={locale === "fr" ? "Client, destinataire, numéro…" : locale === "nl" ? "Klant, ontvanger, nummer…" : "Customer, recipient, number…"} aria-label={locale === "fr" ? "Rechercher une livraison" : locale === "nl" ? "Levering zoeken" : "Search deliveries"} /><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label={t.filterDeliveries}><option value="All deliveries">{t.allDeliveries}</option><option value="In transit">{t.statuses["In transit"]}</option><option value="Delayed">{t.statuses.Delayed}</option><option value="Loading">{t.statuses.Loading}</option><option value="Delivered">{t.statuses.Delivered}</option></select></div></div>
@@ -1355,4 +1370,6 @@ export default function Home() {
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );
+  }
+  return renderDashboard();
 }
