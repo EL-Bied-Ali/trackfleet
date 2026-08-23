@@ -1,4 +1,5 @@
 import { shouldCreateDelayEvent } from "./automation-delay.ts";
+import { knownSite } from "./known-sites.ts";
 import { destinationPointFor, distanceKm } from "./route-progress.ts";
 import { buildEtaObservation } from "./eta-observation.ts";
 import { buildEtaRouteContexts, stableEtaRouteContext } from "./route-history.ts";
@@ -161,6 +162,44 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
     }
     if (completion.deliveredNow) {
       newEvents += 1;
+      automaticCompletions += 1;
+    }
+  }
+
+  // Relay deliveries (see KnownSite.finalLegTrackingUnavailable) have no GPS
+  // confirmation of the actual destination at all -- the site is one our
+  // GPS-tracked trucks never physically visit. Once positions go stale past
+  // the confirmed hub (the same signal the customer tracking page uses to
+  // switch to the CTM notice -- see relayInEffect in page.tsx), there's no
+  // "inside arrival zone" signal to wait for, so this doesn't reuse the
+  // physical-unloading dwell above. Instead, assume CTM's relay leg takes 24h
+  // and reuse the same dwell-timer infrastructure with that as the grace
+  // period. ARRIVED_AT_SITE is recorded only once the 24h completes (not on
+  // "justEntered", unlike the loops above) -- recording it immediately when
+  // CTM merely takes over would fire the customer WhatsApp notification at
+  // the start of the relay leg instead of when the parcel is actually
+  // expected to have arrived.
+  const CTM_RELAY_GRACE_MINUTES = 24 * 60;
+  for (const delivery of manualArrivalCandidates) {
+    if (delivery.status === "Delivered" || observedArrivalIds.has(delivery.id)) continue;
+    if (knownSite(delivery.destinationSiteId)?.finalLegTrackingUnavailable !== true) continue;
+    const hasPosition = typeof delivery.latitude === "number"
+      && typeof delivery.longitude === "number"
+      && delivery.lastPositionAt instanceof Date;
+    if (!hasPosition) continue;
+    const positionAgeMinutes = Math.max(0, (tickObservedAt.getTime() - delivery.lastPositionAt!.getTime()) / 60_000);
+    if (positionAgeMinutes <= 30) continue;
+    const completion = await observeArrivalCompletion({
+      companyId,
+      deliveryId: delivery.id,
+      insideArrivalZone: true,
+      observationAt: tickObservedAt,
+      unloadGraceMinutes: CTM_RELAY_GRACE_MINUTES,
+    });
+    observedArrivalIds.add(delivery.id);
+    if (completion.deliveredNow && await recordEventTracked(delivery.id, "ARRIVED_AT_SITE", 100)) {
+      newEvents += 1;
+      arrivalSiteEvents += 1;
       automaticCompletions += 1;
     }
   }
