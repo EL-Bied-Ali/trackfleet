@@ -7,15 +7,16 @@ export default function AgencyEnrollmentPage() {
 
   useEffect(() => {
     const token = new URLSearchParams(window.location.hash.slice(1)).get("token") ?? "";
+    const code = new URLSearchParams(window.location.search).get("c") ?? "";
     window.history.replaceState({}, "", "/agency/enroll");
-    if (!token) {
+    if (!token && !code) {
       queueMicrotask(() => setState("error"));
       return;
     }
     void fetch("/api/auth/agency-enrollment", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify(token ? { token } : { code }),
     }).then((response) => {
       if (!response.ok) throw new Error("enrollment_failed");
       window.location.replace("/");

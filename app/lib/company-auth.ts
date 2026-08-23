@@ -23,7 +23,7 @@ export type CompanySession = SessionAccess & {
 
 const cookieName = "__Host-trackfleet_session";
 const sessionDurationSeconds = 7 * 24 * 60 * 60;
-const agencyEnrollmentDurationMs = 30 * 60 * 1000;
+export const agencyEnrollmentDurationMs = 30 * 60 * 1000;
 
 type StoredCredentials = {
   accountID: string;
@@ -208,6 +208,64 @@ export async function createAgencyEnrollmentToken(session: CompanySession, siteI
   };
   const encodedPayload = toBase64(new TextEncoder().encode(JSON.stringify(payload)));
   return `${encodedPayload}.${await signAgencyPayload(encodedPayload)}`;
+}
+
+// The full enrollment token is self-contained on purpose (companyId, siteId,
+// expiry, and the encrypted SENDATRACK credentials, all signed) so it never
+// needs a server-side lookup to verify -- but that also makes it a very
+// long URL fragment, unwieldy to share over WhatsApp/SMS to an agency.
+// Reuses the existing SENDATRACK_TOKEN_CACHE KV binding (a distinct key
+// prefix, not the token cache itself) rather than provisioning a new
+// namespace -- this repo's deploy token can't create Cloudflare resources
+// from here. Same graceful-degradation shape as the token cache: KV is
+// Cloudflare-only, so elsewhere this just means the short link isn't
+// available and the caller falls back to the full token.
+type EnrollmentLinkKv = {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options: { expirationTtl: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+};
+
+function enrollmentLinkKv() {
+  return (runtimeEnv as unknown as { SENDATRACK_TOKEN_CACHE?: EnrollmentLinkKv }).SENDATRACK_TOKEN_CACHE ?? null;
+}
+
+function enrollmentLinkKey(code: string) {
+  return `agency-enroll-link:${code}`;
+}
+
+export async function createShortEnrollmentCode(token: string, expiresAt: number): Promise<string | null> {
+  const kv = enrollmentLinkKv();
+  if (!kv) return null;
+  const ttlSeconds = Math.max(60, Math.ceil((expiresAt - Date.now()) / 1000));
+  const code = randomToken(6);
+  try {
+    await kv.put(enrollmentLinkKey(code), token, { expirationTtl: ttlSeconds });
+    return code;
+  } catch (error) {
+    console.error("[trackfleet:agency-enrollment] short link write failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    return null;
+  }
+}
+
+// Single-use: deleted as soon as it's read, on top of its own KV TTL. The
+// long token it resolves to still carries its own expiry and signature, so
+// this is a convenience/safety layer, not the only check.
+export async function resolveShortEnrollmentCode(code: string): Promise<string | null> {
+  const kv = enrollmentLinkKv();
+  if (!kv || !code || code.length > 32) return null;
+  try {
+    const token = await kv.get(enrollmentLinkKey(code));
+    if (token) await kv.delete(enrollmentLinkKey(code));
+    return token;
+  } catch (error) {
+    console.error("[trackfleet:agency-enrollment] short link read failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+    return null;
+  }
 }
 
 async function verifyAgencyEnrollmentToken(token: string): Promise<AgencyEnrollmentPayload> {
