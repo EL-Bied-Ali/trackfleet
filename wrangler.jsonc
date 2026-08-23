@@ -4,6 +4,19 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-08-19",
   "compatibility_flags": ["nodejs_compat"],
+  // No explicit limit previously -> the platform's conservative default CPU
+  // budget. Confirmed live via `wrangler tail`: GET / was intermittently
+  // aborting with "Worker exceeded CPU time limit" (Cloudflare error 1102),
+  // roughly 15-50% of requests depending on isolate warmth. The dashboard's
+  // SSR pass is a single very large client-component render (page.tsx is
+  // ~100KB of source in one file) with no data-dependent cost -- the spikes
+  // track cold-isolate parse/compile cost, not request-specific work.
+  // Raised to the platform maximum as an immediate mitigation; the
+  // underlying fix (splitting page.tsx so cold-start compile cost drops) is
+  // separate follow-up work.
+  "limits": {
+    "cpu_ms": 30000
+  },
   // SENDATRACK does not currently expose the TrackFleet API over HTTPS.
   // This explicit MVP override is monitored by /api/health and can be removed if TLS becomes available.
   "vars": {
