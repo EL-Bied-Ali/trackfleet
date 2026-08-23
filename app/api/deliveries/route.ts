@@ -5,7 +5,7 @@ import { vehicleAliasStore } from "trackfleet-vehicle-alias-store";
 import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
-import { customerFacingEvent, whatsappConsentWithdrawn } from "../../lib/delivery-events";
+import { customerFacingEvent } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { computeDeliveryPrice, deliveryPriceCurrencyForOriginCountry } from "../../lib/delivery-pricing";
 import { getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate } from "../../lib/manual-arrival-duration.postgres";
@@ -152,18 +152,38 @@ function optionalNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+// A phone number can appear across several deliveries (repeat customer,
+// or as both sender and recipient over time). Consent must be resolved
+// per phone number, not per delivery: find the most recent grant and the
+// most recent withdrawal across every delivery where the number appears,
+// and let whichever happened last win. Stopping at the first matching
+// delivery (the previous implementation) meant a withdrawal recorded on
+// one delivery could be silently overridden by an older, still-active
+// grant sitting on a different delivery for the same number.
 async function rememberedConsentForPhone(deliveries: DeliveryRow[], phone: string) {
   if (!phone) return false;
+  let mostRecentGrant: Date | null = null;
+  let mostRecentWithdrawal: Date | null = null;
   for (const delivery of deliveries) {
     const customerMatches = normalizeCustomerPhone(delivery.contact) === phone;
     const recipientMatches = normalizeCustomerPhone(delivery.recipientContact ?? "") === phone;
     if (!customerMatches && !recipientMatches) continue;
+
+    if (customerMatches && delivery.whatsappOptIn === true && delivery.whatsappOptInAt) {
+      if (!mostRecentGrant || delivery.whatsappOptInAt > mostRecentGrant) mostRecentGrant = delivery.whatsappOptInAt;
+    }
+    if (recipientMatches && delivery.recipientWhatsappOptIn === true && delivery.recipientWhatsappOptInAt) {
+      if (!mostRecentGrant || delivery.recipientWhatsappOptInAt > mostRecentGrant) mostRecentGrant = delivery.recipientWhatsappOptInAt;
+    }
+
     const events = await store.listEvents(delivery.id);
-    if (whatsappConsentWithdrawn(events)) return false;
-    if ((customerMatches && delivery.whatsappOptIn === true)
-      || (recipientMatches && delivery.recipientWhatsappOptIn === true)) return true;
+    const withdrawal = events.find((event) => event.type === "WHATSAPP_OPT_OUT");
+    if (withdrawal && (!mostRecentWithdrawal || withdrawal.createdAt > mostRecentWithdrawal)) {
+      mostRecentWithdrawal = withdrawal.createdAt;
+    }
   }
-  return false;
+  if (!mostRecentGrant) return false;
+  return !mostRecentWithdrawal || mostRecentGrant > mostRecentWithdrawal;
 }
 
 async function idempotentReplayResponse(delivery: DeliveryRow, companyId: string) {
