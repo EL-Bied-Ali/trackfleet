@@ -1360,7 +1360,7 @@ export default function Home() {
                 </div>
               )
             ) : <>
-              <InteractiveFleetMap deliveries={mapDeliveriesWithOrigin} liveVehicles={liveVehiclesWithNumbers} selectedId={selectedId} selectedVehicleId={selectedVehicleId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setSelectedVehicleId(null); setShowPopover(true); }} onSelectVehicle={(vehicleId) => { setSelectedVehicleId(vehicleId); setShowPopover(true); }} onBackgroundClick={() => setShowPopover(false)} />
+              <InteractiveFleetMap deliveries={mapDeliveriesWithOrigin} liveVehicles={liveVehiclesWithNumbers} selectedId={showPopover ? selectedId : ""} selectedVehicleId={showPopover ? selectedVehicleId : null} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setSelectedVehicleId(null); setShowPopover(true); }} onSelectVehicle={(vehicleId) => { setSelectedVehicleId(vehicleId); setShowPopover(true); }} onBackgroundClick={() => setShowPopover(false)} />
               <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
               {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{truckNumberLabel(vehicle.id) && <b className="truck-number-badge" style={{ background: truckBadgeColor(vehicleTruckNumbers.get(vehicle.id) ?? null) }}>{truckNumberLabel(vehicle.id)}</b>}{vehicle.name}<small>{vehicle.speed} km/h</small></span>)}</div>}
             </>}
