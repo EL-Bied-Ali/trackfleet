@@ -178,6 +178,8 @@ a.nav-item { text-decoration: none; }
 .truck-popover::before { content: ""; position: absolute; left: -6px; top: 24px; width: 10px; height: 10px; border-left: 1px solid #dce4df; border-bottom: 1px solid #dce4df; background: white; transform: rotate(45deg); }
 .truck-popover > div:first-child { display: flex; align-items: center; }
 .truck-badge { width: 30px; height: 30px; display: grid; place-items: center; margin-right: 9px; border-radius: 8px; color: white; background: var(--green); font-size: 12px; }
+.truck-number-badge { display: inline-block; padding: 3px 8px; border-radius: 6px; color: white; font-size: 8px; font-weight: 750; font-style: normal; line-height: 1.4; white-space: nowrap; }
+.fleet-roster .truck-number-badge, .truck-popover .truck-number-badge { margin-right: 6px; }
 .truck-popover p { flex: 1; margin: 0; min-width: 0; }.truck-popover strong, .truck-popover small { display: block; }.truck-popover strong { font-size: 13px; }.truck-popover small { margin-top: 2px; color: #87928c; font-size: 11px; }
 .rename-trigger { border: 0; margin-left: 5px; padding: 0; color: #93a099; background: transparent; font-size: 11px; cursor: pointer; vertical-align: middle; }
 .rename-trigger:hover { color: var(--green); }
@@ -204,7 +206,7 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
 .group-header-row span { color: #7d8983; font-size: 8px; }
 .group-header-row span + span::before { content: "· "; }
 .group-header-row span.group-header-destination { color: #52635b; font-weight: 650; }
-.group-header-row .truck-badge { padding: 3px 8px; border-radius: 6px; color: white; font-size: 8px; font-weight: 750; }
+.group-header-row span.truck-number-badge { color: white; }
 .group-header-progress { display: inline-flex; align-items: center; }
 .group-header-progress .progress { gap: 5px; }
 .group-header-progress .progress > div { width: 46px; height: 3px; }
