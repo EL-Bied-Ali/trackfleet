@@ -198,5 +198,10 @@ export const store: DeliveryStore = {
     return primaryStore.linkVehicle(deliveryId, companyId, vehicle);
   },
 
+  async updateSchedule(deliveryId, companyId, input) {
+    if (await d1ReadFailoverActive()) return null;
+    return primaryStore.updateSchedule(deliveryId, companyId, input);
+  },
+
   create: primaryStore.create,
 };

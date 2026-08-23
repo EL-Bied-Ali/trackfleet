@@ -25,14 +25,17 @@ test("the delivery record round-trips a next-truck-departure date through the st
   assert.equal(reloaded.nextTruckDepartureAt?.toISOString(), nextTruckDepartureAt.toISOString());
 });
 
-test("POST /api/deliveries requires nextTruckDepartureAt, matching the existing plannedArrivalAt requirement", () => {
-  // Regression guard: the next-truck-departure date is a mandatory field on
-  // the creation form (a dispatcher/agency employee always logs it when
-  // registering a parcel), so the server must reject creation without it,
-  // the same way it already rejects a missing customer/destination/truck.
+test("POST /api/deliveries accepts a missing plannedArrivalAt/nextTruckDepartureAt -- both moved to the table editor", () => {
+  // Both dates were mandatory creation-form fields; reported as redundant to
+  // re-enter per parcel (like truck assignment) and moved to a table editor
+  // (see update-schedule.test.mjs) that calls the new update-schedule
+  // endpoint after creation instead. Both are already handled as nullable
+  // throughout delay detection, ETA estimation and tracking-link expiry.
   assert.match(route, /const nextTruckDepartureRaw = String\(payload\.nextTruckDepartureAt \?\? ""\)\.trim\(\);/);
   assert.match(route, /const parsedNextTruckDeparture = nextTruckDepartureRaw \? new Date\(nextTruckDepartureRaw\) : null;/);
-  assert.match(route, /if \(!customer \|\| !destination \|\| !truck \|\| \(!plannedArrivalAt && !validLegacyEta\) \|\| !nextTruckDepartureAt\) \{/);
+  assert.match(route, /if \(!customer \|\| !destination \|\| !truck\) \{/);
+  assert.doesNotMatch(route, /!plannedArrivalAt && !validLegacyEta/);
+  assert.doesNotMatch(route, /\|\| !nextTruckDepartureAt\)/);
   assert.match(route, /nextTruckDepartureAt,\s*\n\s*contact,/);
 });
 
@@ -43,19 +46,10 @@ test("idempotency payload matching includes nextTruckDepartureAt, not just plann
   assert.match(idempotency, /existingDeparture === requestedDeparture/);
 });
 
-test("the creation form pre-fills the next-truck-departure field from the last value used, per company/user", () => {
-  assert.match(page, /const \[defaultTruckDepartureAt, setDefaultTruckDepartureAt\] = useState\(""\);/);
-  assert.match(page, /setDefaultTruckDepartureAt\(saved\);/);
-  assert.match(page, /name="nextTruckDepartureAt" required type="datetime-local" defaultValue=\{defaultTruckDepartureAt\}/);
-});
-
-test("a stale pre-filled departure date (today or in the past) shows a reminder to update it", () => {
-  // Regression guard for the specific request: since most parcels entered
-  // close together wait on the same next relay truck, the field pre-fills
-  // with the last value -- but once that date has arrived, reusing it
-  // silently would be wrong. This must never be computed directly in the
-  // render body (an impure Date.now() call there breaks React's purity
-  // rule) -- it's set from the load effect and from the submit handler.
-  assert.match(page, /setTruckDepartureIsStale\(Boolean\(saved\) && new Date\(saved\)\.getTime\(\) <= Date\.now\(\)\);/);
-  assert.match(page, /truckDepartureIsStale \?/);
+test("the creation form no longer has date fields -- both are edited from the table afterward instead", () => {
+  assert.doesNotMatch(page, /name="plannedArrivalAt"/);
+  assert.doesNotMatch(page, /name="nextTruckDepartureAt"/);
+  assert.doesNotMatch(page, /defaultTruckDepartureAt/);
+  assert.doesNotMatch(page, /truckDepartureIsStale/);
+  assert.doesNotMatch(page, /truckDeparturePreferenceKey/);
 });

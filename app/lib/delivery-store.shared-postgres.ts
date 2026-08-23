@@ -280,6 +280,11 @@ export const store: DeliveryStore = {
     if (delivery) await mirrorDelivery(delivery);
     return delivery;
   },
+  async updateSchedule(deliveryId, companyId, input) {
+    const delivery = await baseStore.updateSchedule(deliveryId, companyId, input);
+    if (delivery) await mirrorDelivery(delivery);
+    return delivery;
+  },
   async recordEvent(deliveryId, type, progress) {
     const inserted = await baseStore.recordEvent(deliveryId, type, progress);
     if (inserted) await mirrorEvent(deliveryId, type, progress);

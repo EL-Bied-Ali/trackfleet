@@ -420,6 +420,17 @@ export const postgresStore: DeliveryStore = {
     const updated = await sql`SELECT * FROM deliveries WHERE id = ${delivery.id} AND company_id = ${companyId} LIMIT 1` as RawDelivery[];
     return updated[0] ? hydrate(updated[0]) : null;
   },
+
+  async updateSchedule(deliveryId, companyId, input) {
+    await ensureSchema();
+    const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];
+    if (!rows[0]) return null;
+    await sql`UPDATE deliveries SET
+      planned_arrival_at = ${input.plannedArrivalAt?.toISOString() ?? null}, next_truck_departure_at = ${input.nextTruckDepartureAt?.toISOString() ?? null}
+      WHERE id = ${deliveryId} AND company_id = ${companyId}`;
+    const updated = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} LIMIT 1` as RawDelivery[];
+    return updated[0] ? hydrate(updated[0]) : null;
+  },
   async recordEvent(deliveryId, type, progress) {
     await ensureSchema();
     const rows = await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at)

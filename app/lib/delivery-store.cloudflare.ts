@@ -121,6 +121,14 @@ export const store: DeliveryStore = {
     const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(delivery.id, companyId).first<RawDelivery>();
     return updated ? hydrate(updated) : null;
   },
+  async updateSchedule(deliveryId, companyId, input) {
+    const raw = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
+    if (!raw) return null;
+    await db().prepare(`UPDATE deliveries SET planned_arrival_at = ?, next_truck_departure_at = ? WHERE id = ? AND company_id = ?`)
+      .bind(input.plannedArrivalAt?.getTime() ?? null, input.nextTruckDepartureAt?.getTime() ?? null, deliveryId, companyId).run();
+    const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
+    return updated ? hydrate(updated) : null;
+  },
   async recordEvent(deliveryId, type, progress) {
     const result = await db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, ?, ?, ?)`).bind(deliveryId, type, progress, Date.now()).run();
     return Boolean(result.meta?.changes);
