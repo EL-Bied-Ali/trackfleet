@@ -422,11 +422,14 @@ export default function Home() {
     const sorted = [...integration.vehicles].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
     return new Map(sorted.map((vehicle, index) => [vehicle.id, index + 1]));
   }, [integration.vehicles]);
-  const truckLabelWithNumber = useCallback((name: string, vehicleId?: string | null) => {
+  // Returns just the "Camion N" badge text (or null when the vehicle has no
+  // stable number yet) -- callers render this in a colored truck-number-badge
+  // pill next to the plate/name, instead of folding it into one plain string,
+  // so every place a truck number is shown looks and behaves the same way.
+  const truckNumberLabel = useCallback((vehicleId?: string | null) => {
     const number = vehicleId ? vehicleTruckNumbers.get(vehicleId) : undefined;
-    if (!number) return name;
-    const numberLabel = locale === "fr" ? `Camion ${number}` : locale === "nl" ? `Vrachtwagen ${number}` : `Truck ${number}`;
-    return `${numberLabel} · ${name}`;
+    if (!number) return null;
+    return locale === "fr" ? `Camion ${number}` : locale === "nl" ? `Vrachtwagen ${number}` : `Truck ${number}`;
   }, [locale, vehicleTruckNumbers]);
   const driverLabel = (driver: string) => driver === "To be assigned"
     ? (locale === "fr" ? "Chauffeur à affecter" : locale === "nl" ? "Chauffeur toe te wijzen" : driver)
@@ -479,7 +482,7 @@ export default function Home() {
         group = {
           label: unassigned ? unassignedLabel : delivery.truck,
           truckNumber,
-          numberLabel: truckNumber ? (locale === "fr" ? `Camion ${truckNumber}` : locale === "nl" ? `Vrachtwagen ${truckNumber}` : `Truck ${truckNumber}`) : null,
+          numberLabel: truckNumberLabel(delivery.sendatrackVehicleId),
           sortKey: unassigned ? Number.MAX_SAFE_INTEGER : (truckNumber ?? Number.MAX_SAFE_INTEGER - 1),
           deliveries: [],
         };
@@ -507,7 +510,7 @@ export default function Home() {
         return { ...group, uniformDestination };
       })
       .sort((a, b) => a.sortKey - b.sortKey || a.label.localeCompare(b.label));
-  }, [visibleDeliveries, locale, vehicleTruckNumbers]);
+  }, [visibleDeliveries, locale, vehicleTruckNumbers, truckNumberLabel]);
   const mapDeliveries = integration.connected
     ? deliveries.filter((delivery) => delivery.gpsSource === "sendatrack")
     : deliveries;
@@ -1057,7 +1060,7 @@ export default function Home() {
         </div> : <table>
           <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th><th>{locale === "fr" ? "Destinataire" : locale === "nl" ? "Ontvanger" : "Recipient"}</th>{company?.role === "dispatcher" && <th>{locale === "fr" ? "Agence" : locale === "nl" ? "Agentschap" : "Agency"}</th>}<th>{t.tableStatus}</th><th>{t.tableEta}</th><th>{t.tableProgress}</th><th className="col-actions"><span className="sr-only">{t.tableActions}</span></th></tr></thead>
           {groupedDeliveries.map((group) => <tbody key={group.label}>
-            <tr className="group-header-row"><td colSpan={100}>{group.numberLabel && <span className="truck-badge" style={{ background: truckBadgeColor(group.truckNumber) }}>{group.numberLabel}</span>}<strong>{group.label}</strong><span>{group.deliveries.length} {locale === "fr" ? "colis" : locale === "nl" ? "pakketten" : group.deliveries.length === 1 ? "parcel" : "parcels"}</span>{group.uniformDestination && <>
+            <tr className="group-header-row"><td colSpan={100}>{group.numberLabel && <span className="truck-number-badge" style={{ background: truckBadgeColor(group.truckNumber) }}>{group.numberLabel}</span>}<strong>{group.label}</strong><span>{group.deliveries.length} {locale === "fr" ? "colis" : locale === "nl" ? "pakketten" : group.deliveries.length === 1 ? "parcel" : "parcels"}</span>{group.uniformDestination && <>
               <span className="group-header-destination">{group.uniformDestination.destination}</span>
               <span>{group.uniformDestination.estimatedArrivalAt ? new Date(group.uniformDestination.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : group.uniformDestination.eta}</span>
               <span className="group-header-progress"><div className="progress"><div><i style={{ width: `${group.uniformDestination.progress}%` }} /></div><span>{group.uniformDestination.progress}%</span></div></span>
@@ -1149,13 +1152,13 @@ export default function Home() {
             ) : <>
               <InteractiveFleetMap deliveries={mapDeliveriesWithOrigin} liveVehicles={liveVehiclesWithNumbers} selectedId={selectedId} label={t.liveFleet} onSelect={(deliveryId) => { setSelectedId(deliveryId); setShowPopover(true); }} onBackgroundClick={() => setShowPopover(false)} />
               <div className="map-status"><i className={integration.connected ? "" : "fallback"} /> {integration.connected ? t.sendatrackLive(integration.vehicleCount) : t.vehiclesReporting}</div>
-              {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{truckLabelWithNumber(vehicle.name, vehicle.id)}<small>{vehicle.speed} km/h</small></span>)}</div>}
+              {integration.connected && <div className="fleet-roster" aria-label={locale === "fr" ? "Tous les camions connectés" : locale === "nl" ? "Alle verbonden voertuigen" : "All connected vehicles"}>{integration.vehicles.map((vehicle) => <span key={vehicle.id}><i />{truckNumberLabel(vehicle.id) && <b className="truck-number-badge" style={{ background: truckBadgeColor(vehicleTruckNumbers.get(vehicle.id) ?? null) }}>{truckNumberLabel(vehicle.id)}</b>}{vehicle.name}<small>{vehicle.speed} km/h</small></span>)}</div>}
             </>}
             {!agencyMapUnavailable && showPopover && deliveries.length > 0 && <div className="truck-popover">
               <div><span className="truck-badge">▰</span><p>
                 {renamingVehicleId && renamingVehicleId === selected.sendatrackVehicleId
                   ? <span className="rename-truck"><input value={renameDraft} maxLength={60} disabled={renameBusy} onChange={(event) => setRenameDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void renameVehicle(renamingVehicleId); if (event.key === "Escape") setRenamingVehicleId(null); }} /><button type="button" disabled={renameBusy} aria-label={locale === "fr" ? "Confirmer le nom" : locale === "nl" ? "Naam bevestigen" : "Confirm name"} onClick={() => void renameVehicle(renamingVehicleId)}>✓</button><button type="button" disabled={renameBusy} aria-label={t.cancel} onClick={() => setRenamingVehicleId(null)}>×</button></span>
-                  : <><strong>{truckLabelWithNumber(vehicleLabel(selected), selected.sendatrackVehicleId)}</strong>{company?.role === "dispatcher" && !isUnassignedVehicle(selected) && integration.vehicles.some((vehicle) => vehicle.id === selected.sendatrackVehicleId) && <button type="button" className="rename-trigger" aria-label={locale === "fr" ? "Renommer ce véhicule" : locale === "nl" ? "Dit voertuig hernoemen" : "Rename this vehicle"} onClick={() => { setRenamingVehicleId(selected.sendatrackVehicleId ?? null); setRenameDraft(selected.truck); }}>✎</button>}</>}
+                  : <><strong>{truckNumberLabel(selected.sendatrackVehicleId) && <b className="truck-number-badge" style={{ background: truckBadgeColor((selected.sendatrackVehicleId ? vehicleTruckNumbers.get(selected.sendatrackVehicleId) : undefined) ?? null) }}>{truckNumberLabel(selected.sendatrackVehicleId)}</b>}{vehicleLabel(selected)}</strong>{company?.role === "dispatcher" && !isUnassignedVehicle(selected) && integration.vehicles.some((vehicle) => vehicle.id === selected.sendatrackVehicleId) && <button type="button" className="rename-trigger" aria-label={locale === "fr" ? "Renommer ce véhicule" : locale === "nl" ? "Dit voertuig hernoemen" : "Rename this vehicle"} onClick={() => { setRenamingVehicleId(selected.sendatrackVehicleId ?? null); setRenameDraft(selected.truck); }}>✎</button>}</>}
                 <small>{isUnassignedVehicle(selected) ? (locale === "fr" ? "Aucun camion confirmé" : locale === "nl" ? "Nog geen voertuig bevestigd" : "No truck confirmed yet") : driverLabel(selected.driver)}</small>
               </p><button aria-label={t.closeDetails} onClick={() => setShowPopover(false)}>×</button></div>
               <dl><div><dt>{t.status}</dt><dd><i />{t.statuses[selected.status]}</dd></div><div><dt>{t.delivery}</dt><dd>{selected.id}</dd></div><div><dt>{t.eta}</dt><dd>{selected.estimatedArrivalAt ? new Date(selected.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : selected.eta}</dd></div>{selected.weightKg != null && <div><dt>{locale === "fr" ? "Poids" : locale === "nl" ? "Gewicht" : "Weight"}</dt><dd>{selected.weightKg.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { maximumFractionDigits: 3 })} kg</dd></div>}{selected.priceAmount != null && selected.priceCurrency && <div><dt>{locale === "fr" ? "Prix" : locale === "nl" ? "Prijs" : "Price"}</dt><dd>{selected.priceAmount.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {selected.priceCurrency}</dd></div>}</dl>{selected.estimatedArrivalAt && <div className="eta-explanation"><strong>{selectedEtaExplanation.sourceLabel}</strong><span>{selectedEtaExplanation.confidenceLabel}{selected.etaSource === "route-history" && selected.etaHistoricalSpeedKmh ? ` · ${selected.etaHistoricalSpeedKmh} km/h` : ""}</span></div>}
