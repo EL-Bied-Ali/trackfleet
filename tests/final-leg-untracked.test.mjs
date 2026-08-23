@@ -21,8 +21,25 @@ test("both customer and dispatcher ETA displays resolve the untracked-final-leg 
   // per-company data, so it must be resolved via staticKnownSite(id), not
   // the dynamic `destinationSite` lookup.
   assert.match(files["app/page.tsx"], /import \{ knownSite as staticKnownSite \} from "\.\/lib\/known-sites";/);
-  assert.match(files["app/page.tsx"], /customerEtaNote\(\{[\s\S]{0,200}finalLegTrackingUnavailable: staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true/);
+  // The customer page resolves this once into a `relayInEffect` variable
+  // (reused by the map-replacement UI too -- see the CTM relay test below)
+  // rather than repeating the staticKnownSite(...) lookup inline.
+  assert.match(files["app/page.tsx"], /const relayInEffect = staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true;/);
+  assert.match(files["app/page.tsx"], /customerEtaNote\(\{[\s\S]{0,200}finalLegTrackingUnavailable: relayInEffect,/);
   assert.match(files["app/page.tsx"], /etaExplanation\(\{ source: selected\.etaSource, confidence: selected\.etaConfidence, historyTrips: selected\.etaHistoryTrips, finalLegTrackingUnavailable: staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true/);
+});
+
+test("the customer tracking page replaces the live map and GPS stat cards with a CTM relay notice once the destination is past the confirmed hub", () => {
+  // Recommended design (confirmed with the client): once relay begins, the
+  // map/stats are actively misleading -- a frozen truck marker and a stale
+  // "speed: 87 km/h" reading look like live tracking that just stopped
+  // working, rather than what's actually happening (a different carrier now
+  // has the parcel). Replaced outright rather than shown alongside the CTM
+  // note.
+  const page = files["app/page.tsx"];
+  assert.match(page, /\{!relayInEffect && <div style=\{\{ display: "grid", gridTemplateColumns: "repeat\(auto-fit, minmax\(160px, 1fr\)\)"/);
+  assert.match(page, /\{relayInEffect \? <div className="map customer-map relay-notice">/);
+  assert.match(page, /<InteractiveFleetMap deliveries=\{deliveries\} selectedId=\{selectedId\} customerMode/);
 });
 
 test("all three delivery-enrichment call sites (list, public tracking, and just-created) thread a manual-arrival duration estimate through", () => {

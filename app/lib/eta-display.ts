@@ -40,9 +40,9 @@ export function etaExplanation(input: {
     if (typeof input.manualArrivalEstimateHours === "number" && sampleCount >= MANUAL_ARRIVAL_MINIMUM_SAMPLES) {
       const duration = formatDurationEstimate(input.manualArrivalEstimateHours, locale);
       const sourceLabel = {
-        fr: `Estimation employé · ~${duration}`,
-        en: `Employee-reported estimate · ~${duration}`,
-        nl: `Schatting werknemer · ~${duration}`,
+        fr: `Relais CTM · ~${duration}`,
+        en: `CTM relay · ~${duration}`,
+        nl: `CTM-relais · ~${duration}`,
       }[locale];
       const confidenceLabel = {
         fr: `Basé sur ${sampleCount} arrivée${sampleCount > 1 ? "s" : ""} confirmée${sampleCount > 1 ? "s" : ""}`,
@@ -51,10 +51,14 @@ export function etaExplanation(input: {
       }[locale];
       return { sourceLabel, confidenceLabel };
     }
+    // No confirmed-arrival history yet for this destination -- fall back to
+    // a plain "the carrier changes here" note with a generic ~24h estimate
+    // rather than pretending to no estimate at all (matches how the relay
+    // is actually described operationally).
     const untrackedLegLabel = {
-      fr: "Dernière étape non suivie par GPS",
-      en: "Final leg not GPS-tracked",
-      nl: "Laatste traject niet GPS-gevolgd",
+      fr: "Relais CTM · ~24 h",
+      en: "CTM relay · ~24h",
+      nl: "CTM-relais · ~24u",
     };
     return { sourceLabel: untrackedLegLabel[locale], confidenceLabel: "" };
   }
@@ -112,15 +116,15 @@ export function customerEtaNote(input: {
     if (typeof input.manualArrivalEstimateHours === "number" && sampleCount >= MANUAL_ARRIVAL_MINIMUM_SAMPLES) {
       const duration = formatDurationEstimate(input.manualArrivalEstimateHours, locale);
       return {
-        fr: `Estimation : généralement environ ${duration} (${sampleCount} livraison${sampleCount > 1 ? "s" : ""} précédente${sampleCount > 1 ? "s" : ""})`,
-        en: `Estimate: usually about ${duration} (based on ${sampleCount} previous deliver${sampleCount === 1 ? "y" : "ies"})`,
-        nl: `Schatting: meestal ongeveer ${duration} (op basis van ${sampleCount} eerdere levering${sampleCount === 1 ? "" : "en"})`,
+        fr: `La CTM a pris le relais pour cette étape · généralement environ ${duration} (${sampleCount} livraison${sampleCount > 1 ? "s" : ""} précédente${sampleCount > 1 ? "s" : ""})`,
+        en: `CTM has taken over for this leg · usually about ${duration} (based on ${sampleCount} previous deliver${sampleCount === 1 ? "y" : "ies"})`,
+        nl: `CTM heeft dit traject overgenomen · meestal ongeveer ${duration} (op basis van ${sampleCount} eerdere levering${sampleCount === 1 ? "" : "en"})`,
       }[locale];
     }
     const untrackedLegCopy = {
-      fr: "Suivi GPS en direct non disponible pour la dernière étape",
-      en: "Live GPS tracking is not available for the final leg",
-      nl: "Live GPS-tracking is niet beschikbaar voor het laatste traject",
+      fr: "La CTM a pris le relais pour cette étape · arrivée prévue sous ~24 h",
+      en: "CTM has taken over for this leg · arrival expected within ~24h",
+      nl: "CTM heeft dit traject overgenomen · aankomst verwacht binnen ~24u",
     };
     return untrackedLegCopy[locale];
   }
