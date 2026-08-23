@@ -18,7 +18,11 @@ test("each vehicle gets a stable, friendly 'Truck N' tag shown alongside its rea
 
 test("the truck number tag appears in the fleet roster, the delivery table's truck-group headers, and the truck popover", () => {
   assert.match(page, /truckLabelWithNumber\(vehicle\.name, vehicle\.id\)/);
-  assert.match(page, /label: unassigned \? unassignedLabel : truckLabelWithNumber\(delivery\.truck, delivery\.sendatrackVehicleId\)/);
+  // In the table specifically, the number is now its own colored badge
+  // (see delivery-truck-grouping.test.mjs) rather than folded into one
+  // plain-text label string -- roster and popover still use the plain
+  // combined label.
+  assert.match(page, /numberLabel: truckNumber \? \(locale === "fr" \? `Camion \$\{truckNumber\}`/);
   assert.match(page, /truckLabelWithNumber\(vehicleLabel\(selected\), selected\.sendatrackVehicleId\)/);
 });
 

@@ -204,6 +204,7 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
 .group-header-row span { color: #7d8983; font-size: 8px; }
 .group-header-row span + span::before { content: "· "; }
 .group-header-row span.group-header-destination { color: #52635b; font-weight: 650; }
+.group-header-row .truck-badge { padding: 3px 8px; border-radius: 6px; color: white; font-size: 8px; font-weight: 750; }
 .group-header-progress { display: inline-flex; align-items: center; }
 .group-header-progress .progress { gap: 5px; }
 .group-header-progress .progress > div { width: 46px; height: 3px; }
@@ -211,7 +212,7 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
 tbody tr:last-child td { border-bottom: 0; }.row-selected td { background: #fbfdfc; }
 tbody tr:focus-visible { outline: 2px solid #4c987b; outline-offset: -2px; }
 td > strong, td > span { display: block; }td > strong { font-size: 10px; }td > span { margin-top: 3px; color: #96a09b; font-size: 8px; }
-.customer-cell { display: flex; align-items: center; gap: 8px; }.customer-cell i { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; color: white; font-size: 7px; font-style: normal; font-weight: 750; }
+.customer-cell { display: flex; align-items: center; gap: 8px; }
 .contact-cell-wrap { position: relative; }
 .contact-trigger { display: flex; align-items: center; width: 100%; border: 0; background: transparent; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .contact-trigger:hover strong, .contact-trigger:hover span { text-decoration: underline; }
