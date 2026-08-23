@@ -60,8 +60,12 @@ test("the update-schedule endpoint is dispatcher-only, same-origin protected, an
 });
 
 test("the delivery table has a per-row schedule editor (dispatcher only) that pre-fills from the delivery's current dates", () => {
-  assert.match(page, /const \[scheduleEditorDeliveryId, setScheduleEditorDeliveryId\] = useState<string \| null>\(null\);/);
-  assert.match(page, /className="more-button schedule-editor-trigger"/);
+  // Shares its trigger and popover with the truck editor (see
+  // delivery-truck-table-editor.test.mjs) -- both dates and the truck are
+  // part of the same "journey" for a delivery, so editing them no longer
+  // needs two separate icons.
+  assert.match(page, /const \[journeyEditorDeliveryId, setJourneyEditorDeliveryId\] = useState<string \| null>\(null\);/);
+  assert.match(page, /className="more-button journey-editor-trigger"/);
   assert.match(page, /setScheduleEditorPlannedArrival\(opening \? toDatetimeLocalValue\(delivery\.plannedArrivalAt\) : ""\);/);
   assert.match(page, /setScheduleEditorNextDeparture\(opening \? toDatetimeLocalValue\(delivery\.nextTruckDepartureAt\) : ""\);/);
   assert.match(page, /async function updateDeliverySchedule\(deliveryId: string, plannedArrivalAt: string, nextTruckDepartureAt: string\)/);
