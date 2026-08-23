@@ -24,7 +24,7 @@ test("the Livraison column leads with the friendly registration date/time, with 
   // not the first thing your eye lands on -- same pattern as the vehicle
   // cell (plate secondary to the friendly truck number).
   assert.match(page, /const registeredAtLabel = \(delivery: Delivery\) => delivery\.createdAt/);
-  assert.match(page, /<td><strong>\{registeredAtLabel\(delivery\)\}<\/strong><span>\{delivery\.id\}<\/span><\/td>/);
+  assert.match(page, /<td><strong>\{registeredAtLabel\(delivery\)\}<\/strong><span>\{delivery\.id\}<\/span>\{delivery\.shipmentId/);
   assert.doesNotMatch(page, /deliveryDisplayLabel/);
 });
 

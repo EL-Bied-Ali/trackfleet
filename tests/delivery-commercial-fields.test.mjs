@@ -61,9 +61,14 @@ test("commercial fields persist through Postgres, D1 mirror, standby and reconci
 });
 
 test("weight is entered by the dispatcher; price is shown as a computed preview, not a free-form field", () => {
+  // Weight/price inputs moved from FormData fields to controlled React
+  // state (one row per parcel -- see delivery-multi-parcel.test.mjs), so
+  // they're no longer plain name="weightKg" inputs; the values are read
+  // from parcelDrafts state and sent as weightKg/manualPriceAmount in the
+  // request body instead.
   const page = files["app/page.tsx"];
   const publicView = files["app/lib/public-delivery-view.ts"];
-  assert.match(page, /name="weightKg"/);
+  assert.match(page, /value=\{parcel\.weightKg\}/);
   assert.doesNotMatch(page, /name="priceAmount"/);
   assert.doesNotMatch(page, /name="priceCurrency"/);
   assert.match(page, /computeDeliveryPrice\(/);
@@ -86,6 +91,6 @@ test("bulky items without a declared weight let the dispatcher enter a manual pr
   assert.match(route, /weightKg !== null\s*\n\s*\? computeDeliveryPrice\(weightKg, originSite\?\.country \?\? null\)\s*\n\s*: manualPriceInput !== null && manualPriceInput > 0/);
   assert.doesNotMatch(route, /payload\.priceAmount/);
   assert.doesNotMatch(route, /payload\.priceCurrency/);
-  assert.match(page, /name="manualPriceAmount"/);
-  assert.match(page, /weightDraft \? \(locale === "fr" \? "Prix calculé"/);
+  assert.match(page, /value=\{parcel\.manualPriceAmount\}/);
+  assert.match(page, /parcel\.weightKg \? \(locale === "fr" \? "Prix calculé"/);
 });

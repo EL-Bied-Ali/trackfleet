@@ -47,6 +47,7 @@ type RawDelivery = {
   company_id: string;
   tracking_token: string | null;
   trip_id: string | null;
+  shipment_id: string | null;
   created_at: string | Date;
 };
 
@@ -95,6 +96,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     companyId: row.company_id,
     trackingToken: row.tracking_token,
     tripId: row.trip_id ?? null,
+    shipmentId: row.shipment_id ?? null,
     createdAt: new Date(row.created_at),
   };
 }

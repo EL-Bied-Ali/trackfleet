@@ -53,6 +53,7 @@ type RawDelivery = {
   company_id: string;
   tracking_token: string | null;
   trip_id: string | null;
+  shipment_id: string | null;
   created_at: string | Date;
 };
 
@@ -114,6 +115,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     companyId: row.company_id,
     trackingToken: row.tracking_token,
     tripId: row.trip_id ?? null,
+    shipmentId: row.shipment_id ?? null,
     createdAt: new Date(row.created_at),
   };
 }
@@ -191,6 +193,7 @@ async function ensureSchema() {
       gps_source text NOT NULL DEFAULT 'simulation',
       company_id text NOT NULL DEFAULT 'demo',
       tracking_token text UNIQUE,
+      shipment_id text,
       created_at timestamptz NOT NULL
     )`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS origin_site_id text`;
@@ -208,8 +211,10 @@ async function ensureSchema() {
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS price_amount numeric(12,2)`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS price_currency text`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS next_truck_departure_at timestamptz`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS shipment_id text`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_shipment ON deliveries(company_id, shipment_id)`;
     await sql`CREATE TABLE IF NOT EXISTS delivery_events (
       delivery_id text NOT NULL,
       type text NOT NULL,
@@ -624,11 +629,11 @@ export const postgresStore: DeliveryStore = {
     await sql`INSERT INTO deliveries (
       id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
       truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
-      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at
+      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at
     ) VALUES (
       ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
       ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
-      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.createdAt.toISOString()}
+      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}
     )`;
     return delivery;
   },
