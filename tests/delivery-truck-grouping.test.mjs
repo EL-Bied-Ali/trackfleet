@@ -33,3 +33,28 @@ test("the group header row gets its own mobile card-layout treatment instead of 
   assert.match(css, /tbody tr\.group-header-row \{ display: block;/);
   assert.match(css, /\.group-header-row td \{ height: auto; padding: 9px 15px; background: #f5f8f6;/);
 });
+
+test("destination/ETA/progress are hoisted into the group header only when every parcel in the truck's group shares the same destination", () => {
+  // Departure/arrival depend on the truck, not the individual parcel -- when
+  // a truck's whole group is headed to one destination, repeating that
+  // destination/ETA/progress on every row is the same duplication the old
+  // vehicle column had. A truck relaying parcels to several destinations
+  // keeps those columns per row since they're genuinely different there.
+  assert.match(page, /const firstDestination = group\.deliveries\[0\]\?\.destination \|\| null;/);
+  assert.match(page, /const uniformDestination = firstDestination && group\.deliveries\.every\(\(delivery\) => delivery\.destination === firstDestination\)\s*\n\s*\? group\.deliveries\[0\]\s*\n\s*: null;/);
+  assert.match(page, /return \{ \.\.\.group, uniformDestination \};/);
+});
+
+test("the group header shows the hoisted destination/ETA/progress, and per-row cells go blank instead of repeating it", () => {
+  assert.match(page, /\{group\.uniformDestination && <>/);
+  assert.match(page, /<span className="group-header-destination">\{group\.uniformDestination\.destination\}<\/span>/);
+  assert.match(page, /<span className="group-header-progress"><div className="progress">/);
+  assert.match(page, /\{group\.uniformDestination \? <span className="cell-hoisted">—<\/span> : <><strong>/);
+  assert.match(page, /\{group\.uniformDestination \? <span className="cell-hoisted">—<\/span> : <div className="progress">/);
+});
+
+test("the hoisted header pieces and blanked cells have their own CSS instead of relying on the base group-header text style", () => {
+  assert.match(css, /\.group-header-row span\.group-header-destination \{/);
+  assert.match(css, /\.group-header-progress \{/);
+  assert.match(css, /\.cell-hoisted \{/);
+});
