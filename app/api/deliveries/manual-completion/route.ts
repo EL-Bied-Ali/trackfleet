@@ -4,6 +4,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { arrivalConfirmationRecommendation } from "../../../lib/arrival-confirmation";
 import { getCompanySession } from "../../../lib/company-auth";
 import { parseUnloadGraceMinutes } from "../../../lib/delivery-arrival";
+import { knownSite } from "../../../lib/known-sites";
 import { processPendingNotifications } from "../../../lib/notification-runner";
 import { readJsonObject, invalidJsonResponse } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
@@ -22,7 +23,11 @@ export async function GET(request: Request) {
     : active;
   const deliveries = await Promise.all(visible.map(async (delivery) => {
     const events = await store.listEvents(delivery.id);
-    const recommendation = arrivalConfirmationRecommendation({ ...delivery, events });
+    const recommendation = arrivalConfirmationRecommendation({
+      ...delivery,
+      events,
+      finalLegTrackingUnavailable: knownSite(delivery.destinationSiteId)?.finalLegTrackingUnavailable === true,
+    });
     return {
       id: delivery.id,
       customer: delivery.customer,
