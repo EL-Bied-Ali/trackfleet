@@ -12,14 +12,19 @@ test("the deliveries table has a search box that filters by customer, recipient 
   assert.match(page, /\[delivery\.id, delivery\.customer, delivery\.recipientName, delivery\.contact, delivery\.recipientContact, delivery\.destination\]/);
 });
 
-test("the Livraison column shows the real TF-id with its registration date, not a repeating departure-date label", () => {
+test("the Livraison column leads with the friendly registration date/time, with the real TF-id as the secondary reference", () => {
   // The departure-date + origin-country label repeated across most rows
   // (many parcels naturally share a departure day/country), which read as
   // noise rather than a useful identifier -- reported live. Replaced with
   // the registration timestamp, and repetition is now handled by grouping
   // rows under their shared truck instead (see delivery-truck-grouping.test.mjs).
+  // The registration date leads (bold/primary) since it reads at a glance
+  // and differs row to row even within one truck's group; the real id stays
+  // fully visible underneath for tracking-link/support lookups, it's just
+  // not the first thing your eye lands on -- same pattern as the vehicle
+  // cell (plate secondary to the friendly truck number).
   assert.match(page, /const registeredAtLabel = \(delivery: Delivery\) => delivery\.createdAt/);
-  assert.match(page, /<td><strong>\{delivery\.id\}<\/strong><span>\{registeredAtLabel\(delivery\)\}<\/span><\/td>/);
+  assert.match(page, /<td><strong>\{registeredAtLabel\(delivery\)\}<\/strong><span>\{delivery\.id\}<\/span><\/td>/);
   assert.doesNotMatch(page, /deliveryDisplayLabel/);
 });
 
