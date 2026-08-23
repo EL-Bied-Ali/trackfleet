@@ -133,7 +133,7 @@ export default function BulkImportPage() {
           {fileName && <span style={{ color: "#6b7280" }}>{fileName}</span>}
         </div>
         <p style={{ marginBottom: 0, color: "#6b7280", fontSize: 14 }}>
-          Colonnes obligatoires : <code>customer</code>, <code>destination</code>, <code>planned_arrival_at</code>, <code>origin_site_id</code> (nécessaire pour calculer le prix). Le camion et les autres colonnes sont facultatifs.
+          Colonnes obligatoires : <code>customer</code>, <code>destination</code>, <code>origin_site_id</code> (nécessaire pour calculer le prix). Le camion, les dates d’arrivée/départ et les autres colonnes sont facultatifs -- les dates peuvent être renseignées plus tard depuis le tableau des livraisons.
         </p>
       </section>
 
@@ -179,7 +179,7 @@ export default function BulkImportPage() {
                       const { priceAmount, priceCurrency } = computeDeliveryPrice(row.weightKg, originCountry);
                       return priceAmount == null ? "—" : `${priceAmount.toFixed(2)} ${priceCurrency}`;
                     })()}</td>
-                    <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{new Date(row.plannedArrivalAt).toLocaleString()}</td>
+                    <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.plannedArrivalAt ? new Date(row.plannedArrivalAt).toLocaleString() : "—"}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.truck === UNASSIGNED_TRUCK ? "À affecter" : row.truck}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.contact || "—"}</td>
                     <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{row.whatsappOptIn ? "Oui" : "Non"}</td>
