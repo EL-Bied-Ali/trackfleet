@@ -52,26 +52,35 @@ test("the group header row gets its own mobile card-layout treatment instead of 
   assert.match(css, /\.group-header-row td \{ height: auto; padding: 9px 15px; background: #f5f8f6;/);
 });
 
-test("destination/ETA/progress are hoisted into the group header only when a truck has more than one parcel and they all share the same destination", () => {
-  // Departure/arrival depend on the truck, not the individual parcel -- when
-  // a truck's whole group is headed to one destination, repeating that
-  // destination/ETA/progress on every row is the same duplication the old
-  // vehicle column had. A truck relaying parcels to several destinations
-  // keeps those columns per row since they're genuinely different there.
-  // A lone parcel has nothing to deduplicate against, so it must NOT hoist
-  // -- doing so just adds a header row for no space savings and hides the
-  // arrival/progress info from the only row that has it (reported live:
-  // single-parcel groups were spanning two lines with the data pulled up
-  // into an otherwise-empty-feeling header).
+test("status/destination/ETA/progress are hoisted into the group header only when a truck has more than one parcel and they all share the same destination AND status", () => {
+  // Departure/arrival/status depend on the truck, not the individual parcel
+  // -- when a truck's whole group is headed to one destination, repeating
+  // that status/destination/ETA/progress on every row is the same
+  // duplication the old vehicle column had. A truck relaying parcels to
+  // several destinations keeps those columns per row since they're
+  // genuinely different there. A lone parcel has nothing to deduplicate
+  // against, so it must NOT hoist -- doing so just adds a header row for no
+  // space savings and hides the arrival/progress info from the only row
+  // that has it (reported live: single-parcel groups were spanning two
+  // lines with the data pulled up into an otherwise-empty-feeling header).
+  // Status is checked too (not just destination), reported live as still
+  // feeling redundant/confusing once destination/ETA/progress already
+  // hoisted but status kept repeating -- and status must genuinely match
+  // too, since a dispatcher can manually complete one parcel of a group
+  // ahead of its truck-mates, at which point hoisting one shared status
+  // would misrepresent the other.
   assert.match(page, /const firstDestination = group\.deliveries\[0\]\?\.destination \|\| null;/);
-  assert.match(page, /const uniformDestination = group\.deliveries\.length > 1 && firstDestination && group\.deliveries\.every\(\(delivery\) => delivery\.destination === firstDestination\)\s*\n\s*\? group\.deliveries\[0\]\s*\n\s*: null;/);
+  assert.match(page, /const firstStatus = group\.deliveries\[0\]\?\.status \?\? null;/);
+  assert.match(page, /const uniformDestination = group\.deliveries\.length > 1\s*\n\s*&& firstDestination\s*\n\s*&& group\.deliveries\.every\(\(delivery\) => delivery\.destination === firstDestination && delivery\.status === firstStatus\)\s*\n\s*\? group\.deliveries\[0\]\s*\n\s*: null;/);
   assert.match(page, /return \{ \.\.\.group, uniformDestination \};/);
 });
 
-test("the group header shows the hoisted destination/ETA/progress, and per-row cells go blank instead of repeating it", () => {
+test("the group header shows the hoisted status/destination/ETA/progress, and per-row cells go fully blank instead of repeating any of it", () => {
   assert.match(page, /\{group\.uniformDestination && <>/);
+  assert.match(page, /<span className=\{statusClass\[group\.uniformDestination\.status\]\}><i \/>\{t\.statuses\[group\.uniformDestination\.status\]\}<\/span>/);
   assert.match(page, /<span className="group-header-destination">\{group\.uniformDestination\.destination\}<\/span>/);
   assert.match(page, /<span className="group-header-progress"><div className="progress">/);
+  assert.match(page, /\{!group\.uniformDestination && <span className=\{statusClass\[delivery\.status\]\}>/);
   assert.match(page, /\{!group\.uniformDestination && <div className="progress">/);
   assert.match(page, /\{group\.uniformDestination \? <span className="cell-hoisted">—<\/span> : <span className="journey-eta"><strong>/);
 });
