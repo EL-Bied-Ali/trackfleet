@@ -11,7 +11,10 @@ test("unassigned parcels are excluded from active trip planning", () => {
 });
 
 test("creation UI defaults to assign later and allows offline unassigned parcels", () => {
-  assert.match(page, /defaultValue=\{UNASSIGNED_VEHICLE_ID\}/);
+  // The vehicle select became a controlled input (value/onChange) to drive
+  // the truck-availability conflict warning -- see delivery-truck-conflict-warning.test.mjs.
+  assert.match(page, /const \[creationVehicleId, setCreationVehicleId\] = useState\(UNASSIGNED_VEHICLE_ID\);/);
+  assert.match(page, /select name="sendatrackVehicleId" value=\{creationVehicleId\}/);
   assert.match(page, /Assign later \(recommended\)/);
   assert.doesNotMatch(page, /name="manualTruck" required/);
 });
