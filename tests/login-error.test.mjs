@@ -49,13 +49,13 @@ test("public login uses the shared same-origin guard", () => {
 test("public login rate limits repeated provider authentication attempts", () => {
   assert.match(loginRoute, /loginWindowMs = 10 \* 60_000/);
   assert.match(loginRoute, /maxLoginAttempts = 8/);
-  assert.match(loginRoute, /x-forwarded-for/);
+  assert.match(loginRoute, /clientAddress/);
   assert.match(loginRoute, /too_many_login_attempts/);
   assert.match(loginRoute, /retry-after/);
 });
 
 test("successful login clears local and distributed attempt buckets", () => {
-  assert.match(loginRoute, /recentLoginAttempts\.delete\(clientKey\(request\)\)/);
+  assert.match(loginRoute, /recentLoginAttempts\.delete\(clientAddress\(request\)\)/);
   assert.match(loginRoute, /await clearLoginAttempts\(request\)/);
   const sessionAt = loginRoute.indexOf("await createCompanySession");
   const resetAt = loginRoute.indexOf("await resetLoginAttempts(request)");

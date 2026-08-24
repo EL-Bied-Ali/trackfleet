@@ -1,5 +1,6 @@
 import { consumeLoginAttempt, clearLoginAttempts } from "trackfleet-login-rate-limit";
 import { createCompanySession } from "../../../lib/company-auth";
+import { clientAddress } from "../../../lib/login-rate-limit-key";
 import { publicLoginFailure } from "../../../lib/login-error";
 import { readJsonObject } from "../../../lib/request-json";
 import { requestIsSameOrigin } from "../../../lib/request-origin";
@@ -7,11 +8,6 @@ import { requestIsSameOrigin } from "../../../lib/request-origin";
 const loginWindowMs = 10 * 60_000;
 const maxLoginAttempts = 8;
 const recentLoginAttempts = new Map<string, number[]>();
-
-function clientKey(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip")?.trim() || "unknown";
-}
 
 function allowLocalLoginAttempt(key: string) {
   const now = Date.now();
@@ -43,14 +39,14 @@ async function loginAttemptDecision(request: Request) {
   }
 
   return {
-    allowed: allowLocalLoginAttempt(clientKey(request)),
+    allowed: allowLocalLoginAttempt(clientAddress(request)),
     retryAfterSeconds: Math.ceil(loginWindowMs / 1000),
     distributed: false,
   };
 }
 
 async function resetLoginAttempts(request: Request) {
-  recentLoginAttempts.delete(clientKey(request));
+  recentLoginAttempts.delete(clientAddress(request));
   try {
     await clearLoginAttempts(request);
   } catch (error) {
