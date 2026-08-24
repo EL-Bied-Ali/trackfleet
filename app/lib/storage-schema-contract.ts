@@ -29,6 +29,7 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "deliveries", column: "weight_kg" },
   { table: "deliveries", column: "price_amount" },
   { table: "deliveries", column: "price_currency" },
+  { table: "deliveries", column: "item_description" },
   { table: "delivery_eta_observations", column: "route_template_id" },
   { table: "delivery_eta_observations", column: "trip_instance_id" },
   { table: "delivery_eta_observations", column: "destination_site_id" },

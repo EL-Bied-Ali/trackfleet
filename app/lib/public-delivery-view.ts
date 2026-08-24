@@ -38,6 +38,7 @@ export function publicDeliveryView(delivery: PublicDeliverySource) {
     weightKg: delivery.weightKg ?? null,
     priceAmount: delivery.priceAmount ?? null,
     priceCurrency: delivery.priceCurrency ?? null,
+    itemDescription: delivery.itemDescription ?? null,
     destinationLatitude: delivery.destinationLatitude,
     destinationLongitude: delivery.destinationLongitude,
     arrivalRadiusKm: delivery.arrivalRadiusKm,
