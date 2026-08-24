@@ -417,6 +417,13 @@ export const postgresStore: DeliveryStore = {
     if (!delivery) return null;
     const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
     await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${metrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
+    // A physical truck can only be on one active delivery at a time. Without
+    // this, reassigning it here (the dispatcher is only warned, never
+    // blocked -- see vehicleAssignmentConflict in page.tsx) would leave the
+    // delivery it's being taken from still pointing at the same vehicle, so
+    // both would silently keep riding the same live GPS feed going forward.
+    await sql`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ${UNASSIGNED_TRUCK}
+      WHERE company_id = ${companyId} AND sendatrack_vehicle_id = ${vehicle.id} AND status <> 'Delivered' AND id <> ${delivery.id}`;
     await sql`UPDATE deliveries SET
       sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
       speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'

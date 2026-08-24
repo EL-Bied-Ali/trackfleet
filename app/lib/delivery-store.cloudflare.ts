@@ -117,6 +117,12 @@ export const store: DeliveryStore = {
     const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
     await db().batch([
       db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now()),
+      // A physical truck can only be on one active delivery at a time.
+      // Without this, reassigning it here (the dispatcher is only warned,
+      // never blocked -- see vehicleAssignmentConflict in page.tsx) would
+      // leave the delivery it's being taken from still pointing at the same
+      // vehicle, so both would silently keep riding the same live GPS feed.
+      db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ? WHERE company_id = ? AND sendatrack_vehicle_id = ? AND status != 'Delivered' AND id != ?`).bind(UNASSIGNED_TRUCK, companyId, vehicle.id, delivery.id),
       db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id = ? AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, delivery.id, companyId),
     ]);
     const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(delivery.id, companyId).first<RawDelivery>();
