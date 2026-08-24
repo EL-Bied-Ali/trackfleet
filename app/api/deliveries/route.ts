@@ -412,7 +412,7 @@ export async function GET(request: Request) {
         connected: integration.connected,
         vehicleCount: integration.vehicles.length,
         error: integration.error ?? null,
-        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicleAliasById.get(vehicle.id) ?? vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude })),
+        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicleAliasById.get(vehicle.id) ?? vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude, address: vehicle.address })),
       },
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
