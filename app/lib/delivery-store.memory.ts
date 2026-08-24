@@ -81,9 +81,18 @@ export const memoryStore: DeliveryStore = {
         Object.assign(other, { sendatrackVehicleId: "", truck: UNASSIGNED_TRUCK });
       }
     }
+    // A trip groups deliveries that share one truck's route (see
+    // buildTruckStopPlans in truck-stop-plan.ts, keyed by tripId when
+    // present). Moving this delivery onto a genuinely different truck means
+    // it's no longer on that route, so it must leave the trip -- otherwise
+    // the trip's own truck/vehicleKey record can end up describing a truck
+    // that isn't actually what this delivery is on. Re-linking the same
+    // vehicle it already has (a no-op reassignment) leaves the trip intact.
+    const truckIsChanging = delivery.sendatrackVehicleId !== vehicle.id;
     Object.assign(delivery, {
       sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude,
       speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", status: "Loading",
+      ...(truckIsChanging ? { tripId: null } : {}),
     });
     return { ...delivery };
   },

@@ -428,6 +428,16 @@ export const postgresStore: DeliveryStore = {
       sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
       speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'
       WHERE id = ${delivery.id} AND company_id = ${companyId}`;
+    // A trip groups deliveries that share one truck's route (see
+    // buildTruckStopPlans in truck-stop-plan.ts, keyed by trip_id when
+    // present). Moving this delivery onto a genuinely different truck means
+    // it's no longer on that route, so it must leave the trip -- otherwise
+    // the trip's own truck/vehicleKey record can end up describing a truck
+    // that isn't actually what this delivery is on. Re-linking the same
+    // vehicle it already has (a no-op reassignment) leaves the trip intact.
+    if (delivery.sendatrackVehicleId !== vehicle.id) {
+      await sql`UPDATE deliveries SET trip_id = NULL WHERE id = ${delivery.id} AND company_id = ${companyId}`;
+    }
     const updated = await sql`SELECT * FROM deliveries WHERE id = ${delivery.id} AND company_id = ${companyId} LIMIT 1` as RawDelivery[];
     return updated[0] ? hydrate(updated[0]) : null;
   },

@@ -115,7 +115,7 @@ export const store: DeliveryStore = {
     if (!raw) return null;
     const delivery = hydrate(raw);
     const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
-    await db().batch([
+    const statements = [
       db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now()),
       // A physical truck can only be on one active delivery at a time.
       // Without this, reassigning it here (the dispatcher is only warned,
@@ -124,7 +124,18 @@ export const store: DeliveryStore = {
       // vehicle, so both would silently keep riding the same live GPS feed.
       db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ? WHERE company_id = ? AND sendatrack_vehicle_id = ? AND status != 'Delivered' AND id != ?`).bind(UNASSIGNED_TRUCK, companyId, vehicle.id, delivery.id),
       db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id = ? AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, delivery.id, companyId),
-    ]);
+    ];
+    // A trip groups deliveries that share one truck's route (see
+    // buildTruckStopPlans in truck-stop-plan.ts, keyed by trip_id when
+    // present). Moving this delivery onto a genuinely different truck means
+    // it's no longer on that route, so it must leave the trip -- otherwise
+    // the trip's own truck/vehicleKey record can end up describing a truck
+    // that isn't actually what this delivery is on. Re-linking the same
+    // vehicle it already has (a no-op reassignment) leaves the trip intact.
+    if (delivery.sendatrackVehicleId !== vehicle.id) {
+      statements.push(db().prepare(`UPDATE deliveries SET trip_id = NULL WHERE id = ? AND company_id = ?`).bind(delivery.id, companyId));
+    }
+    await db().batch(statements);
     const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(delivery.id, companyId).first<RawDelivery>();
     return updated ? hydrate(updated) : null;
   },

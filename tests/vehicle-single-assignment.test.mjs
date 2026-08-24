@@ -75,3 +75,34 @@ test("every store backend clears the vehicle from whichever other active deliver
   const cloudflare = fs.readFileSync("app/lib/delivery-store.cloudflare.ts", "utf8");
   assert.match(cloudflare, /UPDATE deliveries SET sendatrack_vehicle_id = '', truck = \? WHERE company_id = \? AND sendatrack_vehicle_id = \? AND status != 'Delivered' AND id != \?/);
 });
+
+test("moving a delivery to a genuinely different truck pulls it out of its trip", async () => {
+  const companyId = `vehicle-single-assignment-${Date.now()}-trip`;
+  const otherVehicle = { ...vehicle, id: "V777", name: "TRK-777" };
+
+  // Simulate a delivery already grouped into a multi-stop trip on otherVehicle.
+  const delivery = await memoryStore.create(baseDelivery({
+    companyId, customer: "Trip client", sendatrackVehicleId: otherVehicle.id, truck: otherVehicle.name, tripId: "trip-1",
+  }));
+
+  const moved = await memoryStore.linkVehicle(delivery.id, companyId, vehicle);
+  assert.equal(moved?.sendatrackVehicleId, vehicle.id);
+  assert.equal(moved?.tripId, null, "a delivery moved to a different truck no longer belongs to its old trip");
+});
+
+test("re-linking the same truck a delivery already has leaves its trip untouched", async () => {
+  const companyId = `vehicle-single-assignment-${Date.now()}-notrip-change`;
+  const delivery = await memoryStore.create(baseDelivery({
+    companyId, customer: "Trip client", sendatrackVehicleId: vehicle.id, truck: vehicle.name, tripId: "trip-1",
+  }));
+
+  const relinked = await memoryStore.linkVehicle(delivery.id, companyId, vehicle);
+  assert.equal(relinked?.tripId, "trip-1", "re-linking the same vehicle is not a reassignment, so the trip must stay intact");
+});
+
+test("every store backend detaches a delivery from its trip only when the truck is actually changing", () => {
+  const postgres = fs.readFileSync("app/lib/delivery-store.postgres.ts", "utf8");
+  assert.match(postgres, /if \(delivery\.sendatrackVehicleId !== vehicle\.id\) \{\s*\n\s*await sql`UPDATE deliveries SET trip_id = NULL WHERE id = \$\{delivery\.id\} AND company_id = \$\{companyId\}`;/);
+  const cloudflare = fs.readFileSync("app/lib/delivery-store.cloudflare.ts", "utf8");
+  assert.match(cloudflare, /if \(delivery\.sendatrackVehicleId !== vehicle\.id\) \{\s*\n\s*statements\.push\(db\(\)\.prepare\(`UPDATE deliveries SET trip_id = NULL WHERE id = \? AND company_id = \?`\)\.bind\(delivery\.id, companyId\)\);/);
+});
