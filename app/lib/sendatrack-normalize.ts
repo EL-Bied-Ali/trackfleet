@@ -149,9 +149,24 @@ export function normalizeSendatrackFleet(payload: unknown) {
     if (!existing || vehicle.updatedAt >= existing.updatedAt) newestByVehicle.set(vehicleKey, vehicle);
   }
 
+  // The name-based pass above only catches the same truck appearing under
+  // different ids with a matching name. It does NOT catch the opposite: the
+  // same id appearing twice under two different name strings (e.g. a stale
+  // cached record next to a fresh one, or a nested EventData variant with a
+  // slightly different description). Every consumer downstream (truck
+  // numbering, vehicle linking) treats `id` as the one stable per-vehicle
+  // key, so a second pass enforces that invariant on the way out -- without
+  // it, two rows sharing an id render as two separate map markers that both
+  // independently resolve to the same "Truck N" badge.
+  const newestById = new Map<string, SendatrackVehicle>();
+  for (const vehicle of newestByVehicle.values()) {
+    const existing = newestById.get(vehicle.id);
+    if (!existing || vehicle.updatedAt >= existing.updatedAt) newestById.set(vehicle.id, vehicle);
+  }
+
   const providerAccountId = findStringByKey(payload, "Account");
   const providerAccountDescription = findStringByKey(payload, "Account_desc");
-  const result = [...newestByVehicle.values()].map((vehicle) => ({
+  const result = [...newestById.values()].map((vehicle) => ({
     ...vehicle,
     providerAccountId: vehicle.providerAccountId || providerAccountId,
     providerAccountDescription: vehicle.providerAccountDescription || providerAccountDescription,

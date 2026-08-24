@@ -68,6 +68,33 @@ test("uses logical Device rather than shared DeviceCode when no explicit vehicle
   assert.equal(second.providerDeviceCode, "fmb920");
 });
 
+test("collapses two rows that share the same canonical id even when their names differ, so the same physical truck can't get two markers under the same truck number", () => {
+  const { vehicles } = normalizeSendatrackFleet([
+    {
+      id: "v6",
+      Device_desc: "TRUCK-06",
+      lastValidLatitude: 35.7,
+      lastValidLongitude: -5.8,
+      Timestamp: 1_700_000_000,
+    },
+    {
+      id: "v6",
+      // A stale/nested variant of the same device with a differently
+      // formatted name -- must still collapse to one row by id, since the
+      // name-based dedup pass alone would let both through.
+      Device_desc: "Truck 06 (v6)",
+      lastValidLatitude: 35.71,
+      lastValidLongitude: -5.81,
+      Timestamp: 1_700_000_100,
+    },
+  ]);
+
+  assert.equal(vehicles.length, 1);
+  assert.equal(vehicles[0].id, "v6");
+  // Keeps the newer of the two colliding rows.
+  assert.equal(vehicles[0].name, "Truck 06 (v6)");
+});
+
 test("propagates a parent Account while retaining a Device suitable for OpenGTS history", () => {
   const { vehicles } = normalizeSendatrackFleet({
     Account: "legacy-parent-account",
