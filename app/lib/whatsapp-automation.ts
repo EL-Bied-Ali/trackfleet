@@ -11,20 +11,15 @@ export { automaticWhatsAppMessage } from "./whatsapp-message";
 const metaRequestTimeoutMs = 10_000;
 
 function recipientsFrom(delivery: DeliveryRow) {
-  // Notifications only use contacts attached to this tenant's delivery. A
-  // phone may appear as sender and recipient; de-duplicate it before sending.
-  const candidates = [
-    { name: delivery.customer, phone: delivery.contact, consent: delivery.whatsappOptIn === true },
-    { name: delivery.recipientName ?? "", phone: delivery.recipientContact ?? "", consent: delivery.recipientWhatsappOptIn === true },
-  ];
-  const seen = new Set<string>();
-  return candidates.flatMap((candidate) => {
-    if (!candidate.consent) return [];
-    const phone = normalizeCustomerPhone(candidate.phone) ?? "";
-    if (!phone || seen.has(phone)) return [];
-    seen.add(phone);
-    return [{ name: candidate.name || delivery.customer, phone }];
-  });
+  // Only the sender (the party who registered/dropped off the parcel) gets
+  // messaged -- the recipient's own opt-in is still recorded (and still
+  // shown in the dispatcher UI) but deliberately not used to send, to keep
+  // WhatsApp volume to one message per delivery event instead of doubling
+  // it whenever both parties are opted in.
+  if (delivery.whatsappOptIn !== true) return [];
+  const phone = normalizeCustomerPhone(delivery.contact) ?? "";
+  if (!phone) return [];
+  return [{ name: delivery.customer, phone }];
 }
 
 export type AutomaticWhatsAppPayload = {
@@ -53,7 +48,7 @@ export function buildAutomaticWhatsAppPayload(
   trackingUrl: string,
 ): { payload: AutomaticWhatsAppPayload | null; reason: AutomaticPayloadBuildReason } {
   if (!isAutomaticWhatsAppEvent(event)) return { payload: null, reason: "internal_event" };
-  if (delivery.whatsappOptIn !== true && delivery.recipientWhatsappOptIn !== true) return { payload: null, reason: "consent_missing" };
+  if (delivery.whatsappOptIn !== true) return { payload: null, reason: "consent_missing" };
 
   const recipient = recipientsFrom(delivery)[0];
   if (!recipient) return { payload: null, reason: "recipient_missing" };

@@ -73,16 +73,20 @@ test("WhatsApp consent is explicit for new numbers, remembered, and persisted fo
   assert.match(schema, /recipientWhatsappOptInAt: integer\(["']recipient_whatsapp_opt_in_at["']/);
 });
 
-test("automatic WhatsApp payload refuses missing consent", () => {
-  assert.match(whatsapp, /delivery\.whatsappOptIn !== true && delivery\.recipientWhatsappOptIn !== true/);
+test("automatic WhatsApp payload refuses missing sender consent", () => {
+  assert.match(whatsapp, /delivery\.whatsappOptIn !== true/);
   assert.match(whatsapp, /reason: ["']consent_missing["']/);
 });
 
-test("automatic WhatsApp delivery targets sender and receiver without duplicate numbers", () => {
-  assert.match(whatsapp, /delivery\.recipientName/);
-  assert.match(whatsapp, /delivery\.recipientContact/);
-  assert.match(whatsapp, /new Set<string>\(\)/);
-  assert.match(whatsapp, /Promise\.all/);
+test("automatic WhatsApp delivery targets only the sender, never the recipient, to keep volume to one message per event", () => {
+  // Deliberately scoped to the sender-only send path: the recipient's own
+  // contact/opt-in is still recorded elsewhere (delivery creation, the
+  // dispatcher UI) but must never be read here, since that's exactly what
+  // used to double message volume for deliveries with both parties opted in.
+  assert.doesNotMatch(whatsapp, /delivery\.recipientName/);
+  assert.doesNotMatch(whatsapp, /delivery\.recipientContact/);
+  assert.doesNotMatch(whatsapp, /delivery\.recipientWhatsappOptIn/);
+  assert.match(whatsapp, /delivery\.whatsappOptIn/);
 });
 
 test("scheduler provides a safe registration fallback without messaging historical parcels", () => {
