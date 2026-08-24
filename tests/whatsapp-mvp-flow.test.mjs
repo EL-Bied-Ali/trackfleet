@@ -22,11 +22,14 @@ const [deliveryEvents, deliveryRoute, automation, runner, whatsapp, page, public
   readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
 ]);
 
-test("MVP WhatsApp pushes only high-value customer states", () => {
-  for (const event of ["REGISTERED", "DEPARTED", "DELAY_DETECTED", "NEAR_DESTINATION", "ARRIVED_AT_SITE"]) {
+test("MVP WhatsApp pushes only the two events with real customer action attached", () => {
+  for (const event of ["REGISTERED", "ARRIVED_AT_SITE"]) {
     assert.equal(isAutomaticWhatsAppEvent(event), true, `${event} should be pushed`);
   }
-  for (const event of ["GPS_BASELINE", "GPS_STALE", "PROGRESS_25", "PROGRESS_50", "PROGRESS_75", "ARRIVED", "MANUAL_ARRIVAL_CONFIRMED"]) {
+  // DEPARTED/NEAR_DESTINATION/DELAY_DETECTED are FYI-only status changes --
+  // still visible on the tracking page (linked from the REGISTERED message),
+  // just not worth a separate paid push each.
+  for (const event of ["GPS_BASELINE", "GPS_STALE", "PROGRESS_25", "PROGRESS_50", "PROGRESS_75", "DEPARTED", "NEAR_DESTINATION", "DELAY_DETECTED", "ARRIVED", "MANUAL_ARRIVAL_CONFIRMED"]) {
     assert.equal(isAutomaticWhatsAppEvent(event), false, `${event} should stay out of WhatsApp`);
   }
 });
