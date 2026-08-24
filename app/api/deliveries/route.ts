@@ -449,6 +449,7 @@ export async function POST(request: Request) {
     const weightInput = optionalNumber(payload.weightKg);
     const manualPriceProvided = payload.manualPriceAmount !== null && payload.manualPriceAmount !== undefined && String(payload.manualPriceAmount).trim() !== "";
     const manualPriceInput = optionalNumber(payload.manualPriceAmount);
+    const itemDescriptionInput = String(payload.itemDescription ?? "").trim();
     // Client-generated (not server-assigned) so a dispatcher entering several
     // parcels for one customer in one sitting can link them by generating one
     // id up front and sending it with each parcel's create call -- each
@@ -472,6 +473,7 @@ export async function POST(request: Request) {
       || contactInput.length > 40
       || recipientName.length > 160
       || recipientContactInput.length > 40
+      || itemDescriptionInput.length > 200
     ) {
       return Response.json({ error: "delivery fields exceed allowed length" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
@@ -480,6 +482,13 @@ export async function POST(request: Request) {
     }
     if (manualPriceProvided && (manualPriceInput === null || manualPriceInput <= 0 || manualPriceInput > 1000000)) {
       return Response.json({ error: "manualPriceAmount must be greater than 0 and at most 1000000" }, { status: 400 });
+    }
+    // A parcel with no declared weight (a bulky item priced manually -- a TV,
+    // a washing machine) has nothing else in the table distinguishing it from
+    // any other unweighed parcel, so a description of what it actually is
+    // becomes mandatory exactly when weight is absent.
+    if (!weightProvided && !itemDescriptionInput) {
+      return Response.json({ error: "itemDescription is required when weightKg is not provided" }, { status: 400 });
     }
     const weightKg = weightInput === null ? null : Math.round(weightInput * 1000) / 1000;
     const companySites = await siteStore.listForCompany(session.companyId);
@@ -565,7 +574,7 @@ export async function POST(request: Request) {
         if (session.role === "agency" && !agencyDeliveryIsVisible(existing, session.siteId)) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
-        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency })) {
+        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency, itemDescription: itemDescriptionInput || null })) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
         return idempotentReplayResponse(existing, session.companyId);
@@ -605,6 +614,7 @@ export async function POST(request: Request) {
         weightKg,
         priceAmount,
         priceCurrency,
+        itemDescription: itemDescriptionInput || null,
         whatsappOptIn,
         whatsappOptInAt: whatsappOptIn ? new Date() : null,
         recipientWhatsappOptIn,
@@ -623,7 +633,7 @@ export async function POST(request: Request) {
         const existing = await store.getPublic(idempotencyTrackingToken).catch(() => null);
         if (existing?.companyId === session.companyId
           && (session.role === "dispatcher" || agencyDeliveryIsVisible(existing, session.siteId))
-          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency })) {
+          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency, itemDescription: itemDescriptionInput || null })) {
           return idempotentReplayResponse(existing, session.companyId);
         }
       }

@@ -35,6 +35,12 @@ export type DeliveryRow = {
   weightKg?: number | null;
   priceAmount?: number | null;
   priceCurrency?: DeliveryPriceCurrency | null;
+  // Free-text description of what the parcel actually is -- required at
+  // creation time when weightKg is absent (a bulky item priced manually,
+  // e.g. a TV or washing machine, per app/api/deliveries/route.ts), since
+  // there's otherwise nothing distinguishing one unweighed parcel from
+  // another in the table or on the customer tracking page.
+  itemDescription?: string | null;
   whatsappOptIn?: boolean;
   whatsappOptInAt?: Date | null;
   recipientWhatsappOptIn?: boolean;

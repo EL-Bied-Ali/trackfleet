@@ -66,7 +66,7 @@ test("the Postgres schema-safety contract knows about shipment_id, so CI catches
 
 test("the create-delivery form lets a dispatcher add several parcel rows for one client, each with its own weight/price", () => {
   const page = files["app/page.tsx"];
-  assert.match(page, /const \[parcelDrafts, setParcelDrafts\] = useState<Array<\{ key: string; weightKg: string; manualPriceAmount: string \}>>\(\[\{ key: "0", weightKg: "", manualPriceAmount: "" \}\]\);/);
+  assert.match(page, /const \[parcelDrafts, setParcelDrafts\] = useState<Array<\{ key: string; weightKg: string; manualPriceAmount: string; itemDescription: string \}>>\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" \}\]\);/);
   assert.match(page, /\{parcelDrafts\.map\(\(parcel, index\) => \{/);
   assert.match(page, /className="add-parcel-row"/);
   assert.match(page, /className="remove-parcel-row"/);

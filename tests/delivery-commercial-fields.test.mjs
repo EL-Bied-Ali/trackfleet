@@ -12,9 +12,14 @@ const files = Object.fromEntries(await Promise.all([
   "app/lib/delivery-store.postgres.ts",
   "app/lib/delivery-store.shared-postgres.ts",
   "app/lib/delivery-store.cloudflare.ts",
+  "app/lib/delivery-operational.postgres.ts",
+  "app/lib/delivery-operational.cloudflare.ts",
   "app/lib/d1-standby-read-store.ts",
   "app/lib/d1-history-backfill.ts",
   "app/lib/d1-reconciliation.ts",
+  "app/lib/storage-schema-contract.ts",
+  "app/lib/delivery-idempotency.ts",
+  "app/lib/delivery-history.postgres.ts",
   "scripts/prepare-d1-schema.mjs",
   "app/lib/public-delivery-view.ts",
   "app/page.tsx",
@@ -103,4 +108,40 @@ test("bulky items without a declared weight let the dispatcher enter a manual pr
   assert.doesNotMatch(route, /payload\.priceCurrency/);
   assert.match(page, /value=\{parcel\.manualPriceAmount\}/);
   assert.match(page, /parcel\.weightKg \? \(locale === "fr" \? "Prix calculé"/);
+});
+
+test("an unweighed bulky item requires a description, both in the form and at the API", () => {
+  // A TV and a washing machine both show up as "no weight, manual price" --
+  // with nothing else distinguishing them in the table or on the customer
+  // tracking page, so a plain-text description becomes mandatory exactly
+  // when weight is absent.
+  const route = files["app/api/deliveries/route.ts"];
+  const page = files["app/page.tsx"];
+  assert.match(route, /const itemDescriptionInput = String\(payload\.itemDescription \?\? ""\)\.trim\(\);/);
+  assert.match(route, /if \(!weightProvided && !itemDescriptionInput\)/);
+  assert.match(route, /itemDescription is required when weightKg is not provided/);
+  assert.match(route, /itemDescription: itemDescriptionInput \|\| null,/);
+  assert.match(page, /!parcel\.weightKg && <label>/);
+  assert.match(page, /value=\{parcel\.itemDescription\}/);
+  assert.match(page, /itemDescription: weightRaw \? "" : parcel\.itemDescription\.trim\(\)/);
+});
+
+test("item description persists through Postgres, the D1 mirror, standby, reconciliation, and the operational read paths", () => {
+  for (const path of [
+    "app/lib/delivery-store.postgres.ts",
+    "app/lib/delivery-store.shared-postgres.ts",
+    "app/lib/delivery-store.cloudflare.ts",
+    "app/lib/delivery-operational.postgres.ts",
+    "app/lib/delivery-operational.cloudflare.ts",
+    "app/lib/d1-standby-read-store.ts",
+    "app/lib/d1-history-backfill.ts",
+    "app/lib/d1-reconciliation.ts",
+    "app/lib/storage-schema-contract.ts",
+    "scripts/prepare-d1-schema.mjs",
+  ]) {
+    assert.match(files[path], /item_description/, `${path} must preserve item_description`);
+  }
+  assert.match(files["app/lib/public-delivery-view.ts"], /itemDescription: delivery\.itemDescription/);
+  assert.match(files["app/lib/delivery-idempotency.ts"], /itemDescription\?: string \| null/);
+  assert.match(files["app/lib/delivery-idempotency.ts"], /delivery\.itemDescription \?\? null\) === \(input\.itemDescription \?\? null\)/);
 });

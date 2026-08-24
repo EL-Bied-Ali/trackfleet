@@ -34,6 +34,7 @@ type RawDelivery = {
   weight_kg: number | string | null;
   price_amount: number | string | null;
   price_currency: "EUR" | "MAD" | null;
+  item_description: string | null;
   whatsapp_opt_in: boolean | null;
   whatsapp_opt_in_at: string | Date | null;
   recipient_whatsapp_opt_in: boolean | null;
@@ -83,6 +84,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     weightKg: numberOrNull(row.weight_kg),
     priceAmount: numberOrNull(row.price_amount),
     priceCurrency: row.price_currency === "EUR" || row.price_currency === "MAD" ? row.price_currency : null,
+    itemDescription: row.item_description ?? null,
     whatsappOptIn: row.whatsapp_opt_in === true,
     whatsappOptInAt: row.whatsapp_opt_in_at ? new Date(row.whatsapp_opt_in_at) : null,
     recipientWhatsappOptIn: row.recipient_whatsapp_opt_in === true,

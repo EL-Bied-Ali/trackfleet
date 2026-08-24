@@ -17,7 +17,7 @@ type RawDelivery = {
   id: string; customer: string; originSiteId: string | null; originLatitude: number | null; originLongitude: number | null; destinationSiteId: string | null; destination: string;
   destinationLatitude: number | null; destinationLongitude: number | null; arrivalRadiusKm: number | null;
   truck: string; driver: string; status: DeliveryStatus; eta: string; plannedArrivalAt: number | null; nextTruckDepartureAt: number | null;
-  progress: number; color: string; contact: string; recipientName: string | null; recipientContact: string | null; weightKg: number | null; priceAmount: number | null; priceCurrency: "EUR" | "MAD" | null; whatsappOptIn: number | null; whatsappOptInAt: number | null; recipientWhatsappOptIn: number | null; recipientWhatsappOptInAt: number | null;
+  progress: number; color: string; contact: string; recipientName: string | null; recipientContact: string | null; weightKg: number | null; priceAmount: number | null; priceCurrency: "EUR" | "MAD" | null; itemDescription: string | null; whatsappOptIn: number | null; whatsappOptInAt: number | null; recipientWhatsappOptIn: number | null; recipientWhatsappOptInAt: number | null;
   sendatrackVehicleId: string; latitude: number | null; longitude: number | null; speed: number | null;
   lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; tripId: string | null; shipmentId: string | null; createdAt: number;
 };
@@ -35,6 +35,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     weightKg: row.weightKg ?? null,
     priceAmount: row.priceAmount ?? null,
     priceCurrency: row.priceCurrency === "EUR" || row.priceCurrency === "MAD" ? row.priceCurrency : null,
+    itemDescription: row.itemDescription ?? null,
     recipientName: row.recipientName ?? "",
     recipientContact: row.recipientContact ?? "",
     plannedArrivalAt: row.plannedArrivalAt ? new Date(row.plannedArrivalAt) : null,
@@ -62,7 +63,7 @@ function explicitOrigin(delivery: DeliveryRow): [number, number] | null {
 const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_latitude AS originLatitude, origin_longitude AS originLongitude, destination_site_id AS destinationSiteId, destination,
   destination_latitude AS destinationLatitude, destination_longitude AS destinationLongitude, arrival_radius_km AS arrivalRadiusKm,
   truck, driver, status, eta, planned_arrival_at AS plannedArrivalAt, next_truck_departure_at AS nextTruckDepartureAt, progress, color, contact, recipient_name AS recipientName, recipient_contact AS recipientContact,
-  weight_kg AS weightKg, price_amount AS priceAmount, price_currency AS priceCurrency,
+  weight_kg AS weightKg, price_amount AS priceAmount, price_currency AS priceCurrency, item_description AS itemDescription,
   whatsapp_opt_in AS whatsappOptIn, whatsapp_opt_in_at AS whatsappOptInAt,
   recipient_whatsapp_opt_in AS recipientWhatsappOptIn, recipient_whatsapp_opt_in_at AS recipientWhatsappOptInAt,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
@@ -276,12 +277,12 @@ export const store: DeliveryStore = {
     };
     await db().prepare(`INSERT INTO deliveries
       (id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-       truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
+       truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
        latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.originLatitude, delivery.originLongitude, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
         delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null, delivery.nextTruckDepartureAt?.getTime() ?? null,
-        delivery.progress, delivery.color, delivery.contact, delivery.recipientName ?? "", delivery.recipientContact ?? "", delivery.weightKg ?? null, delivery.priceAmount ?? null, delivery.priceCurrency ?? null, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.recipientWhatsappOptIn === true ? 1 : 0, delivery.recipientWhatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
+        delivery.progress, delivery.color, delivery.contact, delivery.recipientName ?? "", delivery.recipientContact ?? "", delivery.weightKg ?? null, delivery.priceAmount ?? null, delivery.priceCurrency ?? null, delivery.itemDescription ?? null, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.recipientWhatsappOptIn === true ? 1 : 0, delivery.recipientWhatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
         delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.shipmentId ?? null, delivery.createdAt.getTime()).run();
     return delivery;
