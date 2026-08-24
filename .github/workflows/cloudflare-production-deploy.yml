@@ -96,6 +96,19 @@ jobs:
       - name: Build shared-Postgres Cloudflare Worker
         run: pnpm exec vinext build
 
+      - name: Verify Postgres schema before deploy
+        # Blocks the deploy if production Postgres doesn't already satisfy
+        # storage-schema-contract.ts -- runs before "Deploy Worker" so a
+        # column the new code expects can never go live before it exists.
+        # delivery-store.postgres.ts's own migration logic (ensureSchema())
+        # is a deliberate no-op at request time in production (see
+        # runtimeSchemaBootstrapEnabled there), so nothing else catches this
+        # before users do. Self-skips if DATABASE_URL isn't configured as a
+        # repository secret yet.
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node --experimental-strip-types scripts/prepare-postgres-schema.mjs
+
       - name: Prepare D1 fallback schema
         id: d1_prepare
         continue-on-error: true
