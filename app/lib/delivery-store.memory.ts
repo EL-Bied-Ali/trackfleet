@@ -6,7 +6,7 @@ import { NotificationClaimState } from "./notification-claim-state.ts";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress.ts";
 import type { SendatrackSnapshot } from "./sendatrack.ts";
 import { matchDeliveryVehicle } from "./vehicle-linking.ts";
-import { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";
+import { isUnassignedVehicle, UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record.ts";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
@@ -70,6 +70,16 @@ export const memoryStore: DeliveryStore = {
     const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
     if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
       deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
+    }
+    // A physical truck can only be on one active delivery at a time. Without
+    // this, reassigning it here (the dispatcher is only warned, never
+    // blocked -- see vehicleAssignmentConflict in page.tsx) would leave the
+    // delivery it's being taken from still pointing at the same vehicle, so
+    // both would silently keep riding the same live GPS feed going forward.
+    for (const other of deliveryStore) {
+      if (other.id !== delivery.id && other.companyId === companyId && other.sendatrackVehicleId === vehicle.id && other.status !== "Delivered") {
+        Object.assign(other, { sendatrackVehicleId: "", truck: UNASSIGNED_TRUCK });
+      }
     }
     Object.assign(delivery, {
       sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude,
