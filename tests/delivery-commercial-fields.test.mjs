@@ -43,6 +43,16 @@ test("price is 1.5 EUR/kg by default, and 15 MAD/kg when the parcel ships from M
   assert.deepEqual(computeDeliveryPrice(12.345, "BE"), { priceAmount: 18.52, priceCurrency: "EUR" });
 });
 
+test("origin site is required, so pricing never silently defaults to EUR for an unresolved origin", () => {
+  // resolveExplicitCompanySite() treats a blank id as valid-but-unresolved
+  // ({ site: null, invalid: false }) by design -- it's reused for optional
+  // fields elsewhere -- so origin must be enforced as required at the route
+  // level itself, the same way bulk-delivery-import.ts already requires
+  // origin_site_id specifically to avoid this silent-EUR-default trap.
+  const route = files["app/api/deliveries/route.ts"];
+  assert.match(route, /if \(!customer \|\| !destination \|\| !truck \|\| !originSiteInput\)/);
+});
+
 test("commercial fields persist through Postgres, D1 mirror, standby and reconciliation", () => {
   for (const path of [
     "app/lib/delivery-store.postgres.ts",

@@ -506,8 +506,8 @@ export async function POST(request: Request) {
     const parsedNextTruckDeparture = nextTruckDepartureRaw ? new Date(nextTruckDepartureRaw) : null;
     const nextTruckDepartureAt = parsedNextTruckDeparture && Number.isFinite(parsedNextTruckDeparture.getTime()) ? parsedNextTruckDeparture : null;
     const validLegacyEta = /^\d{2}:\d{2}$/.test(eta);
-    if (!customer || !destination || !truck) {
-      return Response.json({ error: "customer, destination, and truck are required" }, { status: 400 });
+    if (!customer || !destination || !truck || !originSiteInput) {
+      return Response.json({ error: "customer, destination, truck, and originSiteId are required" }, { status: 400 });
     }
     // Planned arrival and next-truck-departure both moved out of the
     // creation form (too redundant re-entering them per parcel -- reported

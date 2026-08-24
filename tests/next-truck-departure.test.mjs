@@ -33,7 +33,7 @@ test("POST /api/deliveries accepts a missing plannedArrivalAt/nextTruckDeparture
   // throughout delay detection, ETA estimation and tracking-link expiry.
   assert.match(route, /const nextTruckDepartureRaw = String\(payload\.nextTruckDepartureAt \?\? ""\)\.trim\(\);/);
   assert.match(route, /const parsedNextTruckDeparture = nextTruckDepartureRaw \? new Date\(nextTruckDepartureRaw\) : null;/);
-  assert.match(route, /if \(!customer \|\| !destination \|\| !truck\) \{/);
+  assert.match(route, /if \(!customer \|\| !destination \|\| !truck \|\| !originSiteInput\) \{/);
   assert.doesNotMatch(route, /!plannedArrivalAt && !validLegacyEta/);
   assert.doesNotMatch(route, /\|\| !nextTruckDepartureAt\)/);
   assert.match(route, /nextTruckDepartureAt,\s*\n\s*contact,/);
