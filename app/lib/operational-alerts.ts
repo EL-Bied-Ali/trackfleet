@@ -1,4 +1,5 @@
 import { isUnassignedVehicle } from "./delivery-vehicle-choice";
+import { knownSite } from "./known-sites";
 
 export type OperationalDelivery = {
   id: string;
@@ -13,6 +14,7 @@ export type OperationalDelivery = {
   plannedArrivalAt?: string | null;
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
+  destinationSiteId?: string | null;
 };
 
 export type OperationalAlertKind =
@@ -94,8 +96,15 @@ export function detectOperationalAlerts(
       });
     }
 
+    // For CTM-relay destinations, GPS going stale past the relay hub is the
+    // expected, permanent state for the rest of that leg (see known-sites.ts
+    // finalLegTrackingUnavailable) -- the automatic ~24h relay-completion
+    // timer already handles it, so it isn't something a dispatcher can or
+    // should act on. Mirrors the same relay-awareness fix already applied to
+    // arrival-confirmation.ts.
+    const relayInProgress = knownSite(delivery.destinationSiteId)?.finalLegTrackingUnavailable === true;
     const positionAgeMinutes = finiteNumber(delivery.positionAgeMinutes);
-    if (positionAgeMinutes !== null && positionAgeMinutes > 30) {
+    if (positionAgeMinutes !== null && positionAgeMinutes > 30 && !relayInProgress) {
       alerts.push({
         id: `${delivery.id}:gps_stale`,
         kind: "gps_stale",
