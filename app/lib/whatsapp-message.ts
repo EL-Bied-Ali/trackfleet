@@ -3,6 +3,8 @@ import type { DeliveryEventType } from "./delivery-events";
 export type WhatsAppMessageDelivery = {
   id: string;
   destination: string;
+  priceAmount?: number | null;
+  priceCurrency?: string | null;
 };
 
 export function automaticWhatsAppMessage(
@@ -25,7 +27,15 @@ export function automaticWhatsAppMessage(
       return `Le trajet prend plus de temps que prévu. Nouvelle estimation : ${trackingUrl}`;
     case "ARRIVED_AT_SITE":
     case "ARRIVED":
-      return `Arrivé à ${delivery.destination}.`;
+      // A priced parcel's declared weight/manual price is already shown on
+      // the customer's own tracking page (see public-delivery-view.ts) --
+      // pointing back there instead of restating the amount here keeps this
+      // template message a plain status update rather than something that
+      // reads like a payment demand, and avoids drifting out of sync with
+      // whatever the tracking page actually displays.
+      return delivery.priceAmount != null && delivery.priceCurrency
+        ? `Arrivé à ${delivery.destination}. Facture disponible : ${delivery.priceAmount.toFixed(2)} ${delivery.priceCurrency}. Détails : ${trackingUrl}`
+        : `Arrivé à ${delivery.destination}.`;
     default:
       return "";
   }

@@ -136,3 +136,14 @@ test("arrival-at-site notifies once before unloading completion", () => {
   assert.equal(isAutomaticWhatsAppEvent("ARRIVED_AT_SITE"), true);
   assert.equal(isAutomaticWhatsAppEvent("ARRIVED"), false);
 });
+
+test("a priced parcel's arrival message points to the tracking page for the invoice instead of restating full billing details", async () => {
+  const { automaticWhatsAppMessage } = await import("../app/lib/whatsapp-message.ts");
+  const unpriced = automaticWhatsAppMessage("ARRIVED_AT_SITE", { id: "TF-1", destination: "Casablanca" }, "https://trackfleet.app/?tracking=abc");
+  assert.equal(unpriced, "Arrivé à Casablanca.");
+
+  const priced = automaticWhatsAppMessage("ARRIVED_AT_SITE", { id: "TF-1", destination: "Casablanca", priceAmount: 150, priceCurrency: "MAD" }, "https://trackfleet.app/?tracking=abc");
+  assert.match(priced, /150\.00 MAD/);
+  assert.match(priced, /https:\/\/trackfleet\.app\/\?tracking=abc/);
+  assert.doesNotMatch(priced, /150\.00 MAD.*150\.00 MAD/);
+});
