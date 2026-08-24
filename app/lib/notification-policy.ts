@@ -10,11 +10,15 @@ export function isHistoricalNotification(eventCreatedAt: Date, automationStartAt
   return eventCreatedAt.getTime() < automationStartAt.getTime();
 }
 
+// Deliberately just the two events with real customer behavior attached:
+// REGISTERED carries the tracking link (everything else lives on that page
+// instead of a separate push), and ARRIVED_AT_SITE is the actionable "come
+// get it" nudge. DEPARTED/NEAR_DESTINATION/DELAY_DETECTED are FYI-only status
+// changes -- cutting them as pushes (customer still sees them on the tracking
+// page) roughly halves message volume without losing either message that
+// actually drives customer action.
 const automaticWhatsAppEvents = new Set<DeliveryEventType>([
   "REGISTERED",
-  "DEPARTED",
-  "DELAY_DETECTED",
-  "NEAR_DESTINATION",
   "ARRIVED_AT_SITE",
 ]);
 
