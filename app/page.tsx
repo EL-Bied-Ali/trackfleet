@@ -222,7 +222,7 @@ export default function Home() {
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
   const [locale, setLocale] = useState<Locale>("fr");
   const [authState, setAuthState] = useState<"loading" | "anonymous" | "authenticated">("loading");
-  const [dispatchDataState, setDispatchDataState] = useState<"loading" | "ready" | "error">("loading");
+  const [dispatchDataState, setDispatchDataState] = useState<"loading" | "ready" | "error" | "subscription_required">("loading");
   const [company, setCompany] = useState<CompanyIdentity | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState<LoginErrorKind | "">("");
@@ -414,6 +414,10 @@ export default function Home() {
         if (!tracking && authState !== "authenticated") return;
         const endpoint = tracking ? `/api/deliveries?tracking=${encodeURIComponent(tracking)}` : "/api/deliveries";
         const response = await fetch(endpoint, { cache: "no-store" });
+        if (response.status === 402 && !tracking) {
+          if (active) setDispatchDataState("subscription_required");
+          return;
+        }
         if (!response.ok) throw new Error("Delivery service unavailable");
         const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; trips?: TripHistoryItem[] };
         if (!active) return;
@@ -1164,6 +1168,14 @@ export default function Home() {
   if (view !== "customer" && authState === "authenticated" && company?.role === "agency" && agencyLocationOpen) return <AgencyLocationSetup locale={locale} site={knownSites.find((site) => site.id === company.siteId) ?? null} onLocale={changeLocale} onLogout={() => void logout()} onBack={() => setAgencyLocationOpen(false)} />;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Données temporairement indisponibles" : locale === "nl" ? "Gegevens tijdelijk niet beschikbaar" : "Data temporarily unavailable"}</h1><p>{locale === "fr" ? "TrackFleet n’affiche aucune donnée de démonstration à la place de vos données réelles." : locale === "nl" ? "TrackFleet toont geen demogegevens in plaats van uw echte gegevens." : "TrackFleet will not show demo data in place of your real data."}</p><button className="primary-button" onClick={() => window.location.reload()}>{locale === "fr" ? "Réessayer" : locale === "nl" ? "Opnieuw proberen" : "Retry"}</button></section></main>;
+  // A company with no active subscription (past_due/canceled/never
+  // subscribed) is authenticated and can still log in -- it's only actual
+  // fleet data access that's gated -- so this screen shows instead of the
+  // dashboard rather than instead of the login form. No checkout button
+  // yet: the Paddle integration that creates/renews a subscription lands
+  // separately: this gate and the (currently empty) subscriptions table
+  // ship first so nothing regresses if that follow-up takes longer.
+  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "subscription_required") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Abonnement requis" : locale === "nl" ? "Abonnement vereist" : "Subscription required"}</h1><p>{locale === "fr" ? "Votre accès TrackFleet n’est plus actif. Contactez-nous pour réactiver votre abonnement." : locale === "nl" ? "Uw TrackFleet-toegang is niet meer actief. Neem contact op om uw abonnement te heractiveren." : "Your TrackFleet access is no longer active. Contact us to reactivate your subscription."}</p><button className="primary-button" onClick={() => void logout()}>{locale === "fr" ? "Se déconnecter" : locale === "nl" ? "Afmelden" : "Log out"}</button></section></main>;
 
   // Wrapped in a nested function (instead of inlining this JSX directly in
   // the branch below) so V8 can lazily defer parsing/compiling its body --

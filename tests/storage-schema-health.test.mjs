@@ -27,6 +27,7 @@ test("schema contract covers every persistent production subsystem", async () =>
     "login_rate_limits",
     "sessions",
     "sites",
+    "subscriptions",
     "trip_position_observations",
     "trips",
   ]));

@@ -10,6 +10,7 @@ export const REQUIRED_POSTGRES_TABLES = [
   "login_rate_limits",
   "sessions",
   "sites",
+  "subscriptions",
   "trip_position_observations",
   "trips",
 ] as const;
