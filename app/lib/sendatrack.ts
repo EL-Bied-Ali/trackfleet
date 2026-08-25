@@ -29,6 +29,20 @@ const defaultApiUrl = "http://backend2.sendatrack.com/sendatrack/public/api/";
 const cachedTokens = new Map<string, { value: string; expiresAt: number }>();
 const snapshotMaxAttempts = 2;
 const snapshotRetryDelayMs = 750;
+// A wall-clock budget for the WHOLE snapshot call (every login/list request
+// across every attempt and retry), not a per-fetch allowance. Each
+// individual fetch previously got its own fresh 12s timeout regardless of
+// how much time earlier calls in the same snapshot had already used --
+// worst case (auth-retry within an attempt, times two outer attempts) could
+// legitimately run past a minute when SENDATRACK responds slowly rather
+// than failing fast, which is long enough for Cloudflare's own platform-
+// level request cancellation to kill the whole Worker invocation first
+// (observed live: "outcome": "canceled" with ~20s wall time, ~8ms CPU --
+// not a CPU/resource-limit issue, a hung-upstream one). One shared signal
+// means every fetch after this budget is exhausted fails fast instead of
+// getting its own fresh allowance, so the function's own graceful
+// "service_unavailable" return always wins that race.
+const snapshotOverallTimeoutMs = 15_000;
 
 function environmentCredentials(): SendatrackCredentials {
   return {
@@ -273,7 +287,7 @@ async function authenticationRejectedResponse(response: Response) {
   }
 }
 
-async function login(auth: SendatrackCredentials) {
+async function login(auth: SendatrackCredentials, signal: AbortSignal) {
   requireAllowedTransport();
   const key = credentialKey(auth);
   const cachedToken = await readCachedToken(key);
@@ -283,7 +297,7 @@ async function login(auth: SendatrackCredentials) {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({ ...auth, machin: "trackfleet-connector", remember: true, force: false }),
-    signal: AbortSignal.timeout(12_000),
+    signal,
   });
   if (!response.ok) {
     console.error("[trackfleet:sendatrack] login rejected", {
@@ -309,11 +323,11 @@ async function login(auth: SendatrackCredentials) {
   return token;
 }
 
-async function requestFleetPayload(token: string, auth: SendatrackCredentials) {
+async function requestFleetPayload(token: string, auth: SendatrackCredentials, signal: AbortSignal) {
   requireAllowedTransport();
   const response = await sendatrackFetch(apiUrl("list?"), {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
-    signal: AbortSignal.timeout(12_000),
+    signal,
   });
   if (response.status === 401) {
     await deleteCachedToken(credentialKey(auth));
@@ -323,8 +337,8 @@ async function requestFleetPayload(token: string, auth: SendatrackCredentials) {
   return await response.json() as unknown;
 }
 
-async function requestFleet(token: string, auth: SendatrackCredentials) {
-  const payload = await requestFleetPayload(token, auth);
+async function requestFleet(token: string, auth: SendatrackCredentials, signal: AbortSignal) {
+  const payload = await requestFleetPayload(token, auth, signal);
   const { vehicles, diagnostics } = normalizeSendatrackFleet(payload);
   console.info("[trackfleet:sendatrack] fleet normalized", diagnostics);
   return vehicles;
@@ -346,9 +360,10 @@ export function isSendatrackConfigured() {
 export async function getSendatrackLegacyHistoryIdentities(): Promise<SendatrackLegacyHistoryIdentity[]> {
   const auth = environmentCredentials();
   if (!auth.accountID || !auth.user || !auth.password) return [];
-  const token = await login(auth);
+  const signal = AbortSignal.timeout(snapshotOverallTimeoutMs);
+  const token = await login(auth, signal);
   if (!token) return [];
-  const payload = await requestFleetPayload(token, auth);
+  const payload = await requestFleetPayload(token, auth, signal);
   const { vehicles, diagnostics } = normalizeSendatrackFleet(payload);
   console.info("[trackfleet:sendatrack] fleet normalized", diagnostics);
   const vehicle = vehicles[0];
@@ -380,17 +395,21 @@ export async function getSendatrackSnapshot(providedCredentials?: SendatrackCred
   const auth = providedCredentials ?? environmentCredentials();
   if (!auth.accountID || !auth.user || !auth.password) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
 
+  // One deadline for every login/list call this function makes, across
+  // every attempt and every within-attempt auth retry below -- see
+  // snapshotOverallTimeoutMs for why a per-fetch timeout alone isn't enough.
+  const signal = AbortSignal.timeout(snapshotOverallTimeoutMs);
   for (let attempt = 1; attempt <= snapshotMaxAttempts; attempt += 1) {
     try {
-      let token = await login(auth);
+      let token = await login(auth, signal);
       if (!token) return { configured: false, connected: false, vehicles: [], error: "not_configured" };
       try {
-        const vehicles = await requestFleet(token, auth);
+        const vehicles = await requestFleet(token, auth, signal);
         return { configured: true, connected: true, vehicles };
       } catch (error) {
         if (error instanceof Error && error.message === "authentication_failed") {
-          token = await login(auth);
-          if (token) return { configured: true, connected: true, vehicles: await requestFleet(token, auth) };
+          token = await login(auth, signal);
+          if (token) return { configured: true, connected: true, vehicles: await requestFleet(token, auth, signal) };
         }
         throw error;
       }
