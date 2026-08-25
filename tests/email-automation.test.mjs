@@ -53,11 +53,19 @@ test("reuses automaticWhatsAppMessage as the email body instead of maintaining s
   assert.match(emailAutomation, /const message = automaticWhatsAppMessage\(event, delivery, trackingUrl\);/);
 });
 
-test("sendAutomaticEmailNotification respects the same master automation switch as WhatsApp, and requires both an API key and a from-address before attempting a send", () => {
+test("sendAutomaticEmailNotification respects the same master automation switch as WhatsApp, and requires an API key, sending domain, and from-address before attempting a send", () => {
   assert.match(emailAutomation, /if \(runtimeEnv\.WHATSAPP_AUTOMATION_ENABLED !== "true"\) return \{ sent: false, reason: "disabled" as const \};/);
-  assert.match(emailAutomation, /if \(!apiKey \|\| !from\) return \{ sent: false, reason: "not_configured" as const \};/);
+  assert.match(emailAutomation, /if \(!apiKey \|\| !domain \|\| !from\) return \{ sent: false, reason: "not_configured" as const \};/);
 });
 
-test("the Resend API call has a bounded request timeout, matching the WhatsApp/Paddle/Google/SENDATRACK call pattern", () => {
+test("the Mailgun API call has a bounded request timeout, matching the WhatsApp/Paddle/Google/SENDATRACK call pattern", () => {
   assert.match(emailAutomation, /AbortSignal\.timeout\(emailRequestTimeoutMs\)/);
+});
+
+test("provider is Mailgun: HTTP Basic auth with the literal username \"api\" (not a bearer token like Resend), form-encoded body, and the sending domain in the URL path", () => {
+  assert.match(emailAutomation, /https:\/\/api\.mailgun\.net\/v3\/\$\{domain\}\/messages/);
+  assert.match(emailAutomation, /authorization: `Basic \$\{btoa\(`api:\$\{apiKey\}`\)\}`,/);
+  assert.match(emailAutomation, /"content-type": "application\/x-www-form-urlencoded",/);
+  assert.doesNotMatch(emailAutomation, /api\.resend\.com/);
+  assert.doesNotMatch(emailAutomation, /Bearer \$\{apiKey\}/);
 });
