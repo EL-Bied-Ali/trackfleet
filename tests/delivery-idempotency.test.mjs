@@ -87,6 +87,8 @@ test("payload replay requires the normalized identity fields and ETA to match", 
   assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, plannedArrivalAt: new Date("2026-08-19T15:31:00.000Z") }), false);
   assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, itemDescription: "Washing machine" }), false);
   assert.equal(deliveryIdempotencyPayloadMatches({ ...delivery, itemDescription: "Washing machine" }, { ...same, itemDescription: "Washing machine" }), true);
+  assert.equal(deliveryIdempotencyPayloadMatches(delivery, { ...same, customerEmail: "client@example.com" }), false);
+  assert.equal(deliveryIdempotencyPayloadMatches({ ...delivery, customerEmail: "client@example.com" }, { ...same, customerEmail: "client@example.com" }), true);
 });
 
 test("delivery POST validates, replays and race-recovers idempotency before duplicate side effects", async () => {

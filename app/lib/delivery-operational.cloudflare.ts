@@ -39,6 +39,7 @@ type RawDelivery = {
   priceAmount: number | null;
   priceCurrency: "EUR" | "MAD" | null;
   itemDescription: string | null;
+  customerEmail: string | null;
   whatsappOptIn: number | null;
   whatsappOptInAt: number | null;
   recipientWhatsappOptIn: number | null;
@@ -93,7 +94,7 @@ const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_lati
   destination_latitude AS destinationLatitude, destination_longitude AS destinationLongitude,
   arrival_radius_km AS arrivalRadiusKm, truck, driver, status, eta,
   planned_arrival_at AS plannedArrivalAt, next_truck_departure_at AS nextTruckDepartureAt, progress, color, contact, recipient_name AS recipientName, recipient_contact AS recipientContact,
-  weight_kg AS weightKg, price_amount AS priceAmount, price_currency AS priceCurrency, item_description AS itemDescription,
+  weight_kg AS weightKg, price_amount AS priceAmount, price_currency AS priceCurrency, item_description AS itemDescription, customer_email AS customerEmail,
   whatsapp_opt_in AS whatsappOptIn, whatsapp_opt_in_at AS whatsappOptInAt,
   recipient_whatsapp_opt_in AS recipientWhatsappOptIn, recipient_whatsapp_opt_in_at AS recipientWhatsappOptInAt,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,

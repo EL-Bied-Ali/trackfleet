@@ -46,6 +46,7 @@ type RawDelivery = {
   price_amount: number | string | null;
   price_currency: "EUR" | "MAD" | null;
   item_description: string | null;
+  customer_email: string | null;
   whatsapp_opt_in: boolean | null;
   whatsapp_opt_in_at: string | Date | null;
   recipient_whatsapp_opt_in: boolean | null;
@@ -129,6 +130,7 @@ function hydrateDelivery(row: RawDelivery): DeliveryRow {
     priceAmount: numberOrNull(row.price_amount),
     priceCurrency: row.price_currency === "EUR" || row.price_currency === "MAD" ? row.price_currency : null,
     itemDescription: row.item_description ?? null,
+    customerEmail: row.customer_email ?? null,
     whatsappOptIn: row.whatsapp_opt_in === true,
     whatsappOptInAt: row.whatsapp_opt_in_at ? new Date(row.whatsapp_opt_in_at) : null,
     recipientWhatsappOptIn: row.recipient_whatsapp_opt_in === true,
@@ -179,10 +181,10 @@ function deliveryStatement(db: D1Binding, delivery: DeliveryRow) {
   return db.prepare(`INSERT INTO deliveries (
     id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination,
     destination_latitude, destination_longitude, arrival_radius_km, truck, driver, status, eta,
-    planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at,
+    planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at,
     sendatrack_vehicle_id, latitude, longitude, speed, last_position_at, gps_source, company_id,
     tracking_token, trip_id, shipment_id, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     customer = excluded.customer,
     origin_site_id = excluded.origin_site_id,
@@ -208,6 +210,7 @@ function deliveryStatement(db: D1Binding, delivery: DeliveryRow) {
     price_amount = excluded.price_amount,
     price_currency = excluded.price_currency,
     item_description = excluded.item_description,
+    customer_email = excluded.customer_email,
     whatsapp_opt_in = excluded.whatsapp_opt_in,
     whatsapp_opt_in_at = excluded.whatsapp_opt_in_at,
     recipient_whatsapp_opt_in = excluded.recipient_whatsapp_opt_in,
@@ -227,7 +230,7 @@ function deliveryStatement(db: D1Binding, delivery: DeliveryRow) {
       delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude,
       delivery.arrivalRadiusKm, delivery.truck, delivery.driver, delivery.status, delivery.eta,
       delivery.plannedArrivalAt?.getTime() ?? null, delivery.nextTruckDepartureAt?.getTime() ?? null, delivery.progress, delivery.color, delivery.contact, delivery.recipientName ?? "", delivery.recipientContact ?? "",
-      delivery.weightKg ?? null, delivery.priceAmount ?? null, delivery.priceCurrency ?? null, delivery.itemDescription ?? null,
+      delivery.weightKg ?? null, delivery.priceAmount ?? null, delivery.priceCurrency ?? null, delivery.itemDescription ?? null, delivery.customerEmail ?? null,
       delivery.whatsappOptIn ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.recipientWhatsappOptIn ? 1 : 0, delivery.recipientWhatsappOptInAt?.getTime() ?? null,
       delivery.sendatrackVehicleId, delivery.latitude, delivery.longitude, delivery.speed,
       delivery.lastPositionAt?.getTime() ?? null, delivery.gpsSource, delivery.companyId,

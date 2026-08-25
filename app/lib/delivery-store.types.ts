@@ -41,6 +41,7 @@ export type DeliveryRow = {
   // there's otherwise nothing distinguishing one unweighed parcel from
   // another in the table or on the customer tracking page.
   itemDescription?: string | null;
+  customerEmail?: string | null;
   whatsappOptIn?: boolean;
   whatsappOptInAt?: Date | null;
   recipientWhatsappOptIn?: boolean;

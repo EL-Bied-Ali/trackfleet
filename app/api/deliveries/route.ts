@@ -18,10 +18,10 @@ import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progr
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
-import { getSubscription, subscriptionGrantsAccess } from "../../lib/subscription-store";
+import { getSubscription, subscriptionGrantsAccess, whatsappIncludedInPlan } from "../../lib/subscription-store";
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { publicTrackingIsActive, publicTrackingTokenIsValid, trackingExpiresAt } from "../../lib/tracking-access";
-import { normalizeCustomerPhone } from "../../lib/customer-contact";
+import { normalizeCustomerEmail, normalizeCustomerPhone } from "../../lib/customer-contact";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
@@ -412,6 +412,13 @@ export async function GET(request: Request) {
       routeHistory: session.role === "dispatcher" ? routeHistory : [],
       features: {
         whatsappDemoEnabled: session.role === "dispatcher" && runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",
+        // Lets the new-delivery form hide (rather than misleadingly show) the
+        // WhatsApp opt-in checkbox for a Standard-tier company -- otherwise a
+        // dispatcher could collect a customer's opt-in for something that
+        // silently never sends (see whatsappIncludedInPlan in
+        // subscription-store.ts, the exact same rule notification-runner.ts
+        // gates actual sends on).
+        whatsappAvailable: whatsappIncludedInPlan(subscription),
       },
       integration: {
         configured: integration.configured,
@@ -453,6 +460,7 @@ export async function POST(request: Request) {
     const plannedArrivalRaw = String(payload.plannedArrivalAt ?? "").trim();
     const nextTruckDepartureRaw = String(payload.nextTruckDepartureAt ?? "").trim();
     const contactInput = String(payload.contact ?? "").trim();
+    const customerEmailInput = String(payload.customerEmail ?? "").trim();
     const recipientName = String(payload.recipientName ?? "").trim();
     const recipientContactInput = String(payload.recipientContact ?? "").trim();
     const weightProvided = payload.weightKg !== null && payload.weightKg !== undefined && String(payload.weightKg).trim() !== "";
@@ -481,6 +489,7 @@ export async function POST(request: Request) {
       || plannedArrivalRaw.length > 64
       || nextTruckDepartureRaw.length > 64
       || contactInput.length > 40
+      || customerEmailInput.length > 254
       || recipientName.length > 160
       || recipientContactInput.length > 40
       || itemDescriptionInput.length > 200
@@ -539,6 +548,10 @@ export async function POST(request: Request) {
     if (contact === null) {
       return Response.json({ error: "contact must use an international phone format, for example +212... or +32..." }, { status: 400 });
     }
+    const customerEmail = normalizeCustomerEmail(customerEmailInput);
+    if (customerEmail === null) {
+      return Response.json({ error: "customerEmail must be a valid email address" }, { status: 400 });
+    }
     const recipientContact = normalizeCustomerPhone(recipientContactInput);
     if (recipientContact === null) {
       return Response.json({ error: "recipientContact must use an international phone format, for example +212... or +32..." }, { status: 400 });
@@ -584,7 +597,7 @@ export async function POST(request: Request) {
         if (session.role === "agency" && !agencyDeliveryIsVisible(existing, session.siteId)) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
-        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency, itemDescription: itemDescriptionInput || null })) {
+        if (!deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, customerEmail: customerEmail || null, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency, itemDescription: itemDescriptionInput || null })) {
           return Response.json({ error: "idempotency_key_conflict" }, { status: 409, headers: { "cache-control": "no-store" } });
         }
         return idempotentReplayResponse(existing, session.companyId);
@@ -619,6 +632,7 @@ export async function POST(request: Request) {
         plannedArrivalAt,
         nextTruckDepartureAt,
         contact,
+        customerEmail: customerEmail || null,
         recipientName,
         recipientContact,
         weightKg,
@@ -643,7 +657,7 @@ export async function POST(request: Request) {
         const existing = await store.getPublic(idempotencyTrackingToken).catch(() => null);
         if (existing?.companyId === session.companyId
           && (session.role === "dispatcher" || agencyDeliveryIsVisible(existing, session.siteId))
-          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency, itemDescription: itemDescriptionInput || null })) {
+          && deliveryIdempotencyPayloadMatches(existing, { customer, destination, contact, customerEmail: customerEmail || null, recipientName, recipientContact, eta: normalizedEta, plannedArrivalAt, nextTruckDepartureAt, weightKg, priceAmount, priceCurrency, itemDescription: itemDescriptionInput || null })) {
           return idempotentReplayResponse(existing, session.companyId);
         }
       }

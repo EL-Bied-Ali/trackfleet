@@ -41,6 +41,7 @@ type RawDelivery = {
   price_amount: number | string | null;
   price_currency: "EUR" | "MAD" | null;
   item_description: string | null;
+  customer_email: string | null;
   whatsapp_opt_in: boolean | null;
   whatsapp_opt_in_at: string | Date | null;
   recipient_whatsapp_opt_in: boolean | null;
@@ -104,6 +105,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     priceAmount: numberOrNull(row.price_amount),
     priceCurrency: row.price_currency === "EUR" || row.price_currency === "MAD" ? row.price_currency : null,
     itemDescription: row.item_description ?? null,
+    customerEmail: row.customer_email ?? null,
     whatsappOptIn: row.whatsapp_opt_in === true,
     whatsappOptInAt: row.whatsapp_opt_in_at ? new Date(row.whatsapp_opt_in_at) : null,
     recipientWhatsappOptIn: row.recipient_whatsapp_opt_in === true,
@@ -184,6 +186,7 @@ async function ensureSchema() {
       price_amount numeric(12,2),
       price_currency text,
       item_description text,
+      customer_email text,
       whatsapp_opt_in boolean NOT NULL DEFAULT false,
       whatsapp_opt_in_at timestamptz,
       recipient_whatsapp_opt_in boolean NOT NULL DEFAULT false,
@@ -214,6 +217,7 @@ async function ensureSchema() {
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS price_amount numeric(12,2)`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS price_currency text`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS item_description text`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS customer_email text`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS next_truck_departure_at timestamptz`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS shipment_id text`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
@@ -300,11 +304,11 @@ async function ensureSchema() {
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
         id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-        truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
+        truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
         latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, created_at
       ) VALUES (
         ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
-        ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
+        ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.customerEmail ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
         ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.createdAt.toISOString()}
       ) ON CONFLICT (id) DO NOTHING`;
     }
@@ -660,11 +664,11 @@ export const postgresStore: DeliveryStore = {
     };
     await sql`INSERT INTO deliveries (
       id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
-      truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
+      truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
       latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at
     ) VALUES (
       ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
-      ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
+      ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.customerEmail ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
       ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}
     )`;
     return delivery;

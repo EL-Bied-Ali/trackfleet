@@ -84,7 +84,12 @@ test("submitting a new delivery with a phone number but an unchecked consent box
   // miss entirely. This doesn't check it automatically (that would defeat
   // the point of real affirmative consent) -- it just makes sure a
   // dispatcher can't submit past it without noticing.
-  assert.match(page, /if \(!whatsappOptIn && \(contactRaw \|\| recipientContactRaw\)\) \{/);
+  // Only nudges when WhatsApp is actually available on this company's plan
+  // (see app/lib/subscription-store.ts's whatsappIncludedInPlan) -- a
+  // Standard-tier company never sees the checkbox at all (see the
+  // whatsapp-plan-gating tests), so this confirmation would be meaningless
+  // for them.
+  assert.match(page, /if \(features\.whatsappAvailable && !whatsappOptIn && \(contactRaw \|\| recipientContactRaw\)\) \{/);
   assert.match(page, /if \(!window\.confirm\(confirmMessage\)\) return;/);
   assert.match(page, /contact: contactRaw,/);
   assert.match(page, /recipientContact: recipientContactRaw,/);
