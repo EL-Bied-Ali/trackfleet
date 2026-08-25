@@ -110,7 +110,7 @@ test("missing consent, missing customer phone, and missing customer email are al
   // equivalent. None of these become a five-minute retry loop, because
   // retrying wouldn't change the outcome for that queued event.
   assert.match(runner, /const permanentChannelReasons = new Set\(\["consent_missing", "recipient_missing", "internal_event", "no_email"\]\);/);
-  const suppressionStart = runner.indexOf("results.every((result) => permanentChannelReasons.has(result.reason))");
+  const suppressionStart = runner.indexOf('results.every((result) => permanentChannelReasons.has(result.reason ?? ""))');
   const retryStart = runner.indexOf("await store.releaseNotification", suppressionStart);
   assert.ok(suppressionStart >= 0);
   assert.ok(retryStart > suppressionStart);

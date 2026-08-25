@@ -138,7 +138,7 @@ export async function processPendingNotifications(companyId: string, origin: str
       if (results.some((result) => result.sent)) {
         await store.markNotificationSent(item.delivery.id, item.event.type);
         sent += 1;
-      } else if (results.every((result) => permanentChannelReasons.has(result.reason))) {
+      } else if (results.every((result) => permanentChannelReasons.has(result.reason ?? ""))) {
         // Every attempted (or applicable) channel failed for a permanent
         // reason -- e.g. no WhatsApp consent AND no customer email on file.
         // Must not become a five-minute retry loop: nothing about retrying
