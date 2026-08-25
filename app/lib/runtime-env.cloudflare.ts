@@ -32,6 +32,7 @@ export type TrackFleetRuntimeEnv = {
   PADDLE_WEBHOOK_SECRET?: string;
   PADDLE_PRICE_ID?: string;
   PADDLE_ENVIRONMENT?: string;
+  ADMIN_EMAILS?: string;
 };
 
 const rawRuntimeEnv = env as unknown as TrackFleetRuntimeEnv;

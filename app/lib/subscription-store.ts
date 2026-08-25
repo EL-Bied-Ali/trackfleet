@@ -61,6 +61,58 @@ export async function getSubscription(companyId: string): Promise<Subscription |
   };
 }
 
+export type CompanyWithSubscription = {
+  companyId: string;
+  accountLabel: string;
+  userLabel: string;
+  createdAt: Date;
+  subscriptionStatus: SubscriptionStatus | null;
+  plan: string | null;
+  currentPeriodEnd: Date | null;
+};
+
+// Admin-only (see app/api/admin/companies/route.ts) -- every company, not
+// scoped to one tenant, which is exactly what makes this admin-only rather
+// than something any dispatcher session could call.
+export async function listCompaniesWithSubscriptions(): Promise<CompanyWithSubscription[]> {
+  const sql = sqlClient();
+  const rows = await sql`
+    SELECT c.id AS company_id, c.account_label, c.user_label, c.created_at,
+           s.status, s.plan, s.current_period_end
+    FROM companies c
+    LEFT JOIN subscriptions s ON s.company_id = c.id
+    ORDER BY c.created_at DESC
+  ` as Array<{
+    company_id: string;
+    account_label: string;
+    user_label: string;
+    created_at: string | Date;
+    status: string | null;
+    plan: string | null;
+    current_period_end: string | Date | null;
+  }>;
+  return rows.map((row) => ({
+    companyId: row.company_id,
+    accountLabel: row.account_label,
+    userLabel: row.user_label,
+    createdAt: new Date(row.created_at),
+    subscriptionStatus: isSubscriptionStatus(row.status) ? row.status : null,
+    plan: row.plan,
+    currentPeriodEnd: row.current_period_end ? new Date(row.current_period_end) : null,
+  }));
+}
+
+// Admin-only: fetches a company's stored, encrypted SENDATRACK credentials
+// so an admin can mint a normal session on that company's behalf (see
+// app/api/admin/companies/impersonate/route.ts) without ever seeing the
+// plaintext password themselves -- decryption happens inside
+// createCompanySession's own call chain, same as a normal login.
+export async function getCompanyCredentialsCiphertext(companyId: string): Promise<string | null> {
+  const sql = sqlClient();
+  const rows = await sql`SELECT credentials_ciphertext FROM companies WHERE id = ${companyId} LIMIT 1` as Array<{ credentials_ciphertext: string }>;
+  return rows[0]?.credentials_ciphertext ?? null;
+}
+
 // Called from the Paddle webhook handler once that's wired up -- upserts by
 // companyId, so a re-delivered webhook event (Paddle retries on a non-2xx
 // response) is naturally idempotent rather than needing separate dedup.
