@@ -18,6 +18,7 @@ import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progr
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
+import { getSubscription, subscriptionGrantsAccess } from "../../lib/subscription-store";
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { publicTrackingIsActive, publicTrackingTokenIsValid, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerPhone } from "../../lib/customer-contact";
@@ -264,6 +265,11 @@ export async function GET(request: Request) {
     const session = await getCompanySession(request);
     if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
 
+    const subscription = await getSubscription(session.companyId);
+    if (!subscriptionGrantsAccess(subscription?.status ?? null)) {
+      return Response.json({ error: "subscription_required" }, { status: 402, headers: { "cache-control": "no-store" } });
+    }
+
     const integration = await getSendatrackSnapshot(session.credentials);
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
@@ -425,6 +431,10 @@ export async function POST(request: Request) {
     if (!requestIsSameOrigin(request)) return originRejectedResponse();
     const session = await getCompanySession(request);
     if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
+    const subscription = await getSubscription(session.companyId);
+    if (!subscriptionGrantsAccess(subscription?.status ?? null)) {
+      return Response.json({ error: "subscription_required" }, { status: 402, headers: { "cache-control": "no-store" } });
+    }
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
     if (idempotencyKey && !validDeliveryIdempotencyKey(idempotencyKey)) {
       return Response.json({ error: "invalid_idempotency_key" }, { status: 400, headers: { "cache-control": "no-store" } });
