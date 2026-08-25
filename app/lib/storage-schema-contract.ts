@@ -6,6 +6,7 @@ export const REQUIRED_POSTGRES_TABLES = [
   "delivery_events",
   "delivery_notifications",
   "fleet_position_observations",
+  "google_links",
   "login_rate_limits",
   "sessions",
   "sites",
