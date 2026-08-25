@@ -59,6 +59,7 @@ export async function POST(request: Request) {
     await upsertSubscription({
       companyId: event.companyId,
       status: event.status,
+      plan: event.plan,
       paddleCustomerId: event.paddleCustomerId,
       paddleSubscriptionId: event.paddleSubscriptionId,
       currentPeriodEnd: event.currentPeriodEnd,

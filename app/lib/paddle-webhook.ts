@@ -1,4 +1,5 @@
 import type { SubscriptionStatus } from "./subscription-store";
+import { isPaddlePlan } from "./paddle-plan.ts";
 
 // Paddle sends `Paddle-Signature: ts=<unix seconds>;h1=<hex hmac>`, computed
 // as HMAC-SHA256 over `${ts}:${rawBody}` with the webhook's own secret key
@@ -45,6 +46,7 @@ export async function verifyPaddleWebhookSignature(rawBody: string, signatureHea
 export type PaddleSubscriptionEvent = {
   eventType: string;
   companyId: string | null;
+  plan: string | null;
   paddleCustomerId: string | null;
   paddleSubscriptionId: string | null;
   status: SubscriptionStatus | null;
@@ -79,6 +81,7 @@ export function parsePaddleSubscriptionEvent(payload: unknown): PaddleSubscripti
 
   const customData = asRecord(data.custom_data);
   const companyId = typeof customData?.companyId === "string" ? customData.companyId : null;
+  const plan = isPaddlePlan(customData?.plan) ? customData.plan : null;
   const paddleSubscriptionId = typeof data.id === "string" ? data.id : null;
   const paddleCustomerId = typeof data.customer_id === "string" ? data.customer_id : null;
   const rawStatus = typeof data.status === "string" ? data.status : null;
@@ -89,6 +92,7 @@ export function parsePaddleSubscriptionEvent(payload: unknown): PaddleSubscripti
   return {
     eventType,
     companyId,
+    plan,
     paddleCustomerId,
     paddleSubscriptionId,
     status,

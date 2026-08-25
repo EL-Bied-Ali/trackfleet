@@ -2,7 +2,19 @@ import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { whatsappConsentWithdrawn } from "./delivery-events";
 import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
+import { getSubscription, subscriptionGrantsAccess, type Subscription } from "./subscription-store";
 import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
+
+// WhatsApp is a Pro-tier feature (see app/lib/paddle-checkout.ts) --
+// Standard-tier companies still get tracking, just not WhatsApp pushes.
+// "grandfathered" companies predate the Paddle paywall entirely and never
+// had a plan assigned, so they keep the WhatsApp access they already had
+// rather than losing it because `plan` happens to be null.
+function whatsappIncludedInPlan(subscription: Subscription | null) {
+  if (!subscription) return false;
+  if (subscription.status === "grandfathered") return true;
+  return subscriptionGrantsAccess(subscription.status) && subscription.plan === "pro";
+}
 
 // A dispatcher GET request must never be able to time out because of a
 // WhatsApp/Meta backlog: each send has its own multi-second timeout, and
@@ -33,6 +45,15 @@ export async function processPendingNotifications(companyId: string, origin: str
   // WHATSAPP_AUTOMATION_START_AT defines the activation boundary so old
   // milestones are acknowledged without being sent in a burst.
   if (runtimeEnv.WHATSAPP_AUTOMATION_ENABLED !== "true") {
+    return { pending: pending.length, sent, failed, suppressed };
+  }
+
+  // A company on the Standard (no-WhatsApp) plan, or with no access-granting
+  // subscription at all, keeps events pending rather than losing them --
+  // upgrading to Pro (or the subscription becoming active again) picks the
+  // backlog back up on the next tick, same as while automation is disabled.
+  const subscription = await getSubscription(companyId);
+  if (!whatsappIncludedInPlan(subscription)) {
     return { pending: pending.length, sent, failed, suppressed };
   }
 

@@ -186,6 +186,78 @@ function LoginScreen({ locale, busy, error, onLocale, onSubmit, googleLink, goog
   </main>;
 }
 
+function SubscribeScreen({ locale, busy, unavailable, interval, onIntervalChange, onSubscribe, onLogout }: {
+  locale: Locale;
+  busy: "standard" | "pro" | null;
+  unavailable: boolean;
+  interval: "monthly" | "yearly";
+  onIntervalChange: (interval: "monthly" | "yearly") => void;
+  onSubscribe: (plan: "standard" | "pro") => void;
+  onLogout: () => void;
+}) {
+  const copy = {
+    fr: {
+      title: "Abonnement requis", subtitle: "Votre accès TrackFleet n’est plus actif.",
+      monthly: "Mensuel", yearly: "Annuel",
+      standardName: "Standard", standardDesc: "Suivi GPS et notifications de livraison en temps réel.",
+      proName: "Pro", proDesc: "Standard, plus les notifications WhatsApp automatiques pour vos clients.",
+      subscribe: "S’abonner", redirecting: "Redirection…",
+      unavailable: "Abonnement indisponible pour le moment. Contactez-nous directement.",
+      logout: "Se déconnecter", perMonth: "/mois", perYear: "/an",
+    },
+    en: {
+      title: "Subscription required", subtitle: "Your TrackFleet access is no longer active.",
+      monthly: "Monthly", yearly: "Yearly",
+      standardName: "Standard", standardDesc: "Real-time GPS tracking and delivery notifications.",
+      proName: "Pro", proDesc: "Everything in Standard, plus automatic WhatsApp notifications for your customers.",
+      subscribe: "Subscribe", redirecting: "Redirecting…",
+      unavailable: "Subscribing isn't available right now. Please contact us directly.",
+      logout: "Log out", perMonth: "/mo", perYear: "/yr",
+    },
+    nl: {
+      title: "Abonnement vereist", subtitle: "Uw TrackFleet-toegang is niet meer actief.",
+      monthly: "Maandelijks", yearly: "Jaarlijks",
+      standardName: "Standard", standardDesc: "Live GPS-tracking en leveringsmeldingen.",
+      proName: "Pro", proDesc: "Alles van Standard, plus automatische WhatsApp-meldingen voor uw klanten.",
+      subscribe: "Abonneren", redirecting: "Doorverwijzen…",
+      unavailable: "Abonneren is momenteel niet beschikbaar. Neem rechtstreeks contact met ons op.",
+      logout: "Afmelden", perMonth: "/mnd", perYear: "/jaar",
+    },
+  }[locale];
+  const prices = {
+    standard: { monthly: "€45", yearly: "€400" },
+    pro: { monthly: "€90", yearly: "€800" },
+  } as const;
+  const suffix = interval === "monthly" ? copy.perMonth : copy.perYear;
+  return <main className="login-page login-loading">
+    <section className="tracking-error plan-picker-screen">
+      <div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div>
+      <h1>{copy.title}</h1>
+      <p>{copy.subtitle}</p>
+      {unavailable && <p className="login-error" role="alert">{copy.unavailable}</p>}
+      <div className="plan-interval-toggle" role="group">
+        <button type="button" className={interval === "monthly" ? "active" : ""} onClick={() => onIntervalChange("monthly")}>{copy.monthly}</button>
+        <button type="button" className={interval === "yearly" ? "active" : ""} onClick={() => onIntervalChange("yearly")}>{copy.yearly}</button>
+      </div>
+      <div className="plan-cards">
+        <div className="plan-card">
+          <h2>{copy.standardName}</h2>
+          <p className="plan-price">{prices.standard[interval]}<span>{suffix}</span></p>
+          <p className="plan-desc">{copy.standardDesc}</p>
+          <button className="primary-button" disabled={busy !== null} onClick={() => onSubscribe("standard")}>{busy === "standard" ? copy.redirecting : copy.subscribe}</button>
+        </div>
+        <div className="plan-card plan-card-highlight">
+          <h2>{copy.proName}</h2>
+          <p className="plan-price">{prices.pro[interval]}<span>{suffix}</span></p>
+          <p className="plan-desc">{copy.proDesc}</p>
+          <button className="primary-button" disabled={busy !== null} onClick={() => onSubscribe("pro")}>{busy === "pro" ? copy.redirecting : copy.subscribe}</button>
+        </div>
+      </div>
+      <button className="login-google-cancel" onClick={onLogout}>{copy.logout}</button>
+    </section>
+  </main>;
+}
+
 export default function Home() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -235,8 +307,9 @@ export default function Home() {
   const [googleLinkBusy, setGoogleLinkBusy] = useState(false);
   const [googleLinkError, setGoogleLinkError] = useState<LoginErrorKind | "">("");
   const [googleError, setGoogleError] = useState(false);
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState<"standard" | "pro" | null>(null);
   const [checkoutUnavailable, setCheckoutUnavailable] = useState(false);
+  const [checkoutInterval, setCheckoutInterval] = useState<"monthly" | "yearly">("yearly");
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false });
@@ -945,18 +1018,22 @@ export default function Home() {
     }
   }
 
-  async function startSubscriptionCheckout() {
-    setCheckoutBusy(true);
+  async function startSubscriptionCheckout(plan: "standard" | "pro") {
+    setCheckoutBusy(plan);
     setCheckoutUnavailable(false);
     try {
-      const response = await fetch("/api/subscription/checkout", { method: "POST" });
+      const response = await fetch("/api/subscription/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ plan, interval: checkoutInterval }),
+      });
       const data = await response.json() as { url?: string; error?: string };
       if (!response.ok || !data.url) { setCheckoutUnavailable(true); return; }
       window.location.href = data.url;
     } catch {
       setCheckoutUnavailable(true);
     } finally {
-      setCheckoutBusy(false);
+      setCheckoutBusy(null);
     }
   }
 
@@ -1193,7 +1270,7 @@ export default function Home() {
   // (checkoutUnavailable) when Paddle isn't configured yet -- this screen
   // and the (currently all-grandfathered) subscriptions table ship ahead
   // of that so nothing regresses if the Paddle side takes longer to land.
-  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "subscription_required") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Abonnement requis" : locale === "nl" ? "Abonnement vereist" : "Subscription required"}</h1><p>{locale === "fr" ? "Votre accès TrackFleet n’est plus actif." : locale === "nl" ? "Uw TrackFleet-toegang is niet meer actief." : "Your TrackFleet access is no longer active."}</p>{checkoutUnavailable && <p className="login-error" role="alert">{locale === "fr" ? "Abonnement indisponible pour le moment. Contactez-nous directement." : locale === "nl" ? "Abonneren is momenteel niet beschikbaar. Neem rechtstreeks contact met ons op." : "Subscribing isn't available right now. Please contact us directly."}</p>}<button className="primary-button" disabled={checkoutBusy} onClick={() => void startSubscriptionCheckout()}>{checkoutBusy ? (locale === "fr" ? "Redirection…" : locale === "nl" ? "Doorverwijzen…" : "Redirecting…") : (locale === "fr" ? "S’abonner" : locale === "nl" ? "Abonneren" : "Subscribe")}</button><button className="login-google-cancel" onClick={() => void logout()}>{locale === "fr" ? "Se déconnecter" : locale === "nl" ? "Afmelden" : "Log out"}</button></section></main>;
+  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "subscription_required") return <SubscribeScreen locale={locale} busy={checkoutBusy} unavailable={checkoutUnavailable} interval={checkoutInterval} onIntervalChange={setCheckoutInterval} onSubscribe={(plan) => void startSubscriptionCheckout(plan)} onLogout={() => void logout()} />;
 
   // Wrapped in a nested function (instead of inlining this JSX directly in
   // the branch below) so V8 can lazily defer parsing/compiling its body --
