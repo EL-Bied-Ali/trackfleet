@@ -7,7 +7,13 @@
   // SENDATRACK does not currently expose the TrackFleet API over HTTPS.
   // This explicit MVP override is monitored by /api/health and can be removed if TLS becomes available.
   "vars": {
-    "TRACKFLEET_ALLOW_INSECURE_SENDATRACK": "true"
+    "TRACKFLEET_ALLOW_INSECURE_SENDATRACK": "true",
+    // Neither of these is sensitive (the price id is public-ish, shown in
+    // checkout URLs; the environment flag just picks sandbox vs live API
+    // base URL) -- PADDLE_API_KEY and PADDLE_WEBHOOK_SECRET are the actual
+    // secrets, set via `wrangler secret put`, not here.
+    "PADDLE_PRICE_ID": "pri_01m0wsa3maq3vxp55me576s135",
+    "PADDLE_ENVIRONMENT": "sandbox"
   },
   "triggers": {
     "crons": [
