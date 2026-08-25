@@ -24,12 +24,14 @@
     "PADDLE_ENVIRONMENT": "sandbox",
     // Mailgun sending domain + From header for automatic customer
     // notification emails (app/lib/email-automation.ts) -- EMAIL_API_KEY
-    // is the actual secret, set via `wrangler secret put`. This is still
-    // Mailgun's own sandbox domain: delivery is restricted to that
-    // account's authorized-recipients list until a verified custom domain
-    // replaces it (Mailgun dashboard -> "Set up a custom domain").
-    "EMAIL_DOMAIN": "sandbox12c0abaad5844f0d84d6639d30ef8bdf.mailgun.org",
-    "EMAIL_FROM_ADDRESS": "TrackFleet <postmaster@sandbox12c0abaad5844f0d84d6639d30ef8bdf.mailgun.org>",
+    // is the actual secret, set via `wrangler secret put`. mg.medinabelgique.com
+    // is a verified custom domain (SPF/DKIM/tracking CNAME all "valid" in
+    // Mailgun) -- unlike the earlier sandbox domain, this delivers to real
+    // recipients, not just an authorized-recipients allowlist. A subdomain
+    // (mg.) rather than the bare domain on purpose, so root-domain DNS stays
+    // free for that domain's own website.
+    "EMAIL_DOMAIN": "mg.medinabelgique.com",
+    "EMAIL_FROM_ADDRESS": "TrackFleet <notifications@mg.medinabelgique.com>",
     // Comma-separated allowlist for /admin -- kept as a plain, versioned
     // config value rather than a secret on purpose: who has admin access is
     // exactly the kind of thing that should show up in git history/review,
