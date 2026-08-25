@@ -1,4 +1,5 @@
 export const REQUIRED_POSTGRES_TABLES = [
+  "admin_audit_log",
   "automation_runtime_state",
   "companies",
   "deliveries",

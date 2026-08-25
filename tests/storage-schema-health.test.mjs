@@ -16,6 +16,7 @@ async function loadContract() {
 test("schema contract covers every persistent production subsystem", async () => {
   const { REQUIRED_POSTGRES_TABLES } = await loadContract();
   assert.deepEqual(new Set(REQUIRED_POSTGRES_TABLES), new Set([
+    "admin_audit_log",
     "automation_runtime_state",
     "companies",
     "deliveries",
