@@ -35,6 +35,22 @@ export function subscriptionGrantsAccess(status: SubscriptionStatus | null) {
   return status === "grandfathered" || status === "trialing" || status === "active";
 }
 
+// WhatsApp is a Pro-tier feature (see app/lib/paddle-checkout.ts) --
+// Standard-tier companies still get tracking and email notifications, just
+// not WhatsApp pushes. "grandfathered" companies predate the Paddle
+// paywall entirely and never had a plan assigned, so they keep the
+// WhatsApp access they already had rather than losing it because `plan`
+// happens to be null. Exported (not just used inside notification-runner.ts)
+// so the dispatcher-facing UI (app/api/deliveries/route.ts's features
+// payload) can tell an authenticated company whether to even show WhatsApp
+// opt-in at all, instead of collecting consent for something that will
+// silently never send.
+export function whatsappIncludedInPlan(subscription: Subscription | null) {
+  if (!subscription) return false;
+  if (subscription.status === "grandfathered") return true;
+  return subscriptionGrantsAccess(subscription.status) && subscription.plan === "pro";
+}
+
 export async function getSubscription(companyId: string): Promise<Subscription | null> {
   const sql = sqlClient();
   const rows = await sql`

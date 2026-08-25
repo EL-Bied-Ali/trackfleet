@@ -102,10 +102,15 @@ test("notification runner filters low-value progress events before newest-event 
   assert.ok(splitIndex > eligibleIndex);
 });
 
-test("missing consent and missing customer phone are suppressed instead of retried forever", () => {
-  assert.match(runner, /result\.reason === ["']consent_missing["']/);
-  assert.match(runner, /result\.reason === ["']recipient_missing["']/);
-  const suppressionStart = runner.indexOf('result.reason === "consent_missing"');
+test("missing consent, missing customer phone, and missing customer email are all permanent (suppressed, not retried forever) -- while a genuine provider/config failure on any channel stays retryable", () => {
+  // Email (baseline, every plan) and WhatsApp (Pro-tier add-on) are now
+  // attempted independently per queued notification -- see
+  // permanentChannelReasons in notification-runner.ts. consent_missing and
+  // recipient_missing are WhatsApp-specific; no_email is email's
+  // equivalent. None of these become a five-minute retry loop, because
+  // retrying wouldn't change the outcome for that queued event.
+  assert.match(runner, /const permanentChannelReasons = new Set\(\["consent_missing", "recipient_missing", "internal_event", "no_email"\]\);/);
+  const suppressionStart = runner.indexOf("results.every((result) => permanentChannelReasons.has(result.reason))");
   const retryStart = runner.indexOf("await store.releaseNotification", suppressionStart);
   assert.ok(suppressionStart >= 0);
   assert.ok(retryStart > suppressionStart);
@@ -113,6 +118,12 @@ test("missing consent and missing customer phone are suppressed instead of retri
   assert.match(suppressionBranch, /markNotificationSent/);
   assert.match(suppressionBranch, /suppressed \+= 1/);
   assert.doesNotMatch(suppressionBranch, /releaseNotification/);
+});
+
+test("WhatsApp is only attempted when this company's plan actually includes it -- a Standard-tier company still gets the email attempt, and 'not on this plan' is never counted as a failure", () => {
+  assert.match(runner, /whatsappEligible \? sendAutomaticWhatsAppNotification\(item\.event\.type, item\.delivery, trackingUrl\.toString\(\)\) : null,/);
+  assert.match(runner, /sendAutomaticEmailNotification\(item\.event\.type, item\.delivery, trackingUrl\.toString\(\)\),/);
+  assert.match(runner, /const results = attempts\.filter\(\(result\): result is NonNullable<typeof result> => result !== null\);/);
 });
 
 test("automatic customer links require a private tracking token and never fall back to parcel id", () => {

@@ -22,7 +22,7 @@ export async function deliveryIdempotencyTrackingToken(companyId: string, key: s
 
 export function deliveryIdempotencyPayloadMatches(
   delivery: DeliveryRow,
-  input: { customer: string; destination: string; contact: string; recipientName?: string; recipientContact?: string; eta: string; plannedArrivalAt: Date | null; nextTruckDepartureAt?: Date | null; weightKg?: number | null; priceAmount?: number | null; priceCurrency?: string | null; itemDescription?: string | null },
+  input: { customer: string; destination: string; contact: string; customerEmail?: string | null; recipientName?: string; recipientContact?: string; eta: string; plannedArrivalAt: Date | null; nextTruckDepartureAt?: Date | null; weightKg?: number | null; priceAmount?: number | null; priceCurrency?: string | null; itemDescription?: string | null },
 ) {
   const existingPlanned = delivery.plannedArrivalAt?.getTime() ?? null;
   const requestedPlanned = input.plannedArrivalAt?.getTime() ?? null;
@@ -31,6 +31,7 @@ export function deliveryIdempotencyPayloadMatches(
   return delivery.customer === input.customer
     && delivery.destination === input.destination
     && delivery.contact === input.contact
+    && (delivery.customerEmail ?? null) === (input.customerEmail ?? null)
     && (delivery.recipientName ?? "") === (input.recipientName ?? "")
     && (delivery.recipientContact ?? "") === (input.recipientContact ?? "")
     && delivery.eta === input.eta

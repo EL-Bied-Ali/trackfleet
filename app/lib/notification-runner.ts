@@ -1,20 +1,18 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { whatsappConsentWithdrawn } from "./delivery-events";
+import { sendAutomaticEmailNotification } from "./email-automation";
 import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
-import { getSubscription, subscriptionGrantsAccess, type Subscription } from "./subscription-store";
+import { getSubscription, whatsappIncludedInPlan } from "./subscription-store";
 import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
 
-// WhatsApp is a Pro-tier feature (see app/lib/paddle-checkout.ts) --
-// Standard-tier companies still get tracking, just not WhatsApp pushes.
-// "grandfathered" companies predate the Paddle paywall entirely and never
-// had a plan assigned, so they keep the WhatsApp access they already had
-// rather than losing it because `plan` happens to be null.
-function whatsappIncludedInPlan(subscription: Subscription | null) {
-  if (!subscription) return false;
-  if (subscription.status === "grandfathered") return true;
-  return subscriptionGrantsAccess(subscription.status) && subscription.plan === "pro";
-}
+// Reasons a channel attempt is treated as PERMANENT for this queued event
+// (mark sent, never retry) rather than retryable: missing/invalid contact
+// info for that channel, or missing consent (WhatsApp only -- Meta requires
+// explicit opt-in). "not_configured" and "provider_error" are deliberately
+// NOT here -- an operator adding credentials later, or a transient provider
+// outage, must still get picked up by a later retry.
+const permanentChannelReasons = new Set(["consent_missing", "recipient_missing", "internal_event", "no_email"]);
 
 // A dispatcher GET request must never be able to time out because of a
 // WhatsApp/Meta backlog: each send has its own multi-second timeout, and
@@ -41,21 +39,26 @@ export async function processPendingNotifications(companyId: string, origin: str
   let failed = 0;
   let suppressed = 0;
 
-  // While automation is disabled we keep events pending. When it is enabled,
+  // WHATSAPP_AUTOMATION_ENABLED is the master switch for automatic customer
+  // notifications generally (kept under its original name rather than
+  // renamed/duplicated for email -- it already governs the one real
+  // company's live traffic, and email is gated on top of it the same way
+  // WhatsApp itself is gated on Meta credentials below). While it's
+  // disabled, all events stay pending. Once enabled,
   // WHATSAPP_AUTOMATION_START_AT defines the activation boundary so old
   // milestones are acknowledged without being sent in a burst.
   if (runtimeEnv.WHATSAPP_AUTOMATION_ENABLED !== "true") {
     return { pending: pending.length, sent, failed, suppressed };
   }
 
-  // A company on the Standard (no-WhatsApp) plan, or with no access-granting
-  // subscription at all, keeps events pending rather than losing them --
-  // upgrading to Pro (or the subscription becoming active again) picks the
-  // backlog back up on the next tick, same as while automation is disabled.
+  // Email is the baseline channel available on every plan; WhatsApp is a
+  // Pro-tier add-on on top of it (see app/lib/paddle-checkout.ts and the
+  // SubscribeScreen copy in app/page.tsx: "Everything in Standard, plus
+  // WhatsApp"). A Standard-tier company must still reach the loop below so
+  // its customers get email -- only whatsappEligible (checked per item)
+  // decides whether the WhatsApp channel itself is attempted.
   const subscription = await getSubscription(companyId);
-  if (!whatsappIncludedInPlan(subscription)) {
-    return { pending: pending.length, sent, failed, suppressed };
-  }
+  const whatsappEligible = whatsappIncludedInPlan(subscription);
 
   const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
   if (!automationStartAt) {
@@ -122,19 +125,30 @@ export async function processPendingNotifications(companyId: string, origin: str
     trackingUrl.searchParams.set("tracking", item.delivery.trackingToken);
 
     try {
-      const result = await sendAutomaticWhatsAppNotification(item.event.type, item.delivery, trackingUrl.toString());
-      if (result.sent) {
+      // Email is attempted for every plan; WhatsApp only when this
+      // company's subscription actually includes it -- when it doesn't,
+      // the channel is skipped entirely rather than attempted and counted
+      // as a failure, since "not on this plan" isn't a provider error.
+      const attempts = await Promise.all([
+        whatsappEligible ? sendAutomaticWhatsAppNotification(item.event.type, item.delivery, trackingUrl.toString()) : null,
+        sendAutomaticEmailNotification(item.event.type, item.delivery, trackingUrl.toString()),
+      ]);
+      const results = attempts.filter((result): result is NonNullable<typeof result> => result !== null);
+
+      if (results.some((result) => result.sent)) {
         await store.markNotificationSent(item.delivery.id, item.event.type);
         sent += 1;
-      } else if (result.reason === "consent_missing" || result.reason === "recipient_missing" || result.reason === "internal_event") {
-        // Missing consent/contact is permanent for this queued event and must
-        // not become a five-minute retry loop. Only explicit opt-in at parcel
-        // intake allows an automatic customer message.
+      } else if (results.every((result) => permanentChannelReasons.has(result.reason))) {
+        // Every attempted (or applicable) channel failed for a permanent
+        // reason -- e.g. no WhatsApp consent AND no customer email on file.
+        // Must not become a five-minute retry loop: nothing about retrying
+        // would change the outcome.
         await store.markNotificationSent(item.delivery.id, item.event.type);
         suppressed += 1;
       } else {
-        // Provider/configuration failures are retryable. Release the claim so a
-        // later scheduler tick can try again after the problem is corrected.
+        // At least one channel failed for a retryable reason (provider
+        // error, or not yet configured). Release the claim so a later
+        // scheduler tick can try again once the problem is corrected.
         await store.releaseNotification(item.delivery.id, item.event.type);
         failed += 1;
       }
