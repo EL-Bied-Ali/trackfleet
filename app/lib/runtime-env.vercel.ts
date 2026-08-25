@@ -27,6 +27,10 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_AUTOMATION_START_AT?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  PADDLE_API_KEY?: string;
+  PADDLE_WEBHOOK_SECRET?: string;
+  PADDLE_PRICE_ID?: string;
+  PADDLE_ENVIRONMENT?: string;
 };
 
 const rawRuntimeEnv = process.env as TrackFleetRuntimeEnv;

@@ -235,6 +235,8 @@ export default function Home() {
   const [googleLinkBusy, setGoogleLinkBusy] = useState(false);
   const [googleLinkError, setGoogleLinkError] = useState<LoginErrorKind | "">("");
   const [googleError, setGoogleError] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutUnavailable, setCheckoutUnavailable] = useState(false);
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false });
@@ -943,6 +945,21 @@ export default function Home() {
     }
   }
 
+  async function startSubscriptionCheckout() {
+    setCheckoutBusy(true);
+    setCheckoutUnavailable(false);
+    try {
+      const response = await fetch("/api/subscription/checkout", { method: "POST" });
+      const data = await response.json() as { url?: string; error?: string };
+      if (!response.ok || !data.url) { setCheckoutUnavailable(true); return; }
+      window.location.href = data.url;
+    } catch {
+      setCheckoutUnavailable(true);
+    } finally {
+      setCheckoutBusy(false);
+    }
+  }
+
   async function logout() {
     await fetch("/api/auth/session", { method: "DELETE" });
     setCompany(null);
@@ -1171,11 +1188,12 @@ export default function Home() {
   // A company with no active subscription (past_due/canceled/never
   // subscribed) is authenticated and can still log in -- it's only actual
   // fleet data access that's gated -- so this screen shows instead of the
-  // dashboard rather than instead of the login form. No checkout button
-  // yet: the Paddle integration that creates/renews a subscription lands
-  // separately: this gate and the (currently empty) subscriptions table
-  // ship first so nothing regresses if that follow-up takes longer.
-  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "subscription_required") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Abonnement requis" : locale === "nl" ? "Abonnement vereist" : "Subscription required"}</h1><p>{locale === "fr" ? "Votre accès TrackFleet n’est plus actif. Contactez-nous pour réactiver votre abonnement." : locale === "nl" ? "Uw TrackFleet-toegang is niet meer actief. Neem contact op om uw abonnement te heractiveren." : "Your TrackFleet access is no longer active. Contact us to reactivate your subscription."}</p><button className="primary-button" onClick={() => void logout()}>{locale === "fr" ? "Se déconnecter" : locale === "nl" ? "Afmelden" : "Log out"}</button></section></main>;
+  // dashboard rather than instead of the login form. The Subscribe button
+  // calls the checkout endpoint, which itself degrades gracefully
+  // (checkoutUnavailable) when Paddle isn't configured yet -- this screen
+  // and the (currently all-grandfathered) subscriptions table ship ahead
+  // of that so nothing regresses if the Paddle side takes longer to land.
+  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "subscription_required") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Abonnement requis" : locale === "nl" ? "Abonnement vereist" : "Subscription required"}</h1><p>{locale === "fr" ? "Votre accès TrackFleet n’est plus actif." : locale === "nl" ? "Uw TrackFleet-toegang is niet meer actief." : "Your TrackFleet access is no longer active."}</p>{checkoutUnavailable && <p className="login-error" role="alert">{locale === "fr" ? "Abonnement indisponible pour le moment. Contactez-nous directement." : locale === "nl" ? "Abonneren is momenteel niet beschikbaar. Neem rechtstreeks contact met ons op." : "Subscribing isn't available right now. Please contact us directly."}</p>}<button className="primary-button" disabled={checkoutBusy} onClick={() => void startSubscriptionCheckout()}>{checkoutBusy ? (locale === "fr" ? "Redirection…" : locale === "nl" ? "Doorverwijzen…" : "Redirecting…") : (locale === "fr" ? "S’abonner" : locale === "nl" ? "Abonneren" : "Subscribe")}</button><button className="login-google-cancel" onClick={() => void logout()}>{locale === "fr" ? "Se déconnecter" : locale === "nl" ? "Afmelden" : "Log out"}</button></section></main>;
 
   // Wrapped in a nested function (instead of inlining this JSX directly in
   // the branch below) so V8 can lazily defer parsing/compiling its body --
