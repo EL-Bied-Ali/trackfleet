@@ -29,6 +29,7 @@ export type TrackFleetRuntimeEnv = {
   GOOGLE_CLIENT_SECRET?: string;
   PADDLE_API_KEY?: string;
   PADDLE_WEBHOOK_SECRET?: string;
+  PADDLE_CLIENT_TOKEN?: string;
   PADDLE_PRICE_ID_STANDARD_MONTHLY?: string;
   PADDLE_PRICE_ID_STANDARD_YEARLY?: string;
   PADDLE_PRICE_ID_PRO_MONTHLY?: string;

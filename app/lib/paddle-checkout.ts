@@ -6,13 +6,24 @@ export { isPaddleInterval, isPaddlePlan } from "./paddle-plan.ts";
 
 const requestTimeoutMs = 10_000;
 
+// Defaults to sandbox on purpose -- an unset/misconfigured environment must
+// never silently point at live and risk a real charge before this has been
+// deliberately switched over.
+function paddleIsLive() {
+  return runtimeEnv.PADDLE_ENVIRONMENT?.trim() === "live";
+}
+
 function paddleApiBase() {
-  // Defaults to sandbox on purpose -- an unset/misconfigured environment
-  // must never silently point at live and risk a real charge before this
-  // has been deliberately switched over.
-  return runtimeEnv.PADDLE_ENVIRONMENT?.trim() === "live"
-    ? "https://api.paddle.com"
-    : "https://sandbox-api.paddle.com";
+  return paddleIsLive() ? "https://api.paddle.com" : "https://sandbox-api.paddle.com";
+}
+
+// The frontend's Paddle.js overlay needs to know which environment to talk
+// to as well -- a client-side token is only valid against the matching
+// environment (sandbox tokens don't work against the live API and vice
+// versa), so this must track paddleIsLive() rather than being configured
+// independently.
+export function paddlePublicEnvironment(): "live" | "sandbox" {
+  return paddleIsLive() ? "live" : "sandbox";
 }
 
 function priceIdFor(plan: PaddlePlan, interval: PaddleInterval): string | undefined {
@@ -27,25 +38,41 @@ function priceIdFor(plan: PaddlePlan, interval: PaddleInterval): string | undefi
 }
 
 // Checkout is only offered once every plan/interval combination has a real
-// price id configured -- a partially configured catalog would let a
-// customer pick a plan whose checkout then silently fails.
+// price id configured, plus a client-side token for the Paddle.js overlay --
+// a partially configured catalog would let a customer pick a plan whose
+// checkout then silently fails.
 export function paddleCheckoutConfigured() {
   if (!runtimeEnv.PADDLE_API_KEY?.trim()) return false;
+  if (!runtimeEnv.PADDLE_CLIENT_TOKEN?.trim()) return false;
   const plans: PaddlePlan[] = ["standard", "pro"];
   const intervals: PaddleInterval[] = ["monthly", "yearly"];
   return plans.every((plan) => intervals.every((interval) => Boolean(priceIdFor(plan, interval))));
+}
+
+// A client-side token is public by design (meant to be embedded in
+// frontend JS, unlike PADDLE_API_KEY) -- safe to hand back to an
+// authenticated company so their browser can drive the Paddle.js overlay
+// checkout directly instead of a full-page redirect to a Paddle-hosted page.
+export function paddleClientConfig() {
+  const clientToken = runtimeEnv.PADDLE_CLIENT_TOKEN?.trim();
+  if (!clientToken) return null;
+  return { clientToken, environment: paddlePublicEnvironment() };
 }
 
 // custom_data is how the webhook later knows which TrackFleet company a
 // Paddle subscription belongs to, and which plan it's on (see
 // paddle-webhook.ts) -- set here, server-side, from the authenticated
 // session's own companyId and the validated plan/interval, so neither can
-// be spoofed by a client-supplied value.
+// be spoofed by a client-supplied value. Returns the transaction id (not a
+// hosted checkout URL): the frontend opens it in a Paddle.js overlay via
+// Paddle.Checkout.open({ transactionId }), so the customer never leaves
+// TrackFleet and completion can be handled in-page instead of needing a
+// Paddle-approved custom domain for a post-payment redirect.
 export async function createPaddleCheckout(
   companyId: string,
   plan: PaddlePlan,
   interval: PaddleInterval,
-): Promise<{ url: string } | null> {
+): Promise<{ transactionId: string } | null> {
   const apiKey = runtimeEnv.PADDLE_API_KEY?.trim();
   const priceId = priceIdFor(plan, interval);
   if (!apiKey || !priceId) return null;
@@ -68,7 +95,7 @@ export async function createPaddleCheckout(
     return null;
   }
 
-  const body = await response.json() as { data?: { checkout?: { url?: string } } };
-  const url = body.data?.checkout?.url;
-  return url ? { url } : null;
+  const body = await response.json() as { data?: { id?: string } };
+  const transactionId = body.data?.id;
+  return transactionId ? { transactionId } : null;
 }

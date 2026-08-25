@@ -9,6 +9,7 @@ import { getSendatrackSnapshot, type SendatrackCredentials } from "./sendatrack"
 import { decodeSessionEncryptionKey } from "./session-encryption-key";
 import { knownSite } from "./known-sites";
 import { agencySiteIdFromUserLabel, agencyUserPrefix } from "./agency-access";
+import { grantTrialIfNewCompany } from "./subscription-store";
 
 export type SessionAccess =
   | { role: "dispatcher"; siteId: null }
@@ -161,6 +162,18 @@ export async function createCompanySession(credentials: SendatrackCredentials) {
     });
     throw error;
   }
+
+  // Awaited so it completes before the Worker's execution context could be
+  // torn down after the response is sent, but its failure is caught rather
+  // than propagated: a company's very first login must still succeed even
+  // if this particular write fails (e.g. a transient Postgres blip) --
+  // grantTrialIfNewCompany is idempotent (ON CONFLICT DO NOTHING), so the
+  // very next login attempt tries again for free.
+  await grantTrialIfNewCompany(companyId).catch((error) => {
+    console.error("[trackfleet:auth] trial grant failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  });
 
   return {
     cookie: `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,

@@ -3,9 +3,10 @@ import { neon } from "@neondatabase/serverless";
 // "grandfathered" exists solely for companies that were already using
 // TrackFleet before subscriptions were enforced -- assigned once, directly
 // in production, for every row in `companies` at the time this shipped (see
-// the PR that introduced this file). Never assigned by any code path here;
-// a company with no row at all (the default for anyone new) is NOT active
-// and must actually subscribe.
+// the PR that introduced this file). Never assigned by any code path here.
+// A genuinely new company gets a "trialing" row instead, granted once on
+// first login (see grantTrialIfNewCompany below) -- a company only has no
+// row at all in the brief window before that first login completes.
 export type SubscriptionStatus = "grandfathered" | "trialing" | "active" | "past_due" | "canceled";
 
 export type Subscription = {
@@ -140,5 +141,32 @@ export async function upsertSubscription(input: {
       paddle_subscription_id = EXCLUDED.paddle_subscription_id,
       current_period_end = EXCLUDED.current_period_end,
       updated_at = EXCLUDED.updated_at
+  `;
+}
+
+const trialDays = 14;
+
+// Called from createCompanySession (app/lib/company-auth.ts) on every
+// successful login/link/impersonation -- ON CONFLICT DO NOTHING makes this
+// safe to call unconditionally every time rather than needing to first
+// detect "is this genuinely a brand-new company": a company that already
+// has a subscription row (grandfathered, already trialing/active, or
+// lapsed) is left completely untouched, so this can never reset an
+// existing customer's plan or period back to a fresh trial. Only a company
+// with no row at all -- true first login -- gets one inserted. Granted at
+// the Pro plan (not Standard) so the trial shows the full product,
+// including WhatsApp, rather than undersell it before the customer picks a
+// tier.
+export async function grantTrialIfNewCompany(companyId: string): Promise<void> {
+  const sql = sqlClient();
+  const now = new Date();
+  const periodEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+  await sql`
+    INSERT INTO subscriptions (
+      company_id, status, plan, current_period_end, created_at, updated_at
+    ) VALUES (
+      ${companyId}, 'trialing', 'pro', ${periodEnd.toISOString()}, ${now.toISOString()}, ${now.toISOString()}
+    )
+    ON CONFLICT (company_id) DO NOTHING
   `;
 }
