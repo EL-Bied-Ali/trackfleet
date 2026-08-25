@@ -134,11 +134,23 @@ function LanguageSwitcher({ locale, label, onChange }: { locale: Locale; label: 
   );
 }
 
-function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Locale; busy: boolean; error: LoginErrorKind | ""; onLocale: (locale: Locale) => void; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+function LoginScreen({ locale, busy, error, onLocale, onSubmit, googleLink, googleLinkBusy, googleLinkError, googleError, onGoogleLinkSubmit, onGoogleLinkCancel }: {
+  locale: Locale;
+  busy: boolean;
+  error: LoginErrorKind | "";
+  onLocale: (locale: Locale) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  googleLink: { token: string; email: string } | null;
+  googleLinkBusy: boolean;
+  googleLinkError: LoginErrorKind | "";
+  googleError: boolean;
+  onGoogleLinkSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onGoogleLinkCancel: () => void;
+}) {
   const copy = {
-    fr: { eyebrow: "ESPACE ENTREPRISE", title: "Connectez votre flotte SENDATRACK", body: "Utilisez les mêmes identifiants que dans l’application SENDATRACK. Votre espace TrackFleet sera reconnu automatiquement.", account: "Compte", accountPlaceholder: "Compte SENDATRACK", user: "Utilisateur", userPlaceholder: "Utilisateur", password: "Mot de passe", remember: "Se souvenir de mon compte et utilisateur sur cet appareil", submit: "Accéder à TrackFleet", loading: "Connexion…", invalidCredentials: "Identifiants SENDATRACK incorrects.", serviceUnavailable: "SENDATRACK est temporairement indisponible. Réessayez dans quelques instants.", loginFailed: "Connexion impossible. Réessayez.", privacy: "Connexion chiffrée côté TrackFleet · aucune donnée visible par vos clients" },
-    en: { eyebrow: "COMPANY PORTAL", title: "Connect your SENDATRACK fleet", body: "Use the same credentials as in the SENDATRACK app. Your TrackFleet workspace will be recognized automatically.", account: "Account", accountPlaceholder: "SENDATRACK account", user: "User", userPlaceholder: "User", password: "Password", remember: "Remember my account and username on this device", submit: "Open TrackFleet", loading: "Connecting…", invalidCredentials: "Incorrect SENDATRACK credentials.", serviceUnavailable: "SENDATRACK is temporarily unavailable. Please try again shortly.", loginFailed: "Unable to sign in. Please try again.", privacy: "Encrypted by TrackFleet · credentials are never visible to customers" },
-    nl: { eyebrow: "BEDRIJFSPORTAAL", title: "Koppel uw SENDATRACK-wagenpark", body: "Gebruik dezelfde gegevens als in de SENDATRACK-app. Uw TrackFleet-ruimte wordt automatisch herkend.", account: "Account", accountPlaceholder: "SENDATRACK-account", user: "Gebruiker", userPlaceholder: "Gebruiker", password: "Wachtwoord", remember: "Mijn account en gebruiker op dit toestel onthouden", submit: "TrackFleet openen", loading: "Verbinden…", invalidCredentials: "Onjuiste SENDATRACK-gegevens.", serviceUnavailable: "SENDATRACK is tijdelijk niet beschikbaar. Probeer het zo opnieuw.", loginFailed: "Aanmelden mislukt. Probeer opnieuw.", privacy: "Versleuteld door TrackFleet · nooit zichtbaar voor klanten" },
+    fr: { eyebrow: "ESPACE ENTREPRISE", title: "Connectez votre flotte SENDATRACK", body: "Utilisez les mêmes identifiants que dans l’application SENDATRACK. Votre espace TrackFleet sera reconnu automatiquement.", account: "Compte", accountPlaceholder: "Compte SENDATRACK", user: "Utilisateur", userPlaceholder: "Utilisateur", password: "Mot de passe", remember: "Se souvenir de mon compte et utilisateur sur cet appareil", submit: "Accéder à TrackFleet", loading: "Connexion…", invalidCredentials: "Identifiants SENDATRACK incorrects.", serviceUnavailable: "SENDATRACK est temporairement indisponible. Réessayez dans quelques instants.", loginFailed: "Connexion impossible. Réessayez.", privacy: "Connexion chiffrée côté TrackFleet · aucune donnée visible par vos clients", google: "Continuer avec Google", or: "ou", googleError: "Connexion Google impossible. Réessayez.", linkTitle: "Associez votre compte Google", linkBody: (email: string) => `Première connexion avec ${email}. Entrez vos identifiants SENDATRACK une seule fois pour associer ce compte Google -- la prochaine fois, un clic suffira.`, linkSubmit: "Associer et continuer", linkCancel: "Utiliser un autre identifiant" },
+    en: { eyebrow: "COMPANY PORTAL", title: "Connect your SENDATRACK fleet", body: "Use the same credentials as in the SENDATRACK app. Your TrackFleet workspace will be recognized automatically.", account: "Account", accountPlaceholder: "SENDATRACK account", user: "User", userPlaceholder: "User", password: "Password", remember: "Remember my account and username on this device", submit: "Open TrackFleet", loading: "Connecting…", invalidCredentials: "Incorrect SENDATRACK credentials.", serviceUnavailable: "SENDATRACK is temporarily unavailable. Please try again shortly.", loginFailed: "Unable to sign in. Please try again.", privacy: "Encrypted by TrackFleet · credentials are never visible to customers", google: "Continue with Google", or: "or", googleError: "Google sign-in failed. Please try again.", linkTitle: "Link your Google account", linkBody: (email: string) => `First time signing in with ${email}. Enter your SENDATRACK credentials once to link this Google account -- next time, one click will be enough.`, linkSubmit: "Link and continue", linkCancel: "Use a different login" },
+    nl: { eyebrow: "BEDRIJFSPORTAAL", title: "Koppel uw SENDATRACK-wagenpark", body: "Gebruik dezelfde gegevens als in de SENDATRACK-app. Uw TrackFleet-ruimte wordt automatisch herkend.", account: "Account", accountPlaceholder: "SENDATRACK-account", user: "Gebruiker", userPlaceholder: "Gebruiker", password: "Wachtwoord", remember: "Mijn account en gebruiker op dit toestel onthouden", submit: "TrackFleet openen", loading: "Verbinden…", invalidCredentials: "Onjuiste SENDATRACK-gegevens.", serviceUnavailable: "SENDATRACK is tijdelijk niet beschikbaar. Probeer het zo opnieuw.", loginFailed: "Aanmelden mislukt. Probeer opnieuw.", privacy: "Versleuteld door TrackFleet · nooit zichtbaar voor klanten", google: "Doorgaan met Google", or: "of", googleError: "Aanmelden met Google mislukt. Probeer opnieuw.", linkTitle: "Koppel uw Google-account", linkBody: (email: string) => `Eerste keer aanmelden met ${email}. Voer eenmalig uw SENDATRACK-gegevens in om dit Google-account te koppelen -- de volgende keer volstaat één klik.`, linkSubmit: "Koppelen en doorgaan", linkCancel: "Andere inloggegevens gebruiken" },
   }[locale];
   // LoginScreen only ever renders once the client-side session check has
   // resolved to "anonymous" (see authState), so it's never part of the
@@ -148,16 +160,28 @@ function LoginScreen({ locale, busy, error, onLocale, onSubmit }: { locale: Loca
     <header className="login-header"><span className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></span><LanguageSwitcher locale={locale} label="Language" onChange={onLocale} /></header>
     <section className="login-layout">
       <div className="login-story"><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p>{copy.body}</p><div className="login-route"><span>BE</span><i /><b>↗</b><i /><span>MA</span></div><small>Belgique · France · Espagne · Maroc</small></div>
-      <form className="login-card" onSubmit={onSubmit}>
+      {googleLink ? <form className="login-card" onSubmit={onGoogleLinkSubmit}>
+        <div className="login-provider"><span>⌖</span><div><strong>{copy.linkTitle}</strong><small>{googleLink.email}</small></div></div>
+        <p>{copy.linkBody(googleLink.email)}</p>
+        <label>{copy.account}<input name="accountID" autoComplete="organization" required placeholder={copy.accountPlaceholder} defaultValue={remembered?.accountID ?? ""} /></label>
+        <label>{copy.user}<input name="user" autoComplete="username" required placeholder={copy.userPlaceholder} defaultValue={remembered?.user ?? ""} /></label>
+        <label>{copy.password}<input name="password" type="password" autoComplete="current-password" required placeholder="••••••••" /></label>
+        {googleLinkError && <p className="login-error" role="alert">{googleLinkError === "invalid_credentials" ? copy.invalidCredentials : googleLinkError === "service_unavailable" ? copy.serviceUnavailable : copy.loginFailed}</p>}
+        <button className="login-submit" disabled={googleLinkBusy}>{googleLinkBusy ? copy.loading : copy.linkSubmit}<span>→</span></button>
+        <button type="button" className="login-google-cancel" onClick={onGoogleLinkCancel}>{copy.linkCancel}</button>
+      </form> : <form className="login-card" onSubmit={onSubmit}>
         <div className="login-provider"><span>⌖</span><div><strong>SENDATRACK</strong><small>GPS fleet connection</small></div></div>
+        <a className="login-google" href="/api/auth/google/start">{copy.google}</a>
+        <div className="login-divider"><span>{copy.or}</span></div>
         <label>{copy.account}<input name="accountID" autoComplete="organization" required placeholder={copy.accountPlaceholder} defaultValue={remembered?.accountID ?? ""} /></label>
         <label>{copy.user}<input name="user" autoComplete="username" required placeholder={copy.userPlaceholder} defaultValue={remembered?.user ?? ""} /></label>
         <label>{copy.password}<input name="password" type="password" autoComplete="current-password" required placeholder="••••••••" /></label>
         <label className="consent-choice"><input type="checkbox" name="rememberLogin" defaultChecked /><span>{copy.remember}</span></label>
+        {googleError && <p className="login-error" role="alert">{copy.googleError}</p>}
         {error && <p className="login-error" role="alert">{error === "invalid_credentials" ? copy.invalidCredentials : error === "service_unavailable" ? copy.serviceUnavailable : copy.loginFailed}</p>}
         <button className="login-submit" disabled={busy}>{busy ? copy.loading : copy.submit}<span>→</span></button>
         <p className="login-privacy">⌁ {copy.privacy}</p>
-      </form>
+      </form>}
     </section>
   </main>;
 }
@@ -202,6 +226,15 @@ export default function Home() {
   const [company, setCompany] = useState<CompanyIdentity | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState<LoginErrorKind | "">("");
+  // Set once, right after the Google OAuth callback redirects back here with
+  // a first-time Google identity that isn't linked to a company yet -- the
+  // pending-link token carries that verified identity, so the one-time
+  // SENDATRACK-credential form below only has to establish the link, not
+  // re-verify the Google side of it.
+  const [googleLink, setGoogleLink] = useState<{ token: string; email: string } | null>(null);
+  const [googleLinkBusy, setGoogleLinkBusy] = useState(false);
+  const [googleLinkError, setGoogleLinkError] = useState<LoginErrorKind | "">("");
+  const [googleError, setGoogleError] = useState(false);
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false });
@@ -249,6 +282,22 @@ export default function Home() {
     window.addEventListener("popstate", syncViewFromUrl);
     return () => window.removeEventListener("popstate", syncViewFromUrl);
   }, [deliveries]);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const pendingToken = searchParams.get("google_link");
+    const pendingEmail = searchParams.get("google_email");
+    const hadGoogleError = searchParams.get("google_error");
+    if (pendingToken && pendingEmail) setGoogleLink({ token: pendingToken, email: pendingEmail });
+    if (hadGoogleError) setGoogleError(true);
+    if (pendingToken || pendingEmail || hadGoogleError) {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("google_link");
+      cleanUrl.searchParams.delete("google_email");
+      cleanUrl.searchParams.delete("google_error");
+      window.history.replaceState({}, "", cleanUrl);
+    }
+  }, []);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("tracking")) {
@@ -837,6 +886,40 @@ export default function Home() {
     }
   }
 
+  async function submitGoogleLink(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!googleLink) return;
+    setGoogleLinkBusy(true);
+    setGoogleLinkError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/auth/google/link", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          pendingToken: googleLink.token,
+          accountID: String(form.get("accountID") ?? ""),
+          user: String(form.get("user") ?? ""),
+          password: form.get("password"),
+        }),
+      });
+      const data = await response.json() as { company?: CompanyIdentity; error?: string };
+      if (!response.ok) {
+        if (data.error === "google_link_expired") { setGoogleLink(null); setGoogleLinkError("login_failed"); return; }
+        setGoogleLinkError(classifyLoginError(response.status, data.error));
+        return;
+      }
+      if (!data.company) { setGoogleLinkError("login_failed"); return; }
+      setGoogleLink(null);
+      setCompany(data.company);
+      setAuthState("authenticated");
+    } catch {
+      setGoogleLinkError("login_failed");
+    } finally {
+      setGoogleLinkBusy(false);
+    }
+  }
+
   async function logout() {
     await fetch("/api/auth/session", { method: "DELETE" });
     setCompany(null);
@@ -1058,7 +1141,7 @@ export default function Home() {
   if (view === "customer" && publicTrackingState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view === "customer" && publicTrackingState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>Lien de suivi introuvable</h1><p>Vérifiez le lien reçu ou contactez l’entreprise qui vous l’a envoyé.</p></section></main>;
   if (view !== "customer" && authState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
-  if (view !== "customer" && authState === "anonymous") return <LoginScreen locale={locale} busy={loginBusy} error={loginError} onLocale={changeLocale} onSubmit={login} />;
+  if (view !== "customer" && authState === "anonymous") return <LoginScreen locale={locale} busy={loginBusy} error={loginError} onLocale={changeLocale} onSubmit={login} googleLink={googleLink} googleLinkBusy={googleLinkBusy} googleLinkError={googleLinkError} googleError={googleError} onGoogleLinkSubmit={submitGoogleLink} onGoogleLinkCancel={() => setGoogleLink(null)} />;
   if (view !== "customer" && authState === "authenticated" && company?.role === "agency" && agencyLocationOpen) return <AgencyLocationSetup locale={locale} site={knownSites.find((site) => site.id === company.siteId) ?? null} onLocale={changeLocale} onLogout={() => void logout()} onBack={() => setAgencyLocationOpen(false)} />;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Données temporairement indisponibles" : locale === "nl" ? "Gegevens tijdelijk niet beschikbaar" : "Data temporarily unavailable"}</h1><p>{locale === "fr" ? "TrackFleet n’affiche aucune donnée de démonstration à la place de vos données réelles." : locale === "nl" ? "TrackFleet toont geen demogegevens in plaats van uw echte gegevens." : "TrackFleet will not show demo data in place of your real data."}</p><button className="primary-button" onClick={() => window.location.reload()}>{locale === "fr" ? "Réessayer" : locale === "nl" ? "Opnieuw proberen" : "Retry"}</button></section></main>;

@@ -77,7 +77,7 @@ async function sessionSecretBytes() {
   return sha256Bytes(`trackfleet-session:${fallbackSecret}`);
 }
 
-async function agencySigningKey() {
+async function hmacSigningKey() {
   const raw = await sessionSecretBytes();
   const keyMaterial = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
   return crypto.subtle.importKey("raw", keyMaterial, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -90,7 +90,7 @@ async function encryptCredentials(credentials: StoredCredentials) {
   return `${toBase64(iv)}.${toBase64(new Uint8Array(ciphertext))}`;
 }
 
-async function decryptCredentials(value: string): Promise<StoredCredentials> {
+export async function decryptCredentials(value: string): Promise<StoredCredentials> {
   const [ivValue, ciphertextValue] = value.split(".");
   if (!ivValue || !ciphertextValue) throw new Error("invalid_session");
   const plaintext = await crypto.subtle.decrypt(
@@ -166,6 +166,7 @@ export async function createCompanySession(credentials: SendatrackCredentials) {
     cookie: `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionDurationSeconds}`,
     company: { account: normalized.accountID, user: normalized.user, role: "dispatcher" as const, siteId: null },
     vehicles: snapshot.vehicles,
+    companyId,
   };
 }
 
@@ -186,8 +187,8 @@ function bytesEqual(left: Uint8Array, right: Uint8Array) {
   return difference === 0;
 }
 
-async function signAgencyPayload(encodedPayload: string) {
-  const signature = await crypto.subtle.sign("HMAC", await agencySigningKey(), new TextEncoder().encode(encodedPayload));
+async function signHmacPayload(encodedPayload: string) {
+  const signature = await crypto.subtle.sign("HMAC", await hmacSigningKey(), new TextEncoder().encode(encodedPayload));
   return toBase64(new Uint8Array(signature));
 }
 
@@ -207,7 +208,49 @@ export async function createAgencyEnrollmentToken(session: CompanySession, siteI
     }),
   };
   const encodedPayload = toBase64(new TextEncoder().encode(JSON.stringify(payload)));
-  return `${encodedPayload}.${await signAgencyPayload(encodedPayload)}`;
+  return `${encodedPayload}.${await signHmacPayload(encodedPayload)}`;
+}
+
+type GooglePendingLinkPayload = {
+  version: 1;
+  sub: string;
+  email: string;
+  expiresAt: number;
+};
+
+const googlePendingLinkDurationMs = 10 * 60 * 1000;
+
+// A first-time Google sign-in with no existing google_links row can't be
+// logged in yet -- it needs one round trip through the SENDATRACK-credential
+// linking form first. Rather than persisting that half-authenticated state
+// server-side, the verified Google identity travels in the same
+// self-contained signed-token shape as agency enrollment above: short-lived,
+// tamper-evident, no DB lookup needed to verify it.
+export async function createGooglePendingLinkToken(identity: { sub: string; email: string }) {
+  const payload: GooglePendingLinkPayload = {
+    version: 1,
+    sub: identity.sub,
+    email: identity.email,
+    expiresAt: Date.now() + googlePendingLinkDurationMs,
+  };
+  const encodedPayload = toBase64(new TextEncoder().encode(JSON.stringify(payload)));
+  return `${encodedPayload}.${await signHmacPayload(encodedPayload)}`;
+}
+
+export async function verifyGooglePendingLinkToken(token: string): Promise<{ sub: string; email: string }> {
+  const [encodedPayload, suppliedSignature] = token.split(".");
+  if (!encodedPayload || !suppliedSignature || token.length > 2_000) throw new Error("invalid_google_link");
+  const expectedSignature = await signHmacPayload(encodedPayload);
+  if (!bytesEqual(fromBase64(suppliedSignature), fromBase64(expectedSignature))) throw new Error("invalid_google_link");
+  const payload = JSON.parse(new TextDecoder().decode(fromBase64(encodedPayload))) as Partial<GooglePendingLinkPayload>;
+  if (
+    payload.version !== 1
+    || typeof payload.sub !== "string"
+    || typeof payload.email !== "string"
+    || typeof payload.expiresAt !== "number"
+    || payload.expiresAt < Date.now()
+  ) throw new Error("invalid_google_link");
+  return { sub: payload.sub, email: payload.email };
 }
 
 // The full enrollment token is self-contained on purpose (companyId, siteId,
@@ -271,7 +314,7 @@ export async function resolveShortEnrollmentCode(code: string): Promise<string |
 async function verifyAgencyEnrollmentToken(token: string): Promise<AgencyEnrollmentPayload> {
   const [encodedPayload, suppliedSignature] = token.split(".");
   if (!encodedPayload || !suppliedSignature || token.length > 2_000) throw new Error("invalid_agency_enrollment");
-  const expectedSignature = await signAgencyPayload(encodedPayload);
+  const expectedSignature = await signHmacPayload(encodedPayload);
   if (!bytesEqual(fromBase64(suppliedSignature), fromBase64(expectedSignature))) throw new Error("invalid_agency_enrollment");
   const payload = JSON.parse(new TextDecoder().decode(fromBase64(encodedPayload))) as Partial<AgencyEnrollmentPayload>;
   if (

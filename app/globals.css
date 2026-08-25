@@ -42,6 +42,9 @@ button { color: inherit; }
 .login-submit { width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 22px; border: 0; border-radius: 10px; color: white; background: #1f6952; font-size: 12px; font-weight: 750; cursor: pointer; }.login-submit:hover { background: #164d3e; }.login-submit:disabled { opacity: .65; cursor: wait; }
 .login-error { margin: 13px 0 -5px; padding: 10px 12px; border-radius: 8px; color: #9a3e31; background: #fff0ed; font-size: 10px; line-height: 1.45; }
 .login-privacy { margin: 17px 0 0; color: #8b9991; font-size: 9px; line-height: 1.5; text-align: center; }
+.login-google { width: 100%; height: 47px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #dce6e0; border-radius: 9px; color: #193b2e; background: #fbfcfb; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; }.login-google:hover { border-color: #70a28b; background: #f2f7f4; }
+.login-divider { display: flex; align-items: center; gap: 11px; margin: 18px 0 3px; color: #a3b0a8; font-size: 10px; }.login-divider::before, .login-divider::after { content: ""; flex: 1; border-top: 1px solid #e6ede9; }
+.login-google-cancel { width: 100%; margin-top: 11px; padding: 0; border: 0; background: none; color: #62736a; font-size: 11px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }.login-google-cancel:hover { color: #193b2e; }
 .login-loading { display: grid; place-items: center; }.login-loading .brand { margin: 0; }
 .tracking-error { max-width: 520px; padding: 38px; text-align: center; }.tracking-error .brand { justify-content: center; }.tracking-error h1 { margin: 22px 0 10px; font-family: Georgia, serif; font-size: 34px; font-weight: 500; }.tracking-error p { margin: 0; color: #687970; line-height: 1.6; }
 
