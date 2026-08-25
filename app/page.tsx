@@ -15,6 +15,61 @@ import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "
 import { isUnassignedVehicle, resolveCreationVehicle } from "./lib/delivery-vehicle-choice";
 import { suggestPlannedTrip } from "./lib/trip-suggestion";
 
+declare global {
+  interface Window {
+    Paddle?: {
+      Environment: { set: (environment: "sandbox") => void };
+      Initialize: (options: { token: string; eventCallback?: (event: { name: string }) => void }) => void;
+      Checkout: { open: (options: { transactionId: string }) => void };
+    };
+  }
+}
+
+// Module-level (not component state) on purpose: Paddle.js is a third-party
+// script + SDK singleton, not per-render UI state, and Paddle.Initialize
+// must only ever run once per page -- calling it again on every remount of
+// the subscribe screen would re-register (and potentially duplicate) its
+// event callback.
+let paddleScriptPromise: Promise<void> | null = null;
+let paddleInitialized = false;
+
+function loadPaddleScript(): Promise<void> {
+  if (window.Paddle) return Promise.resolve();
+  if (!paddleScriptPromise) {
+    paddleScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("paddle_script_load_failed"));
+      document.head.appendChild(script);
+    });
+  }
+  return paddleScriptPromise;
+}
+
+// Fetches Paddle's public client-side token (safe to expose -- it's meant
+// to be embedded in frontend JS, unlike the server-side PADDLE_API_KEY) and
+// initializes the Paddle.js overlay checkout exactly once. Returns whether
+// Paddle.js is ready to open a checkout.
+async function ensurePaddleReady(handleEvent: (event: { name: string }) => void): Promise<boolean> {
+  try {
+    await loadPaddleScript();
+    if (!window.Paddle) return false;
+    if (!paddleInitialized) {
+      const response = await fetch("/api/subscription/checkout", { cache: "no-store" });
+      if (!response.ok) return false;
+      const config = await response.json() as { clientToken?: string; environment?: "live" | "sandbox" };
+      if (!config.clientToken) return false;
+      if (config.environment === "sandbox") window.Paddle.Environment.set("sandbox");
+      window.Paddle.Initialize({ token: config.clientToken, eventCallback: handleEvent });
+      paddleInitialized = true;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
 type DeliveryEventType = "REGISTERED" | "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "ARRIVED_AT_SITE" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
 
@@ -186,9 +241,10 @@ function LoginScreen({ locale, busy, error, onLocale, onSubmit, googleLink, goog
   </main>;
 }
 
-function SubscribeScreen({ locale, busy, unavailable, interval, onIntervalChange, onSubscribe, onLogout }: {
+function SubscribeScreen({ locale, busy, completing, unavailable, interval, onIntervalChange, onSubscribe, onLogout }: {
   locale: Locale;
   busy: "standard" | "pro" | null;
+  completing: boolean;
   unavailable: boolean;
   interval: "monthly" | "yearly";
   onIntervalChange: (interval: "monthly" | "yearly") => void;
@@ -201,27 +257,33 @@ function SubscribeScreen({ locale, busy, unavailable, interval, onIntervalChange
       monthly: "Mensuel", yearly: "Annuel",
       standardName: "Standard", standardDesc: "Suivi GPS et notifications de livraison en temps réel.",
       proName: "Pro", proDesc: "Standard, plus les notifications WhatsApp automatiques pour vos clients.",
-      subscribe: "S’abonner", redirecting: "Redirection…",
+      subscribe: "S’abonner", opening: "Ouverture…",
       unavailable: "Abonnement indisponible pour le moment. Contactez-nous directement.",
       logout: "Se déconnecter", perMonth: "/mois", perYear: "/an",
+      completingTitle: "Activation de votre abonnement…",
+      completingBody: "Paiement reçu. Cela ne prend généralement que quelques secondes.",
     },
     en: {
       title: "Subscription required", subtitle: "Your TrackFleet access is no longer active.",
       monthly: "Monthly", yearly: "Yearly",
       standardName: "Standard", standardDesc: "Real-time GPS tracking and delivery notifications.",
       proName: "Pro", proDesc: "Everything in Standard, plus automatic WhatsApp notifications for your customers.",
-      subscribe: "Subscribe", redirecting: "Redirecting…",
+      subscribe: "Subscribe", opening: "Opening…",
       unavailable: "Subscribing isn't available right now. Please contact us directly.",
       logout: "Log out", perMonth: "/mo", perYear: "/yr",
+      completingTitle: "Activating your subscription…",
+      completingBody: "Payment received. This usually only takes a few seconds.",
     },
     nl: {
       title: "Abonnement vereist", subtitle: "Uw TrackFleet-toegang is niet meer actief.",
       monthly: "Maandelijks", yearly: "Jaarlijks",
       standardName: "Standard", standardDesc: "Live GPS-tracking en leveringsmeldingen.",
       proName: "Pro", proDesc: "Alles van Standard, plus automatische WhatsApp-meldingen voor uw klanten.",
-      subscribe: "Abonneren", redirecting: "Doorverwijzen…",
+      subscribe: "Abonneren", opening: "Openen…",
       unavailable: "Abonneren is momenteel niet beschikbaar. Neem rechtstreeks contact met ons op.",
       logout: "Afmelden", perMonth: "/mnd", perYear: "/jaar",
+      completingTitle: "Uw abonnement wordt geactiveerd…",
+      completingBody: "Betaling ontvangen. Dit duurt meestal maar een paar seconden.",
     },
   }[locale];
   const prices = {
@@ -229,6 +291,15 @@ function SubscribeScreen({ locale, busy, unavailable, interval, onIntervalChange
     pro: { monthly: "€90", yearly: "€800" },
   } as const;
   const suffix = interval === "monthly" ? copy.perMonth : copy.perYear;
+  if (completing) {
+    return <main className="login-page login-loading">
+      <section className="tracking-error">
+        <div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div>
+        <h1>{copy.completingTitle}</h1>
+        <p>{copy.completingBody}</p>
+      </section>
+    </main>;
+  }
   return <main className="login-page login-loading">
     <section className="tracking-error plan-picker-screen">
       <div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div>
@@ -244,13 +315,13 @@ function SubscribeScreen({ locale, busy, unavailable, interval, onIntervalChange
           <h2>{copy.standardName}</h2>
           <p className="plan-price">{prices.standard[interval]}<span>{suffix}</span></p>
           <p className="plan-desc">{copy.standardDesc}</p>
-          <button className="primary-button" disabled={busy !== null} onClick={() => onSubscribe("standard")}>{busy === "standard" ? copy.redirecting : copy.subscribe}</button>
+          <button className="primary-button" disabled={busy !== null} onClick={() => onSubscribe("standard")}>{busy === "standard" ? copy.opening : copy.subscribe}</button>
         </div>
         <div className="plan-card plan-card-highlight">
           <h2>{copy.proName}</h2>
           <p className="plan-price">{prices.pro[interval]}<span>{suffix}</span></p>
           <p className="plan-desc">{copy.proDesc}</p>
-          <button className="primary-button" disabled={busy !== null} onClick={() => onSubscribe("pro")}>{busy === "pro" ? copy.redirecting : copy.subscribe}</button>
+          <button className="primary-button" disabled={busy !== null} onClick={() => onSubscribe("pro")}>{busy === "pro" ? copy.opening : copy.subscribe}</button>
         </div>
       </div>
       <button className="login-google-cancel" onClick={onLogout}>{copy.logout}</button>
@@ -310,6 +381,7 @@ export default function Home() {
   const [checkoutBusy, setCheckoutBusy] = useState<"standard" | "pro" | null>(null);
   const [checkoutUnavailable, setCheckoutUnavailable] = useState(false);
   const [checkoutInterval, setCheckoutInterval] = useState<"monthly" | "yearly">("yearly");
+  const [checkoutCompleting, setCheckoutCompleting] = useState(false);
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false });
@@ -1018,18 +1090,46 @@ export default function Home() {
     }
   }
 
+  // Paddle's own "checkout.completed" event fires client-side the moment
+  // payment succeeds, but the subscription itself only actually activates
+  // once the async webhook lands (app/api/webhooks/paddle/route.ts) --
+  // polling here bridges that gap instead of reloading immediately into a
+  // still-not-yet-updated paywall, which would look like the payment failed.
+  async function waitForSubscriptionActivation() {
+    setCheckoutCompleting(true);
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      try {
+        const response = await fetch("/api/deliveries", { cache: "no-store" });
+        if (response.status !== 402) { window.location.reload(); return; }
+      } catch {
+        // Transient -- keep polling rather than giving up on one blip.
+      }
+    }
+    // Paddle confirmed payment but the webhook still hasn't landed after
+    // ~30s (rare). Leave the "activating" screen up rather than reloading
+    // back into the paywall -- a later manual refresh picks it up once the
+    // webhook catches up.
+  }
+
+  function handlePaddleEvent(event: { name: string }) {
+    if (event.name === "checkout.completed") void waitForSubscriptionActivation();
+  }
+
   async function startSubscriptionCheckout(plan: "standard" | "pro") {
     setCheckoutBusy(plan);
     setCheckoutUnavailable(false);
     try {
+      const ready = await ensurePaddleReady(handlePaddleEvent);
+      if (!ready || !window.Paddle) { setCheckoutUnavailable(true); return; }
       const response = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ plan, interval: checkoutInterval }),
       });
-      const data = await response.json() as { url?: string; error?: string };
-      if (!response.ok || !data.url) { setCheckoutUnavailable(true); return; }
-      window.location.href = data.url;
+      const data = await response.json() as { transactionId?: string; error?: string };
+      if (!response.ok || !data.transactionId) { setCheckoutUnavailable(true); return; }
+      window.Paddle.Checkout.open({ transactionId: data.transactionId });
     } catch {
       setCheckoutUnavailable(true);
     } finally {
@@ -1262,15 +1362,16 @@ export default function Home() {
   if (view !== "customer" && authState === "authenticated" && company?.role === "agency" && agencyLocationOpen) return <AgencyLocationSetup locale={locale} site={knownSites.find((site) => site.id === company.siteId) ?? null} onLocale={changeLocale} onLogout={() => void logout()} onBack={() => setAgencyLocationOpen(false)} />;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view !== "customer" && authState === "authenticated" && dispatchDataState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>{locale === "fr" ? "Données temporairement indisponibles" : locale === "nl" ? "Gegevens tijdelijk niet beschikbaar" : "Data temporarily unavailable"}</h1><p>{locale === "fr" ? "TrackFleet n’affiche aucune donnée de démonstration à la place de vos données réelles." : locale === "nl" ? "TrackFleet toont geen demogegevens in plaats van uw echte gegevens." : "TrackFleet will not show demo data in place of your real data."}</p><button className="primary-button" onClick={() => window.location.reload()}>{locale === "fr" ? "Réessayer" : locale === "nl" ? "Opnieuw proberen" : "Retry"}</button></section></main>;
-  // A company with no active subscription (past_due/canceled/never
-  // subscribed) is authenticated and can still log in -- it's only actual
+  // A company past its trial with no active subscription (past_due/
+  // canceled) is authenticated and can still log in -- it's only actual
   // fleet data access that's gated -- so this screen shows instead of the
-  // dashboard rather than instead of the login form. The Subscribe button
-  // calls the checkout endpoint, which itself degrades gracefully
-  // (checkoutUnavailable) when Paddle isn't configured yet -- this screen
-  // and the (currently all-grandfathered) subscriptions table ship ahead
-  // of that so nothing regresses if the Paddle side takes longer to land.
-  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "subscription_required") return <SubscribeScreen locale={locale} busy={checkoutBusy} unavailable={checkoutUnavailable} interval={checkoutInterval} onIntervalChange={setCheckoutInterval} onSubscribe={(plan) => void startSubscriptionCheckout(plan)} onLogout={() => void logout()} />;
+  // dashboard rather than instead of the login form. A genuinely new
+  // company never actually reaches this screen on first login (see
+  // grantTrialIfNewCompany in app/lib/subscription-store.ts); it only shows
+  // once a trial or paid period has actually lapsed. The Subscribe button
+  // opens a Paddle.js overlay checkout, which itself degrades gracefully
+  // (checkoutUnavailable) if Paddle is ever misconfigured.
+  if (view !== "customer" && authState === "authenticated" && dispatchDataState === "subscription_required") return <SubscribeScreen locale={locale} busy={checkoutBusy} completing={checkoutCompleting} unavailable={checkoutUnavailable} interval={checkoutInterval} onIntervalChange={setCheckoutInterval} onSubscribe={(plan) => void startSubscriptionCheckout(plan)} onLogout={() => void logout()} />;
 
   // Wrapped in a nested function (instead of inlining this JSX directly in
   // the branch below) so V8 can lazily defer parsing/compiling its body --
