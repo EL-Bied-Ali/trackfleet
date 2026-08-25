@@ -8,11 +8,16 @@
   // This explicit MVP override is monitored by /api/health and can be removed if TLS becomes available.
   "vars": {
     "TRACKFLEET_ALLOW_INSECURE_SENDATRACK": "true",
-    // Neither of these is sensitive (the price id is public-ish, shown in
+    // None of these four is sensitive (price ids are public-ish, shown in
     // checkout URLs; the environment flag just picks sandbox vs live API
     // base URL) -- PADDLE_API_KEY and PADDLE_WEBHOOK_SECRET are the actual
-    // secrets, set via `wrangler secret put`, not here.
-    "PADDLE_PRICE_ID": "pri_01m0wsa3maq3vxp55me576s135",
+    // secrets, set via `wrangler secret put`, not here. Two tiers (Standard:
+    // no WhatsApp, Pro: WhatsApp included) x two intervals -- see
+    // app/lib/paddle-checkout.ts for how these are selected.
+    "PADDLE_PRICE_ID_STANDARD_MONTHLY": "pri_01m0wz9mx48pbva99e7m49gybx",
+    "PADDLE_PRICE_ID_STANDARD_YEARLY": "pri_01m0wzcnbxfeet00z74zqbbp7m",
+    "PADDLE_PRICE_ID_PRO_MONTHLY": "pri_01m0wzj256camj7jhdhfar1x80",
+    "PADDLE_PRICE_ID_PRO_YEARLY": "pri_01m0wzta8j6ccv6pxnvp9p4a0g",
     "PADDLE_ENVIRONMENT": "sandbox",
     // Comma-separated allowlist for /admin -- kept as a plain, versioned
     // config value rather than a secret on purpose: who has admin access is

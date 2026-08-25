@@ -48,6 +48,20 @@ button { color: inherit; }
 .login-loading { display: grid; place-items: center; }.login-loading .brand { margin: 0; }
 .tracking-error { max-width: 520px; padding: 38px; text-align: center; }.tracking-error .brand { justify-content: center; }.tracking-error h1 { margin: 22px 0 10px; font-family: Georgia, serif; font-size: 34px; font-weight: 500; }.tracking-error p { margin: 0; color: #687970; line-height: 1.6; }
 
+.plan-picker-screen { max-width: 620px; }
+.plan-interval-toggle { display: inline-flex; gap: 2px; margin: 22px 0 4px; padding: 3px; border-radius: 10px; background: var(--mint); }
+.plan-interval-toggle button { padding: 7px 16px; border: 0; border-radius: 8px; background: none; color: #42584d; font-size: 11px; font-weight: 700; cursor: pointer; }
+.plan-interval-toggle button.active { color: white; background: var(--green); }
+.plan-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 22px; text-align: left; }
+.plan-card { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.plan-card-highlight { border-color: #bcd7cb; box-shadow: 0 4px 18px rgba(22,77,62,.1); }
+.plan-card h2 { margin: 0; font-size: 15px; font-weight: 750; }
+.plan-price { margin: 10px 0; font-size: 26px; font-weight: 700; }
+.plan-price span { margin-left: 3px; color: var(--muted); font-size: 12px; font-weight: 500; }
+.plan-desc { margin: 0 0 16px; min-height: 42px; color: #687970; font-size: 11.5px; line-height: 1.55; }
+.plan-card .primary-button { width: 100%; }
+@media (max-width: 560px) { .plan-cards { grid-template-columns: 1fr; } }
+
 .app-shell { min-height: 100vh; display: flex; background: #f6f8f5; }
 .sidebar { width: 240px; flex: 0 0 240px; min-height: 100vh; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 26px 17px 19px; background: #173f34; color: #dce9e3; }
 .brand { color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 11px; padding: 0 10px; margin-bottom: 31px; font-weight: 760; font-size: 18px; letter-spacing: -.3px; }

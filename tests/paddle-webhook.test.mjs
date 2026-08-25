@@ -53,25 +53,34 @@ test("missing header, missing secret, or malformed header all fail closed", asyn
   assert.equal(await verifyPaddleWebhookSignature("{}", "not-a-valid-header", "secret"), false);
 });
 
-test("companyId comes only from custom_data on Paddle's own signed payload, never trusted from elsewhere", () => {
+test("companyId and plan come only from custom_data on Paddle's own signed payload, never trusted from elsewhere", () => {
   const event = parsePaddleSubscriptionEvent({
     event_type: "subscription.updated",
     data: {
       id: "sub_123",
       customer_id: "ctm_456",
       status: "active",
-      custom_data: { companyId: "company-abc" },
+      custom_data: { companyId: "company-abc", plan: "pro" },
       current_billing_period: { ends_at: "2026-09-25T00:00:00Z" },
     },
   });
   assert.deepEqual(event, {
     eventType: "subscription.updated",
     companyId: "company-abc",
+    plan: "pro",
     paddleCustomerId: "ctm_456",
     paddleSubscriptionId: "sub_123",
     status: "active",
     currentPeriodEnd: new Date("2026-09-25T00:00:00Z"),
   });
+});
+
+test("an unrecognized custom_data.plan value parses as null instead of being trusted verbatim", () => {
+  const event = parsePaddleSubscriptionEvent({
+    event_type: "subscription.updated",
+    data: { id: "sub_1", status: "active", custom_data: { companyId: "c1", plan: "enterprise" } },
+  });
+  assert.equal(event.plan, null);
 });
 
 test("Paddle's paused/past_due statuses both map onto the single past_due bucket TrackFleet's gate checks", () => {
@@ -109,4 +118,9 @@ test("the webhook route reads the raw body before parsing, verifies the signatur
   const parseIndex = route.indexOf("JSON.parse(rawBody)");
   assert.ok(rawBodyIndex >= 0 && verifyIndex > rawBodyIndex && parseIndex > verifyIndex, "expected raw-body-read, then verify, then parse, in that order");
   assert.match(route, /if \(!event\.companyId \|\| !event\.status\)/);
+});
+
+test("the webhook route persists which plan the subscription is on, so notification-runner.ts can gate WhatsApp by tier", async () => {
+  const route = await readFile(new URL("../app/api/webhooks/paddle/route.ts", import.meta.url), "utf8");
+  assert.match(route, /plan: event\.plan,/);
 });
