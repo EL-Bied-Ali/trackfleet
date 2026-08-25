@@ -6,15 +6,28 @@ const page = fs.readFileSync("app/page.tsx", "utf8");
 const css = fs.readFileSync("app/globals.css", "utf8");
 
 test("each vehicle gets a stable, friendly 'Truck N' tag shown alongside its real plate, not replacing it", () => {
-  // Numbered by sorting SENDATRACK's own vehicle ids (stable per physical
-  // vehicle), so the same truck keeps the same number across reloads as
-  // long as the fleet's vehicle set doesn't change. This is purely a
-  // friendlier way to refer to a vehicle -- the plate stays the actual
-  // display name/identifier everywhere, this is additive.
-  assert.match(page, /const vehicleTruckNumbers = useMemo\(\(\) => \{/);
-  assert.match(page, /sorted\.map\(\(vehicle, index\) => \[vehicle\.id, index \+ 1\]\)/);
+  // This is purely a friendlier way to refer to a vehicle -- the plate
+  // stays the actual display name/identifier everywhere, this is additive.
+  assert.match(page, /const \[vehicleTruckNumbers, setVehicleTruckNumbers\] = useState<Map<string, number>>\(new Map\(\)\);/);
   assert.match(page, /const truckNumberLabel = useCallback\(\(vehicleId\?: string \| null\) => \{/);
   assert.match(page, /if \(!number\) return null;/);
+});
+
+test("a vehicle's truck number is assigned once and never reassigned or shifted, even if it temporarily drops out of SENDATRACK's live feed", () => {
+  // Reported live: numbering used to be recomputed fresh from whichever
+  // vehicle ids happened to be in the CURRENT poll (sorted-index based), so
+  // one vehicle briefly missing a GPS fix shifted every subsequent
+  // vehicle's number down -- a different truck would suddenly show the
+  // same "Camion N" badge (and color, since that's derived from the
+  // number) another truck had a moment earlier. Assignments now accumulate
+  // in state (updated from an effect, not during render -- React refs/state
+  // must not be mutated while rendering) keyed by vehicle id and are only
+  // ever added to, never mutated or reassigned.
+  assert.match(page, /setVehicleTruckNumbers\(\(current\) => \{/);
+  assert.match(page, /\.filter\(\(id\) => !current\.has\(id\)\)/);
+  assert.match(page, /next\.set\(id, nextNumber\);/);
+  assert.match(page, /if \(newIds\.length === 0\) return current;/);
+  assert.doesNotMatch(page, /sorted\.map\(\(vehicle, index\) => \[vehicle\.id, index \+ 1\]\)/);
 });
 
 test("the truck number appears as the same colored badge everywhere it's shown: the fleet roster, the delivery table's truck-group headers, and the truck popover", () => {
