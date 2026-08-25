@@ -492,13 +492,32 @@ export default function Home() {
     : delivery.truck;
   // A short, stable "Truck N" tag alongside the real plate (the plate stays
   // the actual identifier everywhere -- this is purely a friendlier way to
-  // refer to a vehicle out loud or at a glance). Numbered by sorting the
-  // SENDATRACK vehicle ids, which are stable per physical vehicle, so the
-  // same truck keeps the same number across reloads as long as the fleet's
-  // vehicle set doesn't change.
-  const vehicleTruckNumbers = useMemo(() => {
-    const sorted = [...integration.vehicles].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-    return new Map(sorted.map((vehicle, index) => [vehicle.id, index + 1]));
+  // refer to a vehicle out loud or at a glance). Assignments accumulate in
+  // state and are never reassigned or shifted once given -- reported live:
+  // recomputing every vehicle's number fresh from whichever ids happen to
+  // be in the CURRENT poll (sorted-index based) meant one vehicle briefly
+  // dropping out of SENDATRACK's live feed (a GPS gap) shifted every
+  // subsequent vehicle's number down, so a different truck would suddenly
+  // show the same "Camion N" badge (and color, since that's derived from
+  // the number) that another truck had a moment earlier. Updated from an
+  // effect (not computed during render) since mutating/reading accumulated
+  // state must happen outside render for React to track it correctly.
+  const [vehicleTruckNumbers, setVehicleTruckNumbers] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    setVehicleTruckNumbers((current) => {
+      const newIds = integration.vehicles
+        .map((vehicle) => vehicle.id)
+        .filter((id) => !current.has(id))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      if (newIds.length === 0) return current;
+      const next = new Map(current);
+      let nextNumber = current.size > 0 ? Math.max(...current.values()) + 1 : 1;
+      for (const id of newIds) {
+        next.set(id, nextNumber);
+        nextNumber += 1;
+      }
+      return next;
+    });
   }, [integration.vehicles]);
   // Returns just the "Camion N" badge text (or null when the vehicle has no
   // stable number yet) -- callers render this in a colored truck-number-badge
