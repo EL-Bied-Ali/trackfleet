@@ -332,6 +332,20 @@ export const postgresStore: DeliveryStore = {
     return rows.map(hydrate);
   },
 
+  async findMostRecentActiveDeliveryByContact(phone) {
+    await ensureSchema();
+    const rows = await sql`SELECT * FROM deliveries WHERE contact = ${phone} AND status != 'Delivered' ORDER BY created_at DESC LIMIT 1` as RawDelivery[];
+    return rows[0] ? hydrate(rows[0]) : null;
+  },
+
+  async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
+    await ensureSchema();
+    const trimmed = query.trim();
+    if (!trimmed) return null;
+    const rows = await sql`SELECT * FROM deliveries WHERE status != 'Delivered' AND customer ILIKE ${`%${trimmed}%`} ORDER BY created_at DESC LIMIT 1` as RawDelivery[];
+    return rows[0] ? hydrate(rows[0]) : null;
+  },
+
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
