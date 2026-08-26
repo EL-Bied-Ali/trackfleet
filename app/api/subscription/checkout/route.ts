@@ -1,7 +1,8 @@
 import { getCompanySession } from "../../../lib/company-auth";
-import { createPaddleCheckout, isPaddleInterval, isPaddlePlan, paddleCheckoutConfigured, paddleClientConfig } from "../../../lib/paddle-checkout";
+import { createPaddleCheckout, createPaddlePaymentMethodUpdateTransaction, isPaddleInterval, isPaddlePlan, paddleCheckoutConfigured, paddleClientConfig } from "../../../lib/paddle-checkout";
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
+import { getSubscription } from "../../../lib/subscription-store";
 
 function json(body: Record<string, unknown>, status: number) {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -34,7 +35,20 @@ export async function POST(request: Request) {
   const interval = payload.interval;
   if (!isPaddlePlan(plan) || !isPaddleInterval(interval)) return json({ error: "invalid_plan" }, 400);
 
-  const checkout = await createPaddleCheckout(session.companyId, plan, interval);
+  // A past_due subscription is still alive in Paddle, just failing to
+  // collect payment -- recover it in place via a payment-method-update
+  // transaction on the SAME subscription rather than creating a redundant
+  // second one. Only applies when the requested plan matches what that
+  // subscription is already on: switching plans is a real plan change, not
+  // a same-plan recovery, and isn't handled by this transaction type. Every
+  // other case (no subscription yet, canceled -- which Paddle never allows
+  // reactivating -- or a different plan) falls through to the normal new
+  // checkout below.
+  const existing = await getSubscription(session.companyId);
+  const pastDueSubscriptionId = existing?.status === "past_due" && existing.plan === plan ? existing.paddleSubscriptionId : null;
+  const checkout = pastDueSubscriptionId
+    ? await createPaddlePaymentMethodUpdateTransaction(pastDueSubscriptionId)
+    : await createPaddleCheckout(session.companyId, plan, interval);
   if (!checkout) return json({ error: "checkout_unavailable" }, 502);
 
   return json({ transactionId: checkout.transactionId }, 200);

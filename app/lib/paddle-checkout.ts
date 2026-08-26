@@ -99,3 +99,35 @@ export async function createPaddleCheckout(
   const transactionId = body.data?.id;
   return transactionId ? { transactionId } : null;
 }
+
+// Paddle cancellation is permanent -- a canceled subscription has no
+// reactivate API and the only way back is a brand-new one (createPaddleCheckout
+// above is already correct for that case). past_due is different: the
+// subscription itself is still alive in Paddle, just failing to collect
+// payment, and Paddle exposes a dedicated transaction for updating payment
+// details against that SAME subscription. Reusing createPaddleCheckout for
+// past_due would create a second, redundant subscription instead of
+// recovering the existing one. Returns the same { transactionId } shape as
+// createPaddleCheckout so the frontend's existing
+// Paddle.Checkout.open({ transactionId }) call needs no changes.
+export async function createPaddlePaymentMethodUpdateTransaction(
+  paddleSubscriptionId: string,
+): Promise<{ transactionId: string } | null> {
+  const apiKey = runtimeEnv.PADDLE_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  const response = await fetch(`${paddleApiBase()}/subscriptions/${paddleSubscriptionId}/update-payment-method-transaction`, {
+    method: "GET",
+    headers: { authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(requestTimeoutMs),
+  });
+
+  if (!response.ok) {
+    console.error("[trackfleet:paddle] payment method update transaction failed", { status: response.status });
+    return null;
+  }
+
+  const body = await response.json() as { data?: { id?: string } };
+  const transactionId = body.data?.id;
+  return transactionId ? { transactionId } : null;
+}
