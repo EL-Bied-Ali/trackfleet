@@ -158,6 +158,14 @@ export interface DeliveryStore {
   assignDeliveryToPlannedTrip(deliveryId: string, companyId: string, tripId: string, truck: string, sendatrackVehicleId: string): Promise<DeliveryRow | null>;
   listDeliveryIdsForTrip(companyId: string, tripId: string): Promise<string[]>;
   listPendingNotifications(companyId: string): Promise<PendingDeliveryNotification[]>;
+  // Both unscoped by company, matching getPublic's existing global-lookup
+  // pattern -- an inbound WhatsApp message arrives with no company context
+  // at all (the webhook only knows which Meta phone number received it, and
+  // today exactly one company has one configured), so there is no companyId
+  // to scope by. "Active" means not yet Delivered; ties broken by most
+  // recent createdAt, per product decision (see whatsapp-inbound.ts).
+  findMostRecentActiveDeliveryByContact(phone: string): Promise<DeliveryRow | null>;
+  findMostRecentActiveDeliveryByCustomerNameQuery(query: string): Promise<DeliveryRow | null>;
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
   releaseNotification(deliveryId: string, type: DeliveryEventType): Promise<void>;

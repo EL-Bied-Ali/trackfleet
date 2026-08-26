@@ -40,6 +40,18 @@ export const memoryStore: DeliveryStore = {
   async listForCompany(companyId) {
     return deliveryStore.filter((delivery) => delivery.companyId === companyId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   },
+  async findMostRecentActiveDeliveryByContact(phone) {
+    const matches = deliveryStore.filter((delivery) => delivery.contact === phone && delivery.status !== "Delivered");
+    matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return matches[0] ?? null;
+  },
+  async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return null;
+    const matches = deliveryStore.filter((delivery) => delivery.status !== "Delivered" && delivery.customer.toLowerCase().includes(trimmed));
+    matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return matches[0] ?? null;
+  },
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;

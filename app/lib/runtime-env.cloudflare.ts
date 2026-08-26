@@ -26,6 +26,8 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_TEMPLATE_LANGUAGE?: string;
   WHATSAPP_AUTOMATION_ENABLED?: string;
   WHATSAPP_AUTOMATION_START_AT?: string;
+  WHATSAPP_APP_SECRET?: string;
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
   EMAIL_API_KEY?: string;
   EMAIL_DOMAIN?: string;
   EMAIL_FROM_ADDRESS?: string;
