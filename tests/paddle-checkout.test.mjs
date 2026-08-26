@@ -68,6 +68,16 @@ test("the Paddle API call has a bounded request timeout, matching the existing W
   assert.match(checkoutLib, /AbortSignal\.timeout\(requestTimeoutMs\)/);
 });
 
+test("a past_due subscription (still alive in Paddle, just failing to collect payment) is recovered in place via a payment-method-update transaction on the SAME subscription instead of createPaddleCheckout creating a redundant second one -- Paddle cancellation is permanent with no reactivate API, so createPaddleCheckout stays correct for canceled/no-subscription/plan-change cases", () => {
+  assert.match(checkoutLib, /export async function createPaddlePaymentMethodUpdateTransaction\(\s*\n\s*paddleSubscriptionId: string,\s*\n\): Promise<\{ transactionId: string \} \| null>/);
+  assert.match(checkoutLib, /\/subscriptions\/\$\{paddleSubscriptionId\}\/update-payment-method-transaction/);
+  assert.match(checkoutLib, /method: "GET"/);
+  assert.match(checkoutRoute, /import \{ getSubscription \} from "\.\.\/\.\.\/\.\.\/lib\/subscription-store";/);
+  assert.match(checkoutRoute, /const existing = await getSubscription\(session\.companyId\);/);
+  assert.match(checkoutRoute, /existing\?\.status === "past_due" && existing\.plan === plan/);
+  assert.match(checkoutRoute, /createPaddlePaymentMethodUpdateTransaction\(pastDueSubscriptionId\)/);
+});
+
 test("the checkout POST route requires authentication and same-origin, and degrades to a clear 'not configured' response instead of a raw provider error when Paddle credentials aren't set yet", () => {
   assert.match(checkoutRoute, /requestIsSameOrigin\(request\)/);
   assert.match(checkoutRoute, /if \(!session\) return json\(\{ error: "authentication_required" \}, 401\);/);
