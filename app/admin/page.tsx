@@ -155,6 +155,7 @@ export default function AdminPage() {
             <tr style={{ textAlign: "left", borderBottom: "1px solid #ddd" }}>
               <th style={{ padding: 8 }}>Account</th>
               <th style={{ padding: 8 }}>Created</th>
+              <th style={{ padding: 8 }}>Plan</th>
               <th style={{ padding: 8 }}>Subscription</th>
               <th style={{ padding: 8 }}>Set status</th>
               <th style={{ padding: 8 }}>Actions</th>
@@ -165,6 +166,7 @@ export default function AdminPage() {
               <tr key={company.companyId} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: 8 }}>{company.accountLabel}</td>
                 <td style={{ padding: 8 }}>{new Date(company.createdAt).toLocaleDateString()}</td>
+                <td style={{ padding: 8 }}>{company.plan ?? "—"}</td>
                 <td style={{ padding: 8 }}>{statusLabel(company.subscriptionStatus)}</td>
                 <td style={{ padding: 8 }}>
                   <select

@@ -101,3 +101,8 @@ test("the admin page checks its own session endpoint and shows a distinct sign-i
   assert.match(adminPage, /fetch\("\/api\/admin\/session"/);
   assert.match(adminPage, /href="\/api\/auth\/admin\/google\/start"/);
 });
+
+test("the admin company table renders each company's plan, not just its subscription status -- the API already returns plan (see subscription-store.ts), it was previously fetched into state and never rendered", () => {
+  assert.match(adminPage, /<th style=\{\{ padding: 8 \}\}>Plan<\/th>/);
+  assert.match(adminPage, /<td style=\{\{ padding: 8 \}\}>\{company\.plan \?\? "—"\}<\/td>/);
+});
