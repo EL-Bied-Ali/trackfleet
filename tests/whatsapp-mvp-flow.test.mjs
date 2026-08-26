@@ -121,7 +121,7 @@ test("missing consent, missing customer phone, and missing customer email are al
 });
 
 test("WhatsApp is only attempted when this company's plan actually includes it -- a Standard-tier company still gets the email attempt, and 'not on this plan' is never counted as a failure", () => {
-  assert.match(runner, /whatsappEligible \? sendAutomaticWhatsAppNotification\(item\.event\.type, item\.delivery, trackingUrl\.toString\(\)\) : null,/);
+  assert.match(runner, /whatsappEligible \? sendAutomaticWhatsAppNotification\(item\.event\.type, item\.delivery\) : null,/);
   assert.match(runner, /sendAutomaticEmailNotification\(item\.event\.type, item\.delivery, trackingUrl\.toString\(\)\),/);
   assert.match(runner, /const results = attempts\.filter\(\(result\): result is NonNullable<typeof result> => result !== null\);/);
 });

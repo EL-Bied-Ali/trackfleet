@@ -130,7 +130,7 @@ export async function processPendingNotifications(companyId: string, origin: str
       // the channel is skipped entirely rather than attempted and counted
       // as a failure, since "not on this plan" isn't a provider error.
       const attempts = await Promise.all([
-        whatsappEligible ? sendAutomaticWhatsAppNotification(item.event.type, item.delivery, trackingUrl.toString()) : null,
+        whatsappEligible ? sendAutomaticWhatsAppNotification(item.event.type, item.delivery) : null,
         sendAutomaticEmailNotification(item.event.type, item.delivery, trackingUrl.toString()),
       ]);
       const results = attempts.filter((result): result is NonNullable<typeof result> => result !== null);

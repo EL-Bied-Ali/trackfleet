@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     const built = withdrawn
       ? { payload: null, reason: "consent_withdrawn" as const }
       : trackingUrl
-        ? buildAutomaticWhatsAppPayload(item.event.type, item.delivery, trackingUrl.toString())
+        ? buildAutomaticWhatsAppPayload(item.event.type, item.delivery)
         : { payload: null, reason: "tracking_token_missing" as const };
     const historical = automationStartAt
       ? isHistoricalNotification(item.event.createdAt, automationStartAt)
