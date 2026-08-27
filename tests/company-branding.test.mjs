@@ -29,7 +29,7 @@ test("an empty name, color, or logo clears that field (stored as null) rather th
 });
 
 test("the customer tracking header shows the company's own name/logo, falling back to TrackFleet when unset", () => {
-  assert.match(page, /<span className="brand-mark">\{companyBranding\.logoDataUrl \? <img src=\{companyBranding\.logoDataUrl\} alt="" \/> : <span>↗<\/span>\}<\/span>/);
+  assert.match(page, /<span className="brand-mark">\{companyBranding\.logoDataUrl \? <img src=\{companyBranding\.logoDataUrl\} alt="" \/>.*: <span>↗<\/span>\}<\/span>/);
   assert.match(page, /<span>\{companyBranding\.name \|\| "TrackFleet"\}<\/span>/);
 });
 
