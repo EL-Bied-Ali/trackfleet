@@ -173,4 +173,11 @@ export interface DeliveryStore {
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
   releaseNotification(deliveryId: string, type: DeliveryEventType): Promise<void>;
   create(input: CreateDeliveryInput): Promise<DeliveryRow>;
+  // Bulk-deletes every delivery for this company whose customer name starts
+  // with DEMO_DELIVERY_CUSTOMER_PREFIX (see demo-delivery.ts), along with
+  // their events/notifications/eta observations -- backs the dispatcher's
+  // "Supprimer les livraisons démo" cleanup action. Scoped to the marker
+  // prefix specifically so this can never touch a real customer delivery.
+  // Returns the number of deliveries deleted.
+  deleteDemoDeliveries(companyId: string): Promise<number>;
 }

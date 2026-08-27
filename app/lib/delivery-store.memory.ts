@@ -8,6 +8,7 @@ import type { SendatrackSnapshot } from "./sendatrack.ts";
 import { matchDeliveryVehicle } from "./vehicle-linking.ts";
 import { isUnassignedVehicle, UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record.ts";
+import { DEMO_DELIVERY_CUSTOMER_PREFIX } from "./demo-delivery.ts";
 
 const deliveryStore = seedDeliveries.map((delivery) => ({ ...delivery }));
 const deliveryEvents: DeliveryEventRow[] = [];
@@ -234,5 +235,19 @@ export const memoryStore: DeliveryStore = {
     const delivery: DeliveryRow = { ...input, id: createDeliveryId(), createdAt: new Date() };
     deliveryStore.push(delivery);
     return delivery;
+  },
+  async deleteDemoDeliveries(companyId) {
+    const ids = new Set(deliveryStore.filter((delivery) => delivery.companyId === companyId && delivery.customer.startsWith(DEMO_DELIVERY_CUSTOMER_PREFIX)).map((delivery) => delivery.id));
+    if (!ids.size) return 0;
+    for (let index = deliveryStore.length - 1; index >= 0; index -= 1) {
+      if (ids.has(deliveryStore[index].id)) deliveryStore.splice(index, 1);
+    }
+    for (let index = deliveryEvents.length - 1; index >= 0; index -= 1) {
+      if (ids.has(deliveryEvents[index].deliveryId)) deliveryEvents.splice(index, 1);
+    }
+    for (let index = etaObservations.length - 1; index >= 0; index -= 1) {
+      if (ids.has(etaObservations[index].deliveryId)) etaObservations.splice(index, 1);
+    }
+    return ids.size;
   },
 };
