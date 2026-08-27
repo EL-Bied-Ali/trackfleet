@@ -334,7 +334,10 @@ export const postgresStore: DeliveryStore = {
 
   async findMostRecentActiveDeliveryByContact(phone) {
     await ensureSchema();
-    const rows = await sql`SELECT * FROM deliveries WHERE contact = ${phone} AND status != 'Delivered' ORDER BY created_at DESC LIMIT 1` as RawDelivery[];
+    // Either party texting in gets matched -- the sender tracking what they
+    // shipped and the recipient tracking what's coming to them are both
+    // legitimate, per the user's explicit call.
+    const rows = await sql`SELECT * FROM deliveries WHERE (contact = ${phone} OR recipient_contact = ${phone}) AND status != 'Delivered' ORDER BY created_at DESC LIMIT 1` as RawDelivery[];
     return rows[0] ? hydrate(rows[0]) : null;
   },
 

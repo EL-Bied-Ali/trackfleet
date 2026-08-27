@@ -71,7 +71,15 @@ export async function POST(request: Request) {
     if (delivery) {
       const trackingUrl = new URL(origin);
       if (delivery.trackingToken) trackingUrl.searchParams.set("tracking", delivery.trackingToken);
-      reply = buildFoundReply(delivery, trackingUrl.toString());
+      // Either the sender or the recipient can text in (see
+      // findMostRecentActiveDeliveryByContact) -- greet whichever one
+      // actually matched by phone, not always the sender. A match via the
+      // name-search fallback (phone not on file at all) has no recipient
+      // identity to fall back to, so it stays the sender's name.
+      const greetingName = delivery.recipientContact && delivery.recipientContact === phone && delivery.contact !== phone
+        ? (delivery.recipientName || delivery.customer)
+        : delivery.customer;
+      reply = buildFoundReply(delivery, trackingUrl.toString(), greetingName);
     } else {
       reply = buildNoMatchAskNameReply();
     }

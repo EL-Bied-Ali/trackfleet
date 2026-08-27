@@ -68,8 +68,12 @@ export function parseInboundWhatsAppMessage(payload: unknown): InboundWhatsAppMe
 // automatic push side (whatsapp-message.ts), the tracking link travels as
 // ordinary body text: Meta's anti-phishing restriction on raw URLs only
 // applies to template body parameters, never to freeform messages.
-export function buildFoundReply(delivery: DeliveryRow, trackingUrl: string) {
-  return `Bonjour ${delivery.customer}, voici le suivi de votre colis ${delivery.id} (vers ${delivery.destination}) : ${trackingUrl}`;
+// greetingName is passed in rather than always reading delivery.customer --
+// either the sender or the recipient can text in (see
+// findMostRecentActiveDeliveryByContact), and greeting the recipient by the
+// sender's name would be wrong.
+export function buildFoundReply(delivery: DeliveryRow, trackingUrl: string, greetingName: string) {
+  return `Bonjour ${greetingName}, voici le suivi de votre colis ${delivery.id} (vers ${delivery.destination}) : ${trackingUrl}`;
 }
 
 // Used both on a customer's first contact (no delivery on this phone number)

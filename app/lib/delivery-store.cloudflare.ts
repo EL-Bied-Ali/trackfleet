@@ -86,7 +86,10 @@ export const store: DeliveryStore = {
     return (result.results ?? []).map(hydrate);
   },
   async findMostRecentActiveDeliveryByContact(phone) {
-    const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE contact = ? AND status != 'Delivered' ORDER BY created_at DESC LIMIT 1`).bind(phone).first<RawDelivery>();
+    // Either party texting in gets matched -- the sender tracking what they
+    // shipped and the recipient tracking what's coming to them are both
+    // legitimate, per the user's explicit call.
+    const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE (contact = ? OR recipient_contact = ?) AND status != 'Delivered' ORDER BY created_at DESC LIMIT 1`).bind(phone, phone).first<RawDelivery>();
     return row ? hydrate(row) : null;
   },
   async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
