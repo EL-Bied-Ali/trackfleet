@@ -77,12 +77,21 @@ test("the group truck-reassignment control is dispatcher-only and hidden for the
   assert.match(page, /company\?\.role === "dispatcher" && group\.label !== \(locale === "fr" \? "À affecter"/);
 });
 
-test("group truck reassignment popover anchors left, not right -- its trigger sits near the left of the header row, unlike the schedule editor's trigger far to the right", () => {
-  // Reported live: with the base .truck-editor-popover's right:0 default
-  // (correct for the far-right schedule-editor trigger), this popover
-  // expanded leftward off the edge of the table since its own trigger sits
-  // near the start of the row.
-  assert.match(css, /\.group-truck-editor-popover \{ left: 0; right: auto; \}/);
+test("group truck reassignment popover no longer needs a left-anchor override -- its trigger now sits in the same col-actions cell as the schedule editor's, not near the start of the row", () => {
+  // Originally this trigger sat near the left of one giant flex row spanning
+  // every column (colSpan={100}), so the base .truck-editor-popover's
+  // right:0 default (correct for the far-right schedule-editor trigger)
+  // expanded it leftward off the edge of the table. Reported live, fixed
+  // with a left:0 override at the time.
+  //
+  // The group header row was later split into real per-column cells (see
+  // the width-fix test below) so it lines up with the columns underneath
+  // it, and both edit triggers moved together into their own col-actions
+  // cell -- the same cell the per-row journey editor already uses. Both
+  // now anchor correctly off the base right:0 default, so the override is
+  // gone entirely rather than swapped to match.
+  assert.doesNotMatch(css, /\.group-truck-editor-popover \{ left: 0; right: auto; \}/);
+  assert.match(page, /<td className="col-actions"><div className="group-header-row-inner">\{company\?\.role === "dispatcher" && group\.label !== \(locale === "fr" \? "À affecter"/);
 });
 
 test("group truck reassignment popover anchors to the wrapping row, not its own small trigger span", () => {
@@ -129,6 +138,21 @@ test("the group header row stretches to fill its full row width, not just its co
   assert.doesNotMatch(css, /\.group-header-row \{ display: block; \}/);
   assert.match(css, /\.group-header-row td \{ padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var\(--line\); cursor: default; \}/);
   assert.match(css, /\.group-header-row-inner \{ position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; \}/);
-  assert.match(page, /<td colSpan=\{100\}><div className="group-header-row-inner">/);
-  assert.match(page, /<\/>\}<\/div><\/td><\/tr>/);
+  assert.match(page, /<td colSpan=\{company\?\.role === "dispatcher" \? 3 : 2\}><div className="group-header-row-inner">/);
+  assert.match(page, /<\/>\}<\/td><td className="col-actions"><div className="group-header-row-inner">.*<\/div><\/td><\/tr>/s);
+});
+
+test("the group header row lines up with the columns below it instead of one flex row crammed across the whole width -- reported live as misaligned, cluttered, and inconsistent with the data rows underneath", () => {
+  // Fixing the width bug (above) made the row fill the table correctly, but
+  // it was still a single td colSpan-ing every column with all its content
+  // (truck info, hoisted status/destination/ETA/progress, both edit
+  // triggers) crammed into one flex line -- reported live as not lining up
+  // with LIVRAISON/CLIENT/AGENCE/TRAJET below it, and feeling cluttered.
+  // Split into 3 real cells matching the table's own columns instead: truck
+  // info spans LIVRAISON/CLIENT/[AGENCE], hoisted journey info gets its own
+  // col-journey cell (reusing the exact class the per-row journey cell
+  // already uses), and both edit triggers share a col-actions cell (same
+  // pattern the per-row journey-editor trigger already uses).
+  assert.match(page, /<td className="col-journey">\{group\.uniformDestination && <>/);
+  assert.match(css, /\.col-journey \{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; \}/);
 });

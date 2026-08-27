@@ -17,16 +17,22 @@ test("arrival/departure dates are edited once per truck group when the group sha
   assert.match(page, /const \[groupScheduleEditorLabel, setGroupScheduleEditorLabel\] = useState<string \| null>\(null\);/);
   assert.match(page, /async function updateGroupSchedule\(deliveryIds: string\[\], plannedArrivalAt: string, nextTruckDepartureAt: string\)/);
   assert.match(page, /const results = await Promise\.all\(deliveryIds\.map\(\(deliveryId\) => fetch\("\/api\/deliveries\/update-schedule", \{/);
-  assert.match(page, /\{company\?\.role === "dispatcher" && <span className="group-schedule-editor-wrap">/);
+  assert.match(page, /\{group\.uniformDestination && company\?\.role === "dispatcher" && <span className="group-schedule-editor-wrap">/);
   assert.match(page, /onClick=\{\(\) => void updateGroupSchedule\(group\.deliveries\.map\(\(delivery\) => delivery\.id\), groupSchedulePlannedArrival, groupScheduleNextDeparture\)\}/);
 });
 
 test("the group schedule editor is nested inside the group.uniformDestination branch, so it never renders for a single parcel or a truck with mixed destinations", () => {
-  const start = page.indexOf('{group.uniformDestination && <>');
-  const end = page.indexOf('</>}</div></td></tr>');
-  assert.ok(start > -1 && end > start, "expected the uniformDestination JSX block to be found");
-  const uniformBlock = page.slice(start, end);
-  assert.match(uniformBlock, /group-schedule-editor-trigger/);
+  // The schedule editor now lives in its own col-actions cell (moved there
+  // so the group header row lines up with the columns below it -- see the
+  // col-journey/col-actions split below), not inside the same <>...</>
+  // fragment as the hoisted status/destination/ETA/progress anymore. It's
+  // still gated on group.uniformDestination directly, just as its own
+  // conditional expression rather than nested in that fragment.
+  const start = page.indexOf('<tr className="group-header-row">');
+  const end = page.indexOf('</tr>', start);
+  assert.ok(start > -1 && end > start, "expected the group header row to be found");
+  const row = page.slice(start, end);
+  assert.match(row, /\{group\.uniformDestination && company\?\.role === "dispatcher" && <span className="group-schedule-editor-wrap">.*group-schedule-editor-trigger/s);
 });
 
 test("the group schedule popover closes on outside click via the same pattern as the other row popovers", () => {
@@ -54,9 +60,12 @@ test("the group schedule popover anchors to the wrapping row, not its own small 
   // and doesn't reliably resolve percentage widths either. The td/tr stay
   // real table elements; the flex layout (and this position: relative
   // anchor) live on a plain .group-header-row-inner <div> nested inside the
-  // td instead, which measured correctly.
+  // td instead, which measured correctly. The schedule editor's trigger now
+  // sits in its own col-actions cell (same cell the truck-editor trigger
+  // moved into, matching the per-row action column), each with its own
+  // .group-header-row-inner anchor scoped to just that cell.
   assert.match(css, /\.group-header-row-inner \{ position: relative;/);
-  assert.match(page, /<td colSpan=\{100\}><div className="group-header-row-inner">/);
+  assert.match(page, /<td className="col-actions"><div className="group-header-row-inner">/);
   assert.match(css, /\.group-schedule-editor-wrap \{ display: inline-block; \}/);
   assert.doesNotMatch(css, /\.group-schedule-editor-wrap \{ position: relative;/);
 });

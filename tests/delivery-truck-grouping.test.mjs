@@ -23,7 +23,7 @@ test("unassigned parcels collect into their own trailing group instead of scatte
 
 test("each group renders as its own tbody with a header row showing the truck and parcel count, and the vehicle column is gone from data rows (redundant with the header)", () => {
   assert.match(page, /\{groupedDeliveries\.map\(\(group\) => <tbody key=\{group\.label\}>/);
-  assert.match(page, /<tr className="group-header-row"><td colSpan=\{100\}><div className="group-header-row-inner">\{group\.numberLabel && <span className="truck-number-badge"[^>]*>\{group\.numberLabel\}<\/span>\}<strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
+  assert.match(page, /<tr className="group-header-row"><td colSpan=\{company\?\.role === "dispatcher" \? 3 : 2\}><div className="group-header-row-inner">\{group\.numberLabel && <span className="truck-number-badge"[^>]*>\{group\.numberLabel\}<\/span>\}<strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
   // No more per-row <th>/<td> for the vehicle -- that information now lives
   // exactly once, in the group header, instead of once per row.
   assert.doesNotMatch(page, /<th>\{t\.tableVehicle\}<\/th>/);
