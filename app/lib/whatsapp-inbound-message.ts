@@ -107,3 +107,16 @@ export function buildNoMatchAskNameReply() {
 export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
   return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} est arrivé à destination (${delivery.destination}) et est prêt pour la récupération. Suivi (accès bientôt clôturé) : ${trackingUrl}`, companyName);
 }
+
+// Sent by a dispatcher's explicit "Notifier par WhatsApp" action on a
+// departure confirmation (app/api/deliveries/notify-departure/route.ts), not
+// automatically -- DEPARTED is deliberately excluded from the automatic push
+// set (see automaticWhatsAppEvents in notification-policy.ts, to control
+// message volume/cost), but that exclusion is about the paid,
+// business-initiated template push, not this free customer-service-window
+// reply, so a dispatcher can still choose to send this one for a specific
+// delivery. Unlike buildArrivalNotificationMessage, this doesn't tighten the
+// tracking link's expiry, so there's no "closing soon" framing here.
+export function buildDepartureNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
+  return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} vient de démarrer son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`, companyName);
+}

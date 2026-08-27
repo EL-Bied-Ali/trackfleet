@@ -69,7 +69,7 @@ test("the notify-arrival route only records WHATSAPP_ARRIVAL_NOTIFIED after at l
 });
 
 test("WHATSAPP_ARRIVAL_NOTIFIED is excluded from the customer-facing event timeline -- it's an internal marker, not a route milestone", () => {
-  assert.match(deliveryEventsLib, /&& event !== "WHATSAPP_ARRIVAL_NOTIFIED";/);
+  assert.match(deliveryEventsLib, /&& event !== "WHATSAPP_ARRIVAL_NOTIFIED"/);
 });
 
 test("the notify-arrival route signs the message with the agency's own company branding, looked up once for the whole batch of recipients", () => {

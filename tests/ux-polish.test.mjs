@@ -35,7 +35,7 @@ test("quick tools live in the dispatcher sidebar and are localized", () => {
 
 test("arrival completion hides unsafe actions until a real arrival is confirmed", () => {
   assert.match(siteManager, /arrivalConfirmed && <button[^>]+danger-button/);
-  assert.match(siteManager, /!unassigned && !arrivalConfirmed/);
+  assert.match(siteManager, /!unassigned && !departurePending\(delivery\) && !arrivalConfirmed/);
   assert.match(siteManager, /Camion à affecter/);
 });
 

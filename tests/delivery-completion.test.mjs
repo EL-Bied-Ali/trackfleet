@@ -5,12 +5,13 @@ import "./unloading-delay-suppression.test.mjs";
 import "./unload-departure-guard.test.mjs";
 import { evaluateArrivalDwell, parseUnloadGraceMinutes } from "../app/lib/delivery-arrival.ts";
 
-const [routeProgress, serverAutomation, businessTick, vercelCompletion, cloudflareCompletion, manualRoute, siteManager] = await Promise.all([
+const [routeProgress, serverAutomation, businessTick, vercelCompletion, cloudflareCompletion, sharedPostgresCompletion, manualRoute, siteManager] = await Promise.all([
   readFile(new URL("../app/lib/route-progress.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/fleet-business-tick.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-completion.vercel.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-completion.cloudflare.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/delivery-completion.shared-postgres.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/deliveries/manual-completion/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/SiteManager.tsx", import.meta.url), "utf8"),
 ]);
@@ -111,4 +112,44 @@ test("manual completion UI requires explicit operator confirmation", () => {
   assert.match(siteManager, /confirmArrival: true/);
   assert.match(siteManager, /Confirmer l’arrivée/);
   assert.match(siteManager, /Confirmation recommandée/);
+});
+
+// A delivery with no SENDATRACK-tracked vehicle never gets the automatic
+// Loading -> In transit transition (nothing GPS-observes it leaving), so
+// without a manual override it sits in Loading forever -- the same gap
+// completeDeliveryManually already covers for the Delivered end of the
+// trip. Mirrors that function's shape and the route's confirmArrival
+// branch, just for the opposite direction.
+test("manual departure confirmation only applies to a delivery still in Loading, gated dispatcher-only same as marking delivered", () => {
+  assert.match(manualRoute, /confirmDepartureManually/);
+  assert.match(manualRoute, /payload\.confirmDeparture !== true/);
+  assert.match(manualRoute, /session\.role === "agency" && \(payload\.confirmDelivered === true \|\| payload\.confirmDeparture === true\)/);
+  assert.match(manualRoute, /if \(!departed\) return noStore\(\{ error: "delivery_not_found_or_not_loading" \}, 404\);/);
+  for (const source of [vercelCompletion, cloudflareCompletion]) {
+    assert.match(source, /status = 'Loading'/);
+    assert.match(source, /status = 'In transit'/);
+    assert.match(source, /MANUAL_DEPARTURE_CONFIRMED/);
+    assert.match(source, /'DEPARTED'/);
+  }
+});
+
+test("the D1 mirror replicates a confirmed manual departure the same way it already mirrors manual completion", () => {
+  assert.match(sharedPostgresCompletion, /confirmDepartureManually as confirmPrimaryDeparture/);
+  assert.match(sharedPostgresCompletion, /async function mirrorManualDeparture/);
+  assert.match(sharedPostgresCompletion, /UPDATE deliveries SET status = 'In transit' WHERE id = \? AND company_id = \?/);
+  assert.match(sharedPostgresCompletion, /MANUAL_DEPARTURE_CONFIRMED/);
+  assert.match(sharedPostgresCompletion, /export async function confirmDepartureManually\(companyId: string, deliveryId: string\) \{/);
+});
+
+test("unlike confirming arrival (a real, customer-facing GPS milestone the automatic push set includes), confirming departure never calls processPendingNotifications -- DEPARTED is deliberately excluded from that set", () => {
+  const departureBranch = manualRoute.slice(manualRoute.indexOf("if (payload.confirmDeparture === true) {"), manualRoute.indexOf("if (payload.confirmArrival === true) {"));
+  assert.doesNotMatch(departureBranch, /await processPendingNotifications/);
+});
+
+test("the site manager's dedicated ops panel offers a departure-confirm action instead of a premature arrival-confirm one, for a delivery still in Loading", () => {
+  assert.match(siteManager, /function departurePending\(delivery: ManualDelivery\) \{\s*\n\s*return delivery\.status === "Loading";/);
+  assert.match(siteManager, /confirmDeparture: true/);
+  assert.match(siteManager, /!unassigned && departurePending\(delivery\)/);
+  assert.match(siteManager, /!unassigned && !departurePending\(delivery\) && !arrivalConfirmed/);
+  assert.match(siteManager, /departurePending\(delivery\)\s*\n\s*\? copy\.departurePending/);
 });

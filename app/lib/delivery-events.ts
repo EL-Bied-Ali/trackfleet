@@ -18,7 +18,18 @@ export type DeliveryEventType =
   // pickup (see app/api/deliveries/notify-arrival/route.ts) -- an internal
   // bookkeeping marker, not a route milestone, so it's excluded from
   // customerFacingEvent below like the other internal-only types.
-  | "WHATSAPP_ARRIVAL_NOTIFIED";
+  | "WHATSAPP_ARRIVAL_NOTIFIED"
+  // A dispatcher manually confirming a delivery has left origin (see
+  // app/api/deliveries/manual-completion/route.ts) -- for deliveries with
+  // no SENDATRACK-tracked vehicle, nothing ever detects the automatic
+  // DEPARTED event above, so they'd sit in Loading forever otherwise. Same
+  // internal-bookkeeping role as MANUAL_ARRIVAL_CONFIRMED: the real,
+  // customer-facing DEPARTED event is still recorded alongside it.
+  | "MANUAL_DEPARTURE_CONFIRMED"
+  // Same idea as WHATSAPP_ARRIVAL_NOTIFIED, but for a dispatcher's manual
+  // "the truck just left" notice (see
+  // app/api/deliveries/notify-departure/route.ts).
+  | "WHATSAPP_DEPARTURE_NOTIFIED";
 
 export type DeliveryEventInput = {
   previousStatus: "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -75,7 +86,9 @@ export function customerFacingEvent(event: DeliveryEventType) {
     && event !== "WHATSAPP_OPT_OUT"
     && event !== "MANUAL_ARRIVAL_CONFIRMED"
     && event !== "MANUAL_DELIVERED"
-    && event !== "WHATSAPP_ARRIVAL_NOTIFIED";
+    && event !== "WHATSAPP_ARRIVAL_NOTIFIED"
+    && event !== "MANUAL_DEPARTURE_CONFIRMED"
+    && event !== "WHATSAPP_DEPARTURE_NOTIFIED";
 }
 
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {
