@@ -228,9 +228,27 @@ export default function InteractiveFleetMap({ deliveries, liveVehicles = EMPTY_L
 
     // Never invent a truck position on the customer view. Until real GPS is
     // available the route and destination remain visible without a fake marker.
+    // Dispatcher view: a truck is one physical vehicle regardless of how many
+    // parcels are riding on it (the delivery table already collapses those
+    // into one grouped row -- see groupedDeliveries in page.tsx), so the map
+    // must show exactly one marker per truck too, not one per delivery.
+    // Reported live: a truck carrying two grouped parcels showed as two
+    // overlapping same-numbered badges. Grouped by the same key the table
+    // uses (sendatrackVehicleId, falling back to the truck name for
+    // non-SENDATRACK trucks), preferring whichever delivery in the group is
+    // currently selected so clicking a specific parcel in the table still
+    // highlights and keeps selecting that exact delivery.
     const shownDeliveries = customerMode
       ? deliveries.filter((delivery) => delivery.id === selectedId && hasExactPosition(delivery))
-      : deliveries;
+      : (() => {
+          const groups = new Map<string, MapDelivery>();
+          for (const delivery of deliveries) {
+            const key = delivery.sendatrackVehicleId || delivery.truck;
+            const existing = groups.get(key);
+            if (!existing || delivery.id === selectedId) groups.set(key, delivery);
+          }
+          return Array.from(groups.values());
+        })();
     const markerOccurrences = new Map<string, number>();
     const markers = shownDeliveries.map((delivery, index) => {
       const button = document.createElement("button");
