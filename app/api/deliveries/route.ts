@@ -25,7 +25,7 @@ import { normalizeCustomerEmail, normalizeCustomerPhone } from "../../lib/custom
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
-import { summarizeStopDwell } from "../../lib/stop-dwell";
+import { groupPositionsByTrip, summarizeStopDwellFromGroupedTrips } from "../../lib/stop-dwell";
 import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";
 import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/trip-record";
 import { summarizeCompletedTripRoutes } from "../../lib/trip-history-summary";
@@ -208,9 +208,14 @@ async function learnedStopMinutes(companyId: string, routeTemplateId: string | n
     store.listTripPositionsForRoute(companyId, routeTemplateId, 20000),
     prefetchedSites ? Promise.resolve(prefetchedSites) : siteStore.listForCompany(companyId),
   ]);
+  // Grouping/sorting the position history is identical regardless of which
+  // site is being checked -- done once here and reused for every site,
+  // instead of summarizeStopDwell repeating it per site (see
+  // groupPositionsByTrip's comment in stop-dwell.ts).
+  const groupedTrips = groupPositionsByTrip(positions, currentTripInstanceId);
   for (const site of sites) {
     if (typeof site.latitude !== "number" || typeof site.longitude !== "number") continue;
-    const stats = summarizeStopDwell(positions, { latitude: site.latitude, longitude: site.longitude, arrivalRadiusKm: site.arrivalRadiusKm }, 3, currentTripInstanceId);
+    const stats = summarizeStopDwellFromGroupedTrips(groupedTrips, { latitude: site.latitude, longitude: site.longitude, arrivalRadiusKm: site.arrivalRadiusKm }, 3);
     if (stats.usableMinutes !== null) learned.set(site.id, stats.usableMinutes);
   }
   return learned;
