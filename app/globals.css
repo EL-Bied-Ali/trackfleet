@@ -237,7 +237,11 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
 .group-schedule-editor-popover { left: auto; right: 0; }
 .group-truck-editor-wrap { position: relative; display: inline-block; }
 .group-truck-editor-wrap .more-button { vertical-align: middle; }
-.group-truck-editor-popover { left: auto; right: 0; }
+/* Unlike the group-schedule-editor trigger (far right of the header row,
+   where the base .truck-editor-popover right:0 default already fits), this
+   trigger sits near the left of the row -- right:0 would expand the
+   popover leftward off the edge of the table. Anchor to the left instead. */
+.group-truck-editor-popover { left: 0; right: auto; }
 .cell-hoisted { color: #c3ccc7; }
 tbody tr:last-child td { border-bottom: 0; }.row-selected td { background: #fbfdfc; }
 tbody tr:focus-visible { outline: 2px solid #4c987b; outline-offset: -2px; }

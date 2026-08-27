@@ -77,7 +77,11 @@ test("the group truck-reassignment control is dispatcher-only and hidden for the
   assert.match(page, /company\?\.role === "dispatcher" && group\.label !== \(locale === "fr" \? "À affecter"/);
 });
 
-test("group truck reassignment styling reuses the same popover pattern as the group schedule editor", () => {
+test("group truck reassignment popover anchors left, not right -- its trigger sits near the left of the header row, unlike the schedule editor's trigger far to the right", () => {
+  // Reported live: with the base .truck-editor-popover's right:0 default
+  // (correct for the far-right schedule-editor trigger), this popover
+  // expanded leftward off the edge of the table since its own trigger sits
+  // near the start of the row.
   assert.match(css, /\.group-truck-editor-wrap \{ position: relative; display: inline-block; \}/);
-  assert.match(css, /\.group-truck-editor-popover \{ left: auto; right: 0; \}/);
+  assert.match(css, /\.group-truck-editor-popover \{ left: 0; right: auto; \}/);
 });
