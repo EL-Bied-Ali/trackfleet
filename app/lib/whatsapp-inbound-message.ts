@@ -38,6 +38,17 @@ export async function verifyWhatsAppWebhookSignature(rawBody: string, signatureH
 
 export type InboundWhatsAppMessage = { from: string; text: string };
 
+// A customer receiving a freeform WhatsApp reply from an unfamiliar number
+// has no way to know it's actually from the company that's shipping their
+// parcel (TrackFleet is the tracking SaaS behind it, not a name the customer
+// ever chose to talk to) -- signing with the company's own configured brand
+// name (see getCompanyBranding in trackfleet-auth-session-store) closes
+// that gap. Omitted entirely for a
+// company that hasn't set one, leaving the message exactly as before.
+function signMessage(text: string, companyName: string | null) {
+  return companyName ? `${text}\n\n— ${companyName}` : text;
+}
+
 // Meta's webhook payload carries many event types on the same endpoint
 // (message status updates, template quality changes, account alerts...) --
 // this only recognizes a genuine inbound text message and returns null for
@@ -72,8 +83,8 @@ export function parseInboundWhatsAppMessage(payload: unknown): InboundWhatsAppMe
 // either the sender or the recipient can text in (see
 // findMostRecentActiveDeliveryByContact), and greeting the recipient by the
 // sender's name would be wrong.
-export function buildFoundReply(delivery: DeliveryRow, trackingUrl: string, greetingName: string) {
-  return `Bonjour ${greetingName}, voici le suivi de votre colis ${delivery.id} (vers ${delivery.destination}) : ${trackingUrl}`;
+export function buildFoundReply(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
+  return signMessage(`Bonjour ${greetingName}, voici le suivi de votre colis ${delivery.id} (vers ${delivery.destination}) : ${trackingUrl}`, companyName);
 }
 
 // Used both on a customer's first contact (no delivery on this phone number)
@@ -93,6 +104,6 @@ export function buildNoMatchAskNameReply() {
 // freeform-message constraint as buildFoundReply. Mentions the link is
 // closing soon rather than omitting it, since the whole point of this
 // action is to also tighten the link's expiry (see tracking-access.ts).
-export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string) {
-  return `Bonjour ${greetingName}, votre colis ${delivery.id} est arrivé à destination (${delivery.destination}) et est prêt pour la récupération. Suivi (accès bientôt clôturé) : ${trackingUrl}`;
+export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
+  return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} est arrivé à destination (${delivery.destination}) et est prêt pour la récupération. Suivi (accès bientôt clôturé) : ${trackingUrl}`, companyName);
 }

@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import { getCompanyBranding } from "trackfleet-auth-session-store";
 import { getCompanySession } from "../../../lib/company-auth";
 import { buildArrivalNotificationMessage } from "../../../lib/whatsapp-inbound-message";
 import { sendWhatsAppTextReply } from "../../../lib/whatsapp-inbound";
@@ -45,8 +46,9 @@ export async function POST(request: Request) {
 
   if (!recipients.length) return noStore({ error: "no_contact_on_file" }, 400);
 
+  const branding = await getCompanyBranding(session.companyId);
   const results = await Promise.all(recipients.map(async (recipient) => {
-    const message = buildArrivalNotificationMessage(delivery, trackingUrl.toString(), recipient.name);
+    const message = buildArrivalNotificationMessage(delivery, trackingUrl.toString(), recipient.name, branding?.name ?? null);
     const { sent } = await sendWhatsAppTextReply(recipient.phone, message);
     return { phone: recipient.phone, sent };
   }));
