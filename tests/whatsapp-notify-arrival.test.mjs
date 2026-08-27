@@ -24,6 +24,13 @@ test("the arrival notification greets whoever is passed as greetingName, matchin
   assert.doesNotMatch(message, /Jean Dupont/);
 });
 
+test("the arrival notification is signed with the agency's own company branding, when configured, same as the inbound auto-reply", () => {
+  const signed = buildArrivalNotificationMessage(baseDelivery, "https://example.com/?tracking=xyz", "Jean Dupont", "Net Transport");
+  assert.match(signed, /— Net Transport$/);
+  const unsigned = buildArrivalNotificationMessage(baseDelivery, "https://example.com/?tracking=xyz", "Jean Dupont");
+  assert.doesNotMatch(unsigned, /—/);
+});
+
 test("trackingLinkExpiryAnchorFromEvents treats a WhatsApp arrival notification as an expiry trigger, even without a Delivered event", () => {
   const notifiedAt = new Date("2026-08-20T09:00:00.000Z");
   assert.equal(trackingLinkExpiryAnchorFromEvents([
@@ -63,4 +70,10 @@ test("the notify-arrival route only records WHATSAPP_ARRIVAL_NOTIFIED after at l
 
 test("WHATSAPP_ARRIVAL_NOTIFIED is excluded from the customer-facing event timeline -- it's an internal marker, not a route milestone", () => {
   assert.match(deliveryEventsLib, /&& event !== "WHATSAPP_ARRIVAL_NOTIFIED";/);
+});
+
+test("the notify-arrival route signs the message with the agency's own company branding, looked up once for the whole batch of recipients", () => {
+  assert.match(notifyRoute, /import \{ getCompanyBranding \} from "trackfleet-auth-session-store";/);
+  assert.match(notifyRoute, /const branding = await getCompanyBranding\(session\.companyId\);/);
+  assert.match(notifyRoute, /buildArrivalNotificationMessage\(delivery, trackingUrl\.toString\(\), recipient\.name, branding\?\.name \?\? null\);/);
 });

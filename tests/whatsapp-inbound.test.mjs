@@ -105,6 +105,20 @@ test("the reply greets whoever is passed as greetingName, not always delivery.cu
   assert.doesNotMatch(reply, /Jean Dupont/);
 });
 
+test("the reply is signed with the shipping company's own configured name, when it has one -- a customer has no other way to know an unfamiliar WhatsApp number is really TrackFleet's tracking SaaS behind their own shipper", () => {
+  const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
+  const signed = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont", "Net Transport");
+  assert.match(signed, /— Net Transport$/);
+});
+
+test("the reply is not signed at all when the company hasn't configured a brand name -- omitted, not a placeholder", () => {
+  const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
+  const unsigned = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
+  assert.doesNotMatch(unsigned, /—/);
+  const explicitlyNull = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont", null);
+  assert.equal(unsigned, explicitlyNull);
+});
+
 test("the no-match reply asks for a name, and is the same message whether it's a first hello or a name search that didn't find anything -- there's no conversation state to tell those apart", () => {
   const reply = buildNoMatchAskNameReply();
   assert.match(reply, /prénom/i);
@@ -163,6 +177,12 @@ test("the recipient texting in is greeted by their own name, not the sender's --
   assert.match(webhookRoute, /delivery\.recipientContact && delivery\.recipientContact === phone && delivery\.contact !== phone/);
   assert.match(webhookRoute, /\(delivery\.recipientName \|\| delivery\.customer\)/);
   assert.match(webhookRoute, /: delivery\.customer;/);
+});
+
+test("the reply is signed with the matched delivery's own company branding, looked up only once a delivery is actually found", () => {
+  assert.match(webhookRoute, /import \{ getCompanyBranding \} from "trackfleet-auth-session-store";/);
+  assert.match(webhookRoute, /const branding = await getCompanyBranding\(delivery\.companyId\);/);
+  assert.match(webhookRoute, /buildFoundReply\(delivery, trackingUrl\.toString\(\), greetingName, branding\?\.name \?\? null\);/);
 });
 
 test("the webhook always acknowledges 200 once the payload is verified and parsed, even if the reply send itself fails -- a failed send must never make Meta retry-storm the same inbound message", () => {

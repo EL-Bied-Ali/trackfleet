@@ -1,5 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
+import { getCompanyBranding } from "trackfleet-auth-session-store";
 import { normalizeCustomerPhone } from "../../../lib/customer-contact";
 import { sendWhatsAppTextReply, verifyWhatsAppWebhookSignature, verifyWhatsAppWebhookSubscription } from "../../../lib/whatsapp-inbound";
 import { buildFoundReply, buildNoMatchAskNameReply, parseInboundWhatsAppMessage } from "../../../lib/whatsapp-inbound-message";
@@ -79,7 +80,8 @@ export async function POST(request: Request) {
       const greetingName = delivery.recipientContact && delivery.recipientContact === phone && delivery.contact !== phone
         ? (delivery.recipientName || delivery.customer)
         : delivery.customer;
-      reply = buildFoundReply(delivery, trackingUrl.toString(), greetingName);
+      const branding = await getCompanyBranding(delivery.companyId);
+      reply = buildFoundReply(delivery, trackingUrl.toString(), greetingName, branding?.name ?? null);
     } else {
       reply = buildNoMatchAskNameReply();
     }
