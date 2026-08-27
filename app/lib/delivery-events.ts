@@ -12,7 +12,13 @@ export type DeliveryEventType =
   | "ARRIVED"
   | "MANUAL_DELIVERED"
   | "GPS_STALE"
-  | "WHATSAPP_OPT_OUT";
+  | "WHATSAPP_OPT_OUT"
+  // Recorded once, the first time an agency dispatcher successfully
+  // notifies a customer via WhatsApp that their parcel is ready for
+  // pickup (see app/api/deliveries/notify-arrival/route.ts) -- an internal
+  // bookkeeping marker, not a route milestone, so it's excluded from
+  // customerFacingEvent below like the other internal-only types.
+  | "WHATSAPP_ARRIVAL_NOTIFIED";
 
 export type DeliveryEventInput = {
   previousStatus: "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -68,19 +74,39 @@ export function customerFacingEvent(event: DeliveryEventType) {
     && event !== "GPS_BASELINE"
     && event !== "WHATSAPP_OPT_OUT"
     && event !== "MANUAL_ARRIVAL_CONFIRMED"
-    && event !== "MANUAL_DELIVERED";
+    && event !== "MANUAL_DELIVERED"
+    && event !== "WHATSAPP_ARRIVAL_NOTIFIED";
 }
 
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {
   return events.some((event) => event.type === "WHATSAPP_OPT_OUT");
 }
 
+// Earliest createdAt among events matching any of the given types, or null
+// if none occurred -- every event type here is recorded at most once per
+// delivery (see the UNIQUE (delivery_id, type) constraint backing every
+// store's recordEvent), so "earliest" only matters when several different
+// qualifying types are present, and picking the earliest keeps whichever
+// derived deadline (e.g. tracking-link expiry) as tight as possible.
+export function earliestEventAt(events: Array<{ type: DeliveryEventType; createdAt: Date }>, types: DeliveryEventType[]): Date | null {
+  const matches = events.filter((event) => types.includes(event.type)).map((event) => event.createdAt.getTime());
+  return matches.length ? new Date(Math.min(...matches)) : null;
+}
+
 // ARRIVED (automatic GPS completion) and MANUAL_DELIVERED (dispatcher/agency
-// manual completion) are the two terminal event types recorded exactly once
-// per delivery (see the UNIQUE (delivery_id, type) constraint backing every
-// store's recordEvent) -- whichever is present is the real "became
-// Delivered" moment, used to tighten the public tracking link's expiry
-// beyond the generic post-planned-arrival window (see tracking-access.ts).
+// manual completion) are the two terminal event types -- whichever is
+// present is the real "became Delivered" moment, used to tighten the public
+// tracking link's expiry beyond the generic post-planned-arrival window
+// (see tracking-access.ts).
 export function deliveredAtFromEvents(events: Array<{ type: DeliveryEventType; createdAt: Date }>): Date | null {
-  return events.find((event) => event.type === "ARRIVED" || event.type === "MANUAL_DELIVERED")?.createdAt ?? null;
+  return earliestEventAt(events, ["ARRIVED", "MANUAL_DELIVERED"]);
+}
+
+// Same idea as deliveredAtFromEvents, but also treats an agency's WhatsApp
+// arrival notification as an expiry trigger -- the product intent is that
+// notifying the customer closes out their need for the link even before the
+// delivery is formally marked Delivered (e.g. it's arrived at a relay site
+// awaiting pickup, not yet handed off). See notify-arrival/route.ts.
+export function trackingLinkExpiryAnchorFromEvents(events: Array<{ type: DeliveryEventType; createdAt: Date }>): Date | null {
+  return earliestEventAt(events, ["ARRIVED", "MANUAL_DELIVERED", "WHATSAPP_ARRIVAL_NOTIFIED"]);
 }

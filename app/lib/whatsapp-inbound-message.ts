@@ -86,3 +86,13 @@ export function buildFoundReply(delivery: DeliveryRow, trackingUrl: string, gree
 export function buildNoMatchAskNameReply() {
   return "Nous n'avons pas trouvé de colis actif associé à ce numéro. Pouvez-vous nous répondre avec votre prénom et nom pour qu'on le retrouve ?";
 }
+
+// Sent by an agency dispatcher's explicit "Notifier par WhatsApp" action
+// (app/api/deliveries/notify-arrival/route.ts), not automatically -- only
+// deliverable while a real customer-opened 24h window is still open, same
+// freeform-message constraint as buildFoundReply. Mentions the link is
+// closing soon rather than omitting it, since the whole point of this
+// action is to also tighten the link's expiry (see tracking-access.ts).
+export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string) {
+  return `Bonjour ${greetingName}, votre colis ${delivery.id} est arrivé à destination (${delivery.destination}) et est prêt pour la récupération. Suivi (accès bientôt clôturé) : ${trackingUrl}`;
+}
