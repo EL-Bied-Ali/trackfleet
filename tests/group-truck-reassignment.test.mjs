@@ -86,15 +86,17 @@ test("group truck reassignment popover anchors left, not right -- its trigger si
 });
 
 test("group truck reassignment popover anchors to the wrapping row, not its own small trigger span", () => {
-  // Reported live: .group-header-row td is a wrapping flex container
-  // (flex-wrap: wrap), so its rendered height varies with how many lines
-  // its content wraps onto. A popover positioned "top: 100%" relative to
-  // its own tiny trigger span doesn't account for that -- when the row
-  // wrapped to two lines, the popover rendered high enough to overlap the
-  // second line's badges/destination instead of clearing the whole row.
-  // Anchoring to the td's own box (position: relative, spans every wrapped
-  // line) instead of the trigger wrap fixes that regardless of row height.
-  assert.match(css, /\.group-header-row td \{ position: relative;/);
+  // Reported live: the group header's flex content is a wrapping container
+  // (flex-wrap: wrap), so its rendered height varies with how many lines it
+  // wraps onto. A popover positioned "top: 100%" relative to its own tiny
+  // trigger span doesn't account for that.
+  //
+  // Two earlier fixes here both measured as still broken when actually
+  // tested live via getBoundingClientRect (see the next test) --
+  // .group-header-row-inner (a plain <div> nested inside the still-native
+  // table-cell td, not the td itself) is what carries position: relative
+  // now.
+  assert.match(css, /\.group-header-row-inner \{ position: relative;/);
   assert.match(css, /\.group-truck-editor-wrap \{ display: inline-block; \}/);
   assert.doesNotMatch(css, /\.group-truck-editor-wrap \{ position: relative;/);
 });
@@ -108,18 +110,25 @@ test("the truck picker shows each vehicle's \"Camion N\" number alongside its pl
   assert.equal(occurrences.length, 3, "expected all 3 truck pickers (group reassignment, per-delivery reassignment, vehicle-link popover) to show the truck number");
 });
 
-test("the group header row stretches to fill its full row width, not just its content -- reported live twice as a jarring blank white gap", () => {
-  // First fix attempt (width: 100% on the td alone) was reported still
-  // broken. The real mechanism: a <tr> requires its children to be
-  // table-cell boxes; once this td's display changes to flex, it stops
-  // generating one, colSpan becomes meaningless, and the browser wraps it
-  // in an anonymous cell that only ever occupies column 1 of the table's
-  // shared column grid -- no width value on the td can make it span the
-  // other columns (CLIENT/AGENCE/TRAJET), since that's a table-structure
-  // concept, not a sizing one. Taking the whole <tr> out of table layout
-  // (matching what the mobile media query below already does, proven
-  // correct there) sidesteps the column grid entirely instead of fighting
-  // it with another width guess.
-  assert.match(css, /\.group-header-row \{ display: block; \}/);
-  assert.match(css, /\.group-header-row td \{ position: relative; width: 100%;.*display: flex;.*box-sizing: border-box; \}/);
+test("the group header row stretches to fill its full row width, not just its content -- reported live three times as a jarring blank white gap before this held up under actual measurement", () => {
+  // Attempt 1 (width: 100% on the td alone) and attempt 2 (display: block
+  // on the whole <tr>, matching the mobile media query) were both reported
+  // still broken. Verified why by loading a browser and measuring with
+  // getBoundingClientRect before landing attempt 3: switching the <tr>/<td>
+  // to a non-table display value pulls them out of the table's real
+  // column-width algorithm (colSpan={100} only spans columns for a td
+  // that's still display: table-cell) -- and a block-level element whose
+  // ancestor chain still runs through display:table/table-row-group
+  // doesn't reliably resolve percentage widths against the table's actual
+  // pixel width either, even with an explicit width: 100%. Confirmed with
+  // real numbers, not just code-reading, both broken (td measured at
+  // roughly half the table's real width) and this fix correct (measured
+  // pixel-exact against the table width): leave the <tr>/<td> as real
+  // table-row/table-cell -- letting colSpan do what it's designed for --
+  // and put the flex layout on a plain <div> nested inside the td instead.
+  assert.doesNotMatch(css, /\.group-header-row \{ display: block; \}/);
+  assert.match(css, /\.group-header-row td \{ padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var\(--line\); cursor: default; \}/);
+  assert.match(css, /\.group-header-row-inner \{ position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; \}/);
+  assert.match(page, /<td colSpan=\{100\}><div className="group-header-row-inner">/);
+  assert.match(page, /<\/>\}<\/div><\/td><\/tr>/);
 });

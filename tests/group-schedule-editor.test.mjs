@@ -23,7 +23,7 @@ test("arrival/departure dates are edited once per truck group when the group sha
 
 test("the group schedule editor is nested inside the group.uniformDestination branch, so it never renders for a single parcel or a truck with mixed destinations", () => {
   const start = page.indexOf('{group.uniformDestination && <>');
-  const end = page.indexOf('</>}</td></tr>');
+  const end = page.indexOf('</>}</div></td></tr>');
   assert.ok(start > -1 && end > start, "expected the uniformDestination JSX block to be found");
   const uniformBlock = page.slice(start, end);
   assert.match(uniformBlock, /group-schedule-editor-trigger/);
@@ -40,15 +40,23 @@ test("the per-row journey editor's schedule section is suppressed when the group
 
 test("the group schedule popover anchors to the wrapping row, not its own small trigger span", () => {
   // Reported live (for the sibling group-truck-editor-popover, same row,
-  // same pattern): .group-header-row td is a wrapping flex container
-  // (flex-wrap: wrap), so its rendered height varies with how many lines
-  // its content wraps onto. A popover positioned "top: 100%" relative to
-  // its own tiny trigger span doesn't account for that -- when the row
-  // wrapped to two lines, the popover rendered high enough to overlap the
-  // second line instead of clearing the whole row. Anchoring to the td's
-  // own box (position: relative, spans every wrapped line) instead of the
-  // trigger wrap fixes that regardless of row height.
-  assert.match(css, /\.group-header-row td \{ position: relative;/);
+  // same pattern): the group header's flex content is a wrapping container
+  // (flex-wrap: wrap), so its rendered height varies with how many lines it
+  // wraps onto. A popover positioned "top: 100%" relative to its own tiny
+  // trigger span doesn't account for that -- when the row wrapped to two
+  // lines, the popover rendered high enough to overlap the second line
+  // instead of clearing the whole row.
+  //
+  // Two earlier fixes here (width:100% on the td, then display:block on the
+  // <tr>) both measured as still broken when actually tested live via
+  // getBoundingClientRect -- switching the <tr>/<td> away from
+  // display:table-row/table-cell breaks colSpan's native column-spanning
+  // and doesn't reliably resolve percentage widths either. The td/tr stay
+  // real table elements; the flex layout (and this position: relative
+  // anchor) live on a plain .group-header-row-inner <div> nested inside the
+  // td instead, which measured correctly.
+  assert.match(css, /\.group-header-row-inner \{ position: relative;/);
+  assert.match(page, /<td colSpan=\{100\}><div className="group-header-row-inner">/);
   assert.match(css, /\.group-schedule-editor-wrap \{ display: inline-block; \}/);
   assert.doesNotMatch(css, /\.group-schedule-editor-wrap \{ position: relative;/);
 });
