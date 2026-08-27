@@ -9,6 +9,12 @@ export type StoredCompanySession = {
   expiresAt: Date;
 };
 
+export type CompanyBranding = {
+  name: string | null;
+  logoDataUrl: string | null;
+  color: string | null;
+};
+
 function database() {
   const db = runtimeEnv.DB;
   if (!db) throw new Error("Cloudflare D1 binding `DB` is required for server sessions");
@@ -61,3 +67,14 @@ export async function deleteServerSession(tokenHash: string) {
   const db = database();
   await db.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash).run();
 }
+
+// This D1-only variant (no Postgres primary) never wrote a `companies` row
+// in the first place -- see createServerSession above, which only tracks
+// `sessions`. Branding is a display nicety, not core functionality, so this
+// stays a no-op here rather than adding a companies table to a deploy
+// target production doesn't actually use.
+export async function getCompanyBranding(_companyId: string): Promise<CompanyBranding | null> {
+  return null;
+}
+
+export async function updateCompanyBranding(_companyId: string, _input: CompanyBranding): Promise<void> {}

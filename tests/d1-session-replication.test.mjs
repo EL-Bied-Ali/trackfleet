@@ -17,5 +17,5 @@ test("D1 mirror failures stay best-effort and do not replace the Postgres result
 });
 
 test("session reads remain on Postgres until broader D1 replication is ready", () => {
-  assert.match(source, /export \{ getServerSession \};/);
+  assert.match(source, /export \{ getServerSession, getCompanyBranding \};/);
 });

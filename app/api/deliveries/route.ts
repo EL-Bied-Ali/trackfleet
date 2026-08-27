@@ -18,6 +18,7 @@ import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progr
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
+import { getCompanyBranding } from "trackfleet-auth-session-store";
 import { getSubscription, subscriptionGrantsAccess, whatsappIncludedInPlan } from "../../lib/subscription-store";
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { publicTrackingIsActive, publicTrackingTokenIsValid, trackingExpiresAt } from "../../lib/tracking-access";
@@ -263,10 +264,17 @@ export async function GET(request: Request) {
         ? (await getManualArrivalDurationEstimates(row.companyId)).get(row.destinationSiteId!) ?? null
         : null;
       const enriched = enrichDelivery(row, routeEvents, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount, manualArrivalEstimate);
+      const companyBranding = await getCompanyBranding(row.companyId);
       return Response.json({
         deliveries: [publicDeliveryView(enriched)],
         events: routeEvents.filter((event) => customerFacingEvent(event.type)),
         publicTracking: true,
+        // Per-company, not per-delivery, so it travels as its own top-level
+        // field rather than inside publicDeliveryView's allowlist -- the
+        // customer tracking page shows the actual shipping company's own
+        // name/logo instead of "TrackFleet", falling back to the generic
+        // brand when a company hasn't configured one.
+        companyBranding: companyBranding ?? { name: null, logoDataUrl: null, color: null },
       }, { headers: { "cache-control": "no-store" } });
     }
 

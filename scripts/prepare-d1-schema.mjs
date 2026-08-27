@@ -205,6 +205,9 @@ await runStatements([
     account_label text NOT NULL,
     user_label text NOT NULL,
     credentials_ciphertext text NOT NULL,
+    brand_name text,
+    brand_logo_data_url text,
+    brand_color text,
     created_at integer NOT NULL,
     updated_at integer NOT NULL
   )`,
@@ -253,6 +256,7 @@ const deliveryColumns = await columnsFor("deliveries");
 const etaColumns = await columnsFor("delivery_eta_observations");
 const sessionColumns = await columnsFor("sessions");
 const arrivalColumns = await columnsFor("delivery_arrival_state");
+const companyColumns = await columnsFor("companies");
 const alterations = [];
 
 for (const [name, definition] of [
@@ -302,6 +306,12 @@ for (const [name, definition] of [
 ]) addMissingColumn(alterations, "sessions", sessionColumns, name, definition);
 
 addMissingColumn(alterations, "delivery_arrival_state", arrivalColumns, "last_observed_at", "integer");
+
+for (const [name, definition] of [
+  ["brand_name", "text"],
+  ["brand_logo_data_url", "text"],
+  ["brand_color", "text"],
+]) addMissingColumn(alterations, "companies", companyColumns, name, definition);
 await runStatements(alterations);
 
 await runStatements([

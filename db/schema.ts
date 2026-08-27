@@ -102,6 +102,9 @@ export const companies = sqliteTable("companies", {
   accountLabel: text("account_label").notNull(),
   userLabel: text("user_label").notNull(),
   credentialsCiphertext: text("credentials_ciphertext").notNull(),
+  brandName: text("brand_name"),
+  brandLogoDataUrl: text("brand_logo_data_url"),
+  brandColor: text("brand_color"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });

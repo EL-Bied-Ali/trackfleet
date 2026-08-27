@@ -9,6 +9,12 @@ export type StoredCompanySession = {
   expiresAt: Date;
 };
 
+export type CompanyBranding = {
+  name: string | null;
+  logoDataUrl: string | null;
+  color: string | null;
+};
+
 function sqlClient() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) throw new Error("DATABASE_URL is required for server sessions");
@@ -73,4 +79,26 @@ export async function getServerSession(tokenHash: string): Promise<StoredCompany
 export async function deleteServerSession(tokenHash: string) {
   const sql = sqlClient();
   await sql`DELETE FROM sessions WHERE token_hash = ${tokenHash}`;
+}
+
+// companies.brand_name / brand_logo_data_url / brand_color are provisioned
+// the same way as the rest of this table -- see the "Production schema is
+// provisioned separately" note above. They must exist in production
+// Postgres (via storage-schema-contract.ts's deploy gate) before this code
+// ships, not the other way around.
+export async function getCompanyBranding(companyId: string): Promise<CompanyBranding | null> {
+  const sql = sqlClient();
+  const rows = await sql`SELECT brand_name, brand_logo_data_url, brand_color FROM companies WHERE id = ${companyId} LIMIT 1` as Array<{
+    brand_name: string | null;
+    brand_logo_data_url: string | null;
+    brand_color: string | null;
+  }>;
+  const row = rows[0];
+  if (!row) return null;
+  return { name: row.brand_name, logoDataUrl: row.brand_logo_data_url, color: row.brand_color };
+}
+
+export async function updateCompanyBranding(companyId: string, input: CompanyBranding): Promise<void> {
+  const sql = sqlClient();
+  await sql`UPDATE companies SET brand_name = ${input.name}, brand_logo_data_url = ${input.logoDataUrl}, brand_color = ${input.color}, updated_at = ${new Date().toISOString()} WHERE id = ${companyId}`;
 }
