@@ -18,7 +18,7 @@ test("the branding update route validates name length, hex color format, and log
   assert.match(route, /if \(name\.length > MAX_NAME_LENGTH\) return noStore\(\{ error: "name_too_long" \}, 400\);/);
   assert.match(route, /const HEX_COLOR_PATTERN = \/\^#\[0-9a-fA-F\]\{6\}\$\/;/);
   assert.match(route, /if \(color !== "" && !HEX_COLOR_PATTERN\.test\(color\)\) return noStore\(\{ error: "invalid_color" \}, 400\);/);
-  assert.match(route, /const LOGO_DATA_URL_PATTERN = \/\^data:image\\\/\(png\|jpeg\|jpg\|webp\|svg\\\+xml\)\;base64,\/;/);
+  assert.match(route, /const LOGO_DATA_URL_PATTERN = \/\^data:image\\\/\(png\|jpeg\|jpg\|webp\|svg\\\+xml\);base64,\//);
   assert.match(route, /if \(logoDataUrl\.length > MAX_LOGO_DATA_URL_LENGTH\) return noStore\(\{ error: "logo_too_large" \}, 400\);/);
 });
 
