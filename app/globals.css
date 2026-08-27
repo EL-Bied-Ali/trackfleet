@@ -271,6 +271,15 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
    row), so the base .truck-editor-popover right: 0 default is correct for
    both -- no per-trigger left/right override needed anymore. */
 .group-schedule-editor-popover { left: auto; right: 0; }
+/* Reported live: when the col-journey cell wraps to two lines (a long
+   destination address, typically), the two action triggers here wrapped
+   onto two lines along with it -- .group-header-row-inner's flex-wrap: wrap
+   (needed for the LIVRAISON cell, where the truck badge/plate/count can
+   genuinely overflow a narrow column) let the table's auto layout size this
+   much narrower col-actions cell down to a single icon's width instead of
+   both. Forcing nowrap just here keeps both triggers on one line regardless
+   of the row's own height. */
+.group-header-row td.col-actions .group-header-row-inner { flex-wrap: nowrap; }
 .cell-hoisted { color: #c3ccc7; }
 tbody tr:last-child td { border-bottom: 0; }.row-selected td { background: #fbfdfc; }
 tbody tr:focus-visible { outline: 2px solid #4c987b; outline-offset: -2px; }

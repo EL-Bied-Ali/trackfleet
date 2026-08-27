@@ -156,3 +156,17 @@ test("the group header row lines up with the columns below it instead of one fle
   assert.match(page, /<td className="col-journey">\{group\.uniformDestination && <>/);
   assert.match(css, /\.col-journey \{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; \}/);
 });
+
+test("the two group header action triggers stay on one line even when the col-journey cell wraps to two -- reported live as the truck and schedule icons stacking vertically on a long destination address", () => {
+  // .group-header-row-inner's flex-wrap: wrap is needed for the LIVRAISON
+  // cell (the truck badge/plate/count can genuinely overflow a narrow
+  // column), but the same class is reused for the col-actions cell's inner
+  // div. With wrap allowed there too, the table's auto layout sized the
+  // much narrower actions cell down to fit just one icon, so a second
+  // (independent) trigger wrapped onto its own line whenever the row grew
+  // taller from the col-journey cell wrapping -- even though the actions
+  // cell had plenty of horizontal room for both if wrapping weren't an
+  // option. Forcing nowrap just on this cell's inner div keeps both
+  // triggers side by side regardless of the row's own height.
+  assert.match(css, /\.group-header-row td\.col-actions \.group-header-row-inner \{ flex-wrap: nowrap; \}/);
+});
