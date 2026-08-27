@@ -58,3 +58,20 @@ test("the map marker itself shows the truck number instead of the generic icon, 
   assert.match(page, /const truckNumber = vehicleTruckNumbers\.get\(vehicle\.id\) \?\? null;/);
   assert.match(page, /liveVehicles=\{liveVehiclesWithNumbers\}/);
 });
+
+test("a truck carrying several grouped parcels shows exactly one marker on the dispatcher map, not one per delivery -- reported live as two overlapping same-numbered badges for one physical truck", () => {
+  const map = fs.readFileSync("app/InteractiveFleetMap.tsx", "utf8");
+  assert.match(map, /const key = delivery\.sendatrackVehicleId \|\| delivery\.truck;/);
+  assert.match(map, /const existing = groups\.get\(key\);/);
+  // Whichever delivery in the group is currently selected wins the
+  // representative slot, so selecting one specific parcel from the table
+  // (of several riding the same truck) still highlights and re-selects
+  // that exact delivery rather than always showing the first one found.
+  assert.match(map, /if \(!existing \|\| delivery\.id === selectedId\) groups\.set\(key, delivery\);/);
+  // The customer-facing tracking page already only ever shows the one
+  // selected delivery (never a truck's other parcels), so this grouping is
+  // scoped to the dispatcher view -- must not affect customerMode at all.
+  const shownDeliveriesStart = map.indexOf("const shownDeliveries = customerMode");
+  const groupingLogic = map.indexOf("const groups = new Map<string, MapDelivery>();");
+  assert.ok(shownDeliveriesStart >= 0 && groupingLogic > shownDeliveriesStart);
+});
