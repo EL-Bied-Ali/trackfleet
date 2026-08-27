@@ -1391,7 +1391,6 @@ export default function Home() {
       fr: {
         progress: "Trajet effectué",
         remaining: "Distance restante",
-        speed: "Vitesse GPS",
         gps: "Dernière position",
         fresh: "GPS à jour",
         noGps: "Position indisponible",
@@ -1414,7 +1413,6 @@ export default function Home() {
       en: {
         progress: "Trip completed",
         remaining: "Distance remaining",
-        speed: "GPS speed",
         gps: "Last position",
         fresh: "GPS up to date",
         noGps: "Position unavailable",
@@ -1437,7 +1435,6 @@ export default function Home() {
       nl: {
         progress: "Traject voltooid",
         remaining: "Resterende afstand",
-        speed: "GPS-snelheid",
         gps: "Laatste positie",
         fresh: "GPS is actueel",
         noGps: "Positie niet beschikbaar",
@@ -1529,7 +1526,6 @@ export default function Home() {
           {!relayInEffect && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 18 }}>
             <article className="stat-card"><div className="stat-head"><span>{copy.progress}</span><Icon>↗</Icon></div><div><strong>{selected.progress}%</strong></div><div className="progress"><div><i style={{ width: `${selected.progress}%` }} /></div></div></article>
             <article className="stat-card"><div className="stat-head"><span>{copy.remaining}</span><Icon>◇</Icon></div><div><strong>{selected.remainingDistanceKm == null ? "—" : `${selected.remainingDistanceKm.toLocaleString(dateLocale)} km`}</strong></div><p>{selected.routeDistanceKm == null ? "" : `${Math.round(selected.routeDistanceKm).toLocaleString(dateLocale)} km total`}</p></article>
-            <article className="stat-card"><div className="stat-head"><span>{copy.speed}</span><Icon>▰</Icon></div><div><strong>{selected.speed == null ? "—" : `${Math.round(selected.speed)} km/h`}</strong></div><p>{selected.status === "Delivered" ? t.statuses.Delivered : t.statuses[selected.status]}</p></article>
             <article className="stat-card"><div className="stat-head"><span>{copy.gps}</span><Icon>⌖</Icon></div><div><strong>{selected.gpsFresh ? "●" : selected.positionAgeMinutes == null ? "—" : "△"}</strong></div><p>{gpsText}</p></article>
           </div>}
 
