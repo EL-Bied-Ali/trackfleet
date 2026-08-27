@@ -137,3 +137,31 @@ export async function completeDeliveryManually(companyId: string, deliveryId: st
   await sql`DELETE FROM delivery_arrival_state WHERE company_id = ${companyId} AND delivery_id = ${deliveryId}`;
   return true;
 }
+
+// Same idea as completeDeliveryManually, but for the other end of the trip:
+// a delivery with no SENDATRACK-tracked vehicle never gets the automatic
+// Loading -> In transit transition (detectDeliveryEvents only fires DEPARTED
+// off a real GPS-observed status change), so it would otherwise sit in
+// Loading forever. Only applies from Loading -- already-departed or already-
+// delivered deliveries are left untouched.
+export async function confirmDepartureManually(companyId: string, deliveryId: string) {
+  const sql = await ensureSchema();
+  const now = new Date().toISOString();
+  const updated = await sql`WITH updated AS (
+      UPDATE deliveries SET status = 'In transit'
+      WHERE id = ${deliveryId} AND company_id = ${companyId} AND status = 'Loading'
+      RETURNING id
+    ), manual_event AS (
+      INSERT INTO delivery_events (delivery_id, type, progress, created_at)
+      SELECT id, 'MANUAL_DEPARTURE_CONFIRMED', progress, ${now} FROM deliveries WHERE id IN (SELECT id FROM updated)
+      ON CONFLICT (delivery_id, type) DO NOTHING
+      RETURNING delivery_id
+    ), departed_event AS (
+      INSERT INTO delivery_events (delivery_id, type, progress, created_at)
+      SELECT id, 'DEPARTED', progress, ${now} FROM deliveries WHERE id IN (SELECT id FROM updated)
+      ON CONFLICT (delivery_id, type) DO NOTHING
+      RETURNING delivery_id
+    )
+    SELECT id FROM updated` as Array<{ id: string }>;
+  return updated.length > 0;
+}

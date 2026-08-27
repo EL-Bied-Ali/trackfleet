@@ -1468,6 +1468,30 @@ export default function Home() {
     }
   }
 
+  // The status-changing "confirm departure" action lives in SiteManager's
+  // dedicated "Arrivées" ops panel instead (mirroring where confirmArrival
+  // already lives for the dispatcher role) -- this is just the optional,
+  // on-demand WhatsApp notice for one specific delivery, same popover-only
+  // placement as notifyArrivalForDelivery above.
+  async function notifyDepartureForDelivery(deliveryId: string) {
+    if (company?.role !== "dispatcher") return;
+    try {
+      const response = await fetch("/api/deliveries/notify-departure", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && data?.ok) {
+        setToast(locale === "fr" ? "Client notifié par WhatsApp." : locale === "nl" ? "Klant via WhatsApp op de hoogte gebracht." : "Customer notified via WhatsApp.");
+      } else {
+        setToast(locale === "fr" ? "Notification impossible : le client doit d’abord vous avoir écrit sur WhatsApp (fenêtre gratuite de 24h)." : locale === "nl" ? "Melding niet mogelijk: de klant moet u eerst op WhatsApp hebben geschreven (gratis venster van 24u)." : "Could not notify: the customer must have messaged you on WhatsApp first (free 24h window).");
+      }
+    } catch {
+      setToast(locale === "fr" ? "Impossible d’envoyer la notification." : locale === "nl" ? "Melding kon niet worden verzonden." : "Could not send the notification.");
+    }
+  }
+
   // Quick-create for showing off a feature (e.g. the agency WhatsApp arrival
   // notification) to a prospective client without the full "New delivery"
   // form or a real truck -- the delivery is fully real and appears in the
@@ -1924,6 +1948,7 @@ export default function Home() {
                 <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
                 {company?.role === "agency" && selected.destinationSiteId === company.siteId && selected.status !== "Delivered" && <div className="popover-actions"><button type="button" onClick={() => void confirmArrivalForDelivery(selected.id, selected.destinationSiteId)}>{locale === "fr" ? "Confirmer l’arrivée du camion" : locale === "nl" ? "Aankomst vrachtwagen bevestigen" : "Confirm truck arrival"}</button></div>}
                 {company?.role === "agency" && selected.destinationSiteId === company.siteId && <div className="popover-actions"><button type="button" onClick={() => void notifyArrivalForDelivery(selected.id, selected.destinationSiteId)}>{locale === "fr" ? "Notifier par WhatsApp" : locale === "nl" ? "Melden via WhatsApp" : "Notify via WhatsApp"}</button></div>}
+                {company?.role === "dispatcher" && selected.status === "Loading" && <div className="popover-actions"><button type="button" onClick={() => void notifyDepartureForDelivery(selected.id)}>{locale === "fr" ? "Notifier par WhatsApp" : locale === "nl" ? "Melden via WhatsApp" : "Notify via WhatsApp"}</button></div>}
               </>}
             </div>}
           </div>

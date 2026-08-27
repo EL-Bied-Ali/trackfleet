@@ -104,3 +104,26 @@ export async function completeDeliveryManually(companyId: string, deliveryId: st
   ]);
   return true;
 }
+
+// Same idea as completeDeliveryManually, but for the other end of the trip:
+// a delivery with no SENDATRACK-tracked vehicle never gets the automatic
+// Loading -> In transit transition (detectDeliveryEvents only fires DEPARTED
+// off a real GPS-observed status change), so it would otherwise sit in
+// Loading forever. Only applies from Loading -- already-departed or already-
+// delivered deliveries are left untouched.
+export async function confirmDepartureManually(companyId: string, deliveryId: string) {
+  const database = db();
+  const existing = await database.prepare("SELECT id, progress FROM deliveries WHERE id = ? AND company_id = ? AND status = 'Loading' LIMIT 1")
+    .bind(deliveryId, companyId).first<{ id: string; progress: number }>();
+  if (!existing) return false;
+  const now = Date.now();
+  await database.batch([
+    database.prepare("UPDATE deliveries SET status = 'In transit' WHERE id = ? AND company_id = ? AND status = 'Loading'")
+      .bind(deliveryId, companyId),
+    database.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'MANUAL_DEPARTURE_CONFIRMED', ?, ?)")
+      .bind(deliveryId, existing.progress, now),
+    database.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'DEPARTED', ?, ?)")
+      .bind(deliveryId, existing.progress, now),
+  ]);
+  return true;
+}

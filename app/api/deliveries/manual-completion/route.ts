@@ -1,4 +1,4 @@
-import { completeDeliveryManually, observeArrivalCompletion } from "trackfleet-delivery-completion";
+import { completeDeliveryManually, confirmDepartureManually, observeArrivalCompletion } from "trackfleet-delivery-completion";
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { arrivalConfirmationRecommendation } from "../../../lib/arrival-confirmation";
@@ -50,14 +50,24 @@ export async function POST(request: Request) {
   if (!payload) return invalidJsonResponse();
   const deliveryId = String(payload.deliveryId ?? "").trim();
   if (!deliveryId || deliveryId.length > 100) return noStore({ error: "invalid_delivery_id" }, 400);
-  if (payload.confirmArrival !== true && payload.confirmDelivered !== true) {
+  if (payload.confirmArrival !== true && payload.confirmDelivered !== true && payload.confirmDeparture !== true) {
     return noStore({ error: "delivery_confirmation_required" }, 400);
   }
-  if (session.role === "agency" && payload.confirmDelivered === true) {
+  if (session.role === "agency" && (payload.confirmDelivered === true || payload.confirmDeparture === true)) {
     return noStore({ error: "dispatcher_confirmation_required" }, 403);
   }
 
   try {
+    if (payload.confirmDeparture === true) {
+      // Unlike confirmArrival (whose ARRIVED_AT_SITE is one of the two
+      // automatic-push-worthy events -- see notification-policy.ts), DEPARTED
+      // is deliberately excluded from the automatic push set, so there's
+      // nothing for processPendingNotifications to do here.
+      const departed = await confirmDepartureManually(session.companyId, deliveryId);
+      if (!departed) return noStore({ error: "delivery_not_found_or_not_loading" }, 404);
+      return noStore({ ok: true, deliveryId, status: "In transit", departureConfirmed: true });
+    }
+
     if (payload.confirmArrival === true) {
       const delivery = (await store.listForCompany(session.companyId))
         .find((candidate) => candidate.id === deliveryId && candidate.status !== "Delivered");
