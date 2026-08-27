@@ -240,9 +240,14 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
    confirmed live, explicit width:100% on the block-ified <tr> still
    measured at the same wrong ~50% figure. The only combination that
    measured correctly: leave the <tr>/<td> as real display:table-row /
-   table-cell (so colSpan={100} does what it's designed to do -- span the
-   *entire* column model natively) and put the flex layout on a plain
-   <div> nested inside the td instead of on the td itself. */
+   table-cell (so colSpan does what it's designed to do -- span real
+   columns natively) and put the flex layout on a plain <div> nested
+   inside the td instead of on the td itself. Reported ugly/misaligned
+   after that (group content didn't line up with the columns below it),
+   so the row was further split into 3 real cells -- truck info spanning
+   LIVRAISON/CLIENT/AGENCE, hoisted journey info in its own col-journey
+   cell, edit triggers in col-actions -- instead of one td colSpan-ing
+   every column. */
 .group-header-row td { padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var(--line); cursor: default; }
 .group-header-row-inner { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .group-header-row strong { color: #16251e; font-size: 10px; font-weight: 700; }
@@ -257,20 +262,15 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
 .group-schedule-editor-wrap .more-button { vertical-align: middle; }
 .group-truck-editor-wrap { display: inline-block; }
 .group-truck-editor-wrap .more-button { vertical-align: middle; }
-/* Anchored to .group-header-row td (position: relative, above) instead of
-   these small trigger spans -- the row is a wrapping flex container
-   (flex-wrap: wrap), so its rendered height varies with how many lines its
-   badges/status/destination/progress wrap onto. Positioning "top: 100%"
-   relative to a trigger's own tiny box doesn't account for that: when the
-   row wrapped to two lines, the popover rendered high enough to overlap the
-   second line's content instead of clearing the whole row. Anchoring to the
-   td's own box (which always spans every wrapped line) fixes that
-   regardless of row height. Reported live.
-   Left/right still differ per trigger's rough horizontal position in the
-   row -- the schedule-editor trigger sits at the far right, this one near
-   the start. */
+/* The group header row now mirrors the data rows below it: truck info in
+   its own cell, hoisted status/destination/ETA/progress in a col-journey
+   cell, and both edit triggers together in a col-actions cell at the far
+   right -- same layout the per-row .truck-editor-wrap already uses. Both
+   popovers anchor to their shared .group-header-row-inner wrapper (position:
+   relative, scoped to just that narrow actions cell now, not the whole
+   row), so the base .truck-editor-popover right: 0 default is correct for
+   both -- no per-trigger left/right override needed anymore. */
 .group-schedule-editor-popover { left: auto; right: 0; }
-.group-truck-editor-popover { left: 0; right: auto; }
 .cell-hoisted { color: #c3ccc7; }
 tbody tr:last-child td { border-bottom: 0; }.row-selected td { background: #fbfdfc; }
 tbody tr:focus-visible { outline: 2px solid #4c987b; outline-offset: -2px; }
