@@ -223,7 +223,13 @@ a.nav-item { text-decoration: none; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th { height: 35px; padding: 0 15px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #909b95; background: #fafbfa; font-size: 8px; font-weight: 650; text-align: left; text-transform: uppercase; letter-spacing: .5px; }
 td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size: 9.5px; cursor: pointer; }
-.group-header-row td { height: auto; padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var(--line); cursor: default; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+/* width: 100% is load-bearing here, not decorative -- switching this td to
+   display: flex takes it out of the table layout algorithm entirely
+   (colSpan={100} only stretches a td that's still display: table-cell), so
+   without an explicit width it shrinks to fit its own content and leaves
+   the row's remaining width showing plain white background instead of this
+   row's #f5f8f6 tint. Reported live as "this looks broken". */
+.group-header-row td { position: relative; width: 100%; height: auto; padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var(--line); cursor: default; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; box-sizing: border-box; }
 .group-header-row strong { color: #16251e; font-size: 10px; font-weight: 700; }
 .group-header-row span { color: #7d8983; font-size: 8px; }
 .group-header-row span + span::before { content: "· "; }
@@ -232,15 +238,23 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
 .group-header-progress { display: inline-flex; align-items: center; }
 .group-header-progress .progress { gap: 5px; }
 .group-header-progress .progress > div { width: 46px; height: 3px; }
-.group-schedule-editor-wrap { position: relative; display: inline-block; }
+.group-schedule-editor-wrap { display: inline-block; }
 .group-schedule-editor-wrap .more-button { vertical-align: middle; }
-.group-schedule-editor-popover { left: auto; right: 0; }
-.group-truck-editor-wrap { position: relative; display: inline-block; }
+.group-truck-editor-wrap { display: inline-block; }
 .group-truck-editor-wrap .more-button { vertical-align: middle; }
-/* Unlike the group-schedule-editor trigger (far right of the header row,
-   where the base .truck-editor-popover right:0 default already fits), this
-   trigger sits near the left of the row -- right:0 would expand the
-   popover leftward off the edge of the table. Anchor to the left instead. */
+/* Anchored to .group-header-row td (position: relative, above) instead of
+   these small trigger spans -- the row is a wrapping flex container
+   (flex-wrap: wrap), so its rendered height varies with how many lines its
+   badges/status/destination/progress wrap onto. Positioning "top: 100%"
+   relative to a trigger's own tiny box doesn't account for that: when the
+   row wrapped to two lines, the popover rendered high enough to overlap the
+   second line's content instead of clearing the whole row. Anchoring to the
+   td's own box (which always spans every wrapped line) fixes that
+   regardless of row height. Reported live.
+   Left/right still differ per trigger's rough horizontal position in the
+   row -- the schedule-editor trigger sits at the far right, this one near
+   the start. */
+.group-schedule-editor-popover { left: auto; right: 0; }
 .group-truck-editor-popover { left: 0; right: auto; }
 .cell-hoisted { color: #c3ccc7; }
 tbody tr:last-child td { border-bottom: 0; }.row-selected td { background: #fbfdfc; }
