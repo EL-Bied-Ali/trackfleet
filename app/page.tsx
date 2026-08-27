@@ -788,9 +788,18 @@ export default function Home() {
     }
     return sizes;
   }, [visibleDeliveries]);
-  const mapDeliveries = integration.connected
+  // A Delivered delivery's latitude/longitude are frozen forever the moment
+  // it completes (applySendatrackSnapshot only updates status <> 'Delivered'
+  // rows) -- typically wherever the truck was at that instant, near its
+  // destination. Without this exclusion the map kept showing that stale,
+  // months-old position forever, AND (via InteractiveFleetMap's
+  // linkedVehicleIds) permanently suppressed the same physical truck's real,
+  // live position once it moved on to other work -- reported live as trucks
+  // rendering hundreds of km from where they actually are.
+  const mapDeliveries = (integration.connected
     ? deliveries.filter((delivery) => delivery.gpsSource === "sendatrack")
-    : deliveries;
+    : deliveries
+  ).filter((delivery) => delivery.status !== "Delivered");
   // Dispatcher-only: which country the cargo is coming from/going to, and
   // this truck's own color (matching its "Camion N" badge everywhere else).
   // Not part of the customer-facing map -- originSiteId/destinationSiteId

@@ -75,3 +75,20 @@ test("a truck carrying several grouped parcels shows exactly one marker on the d
   const groupingLogic = map.indexOf("const groups = new Map<string, MapDelivery>();");
   assert.ok(shownDeliveriesStart >= 0 && groupingLogic > shownDeliveriesStart);
 });
+
+test("a Delivered delivery's frozen final position no longer lingers on the dispatcher map, or blocks its truck's live position from showing again", () => {
+  // A Delivered delivery's latitude/longitude are frozen forever the moment
+  // it completes (applySendatrackSnapshot only updates status <> 'Delivered'
+  // rows), typically wherever the truck was at that instant, near its
+  // destination. Without excluding it here, the map kept that stale position
+  // on screen forever, AND (via InteractiveFleetMap's linkedVehicleIds,
+  // which treats any delivery ever linked to a vehicle -- regardless of
+  // status -- as reason to suppress that vehicle's live "gps-only" marker)
+  // permanently hid the truck's real current position once it moved on to
+  // other work. Reported live as trucks rendering hundreds of km from where
+  // they actually are.
+  assert.match(page, /\.filter\(\(delivery\) => delivery\.status !== "Delivered"\);/);
+  const mapDeliveriesStart = page.indexOf("const mapDeliveries = (integration.connected");
+  const statusFilter = page.indexOf('.filter((delivery) => delivery.status !== "Delivered");', mapDeliveriesStart);
+  assert.ok(mapDeliveriesStart >= 0 && statusFilter > mapDeliveriesStart, "the status filter must apply to mapDeliveries, not some unrelated filter");
+});
