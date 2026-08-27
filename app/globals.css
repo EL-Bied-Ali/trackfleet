@@ -223,12 +223,19 @@ a.nav-item { text-decoration: none; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th { height: 35px; padding: 0 15px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #909b95; background: #fafbfa; font-size: 8px; font-weight: 650; text-align: left; text-transform: uppercase; letter-spacing: .5px; }
 td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size: 9.5px; cursor: pointer; }
-/* width: 100% is load-bearing here, not decorative -- switching this td to
-   display: flex takes it out of the table layout algorithm entirely
-   (colSpan={100} only stretches a td that's still display: table-cell), so
-   without an explicit width it shrinks to fit its own content and leaves
-   the row's remaining width showing plain white background instead of this
-   row's #f5f8f6 tint. Reported live as "this looks broken". */
+/* The first fix here (width: 100% on the td alone) turned out not to be
+   enough, still reported live afterward. The real mechanism: once a td's
+   display changes away from table-cell, colSpan stops applying and it no
+   longer generates a real cell in the table's column model at all --
+   browsers insert an anonymous placeholder cell to keep the row's column
+   count consistent, and *that* anonymous cell (not this one) renders with
+   the table's own background, showing through as a blank gap no width
+   value on this td can reach because it was never that cell's box to begin
+   with. Taking the whole <tr> out of table layout (matching what the
+   mobile media query below already does for the same reason) sidesteps
+   the column model entirely -- proven correct there, not layered on top
+   as a second guess. */
+.group-header-row { display: block; }
 .group-header-row td { position: relative; width: 100%; height: auto; padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var(--line); cursor: default; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; box-sizing: border-box; }
 .group-header-row strong { color: #16251e; font-size: 10px; font-weight: 700; }
 .group-header-row span { color: #7d8983; font-size: 8px; }

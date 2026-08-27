@@ -108,11 +108,18 @@ test("the truck picker shows each vehicle's \"Camion N\" number alongside its pl
   assert.equal(occurrences.length, 3, "expected all 3 truck pickers (group reassignment, per-delivery reassignment, vehicle-link popover) to show the truck number");
 });
 
-test("the group header row stretches to fill its full row width, not just its content -- reported live as a jarring blank white gap", () => {
-  // switching this td to display: flex takes it out of the table layout
-  // algorithm entirely (colSpan={100} only stretches a td that's still
-  // display: table-cell), so without an explicit width it shrinks to fit
-  // its own content, leaving the row's remaining width showing plain white
-  // background instead of this row's #f5f8f6 tint.
+test("the group header row stretches to fill its full row width, not just its content -- reported live twice as a jarring blank white gap", () => {
+  // First fix attempt (width: 100% on the td alone) was reported still
+  // broken. The real mechanism: a <tr> requires its children to be
+  // table-cell boxes; once this td's display changes to flex, it stops
+  // generating one, colSpan becomes meaningless, and the browser wraps it
+  // in an anonymous cell that only ever occupies column 1 of the table's
+  // shared column grid -- no width value on the td can make it span the
+  // other columns (CLIENT/AGENCE/TRAJET), since that's a table-structure
+  // concept, not a sizing one. Taking the whole <tr> out of table layout
+  // (matching what the mobile media query below already does, proven
+  // correct there) sidesteps the column grid entirely instead of fighting
+  // it with another width guess.
+  assert.match(css, /\.group-header-row \{ display: block; \}/);
   assert.match(css, /\.group-header-row td \{ position: relative; width: 100%;.*display: flex;.*box-sizing: border-box; \}/);
 });
