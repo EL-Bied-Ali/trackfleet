@@ -141,6 +141,17 @@ export interface DeliveryStore {
   listForCompany(companyId: string): Promise<DeliveryRow[]>;
   applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string): Promise<DeliveryTransition[]>;
   linkVehicle(deliveryId: string, companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow | null>;
+  // Same effect as calling linkVehicle once per id, but atomic across the
+  // whole group -- linkVehicle's own "unassign this vehicle from any OTHER
+  // delivery that currently holds it" safety guard only excludes the ONE
+  // delivery being linked, so naively looping it once per parcel in a group
+  // would have each call strip the vehicle right back off the parcel(s) the
+  // previous call(s) just assigned it to. This does the unassign-others and
+  // assign-to-group steps as one operation instead, excluding every id in
+  // the group at once. Deliveries not found (wrong company, already
+  // Delivered, unknown id) are silently skipped -- returns only the ones
+  // actually updated.
+  linkVehicleToGroup(deliveryIds: string[], companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow[]>;
   updateSchedule(deliveryId: string, companyId: string, input: { plannedArrivalAt: Date | null; nextTruckDepartureAt: Date | null }): Promise<DeliveryRow | null>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;

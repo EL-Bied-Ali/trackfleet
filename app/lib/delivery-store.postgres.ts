@@ -464,6 +464,31 @@ export const postgresStore: DeliveryStore = {
     return updated[0] ? hydrate(updated[0]) : null;
   },
 
+  async linkVehicleToGroup(deliveryIds, companyId, vehicle) {
+    await ensureSchema();
+    if (!deliveryIds.length) return [];
+    const rows = await sql`SELECT * FROM deliveries WHERE id = ANY(${deliveryIds}::text[]) AND company_id = ${companyId} AND status <> 'Delivered'` as RawDelivery[];
+    if (!rows.length) return [];
+    const deliveries = rows.map(hydrate);
+    const matchedIds = deliveries.map((delivery) => delivery.id);
+    for (const delivery of deliveries) {
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${metrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
+    }
+    await sql`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ${UNASSIGNED_TRUCK}
+      WHERE company_id = ${companyId} AND sendatrack_vehicle_id = ${vehicle.id} AND status <> 'Delivered' AND id <> ALL(${matchedIds}::text[])`;
+    await sql`UPDATE deliveries SET
+      sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
+      speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'
+      WHERE id = ANY(${matchedIds}::text[]) AND company_id = ${companyId}`;
+    const changingVehicleIds = deliveries.filter((delivery) => delivery.sendatrackVehicleId !== vehicle.id).map((delivery) => delivery.id);
+    if (changingVehicleIds.length) {
+      await sql`UPDATE deliveries SET trip_id = NULL WHERE id = ANY(${changingVehicleIds}::text[]) AND company_id = ${companyId}`;
+    }
+    const updated = await sql`SELECT * FROM deliveries WHERE id = ANY(${matchedIds}::text[]) AND company_id = ${companyId}` as RawDelivery[];
+    return updated.map(hydrate);
+  },
+
   async updateSchedule(deliveryId, companyId, input) {
     await ensureSchema();
     const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];

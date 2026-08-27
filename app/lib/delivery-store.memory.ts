@@ -112,6 +112,32 @@ export const memoryStore: DeliveryStore = {
     });
     return { ...delivery };
   },
+  async linkVehicleToGroup(deliveryIds, companyId, vehicle) {
+    const ids = new Set(deliveryIds);
+    const deliveries = deliveryStore.filter((item) => ids.has(item.id) && item.companyId === companyId && item.status !== "Delivered");
+    if (!deliveries.length) return [];
+    const matchedIds = new Set(deliveries.map((delivery) => delivery.id));
+    for (const delivery of deliveries) {
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
+        deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
+      }
+    }
+    for (const other of deliveryStore) {
+      if (!matchedIds.has(other.id) && other.companyId === companyId && other.sendatrackVehicleId === vehicle.id && other.status !== "Delivered") {
+        Object.assign(other, { sendatrackVehicleId: "", truck: UNASSIGNED_TRUCK });
+      }
+    }
+    for (const delivery of deliveries) {
+      const truckIsChanging = delivery.sendatrackVehicleId !== vehicle.id;
+      Object.assign(delivery, {
+        sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude,
+        speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", status: "Loading",
+        ...(truckIsChanging ? { tripId: null } : {}),
+      });
+    }
+    return deliveries.map((delivery) => ({ ...delivery }));
+  },
   async updateSchedule(deliveryId, companyId, input) {
     const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId) ?? null;
     if (!delivery || delivery.status === "Delivered") return null;

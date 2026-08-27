@@ -365,6 +365,9 @@ export default function Home() {
   const [groupSchedulePlannedArrival, setGroupSchedulePlannedArrival] = useState("");
   const [groupScheduleNextDeparture, setGroupScheduleNextDeparture] = useState("");
   const [groupSchedulePending, setGroupSchedulePending] = useState(false);
+  const [groupTruckEditorLabel, setGroupTruckEditorLabel] = useState<string | null>(null);
+  const [groupTruckEditorSelection, setGroupTruckEditorSelection] = useState("");
+  const [groupTruckEditorPending, setGroupTruckEditorPending] = useState(false);
   const [showPopover, setShowPopover] = useState(true);
   const [creating, setCreating] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
@@ -532,6 +535,17 @@ export default function Home() {
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [groupScheduleEditorLabel]);
+
+  useEffect(() => {
+    if (!groupTruckEditorLabel) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".group-truck-editor-popover, .group-truck-editor-trigger")) return;
+      setGroupTruckEditorLabel(null);
+    };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [groupTruckEditorLabel]);
 
   useEffect(() => {
     if (!company || !knownSites.length) {
@@ -958,6 +972,38 @@ export default function Home() {
       setToast(locale === "fr" ? "Impossible de mettre à jour les dates" : locale === "nl" ? "Kon de data niet bijwerken" : "Couldn't update the dates");
     } finally {
       setGroupSchedulePending(false);
+    }
+  }
+
+  // Unlike updateGroupSchedule above, this can't just loop the single-id
+  // endpoint once per parcel -- link-vehicle's own "unassign this vehicle
+  // from any OTHER delivery that currently holds it" safety guard only
+  // excludes the one delivery being linked, so each call in a loop would
+  // strip the vehicle right back off the parcel(s) the previous call(s) in
+  // the same group just assigned it to. The server does the whole group as
+  // one atomic operation instead (see linkVehicleToGroup).
+  async function reassignTruckForGroup(deliveryIds: string[], vehicleId: string) {
+    setGroupTruckEditorPending(true);
+    try {
+      const response = await fetch("/api/deliveries/link-vehicle", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryIds, vehicleId }),
+      });
+      const data = (await response.json()) as { deliveries?: Delivery[]; error?: string };
+      if (!response.ok || !data.deliveries?.length) {
+        setToast(data.error || (locale === "fr" ? "Impossible de changer le camion" : locale === "nl" ? "Kon het voertuig niet wijzigen" : "Couldn't change the truck"));
+        return;
+      }
+      const updated = data.deliveries;
+      setDeliveries((items) => items.map((item) => updated.find((delivery) => delivery.id === item.id) ?? item));
+      setGroupTruckEditorLabel(null);
+      setGroupTruckEditorSelection("");
+      setToast(locale === "fr" ? "Camion mis à jour" : locale === "nl" ? "Voertuig bijgewerkt" : "Truck updated");
+    } catch {
+      setToast(locale === "fr" ? "Impossible de changer le camion" : locale === "nl" ? "Kon het voertuig niet wijzigen" : "Couldn't change the truck");
+    } finally {
+      setGroupTruckEditorPending(false);
     }
   }
 
@@ -1661,7 +1707,7 @@ export default function Home() {
         </div> : <table>
           <thead><tr><th>{t.tableDelivery}</th><th>{t.tableCustomer}</th>{company?.role === "dispatcher" && <th>{locale === "fr" ? "Agence" : locale === "nl" ? "Agentschap" : "Agency"}</th>}<th>{t.tableJourney}</th><th className="col-actions"><span className="sr-only">{t.tableActions}</span></th></tr></thead>
           {groupedDeliveries.map((group) => <tbody key={group.label}>
-            <tr className="group-header-row"><td colSpan={100}>{group.numberLabel && <span className="truck-number-badge" style={{ background: truckBadgeColor(group.truckNumber) }}>{group.numberLabel}</span>}<strong>{group.label}</strong><span>{group.deliveries.length} {locale === "fr" ? "colis" : locale === "nl" ? "pakketten" : group.deliveries.length === 1 ? "parcel" : "parcels"}</span>{group.uniformDestination && <>
+            <tr className="group-header-row"><td colSpan={100}>{group.numberLabel && <span className="truck-number-badge" style={{ background: truckBadgeColor(group.truckNumber) }}>{group.numberLabel}</span>}<strong>{group.label}</strong><span>{group.deliveries.length} {locale === "fr" ? "colis" : locale === "nl" ? "pakketten" : group.deliveries.length === 1 ? "parcel" : "parcels"}</span>{company?.role === "dispatcher" && group.label !== (locale === "fr" ? "À affecter" : locale === "nl" ? "Toe te wijzen" : "To assign") && integration.connected && integration.vehicles.length > 0 && <span className="group-truck-editor-wrap"><button type="button" className="more-button group-truck-editor-trigger" aria-label={locale === "fr" ? "Changer le camion pour tout le groupe" : locale === "nl" ? "Voertuig wijzigen voor de hele groep" : "Change the truck for the whole group"} onClick={(event) => { event.stopPropagation(); const opening = groupTruckEditorLabel !== group.label; setGroupTruckEditorLabel(opening ? group.label : null); setGroupTruckEditorSelection(""); }}>🚚</button>{groupTruckEditorLabel === group.label && <div className="group-truck-editor-popover journey-editor-popover truck-editor-popover"><strong>{locale === "fr" ? "Affecter tout le groupe à un camion" : locale === "nl" ? "Hele groep toewijzen aan voertuig" : "Assign the whole group to a truck"}</strong><select value={groupTruckEditorSelection} disabled={groupTruckEditorPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setGroupTruckEditorSelection(event.target.value)}><option value="">{locale === "fr" ? "Choisir un camion" : locale === "nl" ? "Kies een voertuig" : "Choose a truck"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name}</option>)}</select>{groupTruckEditorSelection && deliveries.find((delivery) => !group.deliveries.some((groupDelivery) => groupDelivery.id === delivery.id) && delivery.sendatrackVehicleId === groupTruckEditorSelection && delivery.status !== "Delivered") && <small className="warning">{locale === "fr" ? `⚠ Ce camion est encore en route (${deliveries.find((delivery) => !group.deliveries.some((groupDelivery) => groupDelivery.id === delivery.id) && delivery.sendatrackVehicleId === groupTruckEditorSelection && delivery.status !== "Delivered")!.id}). Vérifiez qu'il sera bien de retour.` : locale === "nl" ? `⚠ Dit voertuig is nog onderweg (${deliveries.find((delivery) => !group.deliveries.some((groupDelivery) => groupDelivery.id === delivery.id) && delivery.sendatrackVehicleId === groupTruckEditorSelection && delivery.status !== "Delivered")!.id}). Controleer of het op tijd terug is.` : `⚠ This truck is still en route (${deliveries.find((delivery) => !group.deliveries.some((groupDelivery) => groupDelivery.id === delivery.id) && delivery.sendatrackVehicleId === groupTruckEditorSelection && delivery.status !== "Delivered")!.id}). Confirm it will actually be back.`}</small>}<button type="button" disabled={!groupTruckEditorSelection || groupTruckEditorPending} onClick={(event) => { event.stopPropagation(); void reassignTruckForGroup(group.deliveries.map((delivery) => delivery.id), groupTruckEditorSelection); }}>{groupTruckEditorPending ? (locale === "fr" ? "Confirmation…" : locale === "nl" ? "Bevestigen…" : "Confirming…") : (locale === "fr" ? "Confirmer" : locale === "nl" ? "Bevestigen" : "Confirm")}</button></div>}</span>}{group.uniformDestination && <>
               <span className={statusClass[group.uniformDestination.status]}><i />{t.statuses[group.uniformDestination.status]}</span>
               <span className="group-header-destination">{group.uniformDestination.destination}</span>
               <span>{group.uniformDestination.estimatedArrivalAt ? new Date(group.uniformDestination.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : group.uniformDestination.eta}</span>

@@ -154,6 +154,29 @@ export const store: DeliveryStore = {
     const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(delivery.id, companyId).first<RawDelivery>();
     return updated ? hydrate(updated) : null;
   },
+  async linkVehicleToGroup(deliveryIds, companyId, vehicle) {
+    if (!deliveryIds.length) return [];
+    const idPlaceholders = deliveryIds.map(() => "?").join(",");
+    const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id IN (${idPlaceholders}) AND company_id = ? AND status != 'Delivered'`).bind(...deliveryIds, companyId).all<RawDelivery>();
+    const deliveries = (result.results ?? []).map(hydrate);
+    if (!deliveries.length) return [];
+    const matchedIds = deliveries.map((delivery) => delivery.id);
+    const matchedPlaceholders = matchedIds.map(() => "?").join(",");
+    const statements = deliveries.map((delivery) => {
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      return db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now());
+    });
+    statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ? WHERE company_id = ? AND sendatrack_vehicle_id = ? AND status != 'Delivered' AND id NOT IN (${matchedPlaceholders})`).bind(UNASSIGNED_TRUCK, companyId, vehicle.id, ...matchedIds));
+    statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id IN (${matchedPlaceholders}) AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, ...matchedIds, companyId));
+    const changingVehicleIds = deliveries.filter((delivery) => delivery.sendatrackVehicleId !== vehicle.id).map((delivery) => delivery.id);
+    if (changingVehicleIds.length) {
+      const changingPlaceholders = changingVehicleIds.map(() => "?").join(",");
+      statements.push(db().prepare(`UPDATE deliveries SET trip_id = NULL WHERE id IN (${changingPlaceholders}) AND company_id = ?`).bind(...changingVehicleIds, companyId));
+    }
+    await db().batch(statements);
+    const updatedResult = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id IN (${matchedPlaceholders}) AND company_id = ?`).bind(...matchedIds, companyId).all<RawDelivery>();
+    return (updatedResult.results ?? []).map(hydrate);
+  },
   async updateSchedule(deliveryId, companyId, input) {
     const raw = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
     if (!raw) return null;
