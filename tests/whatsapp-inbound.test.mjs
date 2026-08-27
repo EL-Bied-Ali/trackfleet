@@ -91,11 +91,18 @@ test("parseInboundWhatsAppMessage returns null for non-message webhook events (s
 
 test("a found delivery's reply includes the tracking link as plain body text, not a button -- freeform replies have no anti-phishing URL restriction, unlike the template-based automatic push side", () => {
   const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
-  const reply = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123");
+  const reply = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
   assert.match(reply, /Jean Dupont/);
   assert.match(reply, /TF-1/);
   assert.match(reply, /Casablanca/);
   assert.match(reply, /https:\/\/trackfleet\.chronoplan\.workers\.dev\/\?tracking=abc123/);
+});
+
+test("the reply greets whoever is passed as greetingName, not always delivery.customer -- lets the caller greet the recipient by their own name when they're the one who texted in", () => {
+  const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
+  const reply = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Fatima Zahra");
+  assert.match(reply, /Fatima Zahra/);
+  assert.doesNotMatch(reply, /Jean Dupont/);
 });
 
 test("the no-match reply asks for a name, and is the same message whether it's a first hello or a name search that didn't find anything -- there's no conversation state to tell those apart", () => {
@@ -145,11 +152,17 @@ test("consent withdrawal deliberately does not suppress this reply -- the custom
   assert.doesNotMatch(webhookRoute, /whatsappConsentWithdrawn/);
 });
 
-test("a delivery match tries the sender's phone number first, then falls back to a name search using the message text -- both scoped globally (unscoped by company), matching getPublic's existing pattern, since the webhook has no company context", () => {
+test("a delivery match tries the phone number first (either the sender or the recipient), then falls back to a name search using the message text -- both scoped globally (unscoped by company), matching getPublic's existing pattern, since the webhook has no company context", () => {
   assert.match(webhookRoute, /store\.findMostRecentActiveDeliveryByContact\(phone\)/);
   assert.match(webhookRoute, /store\.findMostRecentActiveDeliveryByCustomerNameQuery\(inbound\.text\)/);
   assert.match(deliveryStoreTypes, /findMostRecentActiveDeliveryByContact\(phone: string\): Promise<DeliveryRow \| null>;/);
   assert.match(deliveryStoreTypes, /findMostRecentActiveDeliveryByCustomerNameQuery\(query: string\): Promise<DeliveryRow \| null>;/);
+});
+
+test("the recipient texting in is greeted by their own name, not the sender's -- explicit product decision: either party can look up the same delivery", () => {
+  assert.match(webhookRoute, /delivery\.recipientContact && delivery\.recipientContact === phone && delivery\.contact !== phone/);
+  assert.match(webhookRoute, /\(delivery\.recipientName \|\| delivery\.customer\)/);
+  assert.match(webhookRoute, /: delivery\.customer;/);
 });
 
 test("the webhook always acknowledges 200 once the payload is verified and parsed, even if the reply send itself fails -- a failed send must never make Meta retry-storm the same inbound message", () => {
@@ -183,6 +196,14 @@ test("findMostRecentActiveDeliveryByContact returns the most recent match when a
 test("findMostRecentActiveDeliveryByContact returns null for an unknown number", async () => {
   const match = await memoryStore.findMostRecentActiveDeliveryByContact("999999999999999");
   assert.equal(match, null);
+});
+
+test("findMostRecentActiveDeliveryByContact also matches the recipient's phone, not just the sender's -- explicit product decision: either party texting in is a legitimate lookup", async () => {
+  const recipientPhone = `21263${Date.now()}`.slice(0, 12);
+  const delivery = await memoryStore.create(baseDeliveryInput({ contact: "212699999999", recipientContact: recipientPhone, recipientName: "Fatima Zahra" }));
+
+  const match = await memoryStore.findMostRecentActiveDeliveryByContact(recipientPhone);
+  assert.equal(match?.id, delivery.id);
 });
 
 test("findMostRecentActiveDeliveryByCustomerNameQuery does a case-insensitive substring match on the customer name, among active deliveries only", async () => {

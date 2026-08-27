@@ -41,7 +41,10 @@ export const memoryStore: DeliveryStore = {
     return deliveryStore.filter((delivery) => delivery.companyId === companyId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   },
   async findMostRecentActiveDeliveryByContact(phone) {
-    const matches = deliveryStore.filter((delivery) => delivery.contact === phone && delivery.status !== "Delivered");
+    // Either party texting in gets matched -- the sender tracking what they
+    // shipped and the recipient tracking what's coming to them are both
+    // legitimate, per the user's explicit call.
+    const matches = deliveryStore.filter((delivery) => (delivery.contact === phone || delivery.recipientContact === phone) && delivery.status !== "Delivered");
     matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return matches[0] ?? null;
   },

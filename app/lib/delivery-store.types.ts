@@ -164,6 +164,9 @@ export interface DeliveryStore {
   // today exactly one company has one configured), so there is no companyId
   // to scope by. "Active" means not yet Delivered; ties broken by most
   // recent createdAt, per product decision (see whatsapp-inbound.ts).
+  // findMostRecentActiveDeliveryByContact matches EITHER contact (the
+  // sender) OR recipientContact (the recipient) -- either party texting in
+  // is a legitimate lookup, per explicit product decision.
   findMostRecentActiveDeliveryByContact(phone: string): Promise<DeliveryRow | null>;
   findMostRecentActiveDeliveryByCustomerNameQuery(query: string): Promise<DeliveryRow | null>;
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
