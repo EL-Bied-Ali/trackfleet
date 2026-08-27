@@ -49,7 +49,7 @@ test("the client cell no longer shows the little colored initials avatar", () =>
 
 test("the group header row gets its own mobile card-layout treatment instead of being forced into the 2-column grid meant for data rows", () => {
   assert.match(css, /tbody tr\.group-header-row \{ display: block;/);
-  assert.match(css, /\.group-header-row td \{ height: auto; padding: 9px 15px; background: #f5f8f6;/);
+  assert.match(css, /\.group-header-row td \{ position: relative; width: 100%; height: auto; padding: 9px 15px; background: #f5f8f6;/);
 });
 
 test("status/destination/ETA/progress are hoisted into the group header only when a truck has more than one parcel and they all share the same destination AND status", () => {

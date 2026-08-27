@@ -82,6 +82,37 @@ test("group truck reassignment popover anchors left, not right -- its trigger si
   // (correct for the far-right schedule-editor trigger), this popover
   // expanded leftward off the edge of the table since its own trigger sits
   // near the start of the row.
-  assert.match(css, /\.group-truck-editor-wrap \{ position: relative; display: inline-block; \}/);
   assert.match(css, /\.group-truck-editor-popover \{ left: 0; right: auto; \}/);
+});
+
+test("group truck reassignment popover anchors to the wrapping row, not its own small trigger span", () => {
+  // Reported live: .group-header-row td is a wrapping flex container
+  // (flex-wrap: wrap), so its rendered height varies with how many lines
+  // its content wraps onto. A popover positioned "top: 100%" relative to
+  // its own tiny trigger span doesn't account for that -- when the row
+  // wrapped to two lines, the popover rendered high enough to overlap the
+  // second line's badges/destination instead of clearing the whole row.
+  // Anchoring to the td's own box (position: relative, spans every wrapped
+  // line) instead of the trigger wrap fixes that regardless of row height.
+  assert.match(css, /\.group-header-row td \{ position: relative;/);
+  assert.match(css, /\.group-truck-editor-wrap \{ display: inline-block; \}/);
+  assert.doesNotMatch(css, /\.group-truck-editor-wrap \{ position: relative;/);
+});
+
+test("the truck picker shows each vehicle's \"Camion N\" number alongside its plate, matching the badges used everywhere else", () => {
+  // Reported live: the dropdown listed bare plate numbers with no way to
+  // tell which colored/numbered badge (seen on the map, the fleet roster,
+  // the group header) each one corresponds to.
+  assert.match(page, /\{integration\.vehicles\.map\(\(vehicle\) => <option key=\{vehicle\.id\} value=\{vehicle\.id\}>\{truckNumberLabel\(vehicle\.id\) \? `\$\{truckNumberLabel\(vehicle\.id\)\} · \$\{vehicle\.name\}` : vehicle\.name\}<\/option>\)\}/g);
+  const occurrences = page.match(/truckNumberLabel\(vehicle\.id\) \? `\$\{truckNumberLabel\(vehicle\.id\)\} · \$\{vehicle\.name\}` : vehicle\.name/g) ?? [];
+  assert.equal(occurrences.length, 3, "expected all 3 truck pickers (group reassignment, per-delivery reassignment, vehicle-link popover) to show the truck number");
+});
+
+test("the group header row stretches to fill its full row width, not just its content -- reported live as a jarring blank white gap", () => {
+  // switching this td to display: flex takes it out of the table layout
+  // algorithm entirely (colSpan={100} only stretches a td that's still
+  // display: table-cell), so without an explicit width it shrinks to fit
+  // its own content, leaving the row's remaining width showing plain white
+  // background instead of this row's #f5f8f6 tint.
+  assert.match(css, /\.group-header-row td \{ position: relative; width: 100%;.*display: flex;.*box-sizing: border-box; \}/);
 });

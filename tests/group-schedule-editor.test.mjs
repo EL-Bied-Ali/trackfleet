@@ -38,6 +38,17 @@ test("the per-row journey editor's schedule section is suppressed when the group
   assert.match(page, /\{!group\.uniformDestination && <div className="journey-editor-divider" \/>\}<\/>\}\{!group\.uniformDestination && <><strong>\{locale === "fr" \? "Arrivée prévue"/);
 });
 
-test("the group schedule popover has its own positioning context", () => {
-  assert.match(css, /\.group-schedule-editor-wrap \{ position: relative; display: inline-block; \}/);
+test("the group schedule popover anchors to the wrapping row, not its own small trigger span", () => {
+  // Reported live (for the sibling group-truck-editor-popover, same row,
+  // same pattern): .group-header-row td is a wrapping flex container
+  // (flex-wrap: wrap), so its rendered height varies with how many lines
+  // its content wraps onto. A popover positioned "top: 100%" relative to
+  // its own tiny trigger span doesn't account for that -- when the row
+  // wrapped to two lines, the popover rendered high enough to overlap the
+  // second line instead of clearing the whole row. Anchoring to the td's
+  // own box (position: relative, spans every wrapped line) instead of the
+  // trigger wrap fixes that regardless of row height.
+  assert.match(css, /\.group-header-row td \{ position: relative;/);
+  assert.match(css, /\.group-schedule-editor-wrap \{ display: inline-block; \}/);
+  assert.doesNotMatch(css, /\.group-schedule-editor-wrap \{ position: relative;/);
 });
