@@ -359,6 +359,8 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .expected-parcel-meta { display: flex; flex-wrap: wrap; gap: 3px; font-size: 10px; color: #46564e; }
 .expected-parcel-meta span { display: block; }
 .expected-parcel-meta span:not(:last-child)::after { content: "·"; margin-left: 8px; color: #c3ccc7; }
+.expected-parcel-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.expected-parcel-actions button { height: 27px; padding: 0 12px; border: 0; border-radius: 6px; background: #e8f3ee; color: #1e624d; font-size: 11px; font-weight: 650; cursor: pointer; white-space: nowrap; }
 .tour-list { display: grid; gap: 10px; padding: 0 17px 17px; }
 .tour-card { padding: 14px; border: 1px solid #e5ebe7; border-radius: 10px; background: #fbfcfb; }
 .tour-card-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }

@@ -1357,6 +1357,31 @@ export default function Home() {
     }
   }
 
+  // Only actually deliverable while the customer's own WhatsApp message
+  // opened Meta's free 24h reply window -- this endpoint just attempts it
+  // and reports back whatever Meta says, rather than TrackFleet trying to
+  // track that window itself. A closed window is the expected, ordinary
+  // outcome (not every customer texts in), so its toast is informational,
+  // not alarming.
+  async function notifyArrivalForDelivery(deliveryId: string, destinationSiteId?: string | null) {
+    if (company?.role !== "agency" || destinationSiteId !== company.siteId) return;
+    try {
+      const response = await fetch("/api/deliveries/notify-arrival", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && data?.ok) {
+        setToast(locale === "fr" ? "Client notifié par WhatsApp." : locale === "nl" ? "Klant via WhatsApp op de hoogte gebracht." : "Customer notified via WhatsApp.");
+      } else {
+        setToast(locale === "fr" ? "Notification impossible : le client doit d’abord vous avoir écrit sur WhatsApp (fenêtre gratuite de 24h)." : locale === "nl" ? "Melding niet mogelijk: de klant moet u eerst op WhatsApp hebben geschreven (gratis venster van 24u)." : "Could not notify: the customer must have messaged you on WhatsApp first (free 24h window).");
+      }
+    } catch {
+      setToast(locale === "fr" ? "Impossible d’envoyer la notification." : locale === "nl" ? "Melding kon niet worden verzonden." : "Could not send the notification.");
+    }
+  }
+
   if (view === "customer" && publicTrackingState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view === "customer" && publicTrackingState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>Lien de suivi introuvable</h1><p>Vérifiez le lien reçu ou contactez l’entreprise qui vous l’a envoyé.</p></section></main>;
   if (view !== "customer" && authState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
@@ -1665,7 +1690,10 @@ export default function Home() {
                           {delivery.itemDescription && <span>{delivery.itemDescription}</span>}
                           <span>{note}</span>
                         </div>
-                        <button type="button" onClick={() => void confirmArrivalForDelivery(delivery.id, delivery.destinationSiteId)}>{locale === "fr" ? "Confirmer l’arrivée" : locale === "nl" ? "Aankomst bevestigen" : "Confirm arrival"}</button>
+                        <div className="expected-parcel-actions">
+                          <button type="button" onClick={() => void confirmArrivalForDelivery(delivery.id, delivery.destinationSiteId)}>{locale === "fr" ? "Confirmer l’arrivée" : locale === "nl" ? "Aankomst bevestigen" : "Confirm arrival"}</button>
+                          <button type="button" onClick={() => void notifyArrivalForDelivery(delivery.id, delivery.destinationSiteId)}>{locale === "fr" ? "Notifier par WhatsApp" : locale === "nl" ? "Melden via WhatsApp" : "Notify via WhatsApp"}</button>
+                        </div>
                       </article>
                     );
                   })}
@@ -1709,6 +1737,7 @@ export default function Home() {
                 </div>}
                 <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
                 {company?.role === "agency" && selected.destinationSiteId === company.siteId && selected.status !== "Delivered" && <div className="popover-actions"><button type="button" onClick={() => void confirmArrivalForDelivery(selected.id, selected.destinationSiteId)}>{locale === "fr" ? "Confirmer l’arrivée du camion" : locale === "nl" ? "Aankomst vrachtwagen bevestigen" : "Confirm truck arrival"}</button></div>}
+                {company?.role === "agency" && selected.destinationSiteId === company.siteId && <div className="popover-actions"><button type="button" onClick={() => void notifyArrivalForDelivery(selected.id, selected.destinationSiteId)}>{locale === "fr" ? "Notifier par WhatsApp" : locale === "nl" ? "Melden via WhatsApp" : "Notify via WhatsApp"}</button></div>}
               </>}
             </div>}
           </div>

@@ -5,7 +5,7 @@ import { vehicleAliasStore } from "trackfleet-vehicle-alias-store";
 import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
-import { customerFacingEvent, deliveredAtFromEvents } from "../../lib/delivery-events";
+import { customerFacingEvent, trackingLinkExpiryAnchorFromEvents } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { computeDeliveryPrice, deliveryPriceCurrencyForOriginCountry } from "../../lib/delivery-pricing";
 import { getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate } from "../../lib/manual-arrival-duration.postgres";
@@ -105,7 +105,7 @@ function enrichDelivery<T extends {
     pendingStopServiceMinutes: futureServiceMinutes,
     etaHistoryTrips: historicalTripCount,
     etaHistoricalSpeedKmh: historicalEffectiveSpeedKmh === null ? null : Math.round(historicalEffectiveSpeedKmh),
-    trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt, deliveredAt: deliveredAtFromEvents(events) }).toISOString() : null,
+    trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt, deliveredAt: trackingLinkExpiryAnchorFromEvents(events) }).toISOString() : null,
     manualArrivalEstimateHours: manualArrivalEstimate?.medianHours ?? null,
     manualArrivalEstimateSampleCount: manualArrivalEstimate?.sampleCount ?? 0,
   };
@@ -240,7 +240,7 @@ export async function GET(request: Request) {
       // never create delivery events or trigger outbound notifications.
       const routeEvents = await store.listEvents(row.id);
 
-      if (!publicTrackingIsActive({ plannedArrivalAt: row.plannedArrivalAt, createdAt: row.createdAt, deliveredAt: deliveredAtFromEvents(routeEvents) })) {
+      if (!publicTrackingIsActive({ plannedArrivalAt: row.plannedArrivalAt, createdAt: row.createdAt, deliveredAt: trackingLinkExpiryAnchorFromEvents(routeEvents) })) {
         return Response.json({ error: "not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
       }
 
