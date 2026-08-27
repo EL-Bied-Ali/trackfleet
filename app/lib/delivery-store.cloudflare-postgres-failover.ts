@@ -204,4 +204,12 @@ export const store: DeliveryStore = {
   },
 
   create: primaryStore.create,
+
+  deleteDemoDeliveries(companyId) {
+    return suppressMaintenanceWriteDuringD1Failover(
+      "delivery.deleteDemoDeliveries",
+      () => primaryStore.deleteDemoDeliveries(companyId),
+      0,
+    );
+  },
 };

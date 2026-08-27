@@ -7,6 +7,7 @@ import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
 import { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record";
+import { DEMO_DELIVERY_CUSTOMER_PREFIX } from "./demo-delivery";
 
 function db() {
   if (!runtimeEnv.DB) throw new Error("Cloudflare D1 binding `DB` is unavailable");
@@ -317,5 +318,19 @@ export const store: DeliveryStore = {
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
         delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.shipmentId ?? null, delivery.createdAt.getTime()).run();
     return delivery;
+  },
+
+  async deleteDemoDeliveries(companyId) {
+    const result = await db().prepare(`SELECT id FROM deliveries WHERE company_id = ? AND customer LIKE ?`).bind(companyId, `${DEMO_DELIVERY_CUSTOMER_PREFIX}%`).all<{ id: string }>();
+    const ids = (result.results ?? []).map((row) => row.id);
+    if (!ids.length) return 0;
+    const placeholders = ids.map(() => "?").join(",");
+    await db().batch([
+      db().prepare(`DELETE FROM delivery_events WHERE delivery_id IN (${placeholders})`).bind(...ids),
+      db().prepare(`DELETE FROM delivery_notifications WHERE delivery_id IN (${placeholders})`).bind(...ids),
+      db().prepare(`DELETE FROM delivery_eta_observations WHERE delivery_id IN (${placeholders})`).bind(...ids),
+      db().prepare(`DELETE FROM deliveries WHERE id IN (${placeholders})`).bind(...ids),
+    ]);
+    return ids.length;
   },
 };

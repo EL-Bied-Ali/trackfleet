@@ -8,6 +8,7 @@ import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
 import { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record";
+import { DEMO_DELIVERY_CUSTOMER_PREFIX } from "./demo-delivery";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the Postgres delivery store");
@@ -689,5 +690,17 @@ export const postgresStore: DeliveryStore = {
       ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}
     )`;
     return delivery;
+  },
+
+  async deleteDemoDeliveries(companyId) {
+    await ensureSchema();
+    const rows = await sql`SELECT id FROM deliveries WHERE company_id = ${companyId} AND customer LIKE ${`${DEMO_DELIVERY_CUSTOMER_PREFIX}%`}` as Array<{ id: string }>;
+    const ids = rows.map((row) => row.id);
+    if (!ids.length) return 0;
+    await sql`DELETE FROM delivery_events WHERE delivery_id = ANY(${ids}::text[])`;
+    await sql`DELETE FROM delivery_notifications WHERE delivery_id = ANY(${ids}::text[])`;
+    await sql`DELETE FROM delivery_eta_observations WHERE delivery_id = ANY(${ids}::text[])`;
+    await sql`DELETE FROM deliveries WHERE id = ANY(${ids}::text[])`;
+    return ids.length;
   },
 };
