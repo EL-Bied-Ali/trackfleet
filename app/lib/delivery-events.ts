@@ -74,3 +74,13 @@ export function customerFacingEvent(event: DeliveryEventType) {
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {
   return events.some((event) => event.type === "WHATSAPP_OPT_OUT");
 }
+
+// ARRIVED (automatic GPS completion) and MANUAL_DELIVERED (dispatcher/agency
+// manual completion) are the two terminal event types recorded exactly once
+// per delivery (see the UNIQUE (delivery_id, type) constraint backing every
+// store's recordEvent) -- whichever is present is the real "became
+// Delivered" moment, used to tighten the public tracking link's expiry
+// beyond the generic post-planned-arrival window (see tracking-access.ts).
+export function deliveredAtFromEvents(events: Array<{ type: DeliveryEventType; createdAt: Date }>): Date | null {
+  return events.find((event) => event.type === "ARRIVED" || event.type === "MANUAL_DELIVERED")?.createdAt ?? null;
+}

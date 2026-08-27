@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectDeliveryEvents } from "../app/lib/delivery-events.ts";
+import { deliveredAtFromEvents, detectDeliveryEvents } from "../app/lib/delivery-events.ts";
 
 test("detects departure and crossed progress milestones exactly once per transition", () => {
   assert.deepEqual(detectDeliveryEvents({
@@ -55,6 +55,29 @@ test("arrival remains separate from the near-destination alert", () => {
     positionAgeMinutes: 1,
     arrivalRadiusKm: 0.5,
   }), ["ARRIVED"]);
+});
+
+test("deliveredAtFromEvents finds the automatic arrival timestamp", () => {
+  const arrivedAt = new Date("2026-08-20T09:00:00.000Z");
+  assert.equal(deliveredAtFromEvents([
+    { type: "DEPARTED", createdAt: new Date("2026-08-16T12:00:00.000Z") },
+    { type: "ARRIVED", createdAt: arrivedAt },
+  ])?.toISOString(), arrivedAt.toISOString());
+});
+
+test("deliveredAtFromEvents finds the manual completion timestamp", () => {
+  const deliveredAt = new Date("2026-08-20T09:00:00.000Z");
+  assert.equal(deliveredAtFromEvents([
+    { type: "ARRIVED_AT_SITE", createdAt: new Date("2026-08-19T09:00:00.000Z") },
+    { type: "MANUAL_DELIVERED", createdAt: deliveredAt },
+  ])?.toISOString(), deliveredAt.toISOString());
+});
+
+test("deliveredAtFromEvents returns null when the delivery hasn't arrived", () => {
+  assert.equal(deliveredAtFromEvents([
+    { type: "DEPARTED", createdAt: new Date("2026-08-16T12:00:00.000Z") },
+    { type: "PROGRESS_50", createdAt: new Date("2026-08-17T12:00:00.000Z") },
+  ]), null);
 });
 
 test("marks stale GPS for internal attention", () => {
