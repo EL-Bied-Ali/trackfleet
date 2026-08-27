@@ -5,7 +5,10 @@ import {
   deleteServerSession as deletePrimarySession,
   renewServerSession as renewPrimarySession,
   getServerSession,
+  getCompanyBranding,
+  updateCompanyBranding as updatePrimaryCompanyBranding,
   type StoredCompanySession,
+  type CompanyBranding,
 } from "./auth-session-store.vercel";
 
 type D1MirrorStatement = {
@@ -95,5 +98,24 @@ export async function renewServerSession(tokenHash: string, expiresAt: Date) {
   await mirrorRenew(tokenHash, expiresAt);
 }
 
-export { getServerSession };
-export type { StoredCompanySession };
+async function mirrorBranding(companyId: string, input: CompanyBranding) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare(`UPDATE companies SET brand_name = ?, brand_logo_data_url = ?, brand_color = ?, updated_at = ? WHERE id = ?`)
+      .bind(input.name, input.logoDataUrl, input.color, Date.now(), companyId)
+      .run();
+  } catch (error) {
+    console.error("[trackfleet:replication] D1 company branding mirror failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
+}
+
+export async function updateCompanyBranding(companyId: string, input: CompanyBranding) {
+  await updatePrimaryCompanyBranding(companyId, input);
+  await mirrorBranding(companyId, input);
+}
+
+export { getServerSession, getCompanyBranding };
+export type { StoredCompanySession, CompanyBranding };

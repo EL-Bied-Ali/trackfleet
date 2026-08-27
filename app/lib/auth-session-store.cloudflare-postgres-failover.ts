@@ -3,10 +3,13 @@ import {
   deleteServerSession as deletePrimarySession,
   renewServerSession as renewPrimarySession,
   getServerSession as getPrimarySession,
+  getCompanyBranding as getPrimaryCompanyBranding,
+  updateCompanyBranding as updatePrimaryCompanyBranding,
   type StoredCompanySession,
+  type CompanyBranding,
 } from "./auth-session-store.shared-postgres";
 import { getStandbySessionFromD1 } from "./d1-standby-session-read";
-import { withD1ReadFailover } from "./d1-read-failover";
+import { suppressMaintenanceWriteDuringD1Failover, withD1ReadFailover } from "./d1-read-failover";
 
 export async function createServerSession(input: StoredCompanySession) {
   return createPrimarySession(input);
@@ -28,4 +31,24 @@ export async function renewServerSession(tokenHash: string, expiresAt: Date) {
   return renewPrimarySession(tokenHash, expiresAt);
 }
 
-export type { StoredCompanySession };
+export async function getCompanyBranding(companyId: string): Promise<CompanyBranding | null> {
+  return withD1ReadFailover(
+    "company.getBranding",
+    () => getPrimaryCompanyBranding(companyId),
+    // Branding is a display nicety, not core functionality -- during an
+    // active D1 failover (Postgres itself down) it's fine to just fall back
+    // to generic TrackFleet branding rather than building out a dedicated
+    // D1 standby read path for it.
+    async () => null,
+  );
+}
+
+export async function updateCompanyBranding(companyId: string, input: CompanyBranding) {
+  return suppressMaintenanceWriteDuringD1Failover(
+    "company.updateBranding",
+    () => updatePrimaryCompanyBranding(companyId, input),
+    undefined,
+  );
+}
+
+export type { StoredCompanySession, CompanyBranding };

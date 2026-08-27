@@ -138,6 +138,8 @@ type DeliveryEventRow = {
 type VehicleOption = { id: string; name: string; speed: number; updatedAt: number; latitude: number; longitude: number; address?: string };
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null; vehicles: VehicleOption[] };
 type FeatureState = { whatsappDemoEnabled: boolean; whatsappAvailable: boolean };
+type CompanyBranding = { name: string | null; logoDataUrl: string | null; color: string | null };
+const emptyCompanyBranding: CompanyBranding = { name: null, logoDataUrl: null, color: null };
 type TripHistoryItem = { id: string; routeTemplateId: string; vehicleKey: string; truck: string; sendatrackVehicleId: string; originSiteId: string | null; stops: Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: string | null }>; status: "planned" | "active" | "completed"; createdAt: string; updatedAt: string };
 
 type MessageEvent = {
@@ -344,6 +346,11 @@ export default function Home() {
   const [demoContact, setDemoContact] = useState("");
   const [demoDestinationSiteId, setDemoDestinationSiteId] = useState("");
   const [demoBusy, setDemoBusy] = useState(false);
+  const [companySettingsOpen, setCompanySettingsOpen] = useState(false);
+  const [companySettingsName, setCompanySettingsName] = useState("");
+  const [companySettingsColor, setCompanySettingsColor] = useState("#1f6952");
+  const [companySettingsLogoDataUrl, setCompanySettingsLogoDataUrl] = useState<string | null>(null);
+  const [companySettingsSaving, setCompanySettingsSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("All deliveries");
   const [searchQuery, setSearchQuery] = useState("");
@@ -393,6 +400,7 @@ export default function Home() {
   const [publicTrackingState, setPublicTrackingState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false, whatsappAvailable: false });
+  const [companyBranding, setCompanyBranding] = useState<CompanyBranding>(emptyCompanyBranding);
   const [trips, setTrips] = useState<TripHistoryItem[]>([]);
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEventRow[]>([]);
   const [knownSites, setKnownSites] = useState<KnownSite[]>([]);
@@ -504,6 +512,24 @@ export default function Home() {
   }, [authState]);
 
   useEffect(() => {
+    if (authState !== "authenticated") return;
+    let active = true;
+    async function refreshBranding() {
+      try {
+        const response = await fetch("/api/company/branding", { cache: "no-store" });
+        const data = response.ok ? await response.json() as { branding?: CompanyBranding } : { branding: emptyCompanyBranding };
+        if (active) setCompanyBranding(data.branding ?? emptyCompanyBranding);
+      } catch {
+        if (active) setCompanyBranding(emptyCompanyBranding);
+      }
+    }
+    void refreshBranding();
+    const handleBrandingChanged = () => void refreshBranding();
+    window.addEventListener("trackfleet-branding-changed", handleBrandingChanged);
+    return () => { active = false; window.removeEventListener("trackfleet-branding-changed", handleBrandingChanged); };
+  }, [authState]);
+
+  useEffect(() => {
     if (!openContactPopover) return;
     const close = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -585,13 +611,14 @@ export default function Home() {
           return;
         }
         if (!response.ok) throw new Error("Delivery service unavailable");
-        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; trips?: TripHistoryItem[] };
+        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; trips?: TripHistoryItem[]; companyBranding?: CompanyBranding };
         if (!active) return;
         if (tracking && data.deliveries.length) {
           setDeliveries(data.deliveries);
           setDeliveryEvents(data.events ?? []);
           setSelectedId(data.deliveries[0].id);
           setPublicTrackingState("ready");
+          if (data.companyBranding) setCompanyBranding(data.companyBranding);
         } else if (!tracking) {
           setDeliveries(data.deliveries);
           setDispatchDataState("ready");
@@ -1485,6 +1512,62 @@ export default function Home() {
     }
   }
 
+  function openCompanySettings() {
+    setCompanySettingsName(companyBranding.name ?? "");
+    setCompanySettingsColor(companyBranding.color ?? "#1f6952");
+    setCompanySettingsLogoDataUrl(companyBranding.logoDataUrl ?? null);
+    setCompanySettingsOpen(true);
+  }
+
+  // Resized/compressed client-side before it ever reaches the server --
+  // logos don't need to be huge (this UI only ever shows them at badge
+  // size), and keeping the upload small keeps the company row's stored
+  // data URL well under the server's own size cap regardless of what the
+  // dispatcher's original file looked like.
+  async function handleLogoFileChange(file: File) {
+    const maxDimension = 200;
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("logo_read_failed"));
+      reader.readAsDataURL(file);
+    });
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("logo_decode_failed"));
+      image.src = dataUrl;
+    });
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) { setToast(locale === "fr" ? "Impossible de traiter cette image." : locale === "nl" ? "Kon deze afbeelding niet verwerken." : "Could not process this image."); return; }
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    setCompanySettingsLogoDataUrl(canvas.toDataURL("image/png"));
+  }
+
+  async function saveCompanySettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCompanySettingsSaving(true);
+    try {
+      const response = await fetch("/api/company/branding", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: companySettingsName.trim(), color: companySettingsColor, logoDataUrl: companySettingsLogoDataUrl ?? "" }),
+      });
+      if (!response.ok) throw new Error("branding_save_failed");
+      window.dispatchEvent(new Event("trackfleet-branding-changed"));
+      setCompanySettingsOpen(false);
+      setToast(locale === "fr" ? "Identité visuelle mise à jour." : locale === "nl" ? "Huisstijl bijgewerkt." : "Branding updated.");
+    } catch {
+      setToast(locale === "fr" ? "Impossible d’enregistrer l’identité visuelle." : locale === "nl" ? "Kon de huisstijl niet opslaan." : "Could not save the branding.");
+    } finally {
+      setCompanySettingsSaving(false);
+    }
+  }
+
   if (view === "customer" && publicTrackingState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
   if (view === "customer" && publicTrackingState === "error") return <main className="login-page login-loading"><section className="tracking-error"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div><h1>Lien de suivi introuvable</h1><p>Vérifiez le lien reçu ou contactez l’entreprise qui vous l’a envoyé.</p></section></main>;
   if (view !== "customer" && authState === "loading") return <main className="login-page login-loading"><div className="brand brand-dark"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div></main>;
@@ -1625,8 +1708,8 @@ export default function Home() {
       <main className="customer-page">
         <header className="customer-header">
           <button type="button" className="brand brand-dark" onClick={openDispatchView}>
-            <span className="brand-mark"><span>↗</span></span>
-            <span>TrackFleet</span>
+            <span className="brand-mark">{companyBranding.logoDataUrl ? <img src={companyBranding.logoDataUrl} alt="" /> : <span>↗</span>}</span>
+            <span>{companyBranding.name || "TrackFleet"}</span>
           </button>
           <div className="customer-header-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} /><div className="secure-pill"><span>●</span> {t.secureLink}</div></div>
         </header>
@@ -1724,7 +1807,7 @@ export default function Home() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark"><span>↗</span></span><span>TrackFleet</span></div>
+        <div className="brand"><span className="brand-mark">{companyBranding.logoDataUrl ? <img src={companyBranding.logoDataUrl} alt="" /> : <span>↗</span>}</span><span>{companyBranding.name || "TrackFleet"}</span></div>
         <nav aria-label="Main navigation">
           <button className="nav-item active"><Icon>▦</Icon>{t.overview}</button>
           <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">{integration.connected ? integration.vehicleCount : "—"}</span></button>
@@ -1742,7 +1825,7 @@ export default function Home() {
         </nav>
         <div className="sidebar-divider" />
         <nav>
-          <button className="nav-item" disabled><Icon>⚙</Icon>{t.settings}</button>
+          {company?.role === "dispatcher" ? <button className="nav-item" onClick={openCompanySettings}><Icon>⚙</Icon>{t.settings}</button> : <button className="nav-item" disabled><Icon>⚙</Icon>{t.settings}</button>}
           <button className="nav-item" disabled><Icon>?</Icon>{t.helpCentre}</button>
         </nav>
         <div className="sidebar-spacer" />
@@ -1889,6 +1972,8 @@ export default function Home() {
       {modalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title"><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={() => { setModalOpen(false); setParcelDrafts([{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" }]);}} aria-label={t.close}>×</button></div><form onSubmit={createDelivery}><div className="form-section"><strong>{locale === "fr" ? "Expéditeur / client" : locale === "nl" ? "Afzender / klant" : "Sender / customer"}</strong><div className="form-row"><label>{t.customerCompany}<input name="customer" required placeholder={t.customerPlaceholder} /></label><label><span className="field-label">{t.customerContact} <span>({t.optional})</span></span><input name="contact" inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" /></label></div><div className="form-row"><label><span className="field-label">{locale === "fr" ? "E-mail du client" : locale === "nl" ? "E-mail klant" : "Customer email"} <span>({t.optional})</span></span><input name="customerEmail" type="email" autoComplete="email" placeholder="client@exemple.com" /></label></div><small>{locale === "fr" ? "L'e-mail reçoit les mêmes mises à jour de suivi, sans consentement séparé à cocher." : locale === "nl" ? "Dit e-mailadres ontvangt dezelfde trackingupdates, zonder aparte toestemming aan te vinken." : "This email receives the same tracking updates, no separate consent checkbox needed."}</small></div><div className="form-section"><strong>{locale === "fr" ? "Personne qui reçoit le colis" : locale === "nl" ? "Ontvanger van het pakket" : "Parcel recipient"}</strong><div className="form-row"><label><span className="field-label">{locale === "fr" ? "Nom du destinataire" : locale === "nl" ? "Naam ontvanger" : "Recipient name"} <span>({t.optional})</span></span><input name="recipientName" autoComplete="name" placeholder={locale === "fr" ? "Nom et prénom" : locale === "nl" ? "Voor- en achternaam" : "Full name"} /></label><label><span className="field-label">{locale === "fr" ? "Téléphone du destinataire" : locale === "nl" ? "Telefoon ontvanger" : "Recipient phone"} <span>({t.optional})</span></span><input name="recipientContact" inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" /></label></div><small>{locale === "fr" ? "Renseignez le nom et le téléphone ensemble. Le destinataire recevra les mêmes mises à jour utiles." : locale === "nl" ? "Vul naam en telefoon samen in. De ontvanger krijgt dezelfde nuttige updates." : "Enter name and phone together. The recipient receives the same useful updates."}</small></div><div className="parcel-list">{parcelDrafts.map((parcel, index) => { const preview = creationPricePreviewFor(parcel.weightKg); return <div className="form-row parcel-row" key={parcel.key}>{parcelDrafts.length > 1 && <div className="parcel-row-head">{locale === "fr" ? `Colis ${index + 1}` : locale === "nl" ? `Pakket ${index + 1}` : `Parcel ${index + 1}`}</div>}<label><span className="field-label">{locale === "fr" ? "Poids du colis" : locale === "nl" ? "Gewicht zending" : "Parcel weight"} <span>({t.optional})</span></span><input type="number" min="0.001" max="100000" step="0.001" inputMode="decimal" placeholder="kg" value={parcel.weightKg} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, weightKg: value } : row)); }} /><small>{locale === "fr" ? "Laissez vide pour un objet volumineux (machine à laver, télé…)" : locale === "nl" ? "Laat leeg voor een groot voorwerp (wasmachine, tv…)" : "Leave blank for a bulky item (washing machine, TV…)"}</small></label><label>{parcel.weightKg ? (locale === "fr" ? "Prix calculé" : locale === "nl" ? "Berekende prijs" : "Calculated price") : (locale === "fr" ? "Prix manuel" : locale === "nl" ? "Handmatige prijs" : "Manual price")}{parcel.weightKg ? <div className="price-preview">{preview.priceAmount != null ? <strong>{preview.priceAmount.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {preview.priceCurrency}</strong> : <span>{locale === "fr" ? "Renseignez le poids" : locale === "nl" ? "Vul het gewicht in" : "Enter the weight"}</span>}</div> : <input type="number" min="0.01" max="1000000" step="0.01" inputMode="decimal" placeholder={creationOriginCountry === "MA" ? "MAD" : "EUR"} value={parcel.manualPriceAmount} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, manualPriceAmount: value } : row)); }} />}<small>{parcel.weightKg ? (creationOriginCountry === "MA" ? (locale === "fr" ? "15 DH/kg au départ du Maroc" : locale === "nl" ? "15 DH/kg vanuit Marokko" : "15 MAD/kg from Morocco") : (locale === "fr" ? "1,50 €/kg" : locale === "nl" ? "1,50 €/kg" : "1.50 EUR/kg")) : (locale === "fr" ? "Objet volumineux : indiquez le prix directement" : locale === "nl" ? "Groot voorwerp: geef de prijs rechtstreeks op" : "Bulky item: enter the price directly")}</small></label>{!parcel.weightKg && <label>{locale === "fr" ? "Description de l'objet" : locale === "nl" ? "Omschrijving van het voorwerp" : "Item description"}<input type="text" required maxLength={200} placeholder={locale === "fr" ? "Ex. : télévision, lave-linge…" : locale === "nl" ? "Bijv. televisie, wasmachine…" : "E.g. TV, washing machine…"} value={parcel.itemDescription} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, itemDescription: value } : row)); }} /><small>{locale === "fr" ? "Obligatoire pour un objet non pesé, pour le distinguer des autres colis." : locale === "nl" ? "Verplicht voor een niet-gewogen voorwerp, om het van andere zendingen te onderscheiden." : "Required for an unweighed item, to tell it apart from other parcels."}</small></label>}{parcelDrafts.length > 1 && <button type="button" className="remove-parcel-row" aria-label={locale === "fr" ? "Retirer ce colis" : locale === "nl" ? "Dit pakket verwijderen" : "Remove this parcel"} onClick={() => setParcelDrafts((rows) => rows.filter((row) => row.key !== parcel.key))}>×</button>}</div>; })}<button type="button" className="add-parcel-row" onClick={() => setParcelDrafts((rows) => [...rows, { key: crypto.randomUUID(), weightKg: "", manualPriceAmount: "", itemDescription: "" }])}>{locale === "fr" ? "+ Ajouter un colis pour ce client" : locale === "nl" ? "+ Pakket toevoegen voor deze klant" : "+ Add another parcel for this customer"}</button></div><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} disabled={company?.role === "agency"} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin") && (company?.role !== "agency" || site.id === company.siteId)).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{company?.role === "agency" ? (locale === "fr" ? "Les colis enregistrés sont automatiquement rattachés à votre agence." : locale === "nl" ? "Geregistreerde zendingen worden automatisch aan uw agentschap gekoppeld." : "Registered parcels are automatically assigned to your agency.") : (locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser.")}</small></label><label>{t.destination}<select name="destinationSiteId" required defaultValue=""><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination") && (company?.role !== "agency" || site.country !== creationOriginCountry)).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div>{features.whatsappAvailable && <label className="consent-choice"><input type="checkbox" name="whatsappOptIn" /><span>{locale === "fr" ? "Nouveau consentement WhatsApp confirmé pour les numéros renseignés" : locale === "nl" ? "Nieuwe WhatsApp-toestemming bevestigd voor de ingevulde nummers" : "New WhatsApp consent confirmed for the entered numbers"}<small>{locale === "fr" ? "Inutile de cocher si ce numéro a déjà consenti auparavant : TrackFleet le reconnaît automatiquement. Le consentement peut toujours être retiré." : locale === "nl" ? "Niet nodig als dit nummer eerder toestemming gaf: TrackFleet herkent dit automatisch. Toestemming kan altijd worden ingetrokken." : "Do not check this when the number already consented: TrackFleet remembers it automatically. Consent can always be withdrawn."}</small></span></label>}<div className="modal-footer"><button type="button" onClick={() => { setModalOpen(false); setParcelDrafts([{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" }]);}}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
 
       {demoModalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="demo-delivery-title"><div className="modal-header"><div><p className="eyebrow">{locale === "fr" ? "DÉMONSTRATION" : locale === "nl" ? "DEMONSTRATIE" : "DEMO"}</p><h2 id="demo-delivery-title">{locale === "fr" ? "Créer une livraison démo" : locale === "nl" ? "Demozending aanmaken" : "Create demo delivery"}</h2><span>{locale === "fr" ? "Pour montrer la notification WhatsApp d’arrivée sans attendre un vrai camion." : locale === "nl" ? "Om de WhatsApp-aankomstmelding te tonen zonder op een echte vrachtwagen te wachten." : "To show off the WhatsApp arrival notification without waiting for a real truck."}</span></div><button onClick={() => setDemoModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDemoDelivery}><div className="form-row"><label>{locale === "fr" ? "Numéro WhatsApp à utiliser pour la démo" : locale === "nl" ? "WhatsApp-nummer voor de demo" : "WhatsApp number to demo with"}<input value={demoContact} onChange={(event) => setDemoContact(event.target.value)} inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" required /></label><label>{locale === "fr" ? "Agence de destination" : locale === "nl" ? "Bestemmingsagentschap" : "Destination agency"}<select value={demoDestinationSiteId} onChange={(event) => setDemoDestinationSiteId(event.target.value)} required><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><small>{locale === "fr" ? "Une livraison réelle et marquée [DEMO] sera créée et apparaîtra immédiatement dans le tableau de bord de cette agence." : locale === "nl" ? "Er wordt een echte, als [DEMO] gemarkeerde zending aangemaakt die meteen verschijnt in het dashboard van dit agentschap." : "A real delivery marked [DEMO] will be created and will appear immediately in that agency's dashboard."}</small><div className="modal-footer"><button type="button" onClick={() => setDemoModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={demoBusy}>{demoBusy ? t.creating : (locale === "fr" ? "Créer" : locale === "nl" ? "Aanmaken" : "Create")}<span>→</span></button></div></form></section></div>}
+
+      {companySettingsOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="company-settings-title"><div className="modal-header"><div><p className="eyebrow">{locale === "fr" ? "IDENTITÉ VISUELLE" : locale === "nl" ? "HUISSTIJL" : "BRANDING"}</p><h2 id="company-settings-title">{locale === "fr" ? "Paramètres de l’entreprise" : locale === "nl" ? "Bedrijfsinstellingen" : "Company settings"}</h2><span>{locale === "fr" ? "Votre nom, logo et couleur remplacent la marque TrackFleet sur la page de suivi client et dans le tableau de bord." : locale === "nl" ? "Uw naam, logo en kleur vervangen het TrackFleet-merk op de klant-trackingpagina en in het dashboard." : "Your name, logo and color replace TrackFleet's branding on the customer tracking page and in the dashboard."}</span></div><button onClick={() => setCompanySettingsOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={saveCompanySettings}><div className="form-row"><label>{locale === "fr" ? "Nom de l’entreprise" : locale === "nl" ? "Bedrijfsnaam" : "Company name"}<input value={companySettingsName} onChange={(event) => setCompanySettingsName(event.target.value)} maxLength={80} placeholder="TrackFleet" /></label><label>{locale === "fr" ? "Couleur de la marque" : locale === "nl" ? "Merkkleur" : "Brand color"}<input type="color" value={companySettingsColor} onChange={(event) => setCompanySettingsColor(event.target.value)} /></label></div><label>{locale === "fr" ? "Logo" : "Logo"}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleLogoFileChange(file); }} /></label>{companySettingsLogoDataUrl && <div className="company-logo-preview"><img src={companySettingsLogoDataUrl} alt="" /><button type="button" onClick={() => setCompanySettingsLogoDataUrl(null)}>{locale === "fr" ? "Retirer le logo" : locale === "nl" ? "Logo verwijderen" : "Remove logo"}</button></div>}<small>{locale === "fr" ? "Laissez le nom vide pour garder la marque TrackFleet par défaut." : locale === "nl" ? "Laat de naam leeg om de standaard TrackFleet-branding te behouden." : "Leave the name blank to keep the default TrackFleet branding."}</small><div className="modal-footer"><button type="button" onClick={() => setCompanySettingsOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={companySettingsSaving}>{companySettingsSaving ? (locale === "fr" ? "Enregistrement…" : locale === "nl" ? "Opslaan…" : "Saving…") : (locale === "fr" ? "Enregistrer" : locale === "nl" ? "Opslaan" : "Save")}<span>→</span></button></div></form></section></div>}
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );
