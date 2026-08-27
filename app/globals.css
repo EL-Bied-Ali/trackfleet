@@ -235,6 +235,9 @@ td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size:
 .group-schedule-editor-wrap { position: relative; display: inline-block; }
 .group-schedule-editor-wrap .more-button { vertical-align: middle; }
 .group-schedule-editor-popover { left: auto; right: 0; }
+.group-truck-editor-wrap { position: relative; display: inline-block; }
+.group-truck-editor-wrap .more-button { vertical-align: middle; }
+.group-truck-editor-popover { left: auto; right: 0; }
 .cell-hoisted { color: #c3ccc7; }
 tbody tr:last-child td { border-bottom: 0; }.row-selected td { background: #fbfdfc; }
 tbody tr:focus-visible { outline: 2px solid #4c987b; outline-offset: -2px; }
