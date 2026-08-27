@@ -23,7 +23,7 @@ test("unassigned parcels collect into their own trailing group instead of scatte
 
 test("each group renders as its own tbody with a header row showing the truck and parcel count, and the vehicle column is gone from data rows (redundant with the header)", () => {
   assert.match(page, /\{groupedDeliveries\.map\(\(group\) => <tbody key=\{group\.label\}>/);
-  assert.match(page, /<tr className="group-header-row"><td colSpan=\{100\}>\{group\.numberLabel && <span className="truck-number-badge"[^>]*>\{group\.numberLabel\}<\/span>\}<strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
+  assert.match(page, /<tr className="group-header-row"><td colSpan=\{100\}><div className="group-header-row-inner">\{group\.numberLabel && <span className="truck-number-badge"[^>]*>\{group\.numberLabel\}<\/span>\}<strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
   // No more per-row <th>/<td> for the vehicle -- that information now lives
   // exactly once, in the group header, instead of once per row.
   assert.doesNotMatch(page, /<th>\{t\.tableVehicle\}<\/th>/);
@@ -49,7 +49,7 @@ test("the client cell no longer shows the little colored initials avatar", () =>
 
 test("the group header row gets its own mobile card-layout treatment instead of being forced into the 2-column grid meant for data rows", () => {
   assert.match(css, /tbody tr\.group-header-row \{ display: block;/);
-  assert.match(css, /\.group-header-row td \{ position: relative; width: 100%; height: auto; padding: 9px 15px; background: #f5f8f6;/);
+  assert.match(css, /\.group-header-row td \{ padding: 9px 15px; background: #f5f8f6;/);
 });
 
 test("status/destination/ETA/progress are hoisted into the group header only when a truck has more than one parcel and they all share the same destination AND status", () => {

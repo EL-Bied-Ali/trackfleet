@@ -227,20 +227,24 @@ a.nav-item { text-decoration: none; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th { height: 35px; padding: 0 15px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #909b95; background: #fafbfa; font-size: 8px; font-weight: 650; text-align: left; text-transform: uppercase; letter-spacing: .5px; }
 td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size: 9.5px; cursor: pointer; }
-/* The first fix here (width: 100% on the td alone) turned out not to be
-   enough, still reported live afterward. The real mechanism: once a td's
-   display changes away from table-cell, colSpan stops applying and it no
-   longer generates a real cell in the table's column model at all --
-   browsers insert an anonymous placeholder cell to keep the row's column
-   count consistent, and *that* anonymous cell (not this one) renders with
-   the table's own background, showing through as a blank gap no width
-   value on this td can reach because it was never that cell's box to begin
-   with. Taking the whole <tr> out of table layout (matching what the
-   mobile media query below already does for the same reason) sidesteps
-   the column model entirely -- proven correct there, not layered on top
-   as a second guess. */
-.group-header-row { display: block; }
-.group-header-row td { position: relative; width: 100%; height: auto; padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var(--line); cursor: default; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; box-sizing: border-box; }
+/* Two earlier fix attempts here both failed, verified live via a DOM
+   measurement harness (getBoundingClientRect) before landing this one --
+   not shipped on code-reading alone a third time. Attempt 1 (width: 100%
+   on the td) and attempt 2 (display: block on the <tr>, matching the
+   mobile media query below) both still measured the td/row at roughly
+   half the table's real width. Root cause: switching a <tr> or <td> to a
+   non-table display value pulls it out of the table's column-width
+   algorithm, but a block-level element whose ancestor chain still runs
+   through display:table / table-row-group doesn't reliably resolve
+   percentage widths against the table's actual pixel width either --
+   confirmed live, explicit width:100% on the block-ified <tr> still
+   measured at the same wrong ~50% figure. The only combination that
+   measured correctly: leave the <tr>/<td> as real display:table-row /
+   table-cell (so colSpan={100} does what it's designed to do -- span the
+   *entire* column model natively) and put the flex layout on a plain
+   <div> nested inside the td instead of on the td itself. */
+.group-header-row td { padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var(--line); cursor: default; }
+.group-header-row-inner { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .group-header-row strong { color: #16251e; font-size: 10px; font-weight: 700; }
 .group-header-row span { color: #7d8983; font-size: 8px; }
 .group-header-row span + span::before { content: "· "; }
