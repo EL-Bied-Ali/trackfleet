@@ -81,7 +81,10 @@ export async function POST(request: Request) {
         ? (delivery.recipientName || delivery.customer)
         : delivery.customer;
       const branding = await getCompanyBranding(delivery.companyId);
-      reply = buildFoundReply(delivery, trackingUrl.toString(), greetingName, branding?.name ?? null);
+      const parcelCount = delivery.shipmentId
+        ? (await store.listForCompany(delivery.companyId)).filter((item) => item.shipmentId === delivery.shipmentId).length
+        : 1;
+      reply = buildFoundReply(delivery, trackingUrl.toString(), greetingName, branding?.name ?? null, parcelCount);
     } else {
       reply = buildNoMatchAskNameReply();
     }
