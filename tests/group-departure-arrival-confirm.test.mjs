@@ -23,9 +23,22 @@ test("the departure button only shows for a dispatcher, and only when the group 
   assert.match(page, /void confirmGroupDeparture\(group\.label, group\.deliveries\.filter\(\(delivery\) => delivery\.status === "Loading"\)\.map\(\(delivery\) => delivery\.id\)\)/);
 });
 
-test("the arrival button shows for either role (matching confirmArrival's own permission model), only once a member has actually departed and isn't already Delivered", () => {
-  assert.match(page, /\{company && group\.deliveries\.some\(\(delivery\) => delivery\.status !== "Delivered" && delivery\.status !== "Loading"\) && <button type="button" className="more-button" disabled=\{groupArrivalPending === group\.label\}/);
-  assert.match(page, /void confirmGroupArrival\(group\.label, group\.deliveries\.filter\(\(delivery\) => delivery\.status !== "Delivered" && delivery\.status !== "Loading"\)\.map\(\(delivery\) => delivery\.id\)\)/);
+// Reported live: a truck can relay to several different agencies on one
+// run, and the group-level arrival button was marking every parcel on the
+// truck as arrived at once, regardless of which agency it actually reached.
+// Arrival is scoped per destination subgroup instead -- one button per
+// agency actually present in the group, each only touching that agency's
+// parcels. Departure stays whole-group (see the test above): the truck
+// leaving the depot is a single physical event for every parcel on it,
+// unlike arrival which happens at a specific agency.
+test("the arrival button is scoped per destination subgroup, not the whole group -- a truck relaying to several agencies gets one button per agency it actually reached", () => {
+  assert.match(page, /const destinationSubgroups: \{ destination: string; deliveries: Delivery\[\] \}\[\] = Array\.from\(/);
+  assert.match(page, /\{company && group\.destinationSubgroups\.map\(\(subgroup\) => \{/);
+  assert.match(page, /const eligible = subgroup\.deliveries\.filter\(\(delivery\) => delivery\.status !== "Delivered" && delivery\.status !== "Loading"\);/);
+  assert.match(page, /if \(!eligible\.length\) return null;/);
+  assert.match(page, /const arrivalKey = `\$\{group\.label\}::\$\{subgroup\.destination\}`;/);
+  assert.match(page, /disabled=\{groupArrivalPending === arrivalKey\}/);
+  assert.match(page, /void confirmGroupArrival\(arrivalKey, eligible\.map\(\(delivery\) => delivery\.id\)\)/);
 });
 
 test("both group confirmations require an explicit browser confirmation before doing anything, mentioning the WhatsApp notice up front", () => {
@@ -70,7 +83,7 @@ test("every icon-only table action button now has a hover tooltip (title) matchi
     /className="more-button group-truck-editor-trigger" title=\{locale === "fr" \? "Changer le camion pour tout le groupe"/,
     /className="more-button group-schedule-editor-trigger" title=\{locale === "fr" \? "Modifier les dates pour ce camion"/,
     /disabled=\{groupDeparturePending === group\.label\} title=\{locale === "fr" \? "Confirmer le départ pour tout le groupe"/,
-    /disabled=\{groupArrivalPending === group\.label\} title=\{locale === "fr" \? "Confirmer l’arrivée pour tout le groupe"/,
+    /disabled=\{groupArrivalPending === arrivalKey\} title=\{locale === "fr" \? `Confirmer l’arrivée à \$\{subgroup\.destination\}`/,
     /className="more-button journey-editor-trigger" title=\{locale === "fr" \? "Modifier le trajet"/,
     /className="more-button" title=\{t\.copyTrackingFor\(delivery\.id\)\} aria-label=\{t\.copyTrackingFor\(delivery\.id\)\}/,
   ];
