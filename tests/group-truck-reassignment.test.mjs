@@ -123,7 +123,7 @@ test("the truck picker shows each vehicle's \"Camion N\" number alongside its pl
   // the group header) each one corresponds to.
   assert.match(page, /\{integration\.vehicles\.map\(\(vehicle\) => <option key=\{vehicle\.id\} value=\{vehicle\.id\}>\{truckNumberLabel\(vehicle\.id\) \? `\$\{truckNumberLabel\(vehicle\.id\)\} · \$\{vehicle\.name\}` : vehicle\.name\}<\/option>\)\}/g);
   const occurrences = page.match(/truckNumberLabel\(vehicle\.id\) \? `\$\{truckNumberLabel\(vehicle\.id\)\} · \$\{vehicle\.name\}` : vehicle\.name/g) ?? [];
-  assert.equal(occurrences.length, 3, "expected all 3 truck pickers (group reassignment, per-delivery reassignment, vehicle-link popover) to show the truck number");
+  assert.equal(occurrences.length, 4, "expected all 4 truck pickers (group reassignment, per-delivery reassignment, vehicle-link popover, delivery creation) to show the truck number");
 });
 
 test("the group header row stretches to fill its full row width, not just its content -- reported live three times as a jarring blank white gap before this held up under actual measurement", () => {
