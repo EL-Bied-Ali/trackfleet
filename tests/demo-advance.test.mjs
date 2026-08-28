@@ -34,12 +34,21 @@ test("advancing always sets status to In transit -- forgiving of click order if 
   assert.match(route, /status: "In transit",/);
 });
 
-test("the demo walkthrough panel in the table reuses the real confirmGroupDeparture/confirmGroupArrival actions (including the real WhatsApp send) for departure and arrival, and only calls the new advance endpoint for movement", () => {
+// Reported live: the demo panel originally duplicated "Confirmer le
+// départ"/"Confirmer l'arrivée" as its own buttons, calling the exact same
+// confirmGroupDeparture/confirmGroupArrival actions the real table's group
+// header row already offers for this same delivery (it's a real row, just
+// marked [DEMO]). Removed as redundant -- the dispatcher uses the real
+// table's buttons for those two steps, and the demo panel is now scoped to
+// only the one thing nothing else provides: moving the delivery without a
+// real truck.
+test("the demo walkthrough panel only offers the advance action -- departure and arrival are confirmed from the delivery's own row in the real table, not duplicated here", () => {
   assert.match(page, /const \[demoActiveDeliveryId, setDemoActiveDeliveryId\] = useState<string \| null>\(null\);/);
   assert.match(page, /async function advanceDemoDelivery\(\) \{/);
   assert.match(page, /fetch\("\/api\/deliveries\/demo\/advance", \{/);
-  assert.match(page, /onClick=\{\(\) => void confirmGroupDeparture\("__demo__", \[demoActiveDeliveryId\]\)\}/);
-  assert.match(page, /onClick=\{\(\) => void confirmGroupArrival\("__demo__", \[demoActiveDeliveryId\]\)\}/);
+  assert.match(page, /className="demo-walkthrough"/);
+  assert.doesNotMatch(page, /confirmGroupDeparture\("__demo__"/);
+  assert.doesNotMatch(page, /confirmGroupArrival\("__demo__"/);
 });
 
 test("the demo creation route now returns the full delivery row, so the panel can show it immediately instead of waiting for the next 30s poll", async () => {
