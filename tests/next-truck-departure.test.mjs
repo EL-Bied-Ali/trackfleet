@@ -46,10 +46,14 @@ test("idempotency payload matching includes nextTruckDepartureAt, not just plann
   assert.match(idempotency, /existingDeparture === requestedDeparture/);
 });
 
-test("the creation form no longer has date fields -- both are edited from the table afterward instead", () => {
+// Reversed later: a departure date is back in the creation form (see
+// relay-eta-estimate.test.mjs) -- but as ONE field shared once per shipment
+// submission, not per parcel, so it doesn't reintroduce the original
+// per-parcel re-entry redundancy that got both fields removed in the first
+// place. plannedArrivalAt still never appears as a raw form field: it's
+// always server-derived from this date and the destination's CTM relay
+// window, the same trusted-computation pattern as price.
+test("the creation form has a departure date field, but plannedArrivalAt is still never a raw editable form field -- it's always derived", () => {
+  assert.match(page, /name="nextTruckDepartureAt"/);
   assert.doesNotMatch(page, /name="plannedArrivalAt"/);
-  assert.doesNotMatch(page, /name="nextTruckDepartureAt"/);
-  assert.doesNotMatch(page, /defaultTruckDepartureAt/);
-  assert.doesNotMatch(page, /truckDepartureIsStale/);
-  assert.doesNotMatch(page, /truckDeparturePreferenceKey/);
 });
