@@ -130,14 +130,20 @@ export const store: DeliveryStore = {
     if (!raw) return null;
     const delivery = hydrate(raw);
     const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+    // No longer clears the vehicle off any other active delivery already
+    // riding it (that used to be the first statement here). One truck
+    // legitimately carrying several parcels at once is the group feature's
+    // whole premise -- this single-delivery path is now just
+    // linkVehicleToGroup with one member, so it must not evict the truck's
+    // existing group the way it used to. Reported live: adding one more
+    // unassigned parcel to an already-multi-parcel truck via this per-row
+    // action silently kicked its existing members back to unassigned (stale
+    // GPS position/status still attached -- a ghost truck on the map) every
+    // time. vehicleAssignmentConflict in page.tsx still warns the dispatcher
+    // the truck is in use; trusting that warning (not blocking) was already
+    // the design, this just stopped corrupting data when they proceed.
     const statements = [
       db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now()),
-      // A physical truck can only be on one active delivery at a time.
-      // Without this, reassigning it here (the dispatcher is only warned,
-      // never blocked -- see vehicleAssignmentConflict in page.tsx) would
-      // leave the delivery it's being taken from still pointing at the same
-      // vehicle, so both would silently keep riding the same live GPS feed.
-      db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ? WHERE company_id = ? AND sendatrack_vehicle_id = ? AND status != 'Delivered' AND id != ?`).bind(UNASSIGNED_TRUCK, companyId, vehicle.id, delivery.id),
       db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id = ? AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, delivery.id, companyId),
     ];
     // A trip groups deliveries that share one truck's route (see
