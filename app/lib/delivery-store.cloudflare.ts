@@ -1,6 +1,7 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import { createDeliveryId } from "./delivery-id";
+import { progressRouteDestination } from "./delivery-progress-destination";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
@@ -113,7 +114,8 @@ export const store: DeliveryStore = {
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const origin = explicitOrigin(delivery);
-      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), origin);
+      const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, origin);
       if (firstLink) statements.push(db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, absoluteMetrics.progress, Date.now()));
       const metrics = rebaseRouteMetrics(absoluteMetrics, origin ? 0 : (firstLink ? absoluteMetrics.progress : await baselineProgress(delivery.id)));
       const positionAgeMinutes = Math.max(0, Math.round((Date.now() - vehicle.updatedAt) / 60_000));
@@ -129,7 +131,8 @@ export const store: DeliveryStore = {
     const raw = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
     if (!raw) return null;
     const delivery = hydrate(raw);
-    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+    const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
     // No longer clears the vehicle off any other active delivery already
     // riding it (that used to be the first statement here). One truck
     // legitimately carrying several parcels at once is the group feature's
@@ -169,7 +172,8 @@ export const store: DeliveryStore = {
     const matchedIds = deliveries.map((delivery) => delivery.id);
     const matchedPlaceholders = matchedIds.map(() => "?").join(",");
     const statements = deliveries.map((delivery) => {
-      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
       return db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now());
     });
     // No longer clears the vehicle off any other active delivery already

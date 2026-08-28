@@ -298,6 +298,8 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .progress { display: flex; align-items: center; gap: 7px; }.progress > div { width: 65px; height: 4px; overflow: hidden; border-radius: 4px; background: #e7ece9; }.progress > div i { display: block; height: 100%; border-radius: inherit; background: #2b7b61; }.progress span { color: #7d8983; font-size: 8px; }
 .col-journey { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
+.journey-destination { color: #52635b; font-size: 9px; font-weight: 650; }
+.relay-badge { display: inline-block; margin-left: 5px; padding: 2px 6px; border-radius: 5px; color: #92400e; background: #fef3c7; font-size: 7px; font-weight: 650; }
 .recipient-line { margin-top: 3px; }.recipient-line .contact-trigger span { color: #96a09b; font-size: 8px; }
 .more-button { border: 0; background: transparent; color: #8c9791; cursor: pointer; font-size: 15px; line-height: 1; padding: 5px; border-radius: 6px; }
 .more-button:hover:not(:disabled) { background: #eef2f0; color: #52635b; }
