@@ -60,6 +60,32 @@ test("a relay-destined delivery still shows the real live map while GPS is fresh
   assert.doesNotMatch(page, /relayInEffect = relayDestination;/);
 });
 
+// Reported live: the headline "estimated arrival" on the customer tracking
+// page was showing estimatedArrivalAt, a GPS-based ETA to the confirmed hub
+// (route/progress math is capped there for a relay destination -- see
+// delivery-progress-destination.ts), not to the parcel's actual destination.
+// Once real GPS pace existed this silently won over plannedArrivalAt (the
+// destination-aware CTM relay estimate), understating the real arrival date
+// by however long the onward relay leg itself takes -- confirmed live on a
+// real Tétouan delivery: headline showed an ETA a full week earlier than
+// plannedArrivalAt. plannedArrivalAt now wins for any relay destination
+// (not gated on relayInEffect -- the hub ETA is never the right headline for
+// a relay destination, even while GPS is still fresh on the way there).
+test("the customer tracking page's headline ETA prefers plannedArrivalAt over the GPS-based estimatedArrivalAt for any relay destination", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /const displayedEta = relayDestination && selected\.plannedArrivalAt\s*\n\s*\? new Date\(selected\.plannedArrivalAt\)\.toLocaleString\(dateLocale, \{ day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" \}\)\s*\n\s*: selected\.estimatedArrivalAt/);
+  // displayedEta must be computed after relayDestination is defined, not
+  // before -- it depends on it now.
+  const relayDestinationIndex = page.indexOf("const relayDestination = staticKnownSite(selected.destinationSiteId)");
+  const displayedEtaIndex = page.indexOf("const displayedEta = relayDestination");
+  assert.ok(relayDestinationIndex > -1 && displayedEtaIndex > relayDestinationIndex, "expected relayDestination to be defined before displayedEta uses it");
+});
+
+test("a non-relay destination still prefers the real GPS-based estimatedArrivalAt over the static plannedArrivalAt, since it's the more accurate live figure there", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /: selected\.estimatedArrivalAt\s*\n\s*\? new Date\(selected\.estimatedArrivalAt\)\.toLocaleString\(dateLocale, \{ day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" \}\)\s*\n\s*: selected\.plannedArrivalAt/);
+});
+
 test("all three delivery-enrichment call sites (list, public tracking, and just-created) thread a manual-arrival duration estimate through", () => {
   const route = files["app/api/deliveries/route.ts"];
   assert.match(route, /import \{ getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate \} from "\.\.\/\.\.\/lib\/manual-arrival-duration\.postgres";/);
