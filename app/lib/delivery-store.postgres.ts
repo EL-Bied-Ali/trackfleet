@@ -752,4 +752,13 @@ export const postgresStore: DeliveryStore = {
     await sql`DELETE FROM deliveries WHERE id = ${deliveryId}`;
     return true;
   },
+  async advanceDemoDelivery(deliveryId, companyId, input) {
+    await ensureSchema();
+    const rows = await sql`UPDATE deliveries SET
+      status = ${input.status}, progress = ${input.progress}, latitude = ${input.latitude}, longitude = ${input.longitude},
+      speed = ${input.speed}, last_position_at = ${new Date().toISOString()}, gps_source = 'simulation'
+      WHERE id = ${deliveryId} AND company_id = ${companyId} AND customer LIKE ${`${DEMO_DELIVERY_CUSTOMER_PREFIX}%`}
+      RETURNING *` as RawDelivery[];
+    return rows[0] ? hydrate(rows[0]) : null;
+  },
 };

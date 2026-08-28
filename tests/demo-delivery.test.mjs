@@ -49,6 +49,41 @@ test("deleteDemoDeliveries returns 0 and is a no-op when there is nothing to del
   assert.equal(await memoryStore.deleteDemoDeliveries(companyId), 0);
 });
 
+test("advanceDemoDelivery updates status/progress/position only for a [DEMO]-marked delivery, and returns null for anything else", async () => {
+  const companyId = `demo-test-${Date.now()}-${Math.random()}`;
+  const real = await memoryStore.create(baseDeliveryInput({ companyId, customer: "Atlas Distribution", status: "Loading", progress: 0 }));
+  const demo = await memoryStore.create(baseDeliveryInput({ companyId, customer: `${DEMO_DELIVERY_CUSTOMER_PREFIX}Démo TrackFleet`, status: "Loading", progress: 0 }));
+
+  const untouched = await memoryStore.advanceDemoDelivery(real.id, companyId, { status: "In transit", progress: 35, latitude: 40, longitude: -3, speed: 72 });
+  assert.equal(untouched, null);
+  const [reloadedReal] = await memoryStore.listForCompany(companyId).then((rows) => rows.filter((row) => row.id === real.id));
+  assert.equal(reloadedReal.status, "Loading");
+
+  const updated = await memoryStore.advanceDemoDelivery(demo.id, companyId, { status: "In transit", progress: 35, latitude: 40, longitude: -3, speed: 72 });
+  assert.equal(updated?.status, "In transit");
+  assert.equal(updated?.progress, 35);
+  assert.equal(updated?.latitude, 40);
+  assert.equal(updated?.longitude, -3);
+  assert.equal(updated?.speed, 72);
+  assert.equal(updated?.gpsSource, "simulation");
+
+  assert.equal(await memoryStore.advanceDemoDelivery("not-a-real-id", companyId, { status: "In transit", progress: 35, latitude: 40, longitude: -3, speed: 72 }), null);
+});
+
+test("the DeliveryStore interface declares advanceDemoDelivery, and postgres/cloudflare/memory each implement it directly", async () => {
+  const [typesSource, postgresSource, cloudflareSource, memorySource] = await Promise.all([
+    readFile(new URL("../app/lib/delivery-store.types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/delivery-store.memory.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(typesSource, /advanceDemoDelivery\(deliveryId: string, companyId: string, input: \{ status: DeliveryStatus; progress: number; latitude: number; longitude: number; speed: number \}\): Promise<DeliveryRow \| null>;/);
+  for (const source of [postgresSource, cloudflareSource, memorySource]) {
+    assert.match(source, /async advanceDemoDelivery\(deliveryId, companyId, input\)/);
+    assert.match(source, /DEMO_DELIVERY_CUSTOMER_PREFIX/);
+  }
+});
+
 const demoRoute = await readFile(new URL("../app/api/deliveries/demo/route.ts", import.meta.url), "utf8");
 
 test("the demo route is dispatcher-only and same-origin protected, for both creation and cleanup", () => {

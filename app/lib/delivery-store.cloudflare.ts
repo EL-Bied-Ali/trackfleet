@@ -384,4 +384,14 @@ export const store: DeliveryStore = {
     ]);
     return true;
   },
+
+  async advanceDemoDelivery(deliveryId, companyId, input) {
+    const existing = await db().prepare(`SELECT id FROM deliveries WHERE id = ? AND company_id = ? AND customer LIKE ? LIMIT 1`)
+      .bind(deliveryId, companyId, `${DEMO_DELIVERY_CUSTOMER_PREFIX}%`).first<{ id: string }>();
+    if (!existing) return null;
+    await db().prepare(`UPDATE deliveries SET status = ?, progress = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'simulation' WHERE id = ? AND company_id = ?`)
+      .bind(input.status, input.progress, input.latitude, input.longitude, input.speed, Date.now(), deliveryId, companyId).run();
+    const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
+    return updated ? hydrate(updated) : null;
+  },
 };

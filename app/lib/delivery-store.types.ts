@@ -197,4 +197,13 @@ export interface DeliveryStore {
   // when nothing matched (wrong company or already-removed id) so the
   // route can 404 instead of silently succeeding.
   deleteDelivery(deliveryId: string, companyId: string): Promise<boolean>;
+  // Teleports a [DEMO]-prefixed delivery's status/progress/position, backing
+  // the dispatcher's "Faire avancer le camion" demo-walkthrough button (see
+  // demo-advance.ts) -- there's no real truck or SENDATRACK feed behind a
+  // demo delivery, so progress has to be set directly rather than observed
+  // from GPS. Scoped to the DEMO_DELIVERY_CUSTOMER_PREFIX marker at the
+  // storage layer itself (same defense-in-depth as deleteDemoDeliveries), so
+  // this can never be used to fake-move a real delivery even if a route-level
+  // check were ever missed.
+  advanceDemoDelivery(deliveryId: string, companyId: string, input: { status: DeliveryStatus; progress: number; latitude: number; longitude: number; speed: number }): Promise<DeliveryRow | null>;
 }

@@ -294,4 +294,10 @@ export const memoryStore: DeliveryStore = {
     }
     return true;
   },
+  async advanceDemoDelivery(deliveryId, companyId, input) {
+    const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId && item.customer.startsWith(DEMO_DELIVERY_CUSTOMER_PREFIX)) ?? null;
+    if (!delivery) return null;
+    Object.assign(delivery, { status: input.status, progress: input.progress, latitude: input.latitude, longitude: input.longitude, speed: input.speed, lastPositionAt: new Date(), gpsSource: "simulation" as const });
+    return { ...delivery };
+  },
 };
