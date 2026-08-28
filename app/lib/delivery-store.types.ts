@@ -191,4 +191,10 @@ export interface DeliveryStore {
   // prefix specifically so this can never touch a real customer delivery.
   // Returns the number of deliveries deleted.
   deleteDemoDeliveries(companyId: string): Promise<number>;
+  // Permanently removes one delivery (and its events/eta observations),
+  // scoped to this company -- backs the dispatcher's per-row delete action
+  // (gated behind a confirmation in the UI, see page.tsx). Returns false
+  // when nothing matched (wrong company or already-removed id) so the
+  // route can 404 instead of silently succeeding.
+  deleteDelivery(deliveryId: string, companyId: string): Promise<boolean>;
 }

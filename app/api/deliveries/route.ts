@@ -694,3 +694,28 @@ export async function POST(request: Request) {
     return errorResponse(error);
   }
 }
+
+// Dispatcher-only, permanent deletion of one delivery (e.g. an accidental
+// or test entry) -- gated behind a confirmation in the UI (see page.tsx).
+// Unlike the demo-delivery bulk DELETE, this isn't restricted to any
+// customer-name prefix: store.deleteDelivery itself is the safety
+// boundary, scoping the removal to a company_id match.
+export async function DELETE(request: Request) {
+  try {
+    if (!requestIsSameOrigin(request)) return originRejectedResponse();
+    const session = await getCompanySession(request);
+    if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
+    if (session.role !== "dispatcher") return Response.json({ error: "dispatcher_only" }, { status: 403, headers: { "cache-control": "no-store" } });
+
+    const payload = await readJsonObject(request);
+    if (!payload) return invalidJsonResponse();
+    const deliveryId = String(payload.deliveryId ?? "").trim();
+    if (!deliveryId || deliveryId.length > 100) return Response.json({ error: "invalid_delivery_id" }, { status: 400, headers: { "cache-control": "no-store" } });
+
+    const deleted = await store.deleteDelivery(deliveryId, session.companyId);
+    if (!deleted) return Response.json({ error: "delivery_not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
+    return Response.json({ ok: true, deliveryId }, { headers: { "cache-control": "no-store" } });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}

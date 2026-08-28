@@ -368,4 +368,16 @@ export const store: DeliveryStore = {
     ]);
     return ids.length;
   },
+
+  async deleteDelivery(deliveryId, companyId) {
+    const existing = await db().prepare(`SELECT id FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(deliveryId, companyId).first<{ id: string }>();
+    if (!existing) return false;
+    await db().batch([
+      db().prepare(`DELETE FROM delivery_events WHERE delivery_id = ?`).bind(deliveryId),
+      db().prepare(`DELETE FROM delivery_notifications WHERE delivery_id = ?`).bind(deliveryId),
+      db().prepare(`DELETE FROM delivery_eta_observations WHERE delivery_id = ?`).bind(deliveryId),
+      db().prepare(`DELETE FROM deliveries WHERE id = ?`).bind(deliveryId),
+    ]);
+    return true;
+  },
 };

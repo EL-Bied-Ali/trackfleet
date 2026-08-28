@@ -217,4 +217,12 @@ export const store: DeliveryStore = {
       0,
     );
   },
+
+  deleteDelivery(deliveryId, companyId) {
+    return suppressMaintenanceWriteDuringD1Failover(
+      "delivery.deleteDelivery",
+      () => primaryStore.deleteDelivery(deliveryId, companyId),
+      false,
+    );
+  },
 };

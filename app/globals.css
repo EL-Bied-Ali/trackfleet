@@ -300,6 +300,7 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
 .recipient-line { margin-top: 3px; }.recipient-line .contact-trigger span { color: #96a09b; font-size: 8px; }
 .more-button { border: 0; background: transparent; color: #8c9791; cursor: pointer; }
+.delete-delivery-button:hover:not(:disabled) { color: #c0392b; }
 .truck-editor-wrap { position: relative; display: inline-block; }
 .truck-editor-popover { position: absolute; z-index: 20; top: 100%; right: 0; margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: white; box-shadow: 0 8px 24px rgba(16,24,40,.12); white-space: nowrap; cursor: default; display: grid; gap: 6px; text-align: left; }
 .truck-editor-popover strong { color: #7d8983; font-size: 7px; font-weight: 650; text-transform: uppercase; letter-spacing: .4px; }
