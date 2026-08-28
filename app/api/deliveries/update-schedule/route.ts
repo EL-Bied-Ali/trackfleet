@@ -1,6 +1,8 @@
 import { store } from "trackfleet-delivery-store";
 import { getDispatcherSession } from "../../../lib/company-auth";
 import { estimateRelayArrival } from "../../../lib/relay-eta-estimate";
+import { getDepartureArrivalDurationEstimates } from "../../../lib/departure-arrival-duration.postgres";
+import { knownSite } from "../../../lib/known-sites";
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 
@@ -37,7 +39,10 @@ export async function POST(request: Request) {
   // panel) recomputes the arrival estimate from the delivery's own
   // destination rather than trusting whatever the client sent. Falls back to
   // a client-submitted value only for a destination with no relay window.
-  const plannedArrivalAt = estimateRelayArrival(existing.destinationSiteId, nextTruckDeparture.date) ?? submittedPlannedArrival.date;
+  const learnedTransitEstimate = knownSite(existing.destinationSiteId)?.finalLegTrackingUnavailable === true
+    ? (await getDepartureArrivalDurationEstimates(session.companyId)).get(existing.destinationSiteId!) ?? null
+    : null;
+  const plannedArrivalAt = estimateRelayArrival(existing.destinationSiteId, nextTruckDeparture.date, learnedTransitEstimate) ?? submittedPlannedArrival.date;
 
   const delivery = await store.updateSchedule(deliveryId, session.companyId, {
     plannedArrivalAt,

@@ -30,3 +30,22 @@ test("no departure date or an unknown/invalid destination also yields no estimat
   assert.equal(estimateRelayArrival("not-a-real-site", departure), null);
   assert.equal(estimateRelayArrival("tanger-ville-said-kotb-19a", new Date("invalid")), null);
 });
+
+// Requested live: once real deliveries to a specific agency have confirmed
+// arrivals, that agency's own observed median should win over the fixed
+// hub-wide quote (see getDepartureArrivalDurationEstimates in
+// departure-arrival-duration.postgres.ts).
+test("uses the learned per-agency median once it clears the minimum sample threshold, instead of the fixed hub window", () => {
+  const learned = estimateRelayArrival("tanger-ville-said-kotb-19a", departure, { medianHours: 96, sampleCount: 5 });
+  assert.equal(learned?.toISOString(), "2026-09-05T08:00:00.000Z"); // 96h = 4 days, not the fixed 6
+});
+
+test("ignores a learned estimate below MANUAL_ARRIVAL_MINIMUM_SAMPLES, falling back to the fixed hub window", () => {
+  const tooFewSamples = estimateRelayArrival("tanger-ville-said-kotb-19a", departure, { medianHours: 96, sampleCount: 1 });
+  assert.equal(tooFewSamples?.toISOString(), "2026-09-07T08:00:00.000Z"); // fixed 6-day fallback, unaffected
+});
+
+test("treats a missing (null/undefined) learned estimate exactly like the old 2-argument call -- fully backward compatible", () => {
+  assert.equal(estimateRelayArrival("tanger-ville-said-kotb-19a", departure, null)?.toISOString(), "2026-09-07T08:00:00.000Z");
+  assert.equal(estimateRelayArrival("tanger-ville-said-kotb-19a", departure, undefined)?.toISOString(), "2026-09-07T08:00:00.000Z");
+});

@@ -108,6 +108,10 @@ export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingU
   return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} est arrivé à destination (${delivery.destination}) et est prêt pour la récupération. Suivi (accès bientôt clôturé) : ${trackingUrl}`, companyName);
 }
 
+function formatEstimatedArrivalDate(date: Date) {
+  return date.toLocaleDateString("fr-BE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 // Sent by a dispatcher's explicit "Notifier par WhatsApp" action on a
 // departure confirmation (app/api/deliveries/notify-departure/route.ts), not
 // automatically -- DEPARTED is deliberately excluded from the automatic push
@@ -117,6 +121,16 @@ export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingU
 // reply, so a dispatcher can still choose to send this one for a specific
 // delivery. Unlike buildArrivalNotificationMessage, this doesn't tighten the
 // tracking link's expiry, so there's no "closing soon" framing here.
+//
+// Mentions delivery.plannedArrivalAt (the same trusted, server-computed
+// estimate the creation form and schedule editor show -- see
+// relay-eta-estimate.ts) when one exists, so the customer gets a rough
+// arrival date up front rather than only finding out from the tracking
+// link. Omitted entirely rather than guessed when no estimate is on file
+// (e.g. a departure confirmed without ever setting a next-truck-departure
+// date), matching the "don't invent an estimate" rule used everywhere else
+// this value is shown.
 export function buildDepartureNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
-  return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} vient de démarrer son trajet vers ${delivery.destination}. Suivi : ${trackingUrl}`, companyName);
+  const estimate = delivery.plannedArrivalAt ? ` Arrivée estimée : ${formatEstimatedArrivalDate(delivery.plannedArrivalAt)}.` : "";
+  return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} vient de démarrer son trajet vers ${delivery.destination}.${estimate} Suivi : ${trackingUrl}`, companyName);
 }

@@ -68,7 +68,12 @@ test("the update-schedule endpoint is dispatcher-only, same-origin protected, an
 test("update-schedule recomputes plannedArrivalAt server-side from the delivery's own destination and the submitted departure date, not from a client-submitted arrival date", () => {
   assert.match(route, /import \{ estimateRelayArrival \} from "\.\.\/\.\.\/\.\.\/lib\/relay-eta-estimate";/);
   assert.match(route, /const existing = \(await store\.listForCompany\(session\.companyId\)\)\.find\(\(candidate\) => candidate\.id === deliveryId\);/);
-  assert.match(route, /const plannedArrivalAt = estimateRelayArrival\(existing\.destinationSiteId, nextTruckDeparture\.date\) \?\? submittedPlannedArrival\.date;/);
+  assert.match(route, /const plannedArrivalAt = estimateRelayArrival\(existing\.destinationSiteId, nextTruckDeparture\.date, learnedTransitEstimate\) \?\? submittedPlannedArrival\.date;/);
+});
+
+test("update-schedule also looks up the learned per-agency transit duration, same as the create route", () => {
+  assert.match(route, /import \{ getDepartureArrivalDurationEstimates \} from "\.\.\/\.\.\/\.\.\/lib\/departure-arrival-duration\.postgres";/);
+  assert.match(route, /const learnedTransitEstimate = knownSite\(existing\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true\s*\n\s*\? \(await getDepartureArrivalDurationEstimates\(session\.companyId\)\)\.get\(existing\.destinationSiteId!\) \?\? null\s*\n\s*: null;/);
 });
 
 test("the delivery table has a per-row schedule editor (dispatcher only) that pre-fills from the delivery's current dates", () => {
