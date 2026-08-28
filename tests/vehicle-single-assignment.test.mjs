@@ -19,7 +19,15 @@ function baseDelivery(overrides = {}) {
 
 const vehicle = { id: "V123", name: "18799-B-2", latitude: 33.57, longitude: -7.58, speed: 40, updatedAt: Date.now() };
 
-test("linking a truck already assigned to another active delivery transfers it instead of duplicating it", async () => {
+test("linking a truck already assigned to another active delivery joins it there instead of evicting the delivery that already had it", async () => {
+  // This used to strip Delivery A's link the moment Delivery B linked the
+  // same vehicle -- correct back when one truck could only ever carry one
+  // active delivery, but the group feature (built later) made "one truck,
+  // several parcels" the normal, intended state. Reported live: adding one
+  // more unassigned parcel to an already-multi-parcel truck via this
+  // per-row action silently kicked its existing members back to unassigned
+  // (with their GPS position/status still attached -- a ghost truck on the
+  // map) every single time.
   const companyId = `vehicle-single-assignment-${Date.now()}`;
   const deliveryA = await memoryStore.create(baseDelivery({ companyId, customer: "Client A" }));
   const deliveryB = await memoryStore.create(baseDelivery({ companyId, customer: "Client B" }));
@@ -27,16 +35,13 @@ test("linking a truck already assigned to another active delivery transfers it i
   const linkedA = await memoryStore.linkVehicle(deliveryA.id, companyId, vehicle);
   assert.equal(linkedA?.sendatrackVehicleId, vehicle.id);
 
-  // Same physical truck, now assigned to Delivery B -- Delivery A must lose
-  // the link rather than both silently sharing V123's live GPS feed.
   const linkedB = await memoryStore.linkVehicle(deliveryB.id, companyId, vehicle);
   assert.equal(linkedB?.sendatrackVehicleId, vehicle.id);
 
-  const [companyDeliveries] = await Promise.all([memoryStore.listForCompany(companyId)]);
+  const companyDeliveries = await memoryStore.listForCompany(companyId);
   const refreshedA = companyDeliveries.find((delivery) => delivery.id === deliveryA.id);
-  assert.equal(refreshedA?.sendatrackVehicleId, "");
-  assert.equal(refreshedA?.truck, UNASSIGNED_TRUCK);
-  assert.equal(isUnassignedVehicle(refreshedA), true);
+  assert.equal(refreshedA?.sendatrackVehicleId, vehicle.id, "Delivery A must still be on the truck it was already correctly assigned to");
+  assert.equal(isUnassignedVehicle(refreshedA), false);
 });
 
 test("linking a truck does not disturb a different delivery already on a different truck", async () => {
@@ -65,15 +70,22 @@ test("a completed delivery keeps its historical truck record when the same vehic
   assert.equal(refreshedDelivered?.sendatrackVehicleId, vehicle.id, "a Delivered record is history, not a live assignment -- it must not be touched");
 });
 
-test("every store backend clears the vehicle from whichever other active delivery already held it", () => {
-  for (const path of ["app/lib/delivery-store.postgres.ts", "app/lib/delivery-store.cloudflare.ts"]) {
+test("no store backend's single-delivery linkVehicle clears the vehicle from another active delivery anymore -- that's linkVehicleToGroup's job now", () => {
+  for (const path of ["app/lib/delivery-store.postgres.ts", "app/lib/delivery-store.memory.ts", "app/lib/delivery-store.cloudflare.ts"]) {
     const source = fs.readFileSync(path, "utf8");
-    assert.match(source, /status (?:<>|!=) 'Delivered'/, `${path} must scope the reassignment clear to active deliveries`);
+    const linkVehicleStart = source.indexOf("async linkVehicle(deliveryId");
+    const linkVehicleToGroupStart = source.indexOf("linkVehicleToGroup(");
+    assert.ok(linkVehicleStart > -1 && linkVehicleToGroupStart > linkVehicleStart, `${path} must define linkVehicle before linkVehicleToGroup`);
+    const linkVehicleBody = source.slice(linkVehicleStart, linkVehicleToGroupStart);
+    assert.doesNotMatch(linkVehicleBody, /id (?:<>|!=) (?:\$\{delivery\.id\}|delivery\.id)/, `${path}'s linkVehicle must not evict a sibling delivery from the same vehicle`);
   }
+});
+
+test("linkVehicleToGroup still clears the vehicle from a delivery genuinely outside the group being reassigned -- unlike the single-delivery path above, that one deliberately moves a specific set of deliveries onto a (possibly different) truck", () => {
   const postgres = fs.readFileSync("app/lib/delivery-store.postgres.ts", "utf8");
-  assert.match(postgres, /UPDATE deliveries SET sendatrack_vehicle_id = '', truck = \$\{UNASSIGNED_TRUCK\}/);
+  assert.match(postgres, /UPDATE deliveries SET sendatrack_vehicle_id = '', truck = \$\{UNASSIGNED_TRUCK\}\s*\n\s*WHERE company_id = \$\{companyId\} AND sendatrack_vehicle_id = \$\{vehicle\.id\} AND status <> 'Delivered' AND id <> ALL\(\$\{matchedIds\}::text\[\]\)/);
   const cloudflare = fs.readFileSync("app/lib/delivery-store.cloudflare.ts", "utf8");
-  assert.match(cloudflare, /UPDATE deliveries SET sendatrack_vehicle_id = '', truck = \? WHERE company_id = \? AND sendatrack_vehicle_id = \? AND status != 'Delivered' AND id != \?/);
+  assert.match(cloudflare, /UPDATE deliveries SET sendatrack_vehicle_id = '', truck = \? WHERE company_id = \? AND sendatrack_vehicle_id = \? AND status != 'Delivered' AND id NOT IN/);
 });
 
 test("moving a delivery to a genuinely different truck pulls it out of its trip", async () => {

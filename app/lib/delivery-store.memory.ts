@@ -87,16 +87,17 @@ export const memoryStore: DeliveryStore = {
     if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
       deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
     }
-    // A physical truck can only be on one active delivery at a time. Without
-    // this, reassigning it here (the dispatcher is only warned, never
-    // blocked -- see vehicleAssignmentConflict in page.tsx) would leave the
-    // delivery it's being taken from still pointing at the same vehicle, so
-    // both would silently keep riding the same live GPS feed going forward.
-    for (const other of deliveryStore) {
-      if (other.id !== delivery.id && other.companyId === companyId && other.sendatrackVehicleId === vehicle.id && other.status !== "Delivered") {
-        Object.assign(other, { sendatrackVehicleId: "", truck: UNASSIGNED_TRUCK });
-      }
-    }
+    // No longer clears the vehicle off any other active delivery already
+    // riding it (that used to run unconditionally here). One truck legitimately
+    // carrying several parcels at once is the group feature's whole premise --
+    // this single-delivery path is now just linkVehicleToGroup with one member,
+    // so it must not evict the truck's existing group the way it used to.
+    // Reported live: adding one more unassigned parcel to an already-multi-parcel
+    // truck via this per-row action silently kicked its existing members back to
+    // unassigned (stale GPS position/status still attached -- a ghost truck on
+    // the map) every time. vehicleAssignmentConflict in page.tsx still warns the
+    // dispatcher the truck is in use; trusting that warning (not blocking) was
+    // already the design, this just stopped corrupting data when they proceed.
     // A trip groups deliveries that share one truck's route (see
     // buildTruckStopPlans in truck-stop-plan.ts, keyed by tripId when
     // present). Moving this delivery onto a genuinely different truck means
