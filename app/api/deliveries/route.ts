@@ -8,6 +8,7 @@ import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent, trackingLinkExpiryAnchorFromEvents } from "../../lib/delivery-events";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { computeDeliveryPrice, deliveryPriceCurrencyForOriginCountry } from "../../lib/delivery-pricing";
+import { estimateRelayArrival } from "../../lib/relay-eta-estimate";
 import { getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate } from "../../lib/manual-arrival-duration.postgres";
 import { knownSite, resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
@@ -546,18 +547,20 @@ export async function POST(request: Request) {
     const site = destinationSelection.site ?? findCompanySiteByText(companySites, destinationInput) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
     const parsedPlannedArrival = plannedArrivalRaw ? new Date(plannedArrivalRaw) : null;
-    const plannedArrivalAt = parsedPlannedArrival && Number.isFinite(parsedPlannedArrival.getTime()) ? parsedPlannedArrival : null;
+    const submittedPlannedArrivalAt = parsedPlannedArrival && Number.isFinite(parsedPlannedArrival.getTime()) ? parsedPlannedArrival : null;
     const parsedNextTruckDeparture = nextTruckDepartureRaw ? new Date(nextTruckDepartureRaw) : null;
     const nextTruckDepartureAt = parsedNextTruckDeparture && Number.isFinite(parsedNextTruckDeparture.getTime()) ? parsedNextTruckDeparture : null;
+    // The dispatcher only ever enters a departure date -- the arrival
+    // estimate is derived server-side from the destination's quoted CTM
+    // relay transit window (see relay-eta-estimate.ts), the same trusted,
+    // never-client-supplied computation pattern already used for price. A
+    // client-submitted plannedArrivalAt only survives as a fallback for a
+    // destination with no relay window configured.
+    const plannedArrivalAt = estimateRelayArrival(destinationSiteId, nextTruckDepartureAt) ?? submittedPlannedArrivalAt;
     const validLegacyEta = /^\d{2}:\d{2}$/.test(eta);
     if (!customer || !destination || !truck || !originSiteInput) {
       return Response.json({ error: "customer, destination, truck, and originSiteId are required" }, { status: 400 });
     }
-    // Planned arrival and next-truck-departure both moved out of the
-    // creation form (too redundant re-entering them per parcel -- reported
-    // live) in favor of an editor in the delivery table, so neither is
-    // required here anymore; both are already handled as nullable
-    // throughout delay detection, ETA estimation and tracking-link expiry.
     const normalizedEta = validLegacyEta ? eta : plannedArrivalAt ? plannedArrivalAt.toISOString().slice(11, 16) : "";
 
     const contact = normalizeCustomerPhone(contactInput);

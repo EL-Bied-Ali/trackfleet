@@ -18,7 +18,7 @@ test("arrival/departure dates are edited once per truck group when the group sha
   assert.match(page, /async function updateGroupSchedule\(deliveryIds: string\[\], plannedArrivalAt: string, nextTruckDepartureAt: string\)/);
   assert.match(page, /const results = await Promise\.all\(deliveryIds\.map\(\(deliveryId\) => fetch\("\/api\/deliveries\/update-schedule", \{/);
   assert.match(page, /\{group\.uniformDestination && company\?\.role === "dispatcher" && <span className="group-schedule-editor-wrap">/);
-  assert.match(page, /onClick=\{\(\) => void updateGroupSchedule\(group\.deliveries\.map\(\(delivery\) => delivery\.id\), groupSchedulePlannedArrival, groupScheduleNextDeparture\)\}/);
+  assert.match(page, /onClick=\{\(\) => void updateGroupSchedule\(group\.deliveries\.map\(\(delivery\) => delivery\.id\), "", groupScheduleNextDeparture\)\}/);
 });
 
 test("the group schedule editor is nested inside the group.uniformDestination branch, so it never renders for a single parcel or a truck with mixed destinations", () => {
@@ -41,7 +41,7 @@ test("the group schedule popover closes on outside click via the same pattern as
 });
 
 test("the per-row journey editor's schedule section is suppressed when the group already offers the shared editor, but the truck-reassignment section still shows", () => {
-  assert.match(page, /\{!group\.uniformDestination && <div className="journey-editor-divider" \/>\}<\/>\}\{!group\.uniformDestination && <><strong>\{locale === "fr" \? "Arrivée prévue"/);
+  assert.match(page, /\{!group\.uniformDestination && <div className="journey-editor-divider" \/>\}<\/>\}\{!group\.uniformDestination && <><strong>\{locale === "fr" \? "Départ du prochain camion"/);
 });
 
 test("the group schedule popover anchors to the wrapping row, not its own small trigger span", () => {

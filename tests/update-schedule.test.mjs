@@ -59,6 +59,18 @@ test("the update-schedule endpoint is dispatcher-only, same-origin protected, an
   assert.match(route, /store\.updateSchedule\(deliveryId, session\.companyId, \{/);
 });
 
+// Requested live: editing the departure date should reuse the same
+// auto-estimate the creation form now offers, not let the dispatcher type an
+// arbitrary arrival date directly. The route now fetches the delivery first
+// (to get its destinationSiteId) and derives plannedArrivalAt from
+// estimateRelayArrival, same as the create route -- a client-submitted
+// plannedArrivalAt only survives as a fallback for a non-relay destination.
+test("update-schedule recomputes plannedArrivalAt server-side from the delivery's own destination and the submitted departure date, not from a client-submitted arrival date", () => {
+  assert.match(route, /import \{ estimateRelayArrival \} from "\.\.\/\.\.\/\.\.\/lib\/relay-eta-estimate";/);
+  assert.match(route, /const existing = \(await store\.listForCompany\(session\.companyId\)\)\.find\(\(candidate\) => candidate\.id === deliveryId\);/);
+  assert.match(route, /const plannedArrivalAt = estimateRelayArrival\(existing\.destinationSiteId, nextTruckDeparture\.date\) \?\? submittedPlannedArrival\.date;/);
+});
+
 test("the delivery table has a per-row schedule editor (dispatcher only) that pre-fills from the delivery's current dates", () => {
   // Shares its trigger and popover with the truck editor (see
   // delivery-truck-table-editor.test.mjs) -- both dates and the truck are
@@ -66,7 +78,6 @@ test("the delivery table has a per-row schedule editor (dispatcher only) that pr
   // needs two separate icons.
   assert.match(page, /const \[journeyEditorDeliveryId, setJourneyEditorDeliveryId\] = useState<string \| null>\(null\);/);
   assert.match(page, /className="more-button journey-editor-trigger"/);
-  assert.match(page, /setScheduleEditorPlannedArrival\(opening \? toDatetimeLocalValue\(delivery\.plannedArrivalAt\) : ""\);/);
   assert.match(page, /setScheduleEditorNextDeparture\(opening \? toDatetimeLocalValue\(delivery\.nextTruckDepartureAt\) : ""\);/);
   assert.match(page, /async function updateDeliverySchedule\(deliveryId: string, plannedArrivalAt: string, nextTruckDepartureAt: string\)/);
   assert.match(page, /fetch\("\/api\/deliveries\/update-schedule", \{/);
