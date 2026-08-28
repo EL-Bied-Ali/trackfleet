@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [page, manualCompletionRoute] = await Promise.all([
+const [page, manualCompletionRoute, css] = await Promise.all([
   readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/api/deliveries/manual-completion/route.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
 ]);
 
 // Moved from a per-delivery popover button to a group-level action in the
@@ -57,4 +58,27 @@ test("manual-completion's confirmDeparture and confirmArrival branches now retur
 test("the delivery-detail popover's standalone 'Confirmer l'arrivée du camion' button is gone -- the table's group action replaced it", () => {
   assert.doesNotMatch(page, /Confirmer l’arrivée du camion/);
   assert.doesNotMatch(page, /Confirm truck arrival/);
+});
+
+// Reported live: the icon-only action buttons (🚚, ✎, →, ✓, ↗) gave no clue
+// what they did before clicking, and were tiny (no explicit size -- they
+// just inherited the table's ~9.5px body text size). aria-label already
+// covered screen readers; title is what actually produces a hover tooltip
+// in a mouse-driven browser, which is what was missing.
+test("every icon-only table action button now has a hover tooltip (title) matching its aria-label, not just an aria-label", () => {
+  const buttonPatterns = [
+    /className="more-button group-truck-editor-trigger" title=\{locale === "fr" \? "Changer le camion pour tout le groupe"/,
+    /className="more-button group-schedule-editor-trigger" title=\{locale === "fr" \? "Modifier les dates pour ce camion"/,
+    /disabled=\{groupDeparturePending === group\.label\} title=\{locale === "fr" \? "Confirmer le départ pour tout le groupe"/,
+    /disabled=\{groupArrivalPending === group\.label\} title=\{locale === "fr" \? "Confirmer l’arrivée pour tout le groupe"/,
+    /className="more-button journey-editor-trigger" title=\{locale === "fr" \? "Modifier le trajet"/,
+    /className="more-button" title=\{t\.copyTrackingFor\(delivery\.id\)\} aria-label=\{t\.copyTrackingFor\(delivery\.id\)\}/,
+  ];
+  for (const pattern of buttonPatterns) assert.match(page, pattern, `expected a title alongside this button's existing aria-label: ${pattern}`);
+});
+
+test("icon-only action buttons are a comfortable click target now, not the table's tiny inherited body text size, with visible hover/disabled feedback", () => {
+  assert.match(css, /\.more-button \{ border: 0; background: transparent; color: #8c9791; cursor: pointer; font-size: 15px; line-height: 1; padding: 5px; border-radius: 6px; \}/);
+  assert.match(css, /\.more-button:hover:not\(:disabled\) \{ background: #eef2f0; color: #52635b; \}/);
+  assert.match(css, /\.more-button:disabled \{ opacity: \.4; cursor: default; \}/);
 });

@@ -37,7 +37,7 @@ test("clicking inside the popover doesn't close it or bubble up to the row's own
   // trigger button and the select each stop propagation individually
   // (a bare onClick-stopPropagation div would trip jsx-a11y rules, as
   // happened earlier this session for the contact popover).
-  assert.match(page, /className="more-button journey-editor-trigger" aria-label=\{locale === "fr" \? "Modifier le trajet"/);
+  assert.match(page, /className="more-button journey-editor-trigger" title=\{locale === "fr" \? "Modifier le trajet"/);
   assert.match(page, /event\.stopPropagation\(\); const opening = journeyEditorDeliveryId !== delivery\.id;/);
   assert.match(page, /<select value=\{truckEditorSelection\} disabled=\{truckEditorPending\} onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.doesNotMatch(page, /<div className="journey-editor-popover truck-editor-popover" onClick=/);
