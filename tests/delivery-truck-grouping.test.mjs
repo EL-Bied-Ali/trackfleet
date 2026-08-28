@@ -72,7 +72,7 @@ test("status/destination/ETA/progress are hoisted into the group header only whe
   assert.match(page, /const firstDestination = group\.deliveries\[0\]\?\.destination \|\| null;/);
   assert.match(page, /const firstStatus = group\.deliveries\[0\]\?\.status \?\? null;/);
   assert.match(page, /const uniformDestination = group\.deliveries\.length > 1\s*\n\s*&& firstDestination\s*\n\s*&& group\.deliveries\.every\(\(delivery\) => delivery\.destination === firstDestination && delivery\.status === firstStatus\)\s*\n\s*\? group\.deliveries\[0\]\s*\n\s*: null;/);
-  assert.match(page, /return \{ \.\.\.group, uniformDestination \};/);
+  assert.match(page, /return \{ \.\.\.group, uniformDestination, destinationSubgroups \};/);
 });
 
 test("the group header shows the hoisted status/destination/ETA/progress, and per-row cells go fully blank instead of repeating any of it", () => {
