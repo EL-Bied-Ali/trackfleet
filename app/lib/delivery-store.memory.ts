@@ -3,6 +3,7 @@ import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } fro
 import { createDeliveryId } from "./delivery-id.ts";
 import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types.ts";
 import { NotificationClaimState } from "./notification-claim-state.ts";
+import { progressRouteDestination } from "./delivery-progress-destination.ts";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress.ts";
 import type { SendatrackSnapshot } from "./sendatrack.ts";
 import { matchDeliveryVehicle } from "./vehicle-linking.ts";
@@ -67,7 +68,8 @@ export const memoryStore: DeliveryStore = {
       const firstLink = delivery.gpsSource !== "sendatrack";
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
-      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+      const absoluteMetrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
       if (firstLink && !deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
         deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: absoluteMetrics.progress, createdAt: new Date() });
       }
@@ -83,7 +85,8 @@ export const memoryStore: DeliveryStore = {
   async linkVehicle(deliveryId, companyId, vehicle) {
     const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId) ?? null;
     if (!delivery || delivery.status === "Delivered") return null;
-    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+    const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
     if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
       deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
     }
@@ -118,7 +121,8 @@ export const memoryStore: DeliveryStore = {
     const deliveries = deliveryStore.filter((item) => ids.has(item.id) && item.companyId === companyId && item.status !== "Delivered");
     if (!deliveries.length) return [];
     for (const delivery of deliveries) {
-      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
+      const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
       if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
         deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
       }
