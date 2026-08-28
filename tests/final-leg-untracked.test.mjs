@@ -123,5 +123,10 @@ test("each expected-parcel card reuses the same estimate note and arrival-confir
   // moved to the same generalized function, not kept a second copy.
   assert.doesNotMatch(page, /function confirmAgencyArrival/);
   assert.match(page, /async function confirmArrivalForDelivery\(deliveryId: string, destinationSiteId\?: string \| null\)/);
-  assert.match(page, /confirmArrivalForDelivery\(selected\.id, selected\.destinationSiteId\)/);
+  // The delivery-detail popover's own "Confirmer l'arrivée du camion"
+  // button was later removed as redundant -- the delivery table's group
+  // header now offers the same confirmation (plus WhatsApp notify) at the
+  // truck-group level, so confirmArrivalForDelivery's only remaining
+  // caller is this expected-parcel-card list.
+  assert.doesNotMatch(page, /confirmArrivalForDelivery\(selected\.id, selected\.destinationSiteId\)/);
 });
