@@ -64,3 +64,9 @@ test("the notify-departure route signs the message with the company's own brandi
   assert.match(notifyRoute, /const branding = await getCompanyBranding\(session\.companyId\);/);
   assert.match(notifyRoute, /buildDepartureNotificationMessage\(delivery, trackingUrl\.toString\(\), recipient\.name, branding\?\.name \?\? null\);/);
 });
+
+test("the notify-departure route refuses to send when the customer withdrew WhatsApp consent, same rule the automatic pipeline already enforces", () => {
+  assert.match(notifyRoute, /import \{ whatsappConsentWithdrawn \} from "\.\.\/\.\.\/\.\.\/lib\/delivery-events";/);
+  assert.match(notifyRoute, /const events = await store\.listEvents\(deliveryId\);/);
+  assert.match(notifyRoute, /if \(whatsappConsentWithdrawn\(events\)\) return noStore\(\{ error: "consent_withdrawn" \}, 403\);/);
+});
