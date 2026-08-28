@@ -172,7 +172,13 @@ export const store: DeliveryStore = {
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
       return db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now());
     });
-    statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ? WHERE company_id = ? AND sendatrack_vehicle_id = ? AND status != 'Delivered' AND id NOT IN (${matchedPlaceholders})`).bind(UNASSIGNED_TRUCK, companyId, vehicle.id, ...matchedIds));
+    // No longer clears the vehicle off any other active delivery already
+    // riding it (that used to run unconditionally here). One truck legitimately
+    // carrying several parcels at once is the group feature's whole premise --
+    // this must not evict the target truck's existing group the same way
+    // linkVehicle used to (see that fix). Reassigning group A onto a truck
+    // that already carries group B would otherwise silently kick B back to
+    // unassigned, with its last GPS position/status still attached.
     statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id IN (${matchedPlaceholders}) AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, ...matchedIds, companyId));
     const changingVehicleIds = deliveries.filter((delivery) => delivery.sendatrackVehicleId !== vehicle.id).map((delivery) => delivery.id);
     if (changingVehicleIds.length) {

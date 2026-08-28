@@ -39,13 +39,14 @@ test("linkVehicleToGroup moves every parcel in the group onto the new vehicle wi
   assert.equal(all.filter((delivery) => delivery.sendatrackVehicleId === "new-vehicle").length, 3);
 });
 
-// Unlike the single-delivery linkVehicle (see vehicle-single-assignment.test.mjs
-// -- it no longer strips a truck's existing group when one more delivery joins
-// it), this still clears the vehicle from a delivery genuinely outside the
-// requested group: reassigning a specific set of deliveries to a truck is a
-// deliberate "this truck now carries exactly this group" statement, not an
-// additive join.
-test("linkVehicleToGroup unassigns the vehicle from an unrelated delivery outside the group", async () => {
+// Same analogous bug as the single-delivery linkVehicle fix (see
+// vehicle-single-assignment.test.mjs) -- confirmed live here too:
+// reassigning a group onto a truck that already carries its own parcels
+// silently kicked those existing parcels back to unassigned, with their
+// last GPS position/status still attached (a ghost truck on the map).
+// linkVehicleToGroup must join the target truck's existing parcels, not
+// evict them, same as linkVehicle now does.
+test("linkVehicleToGroup joins an unrelated delivery already on the target truck instead of evicting it", async () => {
   const companyId = `group-truck-test-${Date.now()}-${Math.random()}`;
   const outsider = await memoryStore.create(baseDeliveryInput({ companyId, customer: "Outsider", sendatrackVehicleId: "new-vehicle" }));
   const a = await memoryStore.create(baseDeliveryInput({ companyId, customer: "Parcel A" }));
@@ -54,7 +55,7 @@ test("linkVehicleToGroup unassigns the vehicle from an unrelated delivery outsid
 
   const all = await memoryStore.listForCompany(companyId);
   const outsiderAfter = all.find((delivery) => delivery.id === outsider.id);
-  assert.equal(outsiderAfter?.sendatrackVehicleId, "");
+  assert.equal(outsiderAfter?.sendatrackVehicleId, "new-vehicle", "the outsider was already correctly on this truck and must not be evicted by the group reassignment");
 });
 
 test("linkVehicleToGroup skips a Delivered parcel in the requested group, returning only the ones actually updated", async () => {
