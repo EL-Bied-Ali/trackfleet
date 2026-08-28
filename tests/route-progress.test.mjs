@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics, resolveGpsBaselineProgress, routeForDestination } from "../app/lib/route-progress.ts";
+import { calculateRouteMetrics, deriveDeliveryState, distanceKm, pointAtRouteFraction, rebaseRouteMetrics, resolveGpsBaselineProgress, routeForDestination } from "../app/lib/route-progress.ts";
 
 test("resolveGpsBaselineProgress: an already-linked delivery uses its pre-existing baseline, matching a per-delivery query", () => {
   const value = resolveGpsBaselineProgress({ existingBaselineProgress: 42, firstLink: false, freshlyComputedProgress: 90 });
@@ -207,4 +207,36 @@ test("does not move customer progress backwards after a noisier GPS fix", () => 
   const state = deriveDeliveryState("In transit", noisierFixMetrics, 60, previousProgress);
   assert.equal(state.progress, previousProgress);
   assert.equal(state.status, "In transit");
+});
+function assertPointClose(actual, expected, message) {
+  assert.ok(Math.abs(actual[0] - expected[0]) < 1e-6 && Math.abs(actual[1] - expected[1]) < 1e-6, message ?? `expected ${JSON.stringify(actual)} to be close to ${JSON.stringify(expected)}`);
+}
+
+test("pointAtRouteFraction: 0 returns the route's own start point, 1 returns its own end point", () => {
+  const route = routeForDestination("Casablanca, MA");
+  assertPointClose(pointAtRouteFraction(route, 0), route[0]);
+  assertPointClose(pointAtRouteFraction(route, 1), route.at(-1));
+});
+
+test("pointAtRouteFraction: a midpoint fraction lands on the corridor itself, not a straight line between origin and destination -- calculateRouteMetrics on that same point should report roughly the same progress back, and differs meaningfully from the naive straight-line midpoint", () => {
+  const route = routeForDestination("Casablanca, MA");
+  const [longitude, latitude] = pointAtRouteFraction(route, 0.5);
+  const metrics = calculateRouteMetrics(latitude, longitude, "Casablanca, MA");
+  assert.ok(metrics.progress > 40 && metrics.progress < 60, `expected roughly 50% progress at the 50% route point, got ${metrics.progress}`);
+
+  const origin = route[0];
+  const destination = route.at(-1);
+  const straightLineMidpoint = [(origin[0] + destination[0]) / 2, (origin[1] + destination[1]) / 2];
+  assert.ok(distanceKm([longitude, latitude], straightLineMidpoint) > 5, "expected the corridor point to differ from a naive straight-line midpoint");
+});
+
+test("pointAtRouteFraction clamps out-of-range fractions instead of extrapolating past the route", () => {
+  const route = routeForDestination("Casablanca, MA");
+  assertPointClose(pointAtRouteFraction(route, -0.4), route[0]);
+  assertPointClose(pointAtRouteFraction(route, 1.7), route.at(-1));
+});
+
+test("pointAtRouteFraction handles a single-point or empty route without throwing", () => {
+  assert.deepEqual(pointAtRouteFraction([[4.35, 50.85]], 0.5), [4.35, 50.85]);
+  assert.deepEqual(pointAtRouteFraction([], 0.5), [0, 0]);
 });

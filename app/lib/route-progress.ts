@@ -177,6 +177,37 @@ export function calculateRouteMetrics(
   return { progress, routeDistanceKm, completedDistanceKm, remainingDistanceKm: Math.max(0, routeDistanceKm - completedDistanceKm), distanceFromOriginKm, distanceToDestinationKm };
 }
 
+// The inverse of calculateRouteMetrics: given a route polyline and a target
+// fraction of its total distance, returns the point on that route -- not a
+// straight line between origin and destination, which would cut across the
+// sea for a Belgium-Morocco route instead of following the real corridor
+// (see belgiumMoroccoCorridor). Built for the demo-delivery "advance"
+// action (see demo-advance.ts), which has no real GPS to derive a position
+// from and needs one that still looks right on the map.
+export function pointAtRouteFraction(route: Array<[number, number]>, fraction: number): [number, number] {
+  if (route.length === 0) return [0, 0];
+  if (route.length === 1) return route[0];
+  const clamped = Math.max(0, Math.min(1, fraction));
+  const segmentLengths = route.slice(0, -1).map((start, index) => distanceKm(start, route[index + 1]));
+  const totalKm = segmentLengths.reduce((sum, value) => sum + value, 0);
+  if (totalKm <= 0) return route[0];
+  const targetKm = totalKm * clamped;
+
+  let coveredKm = 0;
+  for (let index = 0; index < segmentLengths.length; index += 1) {
+    const segmentKm = segmentLengths[index];
+    const isLastSegment = index === segmentLengths.length - 1;
+    if (coveredKm + segmentKm >= targetKm || isLastSegment) {
+      const segmentFraction = segmentKm > 0 ? Math.max(0, Math.min(1, (targetKm - coveredKm) / segmentKm)) : 0;
+      const [startLng, startLat] = route[index];
+      const [endLng, endLat] = route[index + 1];
+      return [startLng + (endLng - startLng) * segmentFraction, startLat + (endLat - startLat) * segmentFraction];
+    }
+    coveredKm += segmentKm;
+  }
+  return route.at(-1)!;
+}
+
 export function rebaseRouteMetrics(metrics: RouteMetrics, baselineProgress: number): RouteMetrics {
   const baseline = Math.max(0, Math.min(99, baselineProgress));
   const baselineDistanceKm = metrics.routeDistanceKm * baseline / 100;

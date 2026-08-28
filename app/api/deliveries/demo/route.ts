@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     shipmentId: null,
   });
 
-  return noStore({ ok: true, deliveryId: delivery.id });
+  return noStore({ ok: true, deliveryId: delivery.id, delivery });
 }
 
 export async function DELETE(request: Request) {
