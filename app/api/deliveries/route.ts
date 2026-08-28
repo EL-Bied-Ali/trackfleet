@@ -10,6 +10,7 @@ import { estimateArrival } from "../../lib/eta-estimator";
 import { computeDeliveryPrice, deliveryPriceCurrencyForOriginCountry } from "../../lib/delivery-pricing";
 import { estimateRelayArrival } from "../../lib/relay-eta-estimate";
 import { getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate } from "../../lib/manual-arrival-duration.postgres";
+import { getDepartureArrivalDurationEstimates } from "../../lib/departure-arrival-duration.postgres";
 import { knownSite, resolveKnownSite } from "../../lib/known-sites";
 import { processPendingNotifications } from "../../lib/notification-runner";
 import { publicDeliveryView } from "../../lib/public-delivery-view";
@@ -300,10 +301,16 @@ export async function GET(request: Request) {
     const needsManualArrivalEstimates = rows.some((row) => row.status !== "Delivered"
       && row.destinationSiteId
       && knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true);
-    const [companySites, vehicleAliases, manualArrivalEstimates] = await Promise.all([
+    const [companySites, vehicleAliases, manualArrivalEstimates, departureArrivalEstimates] = await Promise.all([
       siteStore.listForCompany(session.companyId),
       vehicleAliasStore.listForCompany(session.companyId),
       needsManualArrivalEstimates ? getManualArrivalDurationEstimates(session.companyId) : Promise.resolve(new Map<string, ManualArrivalDurationEstimate>()),
+      // Unlike manualArrivalEstimates above, this isn't gated behind an
+      // existing in-flight delivery to a relay site: the creation form and
+      // schedule editor need it available before any delivery to that
+      // agency exists yet. Cheap regardless (bounded to a handful of known
+      // relay sites, no GPS join -- see departure-arrival-duration.postgres.ts).
+      getDepartureArrivalDurationEstimates(session.companyId),
     ]);
     const vehicleAliasById = new Map(vehicleAliases.map((row) => [row.sendatrackVehicleId, row.alias]));
     const siteById = new Map(companySites.map((site) => [site.id, site]));
@@ -427,6 +434,11 @@ export async function GET(request: Request) {
       stopPlans: session.role === "dispatcher" ? stopPlansWithLearning : [],
       trips: session.role === "dispatcher" ? tripHistory : [],
       routeHistory: session.role === "dispatcher" ? routeHistory : [],
+      // Keyed by destinationSiteId, so the creation form and schedule editor
+      // can preview the same learned transit duration estimateRelayArrival
+      // will use server-side, before any delivery to that agency exists in
+      // `deliveries` to read it off of (see relay-eta-estimate.ts).
+      departureArrivalEstimates: Object.fromEntries(departureArrivalEstimates),
       features: {
         whatsappDemoEnabled: session.role === "dispatcher" && runtimeEnv.WHATSAPP_DEMO_ENABLED === "true",
         // Lets the new-delivery form hide (rather than misleadingly show) the
@@ -555,8 +567,15 @@ export async function POST(request: Request) {
     // relay transit window (see relay-eta-estimate.ts), the same trusted,
     // never-client-supplied computation pattern already used for price. A
     // client-submitted plannedArrivalAt only survives as a fallback for a
-    // destination with no relay window configured.
-    const plannedArrivalAt = estimateRelayArrival(destinationSiteId, nextTruckDepartureAt) ?? submittedPlannedArrivalAt;
+    // destination with no relay window configured. Once enough real
+    // door-to-door durations have been confirmed for this specific agency
+    // (see departure-arrival-duration.postgres.ts), that learned median
+    // replaces the fixed hub-wide quote -- skipped entirely for a
+    // non-relay destination, where it would always be empty anyway.
+    const learnedTransitEstimate = knownSite(destinationSiteId)?.finalLegTrackingUnavailable === true
+      ? (await getDepartureArrivalDurationEstimates(session.companyId)).get(destinationSiteId) ?? null
+      : null;
+    const plannedArrivalAt = estimateRelayArrival(destinationSiteId, nextTruckDepartureAt, learnedTransitEstimate) ?? submittedPlannedArrivalAt;
     const validLegacyEta = /^\d{2}:\d{2}$/.test(eta);
     if (!customer || !destination || !truck || !originSiteInput) {
       return Response.json({ error: "customer, destination, truck, and originSiteId are required" }, { status: 400 });

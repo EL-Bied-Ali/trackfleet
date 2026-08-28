@@ -35,6 +35,20 @@ test("unlike the arrival notification, the departure one doesn't frame the link 
   assert.doesNotMatch(message, /clôturé/);
 });
 
+// Requested live: mention the same server-computed estimate the creation
+// form and schedule editor already show (see relay-eta-estimate.ts) so the
+// customer gets a rough arrival date up front, not just a tracking link.
+test("mentions the estimated arrival date when the delivery has a plannedArrivalAt on file", () => {
+  const withEstimate = { ...baseDelivery, plannedArrivalAt: new Date("2026-09-07T08:00:00.000Z") };
+  const message = buildDepartureNotificationMessage(withEstimate, "https://example.com/?tracking=xyz", "Jean Dupont");
+  assert.match(message, /Arrivée estimée : 07 sept\. 2026/);
+});
+
+test("omits the estimate line entirely rather than inventing one when plannedArrivalAt isn't set", () => {
+  const message = buildDepartureNotificationMessage(baseDelivery, "https://example.com/?tracking=xyz", "Jean Dupont");
+  assert.doesNotMatch(message, /Arrivée estimée/);
+});
+
 const [notifyRoute, deliveryEventsLib] = await Promise.all([
   readFile(new URL("../app/api/deliveries/notify-departure/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-events.ts", import.meta.url), "utf8"),
