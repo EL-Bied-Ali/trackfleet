@@ -7,7 +7,6 @@ import {
 } from "trackfleet-automation-heartbeat";
 import { automationStorageIsReady } from "../../../lib/automation-readiness";
 import { runFleetAutomation } from "../../../lib/server-automation";
-import { getSendatrackSnapshot } from "../../../lib/sendatrack";
 import { getStorageHealth } from "../../../lib/storage-health";
 
 function authorized(request: Request) {
@@ -27,19 +26,21 @@ async function bestEffortHeartbeat(label: string, operation: () => Promise<void>
   }
 }
 
-async function failureCodeFor(message: string): Promise<AutomationFailureCode> {
+// The specific SENDATRACK failure reason travels inline in the thrown
+// message (see server-automation.ts's runFleetAutomation) instead of being
+// recovered here via a second getSendatrackSnapshot() call -- that used to
+// roughly double a failing tick's worst-case wall-clock time during an
+// outage, risking a hard platform kill before recordAutomationFailure below
+// ever gets a chance to run.
+function failureCodeFor(message: string): AutomationFailureCode {
   if (message === "sendatrack_server_credentials_missing") return "sendatrack_not_configured";
-  if (message !== "sendatrack_snapshot_disconnected") return "automation_failed";
+  if (!message.startsWith("sendatrack_snapshot_disconnected:")) return "automation_failed";
 
-  try {
-    const snapshot = await getSendatrackSnapshot();
-    if (snapshot.error === "authentication_failed") return "sendatrack_authentication_failed";
-    if (snapshot.error === "unexpected_response") return "sendatrack_unexpected_response";
-    if (snapshot.error === "not_configured") return "sendatrack_not_configured";
-    if (snapshot.error === "service_unavailable") return "sendatrack_service_unavailable";
-  } catch {
-    // The diagnostic retry is best-effort. Keep the persisted code bounded and non-sensitive.
-  }
+  const reason = message.slice("sendatrack_snapshot_disconnected:".length);
+  if (reason === "authentication_failed") return "sendatrack_authentication_failed";
+  if (reason === "unexpected_response") return "sendatrack_unexpected_response";
+  if (reason === "not_configured") return "sendatrack_not_configured";
+  if (reason === "service_unavailable") return "sendatrack_service_unavailable";
   return "sendatrack_disconnected";
 }
 
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, ...result }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "automation_failed";
-    const failureCode = await failureCodeFor(message);
+    const failureCode = failureCodeFor(message);
     await bestEffortHeartbeat("failure", () => recordAutomationFailure(failureCode));
     console.error("[trackfleet:automation] tick failed", { message, failureCode });
     return Response.json({ ok: false, error: "automation_failed" }, { status: 500, headers: { "cache-control": "no-store" } });
