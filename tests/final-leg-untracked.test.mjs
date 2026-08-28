@@ -86,6 +86,19 @@ test("a non-relay destination still prefers the real GPS-based estimatedArrivalA
   assert.match(page, /: selected\.estimatedArrivalAt\s*\n\s*\? new Date\(selected\.estimatedArrivalAt\)\.toLocaleString\(dateLocale, \{ day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" \}\)\s*\n\s*: selected\.plannedArrivalAt/);
 });
 
+// Reported live ("est-ce que le tracking inclut la phase CTM ?"): once
+// relayInEffect kicks in, the timeline's "active" step still said "Position
+// actuelle · X% du trajet effectue" -- implying live GPS tracking that has
+// actually stopped, with no mention that CTM has taken over at all. Every
+// other relay-aware element on this page (map, stat cards, ETA note) already
+// branches on relayInEffect; this was the one spot that didn't.
+test("the timeline's active step switches to CTM-relay wording once relayInEffect kicks in, instead of implying live GPS tracking that has actually stopped", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /relayCurrent: "Relais CTM en cours"/);
+  assert.match(page, /relayCurrentDetail: "Notre partenaire local achemine le colis vers l.agence"/);
+  assert.match(page, /<strong>\{relayInEffect \? copy\.relayCurrent : copy\.current\}<\/strong><span>\{relayInEffect \? copy\.relayCurrentDetail : copy\.currentDetail\(selected\.progress\)\}<\/span>/);
+});
+
 test("all three delivery-enrichment call sites (list, public tracking, and just-created) thread a manual-arrival duration estimate through", () => {
   const route = files["app/api/deliveries/route.ts"];
   assert.match(route, /import \{ getManualArrivalDurationEstimates, type ManualArrivalDurationEstimate \} from "\.\.\/\.\.\/lib\/manual-arrival-duration\.postgres";/);
