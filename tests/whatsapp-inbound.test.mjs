@@ -98,11 +98,11 @@ test("a found delivery's reply includes the tracking link as plain body text, no
   assert.match(reply, /https:\/\/trackfleet\.chronoplan\.workers\.dev\/\?tracking=abc123/);
 });
 
-test("the reply greets whoever is passed as greetingName, not always delivery.customer -- lets the caller greet the recipient by their own name when they're the one who texted in", () => {
+test("the reply greets whoever is passed as greetingName, not always delivery.customer -- lets the caller greet the recipient by their own name when they're the one who texted in, but the sender still shows in the Expéditeur line regardless", () => {
   const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
   const reply = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Fatima Zahra");
-  assert.match(reply, /Fatima Zahra/);
-  assert.doesNotMatch(reply, /Jean Dupont/);
+  assert.match(reply, /^Bonjour Fatima Zahra,/);
+  assert.match(reply, /Expéditeur : Jean Dupont/);
 });
 
 test("the reply is signed with the shipping company's own configured name, when it has one -- a customer has no other way to know an unfamiliar WhatsApp number is really TrackFleet's tracking SaaS behind their own shipper", () => {
@@ -117,6 +117,58 @@ test("the reply is not signed at all when the company hasn't configured a brand 
   assert.doesNotMatch(unsigned, /—/);
   const explicitlyNull = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont", null);
   assert.equal(unsigned, explicitlyNull);
+});
+
+// Requested live: a customer's first message should get the full picture
+// (sender, recipient, agency, weight/description, price, both estimated
+// dates), not just a bare tracking link -- still the same free
+// customer-service-window reply, so no added cost to including more.
+test("the reply includes sender, recipient, agency, weight, price and both estimated dates when the delivery has them", () => {
+  const delivery = {
+    id: "TF-1", customer: "Jean Dupont", recipientName: "Fatima Zahra", destination: "Casablanca",
+    destinationSiteId: "tetouan-cortoba-146", weightKg: 12.5, priceAmount: 45.5, priceCurrency: "EUR",
+    nextTruckDepartureAt: new Date("2026-09-01T08:00:00.000Z"), plannedArrivalAt: new Date("2026-09-07T08:00:00.000Z"),
+  };
+  const reply = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
+  assert.match(reply, /Expéditeur : Jean Dupont/);
+  assert.match(reply, /Destinataire : Fatima Zahra/);
+  assert.match(reply, /Agence : Tétouan · Avenue Cortoba/);
+  assert.match(reply, /Poids : 12,5 kg/);
+  assert.match(reply, /Prix : 45,50 EUR/);
+  assert.match(reply, /Départ estimé : 01 sept\. 2026/);
+  assert.match(reply, /Arrivée estimée : 07 sept\. 2026.*estimation, peut évoluer/);
+});
+
+test("falls back to the destination address (not the site label) when destinationSiteId doesn't resolve to a known site", () => {
+  const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
+  const reply = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
+  assert.match(reply, /Agence : Casablanca/);
+});
+
+test("shows the item description instead of a weight for an unweighed bulky item, and omits both lines entirely when neither is on file", () => {
+  const described = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca", itemDescription: "Machine à laver" };
+  const reply = buildFoundReply(described, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
+  assert.match(reply, /Contenu : Machine à laver/);
+  assert.doesNotMatch(reply, /Poids :/);
+
+  const neither = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
+  const bareReply = buildFoundReply(neither, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
+  assert.doesNotMatch(bareReply, /Poids :|Contenu :/);
+});
+
+test("mentions the estimate is not firm when either date is missing, rather than inventing one", () => {
+  const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
+  const reply = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
+  assert.match(reply, /Départ estimé : à confirmer/);
+  assert.match(reply, /Arrivée estimée : à confirmer.*estimation, peut évoluer/);
+});
+
+test("mentions the parcel count only when the customer's parcel isn't traveling alone", () => {
+  const delivery = { id: "TF-1", customer: "Jean Dupont", destination: "Casablanca" };
+  const solo = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont");
+  assert.doesNotMatch(solo, /colis liés/);
+  const grouped = buildFoundReply(delivery, "https://trackfleet.chronoplan.workers.dev/?tracking=abc123", "Jean Dupont", null, 3);
+  assert.match(grouped, /Colis : 3 colis liés à cet envoi/);
 });
 
 test("the no-match reply asks for a name, and is the same message whether it's a first hello or a name search that didn't find anything -- there's no conversation state to tell those apart", () => {
@@ -182,7 +234,14 @@ test("the recipient texting in is greeted by their own name, not the sender's --
 test("the reply is signed with the matched delivery's own company branding, looked up only once a delivery is actually found", () => {
   assert.match(webhookRoute, /import \{ getCompanyBranding \} from "trackfleet-auth-session-store";/);
   assert.match(webhookRoute, /const branding = await getCompanyBranding\(delivery\.companyId\);/);
-  assert.match(webhookRoute, /buildFoundReply\(delivery, trackingUrl\.toString\(\), greetingName, branding\?\.name \?\? null\);/);
+  assert.match(webhookRoute, /buildFoundReply\(delivery, trackingUrl\.toString\(\), greetingName, branding\?\.name \?\? null, parcelCount\);/);
+});
+
+// Requested live: mention how many parcels share this shipment, when it's
+// more than one -- looked up here (not in whatsapp-inbound-message.ts,
+// which stays store-free) since it needs a company-wide query.
+test("counts sibling parcels sharing the same shipmentId, but only bothers querying when the matched delivery actually has one", () => {
+  assert.match(webhookRoute, /const parcelCount = delivery\.shipmentId\s*\n\s*\? \(await store\.listForCompany\(delivery\.companyId\)\)\.filter\(\(item\) => item\.shipmentId === delivery\.shipmentId\)\.length\s*\n\s*: 1;/);
 });
 
 test("the webhook always acknowledges 200 once the payload is verified and parsed, even if the reply send itself fails -- a failed send must never make Meta retry-storm the same inbound message", () => {

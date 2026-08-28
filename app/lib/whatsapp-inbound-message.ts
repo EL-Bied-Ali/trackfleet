@@ -1,4 +1,5 @@
 import type { DeliveryRow } from "./delivery-store.types";
+import { knownSite } from "./known-sites.ts";
 
 // Kept free of trackfleet-runtime-env (unlike whatsapp-inbound.ts, which
 // actually sends the reply) so this pure parsing/text-building/signature
@@ -74,6 +75,14 @@ export function parseInboundWhatsAppMessage(payload: unknown): InboundWhatsAppMe
   return null;
 }
 
+function formatEstimatedDate(date: Date) {
+  return date.toLocaleDateString("fr-BE", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function formatPrice(amount: number, currency: "EUR" | "MAD") {
+  return `${amount.toLocaleString("fr-BE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+}
+
 // A customer who messages first opens WhatsApp's free 24h customer service
 // window, so this is a plain text reply -- not a template -- and unlike the
 // automatic push side (whatsapp-message.ts), the tracking link travels as
@@ -83,8 +92,36 @@ export function parseInboundWhatsAppMessage(payload: unknown): InboundWhatsAppMe
 // either the sender or the recipient can text in (see
 // findMostRecentActiveDeliveryByContact), and greeting the recipient by the
 // sender's name would be wrong.
-export function buildFoundReply(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
-  return signMessage(`Bonjour ${greetingName}, voici le suivi de votre colis ${delivery.id} (vers ${delivery.destination}) : ${trackingUrl}`, companyName);
+//
+// Requested live: a customer's first message should get the full picture up
+// front (sender, recipient, agency, parcel count, weight/description, price,
+// both estimated dates) rather than just a bare tracking link -- this is
+// still the same free customer-service-window reply, so there's no added
+// cost to including more. Both dates are explicitly framed as estimates
+// ("peut évoluer") rather than firm commitments, same honesty rule
+// etaExplanation/customerEtaNote already apply on the tracking page itself.
+// parcelCount (how many parcels share this delivery's shipmentId, looked up
+// by the caller -- this module stays free of the store) is only mentioned
+// when the customer's parcel isn't traveling alone.
+export function buildFoundReply(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null, parcelCount = 1) {
+  const agency = knownSite(delivery.destinationSiteId)?.label ?? delivery.destination;
+  const lines = [
+    `Bonjour ${greetingName}, voici les informations de votre colis ${delivery.id} :`,
+    `Expéditeur : ${delivery.customer}`,
+    delivery.recipientName ? `Destinataire : ${delivery.recipientName}` : null,
+    `Agence : ${agency}`,
+    parcelCount > 1 ? `Colis : ${parcelCount} colis liés à cet envoi` : null,
+    delivery.weightKg != null
+      ? `Poids : ${delivery.weightKg.toLocaleString("fr-BE", { maximumFractionDigits: 3 })} kg`
+      : delivery.itemDescription
+        ? `Contenu : ${delivery.itemDescription}`
+        : null,
+    delivery.priceAmount != null && delivery.priceCurrency ? `Prix : ${formatPrice(delivery.priceAmount, delivery.priceCurrency)}` : null,
+    `Départ estimé : ${delivery.nextTruckDepartureAt ? formatEstimatedDate(delivery.nextTruckDepartureAt) : "à confirmer"}`,
+    `Arrivée estimée : ${delivery.plannedArrivalAt ? formatEstimatedDate(delivery.plannedArrivalAt) : "à confirmer"} (estimation, peut évoluer)`,
+    `Suivi : ${trackingUrl}`,
+  ].filter((line): line is string => line !== null);
+  return signMessage(lines.join("\n"), companyName);
 }
 
 // Used both on a customer's first contact (no delivery on this phone number)
@@ -108,10 +145,6 @@ export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingU
   return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} est arrivé à destination (${delivery.destination}) et est prêt pour la récupération. Suivi (accès bientôt clôturé) : ${trackingUrl}`, companyName);
 }
 
-function formatEstimatedArrivalDate(date: Date) {
-  return date.toLocaleDateString("fr-BE", { day: "2-digit", month: "short", year: "numeric" });
-}
-
 // Sent by a dispatcher's explicit "Notifier par WhatsApp" action on a
 // departure confirmation (app/api/deliveries/notify-departure/route.ts), not
 // automatically -- DEPARTED is deliberately excluded from the automatic push
@@ -131,6 +164,6 @@ function formatEstimatedArrivalDate(date: Date) {
 // date), matching the "don't invent an estimate" rule used everywhere else
 // this value is shown.
 export function buildDepartureNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
-  const estimate = delivery.plannedArrivalAt ? ` Arrivée estimée : ${formatEstimatedArrivalDate(delivery.plannedArrivalAt)}.` : "";
+  const estimate = delivery.plannedArrivalAt ? ` Arrivée estimée : ${formatEstimatedDate(delivery.plannedArrivalAt)}.` : "";
   return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} vient de démarrer son trajet vers ${delivery.destination}.${estimate} Suivi : ${trackingUrl}`, companyName);
 }
