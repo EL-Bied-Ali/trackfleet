@@ -278,4 +278,16 @@ export const memoryStore: DeliveryStore = {
     }
     return ids.size;
   },
+  async deleteDelivery(deliveryId, companyId) {
+    const index = deliveryStore.findIndex((delivery) => delivery.id === deliveryId && delivery.companyId === companyId);
+    if (index === -1) return false;
+    deliveryStore.splice(index, 1);
+    for (let eventIndex = deliveryEvents.length - 1; eventIndex >= 0; eventIndex -= 1) {
+      if (deliveryEvents[eventIndex].deliveryId === deliveryId) deliveryEvents.splice(eventIndex, 1);
+    }
+    for (let etaIndex = etaObservations.length - 1; etaIndex >= 0; etaIndex -= 1) {
+      if (etaObservations[etaIndex].deliveryId === deliveryId) etaObservations.splice(etaIndex, 1);
+    }
+    return true;
+  },
 };

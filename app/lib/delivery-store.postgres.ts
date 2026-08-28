@@ -737,4 +737,15 @@ export const postgresStore: DeliveryStore = {
     await sql`DELETE FROM deliveries WHERE id = ANY(${ids}::text[])`;
     return ids.length;
   },
+
+  async deleteDelivery(deliveryId, companyId) {
+    await ensureSchema();
+    const rows = await sql`SELECT id FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} LIMIT 1` as Array<{ id: string }>;
+    if (!rows.length) return false;
+    await sql`DELETE FROM delivery_events WHERE delivery_id = ${deliveryId}`;
+    await sql`DELETE FROM delivery_notifications WHERE delivery_id = ${deliveryId}`;
+    await sql`DELETE FROM delivery_eta_observations WHERE delivery_id = ${deliveryId}`;
+    await sql`DELETE FROM deliveries WHERE id = ${deliveryId}`;
+    return true;
+  },
 };
