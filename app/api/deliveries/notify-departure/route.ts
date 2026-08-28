@@ -1,6 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { getCompanyBranding } from "trackfleet-auth-session-store";
 import { getCompanySession } from "../../../lib/company-auth";
+import { whatsappConsentWithdrawn } from "../../../lib/delivery-events";
 import { buildDepartureNotificationMessage } from "../../../lib/whatsapp-inbound-message";
 import { sendWhatsAppTextReply } from "../../../lib/whatsapp-inbound";
 import { readJsonObject, invalidJsonResponse } from "../../../lib/request-json";
@@ -33,6 +34,13 @@ export async function POST(request: Request) {
 
   const delivery = (await store.listForCompany(session.companyId)).find((candidate) => candidate.id === deliveryId);
   if (!delivery) return noStore({ error: "delivery_not_found" }, 404);
+
+  // The automatic push pipeline already refuses to notify a customer who
+  // withdrew consent (see whatsappConsentWithdrawn in notification-runner.ts)
+  // -- this manual, dispatcher-triggered send must respect the same rule,
+  // not just the automatic one.
+  const events = await store.listEvents(deliveryId);
+  if (whatsappConsentWithdrawn(events)) return noStore({ error: "consent_withdrawn" }, 403);
 
   const origin = new URL(request.url).origin;
   const trackingUrl = new URL(origin);

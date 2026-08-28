@@ -77,3 +77,15 @@ test("the notify-arrival route signs the message with the agency's own company b
   assert.match(notifyRoute, /const branding = await getCompanyBranding\(session\.companyId\);/);
   assert.match(notifyRoute, /buildArrivalNotificationMessage\(delivery, trackingUrl\.toString\(\), recipient\.name, branding\?\.name \?\? null\);/);
 });
+
+// Found live during a business-logic audit: the automatic push pipeline
+// already refuses to notify a withdrawn-consent customer
+// (whatsappConsentWithdrawn in notification-runner.ts), but this manual,
+// agency-triggered send skipped that check entirely -- a dispatcher could
+// click "Notifier par WhatsApp" and message a customer who'd explicitly
+// opted out, as long as Meta's unrelated 24h window happened to be open.
+test("the notify-arrival route refuses to send when the customer withdrew WhatsApp consent, same rule the automatic pipeline already enforces", () => {
+  assert.match(notifyRoute, /import \{ whatsappConsentWithdrawn \} from "\.\.\/\.\.\/\.\.\/lib\/delivery-events";/);
+  assert.match(notifyRoute, /const events = await store\.listEvents\(deliveryId\);/);
+  assert.match(notifyRoute, /if \(whatsappConsentWithdrawn\(events\)\) return noStore\(\{ error: "consent_withdrawn" \}, 403\);/);
+});

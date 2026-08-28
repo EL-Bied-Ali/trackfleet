@@ -1460,6 +1460,8 @@ export default function Home() {
       const data = await response.json().catch(() => null);
       if (response.ok && data?.ok) {
         setToast(locale === "fr" ? "Client notifié par WhatsApp." : locale === "nl" ? "Klant via WhatsApp op de hoogte gebracht." : "Customer notified via WhatsApp.");
+      } else if (data?.error === "consent_withdrawn") {
+        setToast(locale === "fr" ? "Notification impossible : ce client a retiré son consentement WhatsApp." : locale === "nl" ? "Melding niet mogelijk: deze klant heeft zijn WhatsApp-toestemming ingetrokken." : "Could not notify: this customer withdrew their WhatsApp consent.");
       } else {
         setToast(locale === "fr" ? "Notification impossible : le client doit d’abord vous avoir écrit sur WhatsApp (fenêtre gratuite de 24h)." : locale === "nl" ? "Melding niet mogelijk: de klant moet u eerst op WhatsApp hebben geschreven (gratis venster van 24u)." : "Could not notify: the customer must have messaged you on WhatsApp first (free 24h window).");
       }
@@ -1484,6 +1486,8 @@ export default function Home() {
       const data = await response.json().catch(() => null);
       if (response.ok && data?.ok) {
         setToast(locale === "fr" ? "Client notifié par WhatsApp." : locale === "nl" ? "Klant via WhatsApp op de hoogte gebracht." : "Customer notified via WhatsApp.");
+      } else if (data?.error === "consent_withdrawn") {
+        setToast(locale === "fr" ? "Notification impossible : ce client a retiré son consentement WhatsApp." : locale === "nl" ? "Melding niet mogelijk: deze klant heeft zijn WhatsApp-toestemming ingetrokken." : "Could not notify: this customer withdrew their WhatsApp consent.");
       } else {
         setToast(locale === "fr" ? "Notification impossible : le client doit d’abord vous avoir écrit sur WhatsApp (fenêtre gratuite de 24h)." : locale === "nl" ? "Melding niet mogelijk: de klant moet u eerst op WhatsApp hebben geschreven (gratis venster van 24u)." : "Could not notify: the customer must have messaged you on WhatsApp first (free 24h window).");
       }
