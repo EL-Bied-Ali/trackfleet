@@ -53,14 +53,19 @@ const [notifyRoute, deliveryEventsLib] = await Promise.all([
   readFile(new URL("../app/lib/delivery-events.ts", import.meta.url), "utf8"),
 ]);
 
-test("the notify-arrival route rejects cross-origin requests and requires an authenticated agency session", () => {
+test("the notify-arrival route rejects cross-origin requests and requires an authenticated session", () => {
   assert.match(notifyRoute, /if \(!requestIsSameOrigin\(request\)\) return originRejectedResponse\(\);/);
   assert.match(notifyRoute, /if \(!session\) return noStore\(\{ error: "unauthorized" \}, 401\);/);
-  assert.match(notifyRoute, /if \(session\.role !== "agency"\) return noStore\(\{ error: "agency_only" \}, 403\);/);
 });
 
-test("the notify-arrival route scopes to the agency's own destination site, same as the existing arrival-confirmation action", () => {
-  assert.match(notifyRoute, /delivery\.destinationSiteId !== session\.siteId/);
+// Widened from agency-only so the delivery table's inline "confirm arrival"
+// group action (dispatcher-triggerable) can also fire this notify, not just
+// the agency-side card list -- same permission model confirmArrival already
+// has in manual-completion/route.ts: dispatcher unrestricted, agency scoped
+// to its own destination site.
+test("the notify-arrival route scopes an agency session to its own destination site, but leaves a dispatcher session unrestricted, same as the existing arrival-confirmation action", () => {
+  assert.doesNotMatch(notifyRoute, /if \(session\.role !== "agency"\) return noStore\(\{ error: "agency_only" \}, 403\);/);
+  assert.match(notifyRoute, /if \(session\.role === "agency" && delivery\.destinationSiteId !== session\.siteId\) \{/);
 });
 
 test("the notify-arrival route only records WHATSAPP_ARRIVAL_NOTIFIED after at least one send actually succeeds", () => {

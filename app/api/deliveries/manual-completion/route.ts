@@ -65,7 +65,8 @@ export async function POST(request: Request) {
       // nothing for processPendingNotifications to do here.
       const departed = await confirmDepartureManually(session.companyId, deliveryId);
       if (!departed) return noStore({ error: "delivery_not_found_or_not_loading" }, 404);
-      return noStore({ ok: true, deliveryId, status: "In transit", departureConfirmed: true });
+      const delivery = (await store.listForCompany(session.companyId)).find((candidate) => candidate.id === deliveryId);
+      return noStore({ ok: true, deliveryId, status: "In transit", departureConfirmed: true, delivery });
     }
 
     if (payload.confirmArrival === true) {
@@ -88,7 +89,8 @@ export async function POST(request: Request) {
       await store.recordEvent(deliveryId, "MANUAL_ARRIVAL_CONFIRMED", Math.min(99, delivery.progress));
       await store.recordEvent(deliveryId, "ARRIVED_AT_SITE", Math.min(99, delivery.progress));
       await processPendingNotifications(session.companyId, new URL(request.url).origin);
-      return noStore({ ok: true, deliveryId, arrivalConfirmed: true, automaticCompletionAfterMinutes: unloadGraceMinutes });
+      const updated = (await store.listForCompany(session.companyId)).find((candidate) => candidate.id === deliveryId);
+      return noStore({ ok: true, deliveryId, arrivalConfirmed: true, automaticCompletionAfterMinutes: unloadGraceMinutes, delivery: updated });
     }
 
     const completed = await completeDeliveryManually(session.companyId, deliveryId);
