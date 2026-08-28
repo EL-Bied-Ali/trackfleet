@@ -28,7 +28,18 @@ export async function runFleetAutomation(): Promise<AutomationRunResult> {
   if (!accountID) throw new Error("sendatrack_server_credentials_missing");
 
   const snapshot = await getSendatrackSnapshot();
-  if (!snapshot.connected) throw new Error("sendatrack_snapshot_disconnected");
+  // The specific reason travels in the message itself (rather than being
+  // dropped and re-fetched by the caller) -- see the tick route's
+  // failureCodeFor, which used to re-call getSendatrackSnapshot() from
+  // scratch just to recover this same value, roughly doubling a failing
+  // tick's worst-case wall-clock time during an outage (each snapshot call
+  // has its own ~25s worst-case retry budget). That extra latency, repeated
+  // every 5 minutes for the outage's duration, was a plausible cause of a
+  // heartbeat gap observed live: lastAttemptAt kept updating every tick
+  // while lastFailureAt froze for 3+ hours during a real SENDATRACK outage,
+  // consistent with the isolate being killed after the first snapshot call
+  // failed but before the second one (and recordAutomationFailure) ran.
+  if (!snapshot.connected) throw new Error(`sendatrack_snapshot_disconnected:${snapshot.error ?? "unknown"}`);
 
   const companyId = await companyIdForAccount(accountID);
   const unloadGraceMinutes = parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);

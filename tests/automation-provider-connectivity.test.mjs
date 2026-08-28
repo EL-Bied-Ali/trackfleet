@@ -10,8 +10,24 @@ const [automationSource, tickRoute, heartbeatStore, healthRoute] = await Promise
 ]);
 
 test("a disconnected SENDATRACK snapshot is an automation failure", () => {
-  assert.match(automationSource, /if \(!snapshot\.connected\) throw new Error\("sendatrack_snapshot_disconnected"\)/);
+  assert.match(automationSource, /if \(!snapshot\.connected\) throw new Error\(`sendatrack_snapshot_disconnected:\$\{snapshot\.error \?\? "unknown"\}`\)/);
   assert.doesNotMatch(automationSource, /if \(!snapshot\.connected\) \{[\s\S]*connected:\s*false/);
+});
+
+// Found during an overnight audit: failureCodeFor used to re-call
+// getSendatrackSnapshot() from scratch just to recover the same .error
+// value runFleetAutomation already had and threw away, roughly doubling a
+// failing tick's worst-case wall-clock time during an outage -- a plausible
+// cause of a heartbeat gap observed live (lastAttemptAt kept updating every
+// tick while lastFailureAt froze for 3+ hours during a real SENDATRACK
+// outage). The reason now travels inline in the thrown message instead, so
+// classifying it is synchronous and makes no network call at all.
+test("the failure reason travels inline in the thrown error instead of triggering a second SENDATRACK call to reclassify it", () => {
+  assert.doesNotMatch(tickRoute, /import \{ getSendatrackSnapshot \}/);
+  assert.match(tickRoute, /function failureCodeFor\(message: string\): AutomationFailureCode \{/);
+  assert.doesNotMatch(tickRoute, /async function failureCodeFor/);
+  assert.match(tickRoute, /const reason = message\.slice\("sendatrack_snapshot_disconnected:"\.length\);/);
+  assert.match(tickRoute, /const failureCode = failureCodeFor\(message\);/);
 });
 
 test("tick records success only after runFleetAutomation resolves", () => {
