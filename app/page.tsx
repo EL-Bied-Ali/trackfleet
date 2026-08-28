@@ -1898,11 +1898,6 @@ export default function Home() {
       : selected.gpsFresh
         ? `${copy.fresh} · ${selected.positionAgeMinutes} min`
         : `${selected.positionAgeMinutes} min`;
-    const displayedEta = selected.estimatedArrivalAt
-      ? new Date(selected.estimatedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
-      : selected.plannedArrivalAt
-        ? new Date(selected.plannedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
-        : selected.eta;
     // Confirmed from real fleet GPS history (see KnownSite.finalLegTrackingUnavailable):
     // past the relay hub, the truck's position goes stale, so a live map and
     // GPS-derived stats (progress/speed/remaining distance/GPS freshness)
@@ -1917,6 +1912,26 @@ export default function Home() {
     // map still shows rather than jumping straight to the relay notice.
     const relayDestination = staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true;
     const relayInEffect = relayDestination && selected.positionAgeMinutes != null && !selected.gpsFresh;
+    // Reported live: for a relay destination, estimatedArrivalAt is only a
+    // GPS-based ETA to the confirmed hub (route/progress math is capped
+    // there -- see delivery-progress-destination.ts), not to the parcel's
+    // actual destination. Once real GPS pace exists it was winning over
+    // plannedArrivalAt (the destination-aware CTM relay estimate, see
+    // relay-eta-estimate.ts) here, so the headline showed "arriving in 2
+    // days" while the honest estimate accounting for the onward relay leg
+    // was really over a week out -- silently understating the real date by
+    // however long the relay leg itself takes. plannedArrivalAt wins for any
+    // relay destination, not just once relayInEffect kicks in: the hub is an
+    // operational waypoint the customer never asked about, so it should
+    // never stand in for "when does MY parcel arrive" even while GPS is
+    // still fresh on the way there.
+    const displayedEta = relayDestination && selected.plannedArrivalAt
+      ? new Date(selected.plannedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+      : selected.estimatedArrivalAt
+        ? new Date(selected.estimatedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+        : selected.plannedArrivalAt
+          ? new Date(selected.plannedArrivalAt).toLocaleString(dateLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+          : selected.eta;
     const etaNote = customerEtaNote({
       source: selected.etaSource,
       delayMinutes: selected.etaDelayMinutes,
