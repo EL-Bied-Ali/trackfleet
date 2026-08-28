@@ -81,11 +81,15 @@ test("no store backend's single-delivery linkVehicle clears the vehicle from ano
   }
 });
 
-test("linkVehicleToGroup still clears the vehicle from a delivery genuinely outside the group being reassigned -- unlike the single-delivery path above, that one deliberately moves a specific set of deliveries onto a (possibly different) truck", () => {
-  const postgres = fs.readFileSync("app/lib/delivery-store.postgres.ts", "utf8");
-  assert.match(postgres, /UPDATE deliveries SET sendatrack_vehicle_id = '', truck = \$\{UNASSIGNED_TRUCK\}\s*\n\s*WHERE company_id = \$\{companyId\} AND sendatrack_vehicle_id = \$\{vehicle\.id\} AND status <> 'Delivered' AND id <> ALL\(\$\{matchedIds\}::text\[\]\)/);
-  const cloudflare = fs.readFileSync("app/lib/delivery-store.cloudflare.ts", "utf8");
-  assert.match(cloudflare, /UPDATE deliveries SET sendatrack_vehicle_id = '', truck = \? WHERE company_id = \? AND sendatrack_vehicle_id = \? AND status != 'Delivered' AND id NOT IN/);
+test("no store backend's linkVehicleToGroup clears the vehicle from a delivery outside the group being reassigned either -- same analogous bug as linkVehicle's, confirmed and fixed the same way", () => {
+  for (const path of ["app/lib/delivery-store.postgres.ts", "app/lib/delivery-store.memory.ts", "app/lib/delivery-store.cloudflare.ts"]) {
+    const source = fs.readFileSync(path, "utf8");
+    const linkVehicleToGroupStart = source.indexOf("linkVehicleToGroup(");
+    const updateScheduleStart = source.indexOf("updateSchedule(");
+    assert.ok(linkVehicleToGroupStart > -1 && updateScheduleStart > linkVehicleToGroupStart, `${path} must define linkVehicleToGroup before updateSchedule`);
+    const linkVehicleToGroupBody = source.slice(linkVehicleToGroupStart, updateScheduleStart);
+    assert.doesNotMatch(linkVehicleToGroupBody, /sendatrack_vehicle_id = ''|sendatrackVehicleId: ""/, `${path}'s linkVehicleToGroup must not evict deliveries outside the group from the target vehicle`);
+  }
 });
 
 test("moving a delivery to a genuinely different truck pulls it out of its trip", async () => {

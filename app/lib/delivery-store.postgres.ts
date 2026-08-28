@@ -479,8 +479,13 @@ export const postgresStore: DeliveryStore = {
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
       await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${metrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
     }
-    await sql`UPDATE deliveries SET sendatrack_vehicle_id = '', truck = ${UNASSIGNED_TRUCK}
-      WHERE company_id = ${companyId} AND sendatrack_vehicle_id = ${vehicle.id} AND status <> 'Delivered' AND id <> ALL(${matchedIds}::text[])`;
+    // No longer clears the vehicle off any other active delivery already
+    // riding it (that used to run unconditionally here). One truck legitimately
+    // carrying several parcels at once is the group feature's whole premise --
+    // this must not evict the target truck's existing group the same way
+    // linkVehicle used to (see that fix). Reassigning group A onto a truck
+    // that already carries group B would otherwise silently kick B back to
+    // unassigned, with its last GPS position/status still attached.
     await sql`UPDATE deliveries SET
       sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
       speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'

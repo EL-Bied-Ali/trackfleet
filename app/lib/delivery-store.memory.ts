@@ -6,7 +6,7 @@ import { NotificationClaimState } from "./notification-claim-state.ts";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress.ts";
 import type { SendatrackSnapshot } from "./sendatrack.ts";
 import { matchDeliveryVehicle } from "./vehicle-linking.ts";
-import { isUnassignedVehicle, UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
+import { isUnassignedVehicle } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record.ts";
 import { DEMO_DELIVERY_CUSTOMER_PREFIX } from "./demo-delivery.ts";
 
@@ -117,18 +117,19 @@ export const memoryStore: DeliveryStore = {
     const ids = new Set(deliveryIds);
     const deliveries = deliveryStore.filter((item) => ids.has(item.id) && item.companyId === companyId && item.status !== "Delivered");
     if (!deliveries.length) return [];
-    const matchedIds = new Set(deliveries.map((delivery) => delivery.id));
     for (const delivery of deliveries) {
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, delivery.destination, explicitDestination(delivery), explicitOrigin(delivery));
       if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
         deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
       }
     }
-    for (const other of deliveryStore) {
-      if (!matchedIds.has(other.id) && other.companyId === companyId && other.sendatrackVehicleId === vehicle.id && other.status !== "Delivered") {
-        Object.assign(other, { sendatrackVehicleId: "", truck: UNASSIGNED_TRUCK });
-      }
-    }
+    // No longer clears the vehicle off any other active delivery already
+    // riding it (that used to run unconditionally here). One truck legitimately
+    // carrying several parcels at once is the group feature's whole premise --
+    // this must not evict the target truck's existing group the same way
+    // linkVehicle used to (see that fix). Reassigning group A onto a truck
+    // that already carries group B would otherwise silently kick B back to
+    // unassigned, with its last GPS position/status still attached.
     for (const delivery of deliveries) {
       const truckIsChanging = delivery.sendatrackVehicleId !== vehicle.id;
       Object.assign(delivery, {
