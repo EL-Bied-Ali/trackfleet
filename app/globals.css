@@ -6,8 +6,15 @@
   --muted: #7b6d74;
   --line: #e5ebe7;
   --cream: #f4f6f3;
-  --green: #9c2b2b;
-  --green-dark: #7a2020;
+  /* Matches Morocco's flag red exactly (same #c1272d already used for the
+     destination-flag dot on the map, dest-ma) -- the client is proud of the
+     country his fleet serves, so the brand color is deliberately that
+     specific red, not just "a red". A few small status dots (the fresh-GPS
+     indicator, .status.transit i) got a matching nod to the flag's green
+     pentagram (#006233) for the same reason -- kept light and confined to
+     small accents rather than re-theming every green in the app. */
+  --green: #c1272d;
+  --green-dark: #9a1f24;
   --mint: #f8e3e1;
   --white: #ffffff;
 }
@@ -30,16 +37,16 @@ button { color: inherit; }
 .login-route { display: flex; align-items: center; gap: 12px; max-width: 430px; margin-top: 46px; }
 .login-route span { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid #d9bcbc; border-radius: 50%; background: rgba(255,255,255,.78); font-size: 11px; font-weight: 800; }
 .login-route i { flex: 1; border-top: 2px dashed #a37979; }
-.login-route b { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; color: white; background: #9c2b2b; box-shadow: 0 7px 18px rgba(156,43,43,.2); }
+.login-route b { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; color: white; background: #c1272d; box-shadow: 0 7px 18px rgba(193,39,45,.2); }
 .login-story small { display: block; margin: 12px 0 0 56px; color: #97868e; font-size: 10px; letter-spacing: .4px; }
 .login-card { padding: 34px; border: 1px solid rgba(198,176,186,.7); border-radius: 20px; background: rgba(255,255,255,.91); box-shadow: 0 24px 65px rgba(74,39,58,.12); backdrop-filter: blur(18px); }
 .login-provider { display: flex; align-items: center; gap: 13px; padding-bottom: 24px; margin-bottom: 22px; border-bottom: 1px solid #ede6e6; }
-.login-provider > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: white; background: #9c2b2b; font-size: 20px; }
+.login-provider > span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: white; background: #c1272d; font-size: 20px; }
 .login-provider strong, .login-provider small { display: block; }.login-provider strong { font-size: 13px; letter-spacing: 1px; }.login-provider small { margin-top: 4px; color: #95898f; font-size: 10px; }
 .login-card label { display: grid; gap: 7px; margin-top: 15px; color: #58424d; font-size: 11px; font-weight: 700; }
 .login-card input { height: 47px; padding: 0 14px; border: 1px solid #e6dce0; border-radius: 9px; color: #3b192e; background: #fbfcfb; outline: 0; }
 .login-card input:focus { border-color: #a2708b; box-shadow: 0 0 0 3px #e7f2ed; }
-.login-submit { width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 22px; border: 0; border-radius: 10px; color: white; background: #9c2b2b; font-size: 12px; font-weight: 750; cursor: pointer; }.login-submit:hover { background: #7a2020; }.login-submit:disabled { opacity: .65; cursor: wait; }
+.login-submit { width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 22px; border: 0; border-radius: 10px; color: white; background: #c1272d; font-size: 12px; font-weight: 750; cursor: pointer; }.login-submit:hover { background: #9a1f24; }.login-submit:disabled { opacity: .65; cursor: wait; }
 .login-error { margin: 13px 0 -5px; padding: 10px 12px; border-radius: 8px; color: #9a3e31; background: #fff0ed; font-size: 10px; line-height: 1.45; }
 .login-privacy { margin: 17px 0 0; color: #998b91; font-size: 9px; line-height: 1.5; text-align: center; }
 .login-google { width: 100%; height: 47px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #e6dce0; border-radius: 9px; color: #3b192e; background: #fbfcfb; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; }.login-google:hover { border-color: #a2708b; background: #f2f7f4; }
@@ -65,7 +72,7 @@ button { color: inherit; }
 .app-shell { min-height: 100vh; display: flex; background: #f6f8f5; }
 .sidebar { width: 240px; flex: 0 0 240px; min-height: 100vh; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 26px 17px 19px; background: #3f1734; color: #e9dce3; }
 .brand { color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 11px; padding: 0 10px; margin-bottom: 31px; font-weight: 760; font-size: 18px; letter-spacing: -.3px; }
-.brand-mark { display: grid; place-items: center; width: 29px; height: 29px; background: #f3cbc4; color: #7a2020; border-radius: 9px; transform: rotate(-5deg); overflow: hidden; }
+.brand-mark { display: grid; place-items: center; width: 29px; height: 29px; background: #f3cbc4; color: #9a1f24; border-radius: 9px; transform: rotate(-5deg); overflow: hidden; }
 .brand-mark span { transform: rotate(5deg); font-size: 18px; font-weight: 900; }
 .brand-mark img { width: 100%; height: 100%; object-fit: cover; transform: rotate(5deg) scale(1.15); }
 .company-logo-preview { display: flex; align-items: center; gap: 10px; margin-top: -6px; }
@@ -89,7 +96,7 @@ a.nav-item { text-decoration: none; }
 .gps-card button { padding: 0; border: 0; color: #e9c5d7; background: transparent; font-size: 10.5px; text-decoration: underline; cursor: pointer; }
 .gps-coming { display: block; color: #d7b8c8; font-size: 9px; line-height: 1.4; }
 .profile { display: flex; align-items: center; gap: 10px; padding: 19px 4px 0; margin-top: 18px; border-top: 1px solid rgba(255,255,255,.09); }
-.avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #f0d5d0; color: #7a2020; font-size: 10px; font-weight: 750; }
+.avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #f0d5d0; color: #9a1f24; font-size: 10px; font-weight: 750; }
 .profile div:nth-child(2) { min-width: 0; flex: 1; }
 .profile strong, .profile span { display: block; }
 .profile strong { color: #f4f8f6; font-size: 11px; }
@@ -111,7 +118,7 @@ a.nav-item { text-decoration: none; }
 .demo-walkthrough button:last-child { width: 22px; height: 22px; padding: 0; border: 0; background: transparent; color: #978c91; font-size: 15px; }
 .icon-button { position: relative; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 9px; background: white; cursor: pointer; }
 .icon-button i { position: absolute; right: 9px; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: #e9654d; }
-.primary-button { height: 39px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 15px; border: 0; border-radius: 9px; color: white; background: var(--green); font-size: 12px; font-weight: 650; cursor: pointer; box-shadow: 0 4px 14px rgba(122,32,32,.14); }
+.primary-button { height: 39px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 15px; border: 0; border-radius: 9px; color: white; background: var(--green); font-size: 12px; font-weight: 650; cursor: pointer; box-shadow: 0 4px 14px rgba(154,31,36,.14); }
 .primary-button:hover { background: var(--green-dark); }
 .primary-button:disabled { opacity: .6; cursor: wait; }
 .primary-button span { font-size: 17px; line-height: 1; }
@@ -191,7 +198,7 @@ a.nav-item { text-decoration: none; }
 .truck-pin.selected { background: #e29a34; box-shadow: 0 0 0 4px rgba(226,154,52,.18), 0 5px 14px rgba(29,71,57,.24); }
 .pin-1 { left: 58%; top: 59%; }.pin-2 { left: 43%; top: 42%; }.pin-3 { left: 72%; top: 72%; }.pin-4 { left: 19%; top: 18%; }
 .map-status, .map-live { position: absolute; left: 13px; top: 13px; z-index: 8; display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgba(217,206,210,.8); border-radius: 7px; background: rgba(255,255,255,.92); color: #615058; font-size: 9px; box-shadow: 0 3px 10px rgba(55,30,46,.07); backdrop-filter: blur(5px); }
-.map-status i, .map-live i { width: 6px; height: 6px; border-radius: 50%; background: #20a876; box-shadow: 0 0 0 3px #d9f1e8; }
+.map-status i, .map-live i { width: 6px; height: 6px; border-radius: 50%; background: #006233; box-shadow: 0 0 0 3px #d9f1e8; }
 .map-status i.fallback { background: #d79a3a; box-shadow: 0 0 0 3px #faecd3; }
 .gps-coming.is-live { color: #126f50; background: #dff3e9; }
 .map-controls { position: absolute; right: 13px; top: 13px; z-index: 8; display: grid; overflow: hidden; border: 1px solid #d5ddd8; border-radius: 7px; box-shadow: 0 2px 7px rgba(60,40,52,.08); }
@@ -299,7 +306,7 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .contact-popover a, .contact-popover span { display: block; color: var(--ink); font-size: 10px; font-weight: 650; text-decoration: none; }
 .contact-popover a + a { margin-top: 4px; }
 .contact-popover a:hover { text-decoration: underline; }
-.status { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; width: max-content; margin: 0; padding: 4px 7px; border-radius: 12px; font-size: 8px; font-weight: 650; }.status i { width: 5px; height: 5px; border-radius: 50%; }.status.transit { color: #167354; background: #e5f4ed; }.status.transit i { background: #1ea475; }.status.delayed { color: #a6681d; background: #fff1da; }.status.delayed i { background: #e29a34; }.status.loading { color: #7653a3; background: #f0eaf8; }.status.loading i { background: #916ed7; }.status.delivered { color: #7b6f75; background: #edf0ee; }.status.delivered i { background: #89938e; }
+.status { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; width: max-content; margin: 0; padding: 4px 7px; border-radius: 12px; font-size: 8px; font-weight: 650; }.status i { width: 5px; height: 5px; border-radius: 50%; }.status.transit { color: #167354; background: #e5f4ed; }.status.transit i { background: #006233; }.status.delayed { color: #a6681d; background: #fff1da; }.status.delayed i { background: #e29a34; }.status.loading { color: #7653a3; background: #f0eaf8; }.status.loading i { background: #916ed7; }.status.delivered { color: #7b6f75; background: #edf0ee; }.status.delivered i { background: #89938e; }
 .progress { display: flex; align-items: center; gap: 7px; }.progress > div { width: 65px; height: 4px; overflow: hidden; border-radius: 4px; background: #e7ece9; }.progress > div i { display: block; height: 100%; border-radius: inherit; background: #7b2b61; }.progress span { color: #897d83; font-size: 8px; }
 .col-journey { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
@@ -404,7 +411,7 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 
 /* Active multi-stop tours */
 .tours-panel { margin-bottom: 15px; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: white; box-shadow: 0 3px 9px rgba(51,25,42,.025); }
-.tour-count { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 14px; color: #9c2b2b; background: #f8e3e1; font-size: 10px; font-weight: 750; }
+.tour-count { min-width: 28px; height: 28px; display: grid; place-items: center; border-radius: 14px; color: #c1272d; background: #f8e3e1; font-size: 10px; font-weight: 750; }
 .expected-parcels-list { display: grid; gap: 10px; padding: 0 17px 17px; }
 .expected-parcels-empty { padding: 0 17px 17px; color: #918489; font-size: 11px; }
 .expected-parcel-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px; border: 1px solid #e5ebe7; border-radius: 10px; background: #fbfcfb; }

@@ -358,7 +358,7 @@ export default function Home() {
   const [deleteBusyId, setDeleteBusyId] = useState<string | null>(null);
   const [companySettingsOpen, setCompanySettingsOpen] = useState(false);
   const [companySettingsName, setCompanySettingsName] = useState("");
-  const [companySettingsColor, setCompanySettingsColor] = useState("#9c2b2b");
+  const [companySettingsColor, setCompanySettingsColor] = useState("#c1272d");
   const [companySettingsLogoDataUrl, setCompanySettingsLogoDataUrl] = useState<string | null>(null);
   const [companySettingsSaving, setCompanySettingsSaving] = useState(false);
   const [toast, setToast] = useState("");
@@ -1739,7 +1739,7 @@ export default function Home() {
 
   function openCompanySettings() {
     setCompanySettingsName(companyBranding.name ?? "");
-    setCompanySettingsColor(companyBranding.color ?? "#9c2b2b");
+    setCompanySettingsColor(companyBranding.color ?? "#c1272d");
     setCompanySettingsLogoDataUrl(companyBranding.logoDataUrl ?? null);
     setCompanySettingsOpen(true);
   }
