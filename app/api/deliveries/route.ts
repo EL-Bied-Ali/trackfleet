@@ -1,7 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { siteStore } from "trackfleet-site-store";
-import { vehicleAliasStore } from "trackfleet-vehicle-alias-store";
 import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
 import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
@@ -18,6 +17,7 @@ import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
+import { applyVehicleAliases } from "../../lib/vehicle-alias-apply";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { getCompanyBranding } from "trackfleet-auth-session-store";
@@ -288,7 +288,14 @@ export async function GET(request: Request) {
       return Response.json({ error: "subscription_required" }, { status: 402, headers: { "cache-control": "no-store" } });
     }
 
-    const integration = await getSendatrackSnapshot(session.credentials);
+    const rawIntegration = await getSendatrackSnapshot(session.credentials);
+    // Applied once, right after the snapshot is fetched, so every downstream
+    // consumer of `integration` -- automatic vehicle matching below, the
+    // vehicle-picker list further down -- sees the dispatcher's chosen alias
+    // instead of the raw SENDATRACK name. See vehicle-alias-apply.ts: without
+    // this, a renamed truck reverted to its real fleet id the moment it
+    // actually matched a delivery, which happens on every single poll.
+    const integration = await applyVehicleAliases(rawIntegration, session.companyId);
     const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
     await persistTransitionEvents(transitions);
     const rows = await store.listForCompany(session.companyId);
@@ -301,9 +308,8 @@ export async function GET(request: Request) {
     const needsManualArrivalEstimates = rows.some((row) => row.status !== "Delivered"
       && row.destinationSiteId
       && knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true);
-    const [companySites, vehicleAliases, manualArrivalEstimates, departureArrivalEstimates] = await Promise.all([
+    const [companySites, manualArrivalEstimates, departureArrivalEstimates] = await Promise.all([
       siteStore.listForCompany(session.companyId),
-      vehicleAliasStore.listForCompany(session.companyId),
       needsManualArrivalEstimates ? getManualArrivalDurationEstimates(session.companyId) : Promise.resolve(new Map<string, ManualArrivalDurationEstimate>()),
       // Unlike manualArrivalEstimates above, this isn't gated behind an
       // existing in-flight delivery to a relay site: the creation form and
@@ -312,7 +318,6 @@ export async function GET(request: Request) {
       // relay sites, no GPS join -- see departure-arrival-duration.postgres.ts).
       getDepartureArrivalDurationEstimates(session.companyId),
     ]);
-    const vehicleAliasById = new Map(vehicleAliases.map((row) => [row.sendatrackVehicleId, row.alias]));
     const siteById = new Map(companySites.map((site) => [site.id, site]));
     const rowById = new Map(rows.map((row) => [row.id, row]));
     const stopPlans = buildTruckStopPlans(rows);
@@ -454,7 +459,7 @@ export async function GET(request: Request) {
         connected: integration.connected,
         vehicleCount: integration.vehicles.length,
         error: integration.error ?? null,
-        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicleAliasById.get(vehicle.id) ?? vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude, address: vehicle.address })),
+        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude, address: vehicle.address })),
       },
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {

@@ -7,6 +7,7 @@ import { runFleetBusinessTick } from "./fleet-business-tick";
 import { rotatedVehicleBatch } from "./fleet-tick-rotation";
 import { parseAutomationStartAt } from "./notification-policy";
 import { getSendatrackSnapshot } from "./sendatrack";
+import { applyVehicleAliases } from "./vehicle-alias-apply";
 
 export type AutomationRunResult = {
   connected: boolean;
@@ -52,8 +53,9 @@ export async function runFleetAutomation(): Promise<AutomationRunResult> {
   // one. This only applies to the scheduled tick; a dispatcher's own
   // dashboard load (/api/deliveries) always processes the full live fleet.
   const rotatedSnapshot = { ...snapshot, vehicles: rotatedVehicleBatch(snapshot.vehicles) };
+  const aliasedSnapshot = await applyVehicleAliases(rotatedSnapshot, companyId);
   const business = await runFleetBusinessTick({
-    snapshot: rotatedSnapshot,
+    snapshot: aliasedSnapshot,
     companyId,
     unloadGraceMinutes,
     store,

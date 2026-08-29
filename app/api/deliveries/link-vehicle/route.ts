@@ -3,6 +3,7 @@ import { getDispatcherSession } from "../../../lib/company-auth";
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 import { getSendatrackSnapshot } from "../../../lib/sendatrack";
+import { applyVehicleAliases } from "../../../lib/vehicle-alias-apply";
 
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
@@ -47,8 +48,11 @@ export async function POST(request: Request) {
   // delivery -- unassigned or not -- directly from the delivery table, so
   // this endpoint now handles both the initial assignment and later
   // reassignment the same way.
-  const snapshot = await getSendatrackSnapshot(session.credentials);
-  if (!snapshot.connected) return Response.json({ error: "sendatrack_unavailable" }, { status: 503 });
+  const rawSnapshot = await getSendatrackSnapshot(session.credentials);
+  if (!rawSnapshot.connected) return Response.json({ error: "sendatrack_unavailable" }, { status: 503 });
+  // See vehicle-alias-apply.ts -- without this, a renamed truck reverted to
+  // its raw SENDATRACK name the instant it actually got assigned.
+  const snapshot = await applyVehicleAliases(rawSnapshot, session.companyId);
   const vehicle = snapshot.vehicles.find((item) => item.id === vehicleId);
   if (!vehicle) return Response.json({ error: "vehicle_not_found" }, { status: 404 });
 
