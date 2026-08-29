@@ -65,6 +65,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   const [error, setError] = useState("");
   const [consentError, setConsentError] = useState("");
   const [completionError, setCompletionError] = useState("");
+  const [completionNotice, setCompletionNotice] = useState("");
 
   async function refresh() {
     const response = await fetch("/api/sites", { cache: "no-store" });
@@ -192,6 +193,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     if (!window.confirm(confirmation)) return;
     setArrivalBusy(delivery.id);
     setCompletionError("");
+    setCompletionNotice("");
     try {
       const response = await fetch("/api/deliveries/manual-completion", {
         method: "POST",
@@ -202,6 +204,17 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       setManualDeliveries((items) => items.map((item) => item.id === delivery.id
         ? { ...item, arrivalState: "manual_confirmed", arrivalReason: "manual_already_confirmed" }
         : item));
+      // Reported live: this panel confirmed arrival but never told the
+      // customer, unlike the delivery table's group-level arrival buttons
+      // (same underlying manual-completion action) which always attempt the
+      // free WhatsApp notice. Same best-effort call, same honest reporting
+      // of whether it actually went out.
+      const notifyResponse = await fetch("/api/deliveries/notify-arrival", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: delivery.id }),
+      }).then((res) => res.json() as Promise<{ ok?: boolean }>).catch(() => ({ ok: false }));
+      setCompletionNotice(notifyResponse.ok ? copy.arrivalNotified : copy.arrivalNotNotified);
     } catch {
       setCompletionError("arrival_failed");
     } finally {
@@ -218,6 +231,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     if (!window.confirm(confirmation)) return;
     setDepartureBusy(delivery.id);
     setCompletionError("");
+    setCompletionNotice("");
     try {
       const response = await fetch("/api/deliveries/manual-completion", {
         method: "POST",
@@ -226,6 +240,15 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       });
       if (!response.ok) throw new Error("departure_failed");
       await refreshManualCompletions();
+      // Same gap as confirmArrival above: this panel changed the status but
+      // never told the customer, unlike the delivery table's group-level
+      // departure button (same underlying manual-completion action).
+      const notifyResponse = await fetch("/api/deliveries/notify-departure", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: delivery.id }),
+      }).then((res) => res.json() as Promise<{ ok?: boolean }>).catch(() => ({ ok: false }));
+      setCompletionNotice(notifyResponse.ok ? copy.departureNotified : copy.departureNotNotified);
     } catch {
       setCompletionError("departure_failed");
     } finally {
@@ -274,6 +297,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
         add: "Ajouter un site", editTitle: "Modifier le site", edit: "Modifier", agencyAccess: "Accès agence", creatingAccess: "Création…", accessCopied: (label: string) => `Lien temporaire copié pour ${label}. Il expire dans 30 minutes.`, accessCopyFallback: "Copiez ce lien d’activation agence", accessError: "Impossible de créer l’accès agence.", cancelEdit: "Annuler", update: "Mettre à jour", gpsReady: "GPS configuré", gpsMissing: "Coordonnées GPS manquantes", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon d’arrivée (km)", save: "Enregistrer", saving: "Enregistrement…", close: "Fermer", error: "Impossible d’enregistrer ce site.",
         consentButton: "WhatsApp", consentTitle: "Consentements WhatsApp", consentIntro: "Retirez ici l’autorisation d’un client. Après retrait, TrackFleet n’enverra plus aucune mise à jour automatique pour ce colis.", active: "Actif", withdrawn: "Retiré", withdraw: "Retirer le consentement", withdrawing: "Retrait…", noConsents: "Aucun consentement WhatsApp enregistré.", consentError: "Impossible de mettre à jour le consentement.",
         completionButton: "Arrivées", completionTitle: "Arrivées et clôture", completionIntro: "TrackFleet détecte l’arrivée automatiquement. Confirmez-la seulement quand le camion est bien sur place et que le GPS ne suffit pas; le délai de déchargement puis la clôture automatique continueront.", complete: "Marquer livré", completing: "Clôture…", confirmArrival: "Confirmer l’arrivée", confirmingArrival: "Confirmation…", confirmDeparture: "Confirmer le départ", confirmingDeparture: "Confirmation…", departurePending: "Camion pas encore parti", automaticPending: "Détection automatique active", manualRecommended: "Confirmation recommandée", automaticConfirmed: "Arrivée détectée automatiquement", manualConfirmed: "Arrivée confirmée par un employé", relayInProgress: "Relais CTM en cours · clôture automatique sous ~24 h", unassigned: "Camion à affecter", noActive: "Aucune livraison active.", completionError: "Impossible de mettre à jour cette livraison.",
+        arrivalNotified: "Arrivée confirmée, client notifié par WhatsApp", arrivalNotNotified: "Arrivée confirmée (WhatsApp non envoyé : fenêtre 24h fermée ou consentement retiré)", departureNotified: "Départ confirmé, client notifié par WhatsApp", departureNotNotified: "Départ confirmé (WhatsApp non envoyé : fenêtre 24h fermée ou consentement retiré)",
       }
     : locale === "nl"
       ? {
@@ -281,12 +305,14 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
           add: "Locatie toevoegen", editTitle: "Locatie bewerken", edit: "Bewerken", agencyAccess: "Agentschapstoegang", creatingAccess: "Aanmaken…", accessCopied: (label: string) => `Tijdelijke link gekopieerd voor ${label}. Deze verloopt over 30 minuten.`, accessCopyFallback: "Kopieer deze activeringslink", accessError: "Agentschapstoegang kon niet worden aangemaakt.", cancelEdit: "Annuleren", update: "Bijwerken", gpsReady: "GPS ingesteld", gpsMissing: "GPS-coördinaten ontbreken", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", save: "Opslaan", saving: "Opslaan…", close: "Sluiten", error: "Locatie kon niet worden opgeslagen.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp-toestemmingen", consentIntro: "Trek hier de toestemming van een klant in. Daarna verstuurt TrackFleet geen automatische updates meer voor deze levering.", active: "Actief", withdrawn: "Ingetrokken", withdraw: "Toestemming intrekken", withdrawing: "Intrekken…", noConsents: "Geen WhatsApp-toestemmingen geregistreerd.", consentError: "Toestemming kon niet worden bijgewerkt.",
           completionButton: "Aankomsten", completionTitle: "Aankomsten en afsluiting", completionIntro: "TrackFleet detecteert aankomst automatisch. Bevestig alleen wanneer de vrachtwagen ter plaatse is en GPS onvoldoende is; de lostijd en automatische afsluiting gaan daarna door.", complete: "Markeer geleverd", completing: "Afsluiten…", confirmArrival: "Aankomst bevestigen", confirmingArrival: "Bevestigen…", confirmDeparture: "Vertrek bevestigen", confirmingDeparture: "Bevestigen…", departurePending: "Vrachtwagen nog niet vertrokken", automaticPending: "Automatische detectie actief", manualRecommended: "Bevestiging aanbevolen", automaticConfirmed: "Aankomst automatisch gedetecteerd", manualConfirmed: "Aankomst bevestigd door medewerker", relayInProgress: "CTM-relais bezig · automatische afsluiting binnen ~24 u", unassigned: "Voertuig nog toewijzen", noActive: "Geen actieve leveringen.", completionError: "Deze levering kon niet worden bijgewerkt.",
+          arrivalNotified: "Aankomst bevestigd, klant via WhatsApp op de hoogte gebracht", arrivalNotNotified: "Aankomst bevestigd (WhatsApp niet verzonden: 24u-venster gesloten of toestemming ingetrokken)", departureNotified: "Vertrek bevestigd, klant via WhatsApp op de hoogte gebracht", departureNotNotified: "Vertrek bevestigd (WhatsApp niet verzonden: 24u-venster gesloten of toestemming ingetrokken)",
         }
       : {
           button: "Sites", title: "Agencies and depots", count: (value: number) => `${value} site${value === 1 ? "" : "s"}`,
           add: "Add site", editTitle: "Edit site", edit: "Edit", agencyAccess: "Agency access", creatingAccess: "Creating…", accessCopied: (label: string) => `Temporary link copied for ${label}. It expires in 30 minutes.`, accessCopyFallback: "Copy this agency activation link", accessError: "Could not create agency access.", cancelEdit: "Cancel", update: "Update", gpsReady: "GPS configured", gpsMissing: "GPS coordinates missing", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", save: "Save", saving: "Saving…", close: "Close", error: "Could not save this site.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp consents", consentIntro: "Withdraw a customer’s permission here. TrackFleet will stop all automatic WhatsApp updates for that delivery.", active: "Active", withdrawn: "Withdrawn", withdraw: "Withdraw consent", withdrawing: "Withdrawing…", noConsents: "No WhatsApp consent recorded.", consentError: "Could not update consent.",
           completionButton: "Arrivals", completionTitle: "Arrivals and completion", completionIntro: "TrackFleet detects arrival automatically. Confirm only when the truck is physically present and GPS is insufficient; unloading grace and automatic completion will then continue.", complete: "Mark delivered", completing: "Completing…", confirmArrival: "Confirm arrival", confirmingArrival: "Confirming…", confirmDeparture: "Confirm departure", confirmingDeparture: "Confirming…", departurePending: "Truck not yet departed", automaticPending: "Automatic detection active", manualRecommended: "Confirmation recommended", automaticConfirmed: "Arrival detected automatically", manualConfirmed: "Arrival confirmed by employee", relayInProgress: "CTM relay in progress · automatic completion in ~24h", unassigned: "Truck awaiting assignment", noActive: "No active deliveries.", completionError: "Could not update this delivery.",
+          arrivalNotified: "Arrival confirmed, customer notified via WhatsApp", arrivalNotNotified: "Arrival confirmed (WhatsApp not sent: 24h window closed or consent withdrawn)", departureNotified: "Departure confirmed, customer notified via WhatsApp", departureNotNotified: "Departure confirmed (WhatsApp not sent: 24h window closed or consent withdrawn)",
         };
 
   const consentRows = consents.filter((item) => item.whatsappOptIn || item.withdrawn);
@@ -375,7 +401,8 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
           })}
         </div>
         {completionError && <p className="login-error">{copy.completionError}</p>}
-        <div className="modal-footer"><button type="button" onClick={() => setCompletionOpen(false)}>{copy.close}</button></div>
+        {completionNotice && <p className="agency-location-message" role="status">{completionNotice}</p>}
+        <div className="modal-footer"><button type="button" onClick={() => { setCompletionOpen(false); setCompletionNotice(""); }}>{copy.close}</button></div>
       </section>
     </div>}
   </>;
