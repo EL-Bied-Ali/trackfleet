@@ -153,3 +153,24 @@ test("the site manager's dedicated ops panel offers a departure-confirm action i
   assert.match(siteManager, /!unassigned && !departurePending\(delivery\) && !arrivalConfirmed/);
   assert.match(siteManager, /departurePending\(delivery\)\s*\n\s*\? copy\.departurePending/);
 });
+
+// Reported live during an audit: this panel and the delivery table's
+// group-level departure/arrival buttons (confirmGroupDeparture/
+// confirmGroupArrival in page.tsx) both call the exact same manual-
+// completion action, but only the table's version actually told the
+// customer -- this panel changed the delivery's status and stopped there.
+// Since dispatchers use whichever surface is in front of them for the same
+// real-world action, silently skipping the WhatsApp notice here was a
+// customer-facing gap, not just a UI inconsistency. Now attempts the same
+// free, best-effort notify-departure/notify-arrival call the table already
+// uses, and reports honestly whether it actually went out (a closed 24h
+// window or withdrawn consent is a normal, expected outcome, not a failure
+// to hide).
+test("the site manager's ops panel now notifies the customer via WhatsApp after confirming arrival or departure, same as the delivery table's group buttons", () => {
+  assert.match(siteManager, /const \[completionNotice, setCompletionNotice\] = useState\(""\);/);
+  assert.match(siteManager, /fetch\("\/api\/deliveries\/notify-arrival", \{/);
+  assert.match(siteManager, /fetch\("\/api\/deliveries\/notify-departure", \{/);
+  assert.match(siteManager, /setCompletionNotice\(notifyResponse\.ok \? copy\.arrivalNotified : copy\.arrivalNotNotified\);/);
+  assert.match(siteManager, /setCompletionNotice\(notifyResponse\.ok \? copy\.departureNotified : copy\.departureNotNotified\);/);
+  assert.match(siteManager, /\{completionNotice && <p className="agency-location-message" role="status">\{completionNotice\}<\/p>\}/);
+});
