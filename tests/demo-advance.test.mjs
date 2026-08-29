@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { progressRouteDestination } from "../app/lib/delivery-progress-destination.ts";
+import { calculateRouteMetrics } from "../app/lib/route-progress.ts";
 
 const route = await readFile(new URL("../app/api/deliveries/demo/advance/route.ts", import.meta.url), "utf8");
 const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
@@ -26,8 +28,38 @@ test("progress advances through fixed milestones and stops short of 100 -- arriv
 
 test("the interpolated position follows the delivery's own real corridor route (via pointAtRouteFraction), not a straight line between origin and destination", () => {
   assert.match(route, /import \{ pointAtRouteFraction, routeForDestination \} from "\.\.\/\.\.\/\.\.\/\.\.\/lib\/route-progress";/);
-  assert.match(route, /const route = routeForDestination\(delivery\.destination, explicitDestination, explicitOrigin\);/);
+  assert.match(route, /const route = routeForDestination\(progressDestination\.destination, progressDestination\.explicitDestination, explicitOrigin\);/);
   assert.match(route, /const \[longitude, latitude\] = pointAtRouteFraction\(route, nextProgress \/ 100\);/);
+});
+
+// Reported live: verified against a real Tétouan demo delivery -- at 95%
+// progress the interpolated position was still on the Spanish side of the
+// strait, nowhere near Morocco, because the demo route was measured against
+// the parcel's actual final site. A real GPS-linked delivery to the same
+// agency has progressRouteDestination cap route math at the confirmed hub
+// instead (see delivery-progress-destination.ts, applied on every real GPS
+// link) so progress can actually reach 100% once the truck is GPS-tracked
+// that far -- measured against the real final site, it never would (the
+// relay leg past the hub has no GPS at all). The demo route now applies
+// that exact same substitution so a relay-destination demo's progress
+// behaves like what a customer would actually see on a real delivery.
+test("the demo advance route caps route/progress math at the confirmed hub for a relay destination, same as a real GPS-linked delivery", () => {
+  assert.match(route, /import \{ progressRouteDestination \} from "\.\.\/\.\.\/\.\.\/\.\.\/lib\/delivery-progress-destination";/);
+  assert.match(route, /const progressDestination = progressRouteDestination\(\{ destination: delivery\.destination, destinationSiteId: delivery\.destinationSiteId, explicitDestination \}\);/);
+
+  // Behavioral proof, not just source matching: a truck sitting right at the
+  // hub reads 100% when progress is measured against the hub (matching real
+  // GPS-linked delivery behavior), but only 96% measured against the
+  // parcel's actual final site -- confirming the fix's premise that the
+  // uncapped math can never cleanly reach 100% for a relay destination.
+  const hubLatitude = 35.89;
+  const hubLongitude = -5.5;
+  const uncapped = calculateRouteMetrics(hubLatitude, hubLongitude, "146 Avenue Cortoba, Tétouan, Maroc");
+  assert.ok(uncapped.progress < 100, `expected progress measured against the real final site to fall short at the hub, was ${uncapped.progress}`);
+
+  const capped = progressRouteDestination({ destination: "146 Avenue Cortoba, Tétouan, Maroc", destinationSiteId: "tetouan-cortoba-146", explicitDestination: null });
+  const cappedMetrics = calculateRouteMetrics(hubLatitude, hubLongitude, capped.destination, capped.explicitDestination);
+  assert.equal(cappedMetrics.progress, 100, "expected progress measured against the hub to reach 100% once the truck is actually there");
 });
 
 test("advancing always sets status to In transit -- forgiving of click order if the dispatcher advances before confirming departure", () => {

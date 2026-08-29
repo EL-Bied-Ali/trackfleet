@@ -1,5 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { DEMO_DELIVERY_CUSTOMER_PREFIX } from "../../../../lib/demo-delivery";
+import { progressRouteDestination } from "../../../../lib/delivery-progress-destination";
 import { getCompanySession } from "../../../../lib/company-auth";
 import { invalidJsonResponse, readJsonObject } from "../../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../../lib/request-origin";
@@ -43,7 +44,16 @@ export async function POST(request: Request) {
   const explicitDestination: [number, number] | null = typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
     ? [delivery.destinationLongitude, delivery.destinationLatitude]
     : null;
-  const route = routeForDestination(delivery.destination, explicitDestination, explicitOrigin);
+  // Same substitution real GPS linking already applies (see
+  // progressRouteDestination / applySendatrackSnapshot in
+  // delivery-store.postgres.ts): a relay-only destination is a small
+  // fraction of the route past the confirmed hub, so interpolating against
+  // the parcel's actual final site would leave the demo truck looking like
+  // it's still crossing Spain even at 95% -- nowhere near what a customer
+  // would actually see on a real delivery to the same agency, where
+  // progress is measured only up to the hub CTM takes over from.
+  const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination });
+  const route = routeForDestination(progressDestination.destination, progressDestination.explicitDestination, explicitOrigin);
   const [longitude, latitude] = pointAtRouteFraction(route, nextProgress / 100);
 
   const updated = await store.advanceDemoDelivery(deliveryId, session.companyId, {
