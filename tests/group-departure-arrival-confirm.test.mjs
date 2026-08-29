@@ -105,7 +105,7 @@ test("every icon-only table action button now has a hover tooltip (title) matchi
 });
 
 test("icon-only action buttons are a comfortable click target now, not the table's tiny inherited body text size, with visible hover/disabled feedback", () => {
-  assert.match(css, /\.more-button \{ border: 0; background: transparent; color: #8c9791; cursor: pointer; font-size: 15px; line-height: 1; padding: 5px; border-radius: 6px; \}/);
-  assert.match(css, /\.more-button:hover:not\(:disabled\) \{ background: #eef2f0; color: #52635b; \}/);
+  assert.match(css, /\.more-button \{ border: 0; background: transparent; color: #978c91; cursor: pointer; font-size: 15px; line-height: 1; padding: 5px; border-radius: 6px; \}/);
+  assert.match(css, /\.more-button:hover:not\(:disabled\) \{ background: #eef2f0; color: #63525b; \}/);
   assert.match(css, /\.more-button:disabled \{ opacity: \.4; cursor: default; \}/);
 });
