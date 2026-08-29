@@ -296,6 +296,7 @@ for (const [name, definition] of [
   ["route_template_id", "text"],
   ["trip_instance_id", "text"],
   ["destination_site_id", "text"],
+  ["company_id", "text"],
 ]) addMissingColumn(alterations, "delivery_eta_observations", etaColumns, name, definition);
 
 for (const [name, definition] of [
@@ -316,13 +317,19 @@ await runStatements(alterations);
 
 await runStatements([
   "UPDATE delivery_arrival_state SET last_observed_at = arrived_at WHERE last_observed_at IS NULL",
+  // routeTemplateId is a hash of only the origin/destination site ids, and
+  // the known-sites catalog is identical across every company -- without
+  // company_id, two unrelated companies shipping the same route blended
+  // each other's real GPS-observed speed/delay history into route learning
+  // and ETA estimates. Backfilled from each observation's own delivery.
+  "UPDATE delivery_eta_observations SET company_id = (SELECT company_id FROM deliveries WHERE deliveries.id = delivery_eta_observations.delivery_id) WHERE company_id IS NULL",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_shipment ON deliveries(company_id, shipment_id)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)",
   "CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)",
   "CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)",
-  "CREATE INDEX IF NOT EXISTS idx_eta_observations_route_destination ON delivery_eta_observations(route_template_id, destination_site_id, position_at DESC)",
+  "CREATE INDEX IF NOT EXISTS idx_eta_observations_company_route_destination ON delivery_eta_observations(company_id, route_template_id, destination_site_id, position_at DESC)",
   "CREATE INDEX IF NOT EXISTS idx_trip_positions_company_route ON trip_position_observations(company_id, route_template_id, position_at DESC)",
   "CREATE INDEX IF NOT EXISTS idx_trip_positions_company_time ON trip_position_observations(company_id, position_at)",
   "CREATE INDEX IF NOT EXISTS idx_fleet_positions_company_vehicle ON fleet_position_observations(company_id, vehicle_id, position_at DESC)",

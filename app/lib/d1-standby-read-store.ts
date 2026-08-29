@@ -122,6 +122,7 @@ function hydrateEvent(row: RawDeliveryEvent): DeliveryEventRow {
 function hydrateEta(row: Record<string, unknown>): EtaObservationRow {
   return {
     deliveryId: String(row.deliveryId),
+    companyId: row.companyId == null ? "" : String(row.companyId),
     routeTemplateId: row.routeTemplateId == null ? null : String(row.routeTemplateId),
     tripInstanceId: row.tripInstanceId == null ? null : String(row.tripInstanceId),
     destinationSiteId: row.destinationSiteId == null ? null : String(row.destinationSiteId),
@@ -180,7 +181,7 @@ export async function listDeliveryEventsFromD1(deliveryId: string): Promise<Deli
 
 export async function listEtaObservationsFromD1(deliveryId: string, limit = 200): Promise<EtaObservationRow[]> {
   const capped = Math.max(1, Math.min(2000, Math.round(limit)));
-  const result = await db().prepare(`SELECT delivery_id AS deliveryId, route_template_id AS routeTemplateId,
+  const result = await db().prepare(`SELECT delivery_id AS deliveryId, company_id AS companyId, route_template_id AS routeTemplateId,
       trip_instance_id AS tripInstanceId, destination_site_id AS destinationSiteId, position_at AS positionAt,
       estimated_arrival_at AS estimatedArrivalAt, planned_arrival_at AS plannedArrivalAt,
       delay_minutes AS delayMinutes, effective_speed_kmh AS effectiveSpeedKmh,
@@ -191,16 +192,16 @@ export async function listEtaObservationsFromD1(deliveryId: string, limit = 200)
   return (result.results ?? []).map(hydrateEta);
 }
 
-export async function listRouteEtaObservationsFromD1(routeTemplateId: string, destinationSiteId: string, limit = 5000): Promise<EtaObservationRow[]> {
+export async function listRouteEtaObservationsFromD1(companyId: string, routeTemplateId: string, destinationSiteId: string, limit = 5000): Promise<EtaObservationRow[]> {
   const capped = Math.max(1, Math.min(10000, Math.round(limit)));
-  const result = await db().prepare(`SELECT delivery_id AS deliveryId, route_template_id AS routeTemplateId,
+  const result = await db().prepare(`SELECT delivery_id AS deliveryId, company_id AS companyId, route_template_id AS routeTemplateId,
       trip_instance_id AS tripInstanceId, destination_site_id AS destinationSiteId, position_at AS positionAt,
       estimated_arrival_at AS estimatedArrivalAt, planned_arrival_at AS plannedArrivalAt,
       delay_minutes AS delayMinutes, effective_speed_kmh AS effectiveSpeedKmh,
       remaining_distance_km AS remainingDistanceKm, progress, confidence, source, created_at AS createdAt
     FROM delivery_eta_observations
-    WHERE route_template_id = ? AND destination_site_id = ? ORDER BY position_at DESC LIMIT ?`)
-    .bind(routeTemplateId, destinationSiteId, capped)
+    WHERE company_id = ? AND route_template_id = ? AND destination_site_id = ? ORDER BY position_at DESC LIMIT ?`)
+    .bind(companyId, routeTemplateId, destinationSiteId, capped)
     .all<Record<string, unknown>>();
   return (result.results ?? []).map(hydrateEta);
 }

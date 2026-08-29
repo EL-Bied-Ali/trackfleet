@@ -53,11 +53,11 @@ export const store: DeliveryStore = {
     );
   },
 
-  listEtaObservationsForRoute(routeTemplateId, destinationSiteId, limit) {
+  listEtaObservationsForRoute(companyId, routeTemplateId, destinationSiteId, limit) {
     return withD1ReadFailover(
       "delivery.listEtaObservationsForRoute",
-      () => primaryStore.listEtaObservationsForRoute(routeTemplateId, destinationSiteId, limit),
-      () => listRouteEtaObservationsFromD1(routeTemplateId, destinationSiteId, limit),
+      () => primaryStore.listEtaObservationsForRoute(companyId, routeTemplateId, destinationSiteId, limit),
+      () => listRouteEtaObservationsFromD1(companyId, routeTemplateId, destinationSiteId, limit),
     );
   },
 

@@ -256,7 +256,7 @@ export async function GET(request: Request) {
       const routeContexts = buildEtaRouteContexts(companyRows);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
-      const historyRows = routeContext ? await store.listEtaObservationsForRoute(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
+      const historyRows = routeContext ? await store.listEtaObservationsForRoute(row.companyId, routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await learnedStopMinutes(row.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, companyRows, learnedDwell);
@@ -323,7 +323,7 @@ export async function GET(request: Request) {
       const key = `${routeTemplateId}|${destinationSiteId}`;
       let pending = etaHistoryCache.get(key);
       if (!pending) {
-        pending = store.listEtaObservationsForRoute(routeTemplateId, destinationSiteId);
+        pending = store.listEtaObservationsForRoute(session.companyId, routeTemplateId, destinationSiteId);
         etaHistoryCache.set(key, pending);
       }
       return pending;

@@ -72,6 +72,7 @@ export type DeliveryEventRow = {
 };
 
 export type EtaObservationInput = {
+  companyId: string;
   deliveryId: string;
   routeTemplateId: string | null;
   tripInstanceId: string | null;
@@ -157,7 +158,7 @@ export interface DeliveryStore {
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;
   listEtaObservations(deliveryId: string, limit?: number): Promise<EtaObservationRow[]>;
-  listEtaObservationsForRoute(routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
+  listEtaObservationsForRoute(companyId: string, routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
   recordTripPosition(input: TripPositionInput): Promise<boolean>;
   listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;
   recordFleetPosition(input: FleetPositionInput): Promise<boolean>;
