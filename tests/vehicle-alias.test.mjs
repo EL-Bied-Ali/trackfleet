@@ -12,6 +12,10 @@ const tsconfigVercel = fs.readFileSync("tsconfig.vercel.json", "utf8");
 const route = fs.readFileSync("app/api/vehicles/alias/route.ts", "utf8");
 const deliveriesRoute = fs.readFileSync("app/api/deliveries/route.ts", "utf8");
 const sendatrackRoute = fs.readFileSync("app/api/sendatrack/route.ts", "utf8");
+const linkVehicleRoute = fs.readFileSync("app/api/deliveries/link-vehicle/route.ts", "utf8");
+const createTripRoute = fs.readFileSync("app/api/deliveries/create-trip/route.ts", "utf8");
+const vehicleAliasApply = fs.readFileSync("app/lib/vehicle-alias-apply.ts", "utf8");
+const serverAutomation = fs.readFileSync("app/lib/server-automation.ts", "utf8");
 const page = fs.readFileSync("app/page.tsx", "utf8");
 
 test("D1 schema defines a company-scoped vehicle_aliases table", () => {
@@ -63,11 +67,41 @@ test("agencies can still read vehicle aliases", () => {
   assert.doesNotMatch(getBody, /role/);
 });
 
-test("vehicle aliases override the raw SENDATRACK name in every fleet snapshot endpoint", () => {
-  assert.match(deliveriesRoute, /vehicleAliasStore\.listForCompany\(session\.companyId\)/);
-  assert.match(deliveriesRoute, /name: vehicleAliasById\.get\(vehicle\.id\) \?\? vehicle\.name/);
-  assert.match(sendatrackRoute, /vehicleAliasStore\.listForCompany\(session\.companyId\)/);
-  assert.match(sendatrackRoute, /name: vehicleAliasById\.get\(vehicle\.id\) \?\? vehicle\.name/);
+// Reported live during an audit: a dispatcher's chosen alias was only ever
+// applied to the live vehicle-picker list -- the moment a vehicle actually
+// got used (linked to a delivery, matched automatically by
+// applySendatrackSnapshot on every single poll, or logged to fleet position
+// history), every one of those call sites read the raw SENDATRACK snapshot
+// directly, so a renamed truck reverted to its real fleet id in the
+// delivery table, WhatsApp messages, trip records and position history the
+// instant it stopped being merely "in the picker" -- which for an
+// automatically GPS-matched delivery is within one poll (30s). Fixed by
+// applying the alias once, right where each snapshot is fetched
+// (vehicle-alias-apply.ts's applyVehicleAliases), so every downstream
+// consumer of that snapshot object gets the aliased name for free instead
+// of each call site needing its own lookup to remember.
+test("vehicle-alias-apply.ts substitutes the dispatcher's alias for the raw SENDATRACK name across the whole snapshot, once, right after it's fetched", () => {
+  assert.match(vehicleAliasApply, /vehicleAliasStore\.listForCompany\(companyId\)/);
+  assert.match(vehicleAliasApply, /vehicles: snapshot\.vehicles\.map\(\(vehicle\) => \{/);
+  assert.match(vehicleAliasApply, /const alias = aliasById\.get\(vehicle\.id\);/);
+  assert.match(vehicleAliasApply, /return alias \? \{ \.\.\.vehicle, name: alias \} : vehicle;/);
+});
+
+test("every place that reads a live SENDATRACK snapshot applies the alias substitution before using it, not just the vehicle-picker list", () => {
+  for (const [name, source] of [
+    ["GET /api/deliveries (both the automatic matching pass and the picker list)", deliveriesRoute],
+    ["GET /api/sendatrack", sendatrackRoute],
+    ["POST /api/deliveries/link-vehicle (single and group reassignment)", linkVehicleRoute],
+    ["POST /api/deliveries/create-trip", createTripRoute],
+    ["the scheduled fleet automation tick (server-automation.ts)", serverAutomation],
+  ]) {
+    assert.match(source, /applyVehicleAliases\(/, `expected ${name} to call applyVehicleAliases`);
+  }
+});
+
+test("GET /api/deliveries no longer duplicates its own alias lookup for the picker list -- it reuses the already-aliased snapshot", () => {
+  assert.doesNotMatch(deliveriesRoute, /vehicleAliasStore\.listForCompany/);
+  assert.match(deliveriesRoute, /name: vehicle\.name, speed: vehicle\.speed/);
 });
 
 test("renaming a vehicle from the dashboard is dispatcher-only and posts to the alias endpoint", () => {

@@ -1,22 +1,19 @@
 import { getSendatrackSnapshot } from "../../lib/sendatrack";
 import { getCompanySession } from "../../lib/company-auth";
-import { vehicleAliasStore } from "trackfleet-vehicle-alias-store";
+import { applyVehicleAliases } from "../../lib/vehicle-alias-apply";
 
 export async function GET(request: Request) {
   const session = await getCompanySession(request);
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
-  const [snapshot, vehicleAliases] = await Promise.all([
-    getSendatrackSnapshot(session.credentials),
-    vehicleAliasStore.listForCompany(session.companyId),
-  ]);
-  const vehicleAliasById = new Map(vehicleAliases.map((row) => [row.sendatrackVehicleId, row.alias]));
+  const rawSnapshot = await getSendatrackSnapshot(session.credentials);
+  const snapshot = await applyVehicleAliases(rawSnapshot, session.companyId);
   return Response.json({
     configured: snapshot.configured,
     connected: snapshot.connected,
     error: snapshot.error ?? null,
     vehicles: snapshot.vehicles.map((vehicle) => ({
       id: vehicle.id,
-      name: vehicleAliasById.get(vehicle.id) ?? vehicle.name,
+      name: vehicle.name,
       speed: vehicle.speed,
       updatedAt: vehicle.updatedAt,
       latitude: vehicle.latitude,

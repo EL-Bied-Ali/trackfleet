@@ -4,6 +4,7 @@ import { firstStopRouteTemplateId, manualTripVehicleKey, validateNewPlannedTrip 
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 import { getSendatrackSnapshot } from "../../../lib/sendatrack";
+import { applyVehicleAliases } from "../../../lib/vehicle-alias-apply";
 
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
@@ -26,8 +27,11 @@ export async function POST(request: Request) {
   let sendatrackVehicleId = "";
   let vehicleKey = manualTripVehicleKey(manualTruck);
   if (vehicleId) {
-    const snapshot = await getSendatrackSnapshot(session.credentials);
-    if (!snapshot.connected) return Response.json({ error: "sendatrack_unavailable" }, { status: 503 });
+    const rawSnapshot = await getSendatrackSnapshot(session.credentials);
+    if (!rawSnapshot.connected) return Response.json({ error: "sendatrack_unavailable" }, { status: 503 });
+    // See vehicle-alias-apply.ts -- without this, a renamed truck reverts to
+    // its raw SENDATRACK name the moment it's actually assigned.
+    const snapshot = await applyVehicleAliases(rawSnapshot, session.companyId);
     const vehicle = snapshot.vehicles.find((item) => item.id === vehicleId);
     if (!vehicle) return Response.json({ error: "vehicle_not_found" }, { status: 404 });
     truck = vehicle.name;

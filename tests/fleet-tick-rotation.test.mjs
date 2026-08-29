@@ -60,6 +60,7 @@ test("rotation only applies to the scheduled automation tick, never to a dispatc
   // subrequest cost as fleet size grows, not to ever show a dispatcher a
   // stale/partial view of their own trucks.
   assert.match(automationSource, /const rotatedSnapshot = \{ \.\.\.snapshot, vehicles: rotatedVehicleBatch\(snapshot\.vehicles\) \};/);
-  assert.match(automationSource, /snapshot: rotatedSnapshot,/);
+  assert.match(automationSource, /const aliasedSnapshot = await applyVehicleAliases\(rotatedSnapshot, companyId\);/);
+  assert.match(automationSource, /snapshot: aliasedSnapshot,/);
   assert.doesNotMatch(deliveriesRoute, /rotatedVehicleBatch/);
 });
