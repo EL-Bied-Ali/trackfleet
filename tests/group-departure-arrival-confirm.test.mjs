@@ -42,13 +42,15 @@ test("the arrival button is scoped per destination subgroup, not the whole group
 });
 
 // Reported live during an audit: every Moroccan agency site also carries the
-// "origin" role (see known-sites.ts), so an agency's own visible deliveries
-// (agencyDeliveryIsVisible matches on EITHER originSiteId or
-// destinationSiteId) can include a subgroup the agency merely sent, bound
-// for a different agency -- the button was offered for that subgroup too,
-// even though the server always refuses it (agency_destination_mismatch in
-// manual-completion/route.ts). The client now matches that same rule so an
-// agency is never offered a button that can only fail.
+// "origin" role (see known-sites.ts) for return shipments back to Belgium
+// (Moroccan agencies only ever ship to Belgium, never to each other), so an
+// agency's own visible deliveries (agencyDeliveryIsVisible matches on EITHER
+// originSiteId or destinationSiteId) can include a subgroup the agency
+// merely sent, bound for Belgium -- the button was offered for that
+// subgroup too, even though the server always refuses it
+// (agency_destination_mismatch in manual-completion/route.ts). The client
+// now matches that same rule so an agency is never offered a button that
+// can only fail.
 test("an agency is never offered the arrival button for a subgroup that isn't its own destination, even if the agency can see it as the delivery's origin", () => {
   assert.match(page, /if \(company\.role === "agency" && subgroup\.deliveries\[0\]\?\.destinationSiteId !== company\.siteId\) return null;/);
 });
