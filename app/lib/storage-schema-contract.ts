@@ -40,6 +40,7 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "delivery_eta_observations", column: "route_template_id" },
   { table: "delivery_eta_observations", column: "trip_instance_id" },
   { table: "delivery_eta_observations", column: "destination_site_id" },
+  { table: "delivery_eta_observations", column: "company_id" },
   { table: "fleet_position_observations", column: "position_at" },
   { table: "sessions", column: "company_id" },
   { table: "sessions", column: "credentials_ciphertext" },

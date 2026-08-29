@@ -161,6 +161,7 @@ function hydrateEvent(row: RawEvent): DeliveryEventRow {
 function hydrateEta(row: RawEta): EtaObservationRow {
   return {
     deliveryId: String(row.delivery_id),
+    companyId: row.company_id ? String(row.company_id) : "",
     routeTemplateId: row.route_template_id ? String(row.route_template_id) : null,
     tripInstanceId: row.trip_instance_id ? String(row.trip_instance_id) : null,
     destinationSiteId: row.destination_site_id ? String(row.destination_site_id) : null,
@@ -247,11 +248,12 @@ function eventStatement(db: D1Binding, event: DeliveryEventRow) {
 
 function etaStatement(db: D1Binding, observation: EtaObservationRow) {
   return db.prepare(`INSERT INTO delivery_eta_observations (
-    delivery_id, route_template_id, trip_instance_id, destination_site_id, position_at,
+    delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id, position_at,
     estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh,
     remaining_distance_km, progress, confidence, source, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(delivery_id, position_at) DO UPDATE SET
+    company_id = excluded.company_id,
     route_template_id = excluded.route_template_id,
     trip_instance_id = excluded.trip_instance_id,
     destination_site_id = excluded.destination_site_id,
@@ -265,7 +267,7 @@ function etaStatement(db: D1Binding, observation: EtaObservationRow) {
     source = excluded.source,
     created_at = excluded.created_at`)
     .bind(
-      observation.deliveryId, observation.routeTemplateId, observation.tripInstanceId,
+      observation.deliveryId, observation.companyId, observation.routeTemplateId, observation.tripInstanceId,
       observation.destinationSiteId, observation.positionAt.getTime(), observation.estimatedArrivalAt.getTime(),
       observation.plannedArrivalAt?.getTime() ?? null, observation.delayMinutes, observation.effectiveSpeedKmh,
       observation.remainingDistanceKm, observation.progress, observation.confidence, observation.source,
@@ -349,7 +351,7 @@ export async function backfillD1DeliveryHistory(): Promise<D1HistoryBackfillResu
       sql`SELECT delivery_id, type, progress, created_at FROM delivery_events
         WHERE delivery_id = ANY(${ids}::text[]) ORDER BY delivery_id, created_at ASC`
         .then((result) => result as unknown as RawEvent[]),
-      sql`SELECT delivery_id, route_template_id, trip_instance_id, destination_site_id,
+      sql`SELECT delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id,
           position_at, estimated_arrival_at, planned_arrival_at, delay_minutes,
           effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
         FROM (

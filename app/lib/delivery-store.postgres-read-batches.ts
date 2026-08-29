@@ -23,6 +23,7 @@ function uniqueKeys(keys: string[]) {
 function hydrateEta(row: RawEta): EtaObservationRow {
   return {
     deliveryId: String(row.delivery_id),
+    companyId: row.company_id ? String(row.company_id) : "",
     routeTemplateId: row.route_template_id ? String(row.route_template_id) : null,
     tripInstanceId: row.trip_instance_id ? String(row.trip_instance_id) : null,
     destinationSiteId: row.destination_site_id ? String(row.destination_site_id) : null,
@@ -66,7 +67,7 @@ export async function loadEtaBatch(keys: string[], maxLimit: number): Promise<Re
   if (!deliveryIds.length) return {};
   const capped = Math.max(1, Math.min(2000, Math.round(maxLimit)));
   const rows = await sql`
-    SELECT delivery_id, route_template_id, trip_instance_id, destination_site_id,
+    SELECT delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id,
       position_at, estimated_arrival_at, planned_arrival_at, delay_minutes,
       effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
     FROM (

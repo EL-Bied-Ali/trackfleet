@@ -41,6 +41,7 @@ export function buildEtaObservation(
 
   if (!eta.estimatedArrivalAt) return null;
   return {
+    companyId: row.companyId,
     deliveryId: row.id,
     routeTemplateId: routeContext?.routeTemplateId ?? null,
     tripInstanceId: routeContext?.tripInstanceId ?? null,
