@@ -131,7 +131,7 @@ export default function AdminPage() {
         {deniedReason && <p style={{ color: "#9a3e31" }}>{deniedReason}</p>}
         <a
           href="/api/auth/admin/google/start"
-          style={{ display: "inline-block", marginTop: 16, padding: "10px 18px", background: "#1f6952", color: "white", borderRadius: 8, textDecoration: "none" }}
+          style={{ display: "inline-block", marginTop: 16, padding: "10px 18px", background: "#9c2b2b", color: "white", borderRadius: 8, textDecoration: "none" }}
         >
           Sign in with Google
         </a>
