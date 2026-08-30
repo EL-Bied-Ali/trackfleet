@@ -15,6 +15,12 @@ export type CompanyBranding = {
   color: string | null;
 };
 
+export type CompanyAutomationSettings = {
+  unloadGraceMinutes: number | null;
+  ctmRelayGraceMinutes: number | null;
+  ctmRelayAutoCompletionEnabled: boolean | null;
+};
+
 function sqlClient() {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) throw new Error("DATABASE_URL is required for server sessions");
@@ -101,4 +107,32 @@ export async function getCompanyBranding(companyId: string): Promise<CompanyBran
 export async function updateCompanyBranding(companyId: string, input: CompanyBranding): Promise<void> {
   const sql = sqlClient();
   await sql`UPDATE companies SET brand_name = ${input.name}, brand_logo_data_url = ${input.logoDataUrl}, brand_color = ${input.color}, updated_at = ${new Date().toISOString()} WHERE id = ${companyId}`;
+}
+
+// companies.unload_grace_minutes / ctm_relay_grace_minutes /
+// ctm_relay_auto_completion_enabled -- same provisioning note as the
+// brand_* columns above: must exist in production Postgres (via
+// storage-schema-contract.ts's deploy gate) before this code ships. A null
+// value on any field means "use the deploy-wide default" (env var for the
+// grace minutes, enabled for the toggle) -- see server-automation.ts and
+// the manual-completion route for where that fallback is applied.
+export async function getCompanyAutomationSettings(companyId: string): Promise<CompanyAutomationSettings | null> {
+  const sql = sqlClient();
+  const rows = await sql`SELECT unload_grace_minutes, ctm_relay_grace_minutes, ctm_relay_auto_completion_enabled FROM companies WHERE id = ${companyId} LIMIT 1` as Array<{
+    unload_grace_minutes: number | null;
+    ctm_relay_grace_minutes: number | null;
+    ctm_relay_auto_completion_enabled: boolean | null;
+  }>;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    unloadGraceMinutes: row.unload_grace_minutes,
+    ctmRelayGraceMinutes: row.ctm_relay_grace_minutes,
+    ctmRelayAutoCompletionEnabled: row.ctm_relay_auto_completion_enabled,
+  };
+}
+
+export async function updateCompanyAutomationSettings(companyId: string, input: CompanyAutomationSettings): Promise<void> {
+  const sql = sqlClient();
+  await sql`UPDATE companies SET unload_grace_minutes = ${input.unloadGraceMinutes}, ctm_relay_grace_minutes = ${input.ctmRelayGraceMinutes}, ctm_relay_auto_completion_enabled = ${input.ctmRelayAutoCompletionEnabled}, updated_at = ${new Date().toISOString()} WHERE id = ${companyId}`;
 }

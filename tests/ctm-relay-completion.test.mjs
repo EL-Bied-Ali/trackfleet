@@ -93,6 +93,72 @@ test("a relay delivery with no GPS history yet (never departed) is left alone, n
   assert.equal(events.some((event) => event.type === "ARRIVED_AT_SITE"), false);
 });
 
+test("a company that customized the CTM relay grace period gets that value instead of the 24h default", async () => {
+  const companyId = `ctm-relay-custom-grace-test-${Date.now()}`;
+  const staleSince = new Date(Date.now() - 40 * 60_000);
+  await memoryStore.create(baseDeliveryInput(companyId, { lastPositionAt: staleSince }));
+
+  let observedGraceMinutes = null;
+  async function observeArrivalCompletion(input) {
+    observedGraceMinutes = input.unloadGraceMinutes;
+    return { justEntered: false, deliveredNow: true, arrivalSiteSince: staleSince };
+  }
+
+  await runFleetBusinessTick({
+    snapshot: { configured: true, connected: true, vehicles: [] },
+    companyId, unloadGraceMinutes: 120, store: memoryStore,
+    observeArrivalCompletion, observedAt: new Date(), automationStartAt: null,
+    ctmRelayGraceMinutes: 6 * 60,
+  });
+
+  assert.equal(observedGraceMinutes, 6 * 60, "a per-company ctmRelayGraceMinutes override must replace the 24h default");
+});
+
+test("a company that disabled CTM relay auto-completion never enters that loop, even with GPS stale past the hub", async () => {
+  const companyId = `ctm-relay-disabled-test-${Date.now()}`;
+  const staleSince = new Date(Date.now() - 40 * 60_000);
+  const delivery = await memoryStore.create(baseDeliveryInput(companyId, { lastPositionAt: staleSince }));
+
+  let observeCalled = false;
+  async function observeArrivalCompletion() {
+    observeCalled = true;
+    return { justEntered: false, deliveredNow: true, arrivalSiteSince: staleSince };
+  }
+
+  await runFleetBusinessTick({
+    snapshot: { configured: true, connected: true, vehicles: [] },
+    companyId, unloadGraceMinutes: 120, store: memoryStore,
+    observeArrivalCompletion, observedAt: new Date(), automationStartAt: null,
+    ctmRelayAutoCompletionEnabled: false,
+  });
+
+  assert.equal(observeCalled, false, "disabling the toggle must skip the relay-completion loop entirely -- only a manual confirmation can complete this delivery");
+  const events = await memoryStore.listEvents(delivery.id);
+  assert.equal(events.some((event) => event.type === "ARRIVED_AT_SITE"), false);
+});
+
+test("a company that disabled CTM relay auto-completion can still complete a relay delivery through the normal manual-confirmation loop", async () => {
+  const companyId = `ctm-relay-disabled-manual-test-${Date.now()}`;
+  const staleSince = new Date(Date.now() - 40 * 60_000);
+  const delivery = await memoryStore.create(baseDeliveryInput(companyId, { lastPositionAt: staleSince }));
+  await memoryStore.recordEvent(delivery.id, "MANUAL_ARRIVAL_CONFIRMED", 90);
+
+  let observedGraceMinutes = null;
+  async function observeArrivalCompletion(input) {
+    observedGraceMinutes = input.unloadGraceMinutes;
+    return { justEntered: false, deliveredNow: true, arrivalSiteSince: staleSince };
+  }
+
+  await runFleetBusinessTick({
+    snapshot: { configured: true, connected: true, vehicles: [] },
+    companyId, unloadGraceMinutes: 120, store: memoryStore,
+    observeArrivalCompletion, observedAt: new Date(), automationStartAt: null,
+    ctmRelayAutoCompletionEnabled: false,
+  });
+
+  assert.equal(observedGraceMinutes, 120, "the manual-confirmation loop is unaffected by the relay toggle and still uses the normal unload grace period");
+});
+
 test("a normal (non-relay) delivery, even with stale GPS, always uses the normal unloading grace period -- never the 24h CTM one", async () => {
   const companyId = `ctm-relay-direct-test-${Date.now()}`;
   const staleSince = new Date(Date.now() - 40 * 60_000);

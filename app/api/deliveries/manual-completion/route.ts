@@ -1,9 +1,10 @@
+import { getCompanyAutomationSettings } from "trackfleet-auth-session-store";
 import { completeDeliveryManually, confirmDepartureManually, observeArrivalCompletion } from "trackfleet-delivery-completion";
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { arrivalConfirmationRecommendation } from "../../../lib/arrival-confirmation";
 import { getCompanySession } from "../../../lib/company-auth";
-import { parseUnloadGraceMinutes } from "../../../lib/delivery-arrival";
+import { clampUnloadGraceMinutes, parseUnloadGraceMinutes } from "../../../lib/delivery-arrival";
 import { knownSite } from "../../../lib/known-sites";
 import { processPendingNotifications } from "../../../lib/notification-runner";
 import { readJsonObject, invalidJsonResponse } from "../../../lib/request-json";
@@ -78,7 +79,10 @@ export async function POST(request: Request) {
       }
 
       const now = new Date();
-      const unloadGraceMinutes = parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
+      const automationSettings = await getCompanyAutomationSettings(session.companyId);
+      const unloadGraceMinutes = typeof automationSettings?.unloadGraceMinutes === "number"
+        ? clampUnloadGraceMinutes(automationSettings.unloadGraceMinutes)
+        : parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
       await observeArrivalCompletion({
         companyId: session.companyId,
         deliveryId,

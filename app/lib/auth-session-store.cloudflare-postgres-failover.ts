@@ -5,8 +5,11 @@ import {
   getServerSession as getPrimarySession,
   getCompanyBranding as getPrimaryCompanyBranding,
   updateCompanyBranding as updatePrimaryCompanyBranding,
+  getCompanyAutomationSettings as getPrimaryCompanyAutomationSettings,
+  updateCompanyAutomationSettings as updatePrimaryCompanyAutomationSettings,
   type StoredCompanySession,
   type CompanyBranding,
+  type CompanyAutomationSettings,
 } from "./auth-session-store.shared-postgres";
 import { getStandbySessionFromD1 } from "./d1-standby-session-read";
 import { suppressMaintenanceWriteDuringD1Failover, withD1ReadFailover } from "./d1-read-failover";
@@ -51,4 +54,24 @@ export async function updateCompanyBranding(companyId: string, input: CompanyBra
   );
 }
 
-export type { StoredCompanySession, CompanyBranding };
+export async function getCompanyAutomationSettings(companyId: string): Promise<CompanyAutomationSettings | null> {
+  return withD1ReadFailover(
+    "company.getAutomationSettings",
+    () => getPrimaryCompanyAutomationSettings(companyId),
+    // Same reasoning as branding above: during an active D1 failover
+    // (Postgres itself down) it's fine to fall back to every deploy-wide
+    // default (null = "no override") rather than building a dedicated D1
+    // standby read path for a settings tweak that isn't core functionality.
+    async () => null,
+  );
+}
+
+export async function updateCompanyAutomationSettings(companyId: string, input: CompanyAutomationSettings) {
+  return suppressMaintenanceWriteDuringD1Failover(
+    "company.updateAutomationSettings",
+    () => updatePrimaryCompanyAutomationSettings(companyId, input),
+    undefined,
+  );
+}
+
+export type { StoredCompanySession, CompanyBranding, CompanyAutomationSettings };

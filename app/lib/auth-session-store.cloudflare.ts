@@ -15,6 +15,12 @@ export type CompanyBranding = {
   color: string | null;
 };
 
+export type CompanyAutomationSettings = {
+  unloadGraceMinutes: number | null;
+  ctmRelayGraceMinutes: number | null;
+  ctmRelayAutoCompletionEnabled: boolean | null;
+};
+
 function database() {
   const db = runtimeEnv.DB;
   if (!db) throw new Error("Cloudflare D1 binding `DB` is required for server sessions");
@@ -78,3 +84,9 @@ export async function getCompanyBranding(_companyId: string): Promise<CompanyBra
 }
 
 export async function updateCompanyBranding(_companyId: string, _input: CompanyBranding): Promise<void> {}
+
+export async function getCompanyAutomationSettings(_companyId: string): Promise<CompanyAutomationSettings | null> {
+  return null;
+}
+
+export async function updateCompanyAutomationSettings(_companyId: string, _input: CompanyAutomationSettings): Promise<void> {}

@@ -9,6 +9,28 @@ export function parseUnloadGraceMinutes(value: string | undefined) {
   return Math.max(MIN_UNLOAD_GRACE_MINUTES, Math.min(MAX_UNLOAD_GRACE_MINUTES, Math.round(parsed)));
 }
 
+// A company's own override (see CompanyAutomationSettings) takes priority
+// over the env-var default above, but must still be clamped the same way --
+// it reaches this function from a user-editable form field, not a trusted
+// deploy-time env var.
+export function clampUnloadGraceMinutes(value: number): number {
+  return Math.max(MIN_UNLOAD_GRACE_MINUTES, Math.min(MAX_UNLOAD_GRACE_MINUTES, Math.round(value)));
+}
+
+// The CTM relay leg (see KnownSite.finalLegTrackingUnavailable) has no GPS
+// confirmation at all, so its grace period assumes a fixed relay duration
+// instead of measuring a real dwell -- 24h is CTM's own typical relay-leg
+// transit time. Bounded loosely (1h-7d) since a company might reasonably
+// want it shorter (a nearby relay agency) or longer (a remote one), but a
+// value outside that range is almost certainly a data-entry mistake.
+export const DEFAULT_CTM_RELAY_GRACE_MINUTES = 24 * 60;
+export const MIN_CTM_RELAY_GRACE_MINUTES = 60;
+export const MAX_CTM_RELAY_GRACE_MINUTES = 7 * 24 * 60;
+
+export function clampCtmRelayGraceMinutes(value: number): number {
+  return Math.max(MIN_CTM_RELAY_GRACE_MINUTES, Math.min(MAX_CTM_RELAY_GRACE_MINUTES, Math.round(value)));
+}
+
 type ArrivalDwellInput = {
   status: "In transit" | "Delayed" | "Loading" | "Delivered";
   distanceToDestinationKm: number;

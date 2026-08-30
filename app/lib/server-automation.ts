@@ -1,8 +1,9 @@
+import { getCompanyAutomationSettings } from "trackfleet-auth-session-store";
 import { observeArrivalCompletion } from "trackfleet-delivery-completion";
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { companyIdForAccount } from "./company-id";
-import { parseUnloadGraceMinutes } from "./delivery-arrival";
+import { clampCtmRelayGraceMinutes, clampUnloadGraceMinutes, parseUnloadGraceMinutes } from "./delivery-arrival";
 import { runFleetBusinessTick } from "./fleet-business-tick";
 import { rotatedVehicleBatch } from "./fleet-tick-rotation";
 import { parseAutomationStartAt } from "./notification-policy";
@@ -43,7 +44,14 @@ export async function runFleetAutomation(): Promise<AutomationRunResult> {
   if (!snapshot.connected) throw new Error(`sendatrack_snapshot_disconnected:${snapshot.error ?? "unknown"}`);
 
   const companyId = await companyIdForAccount(accountID);
-  const unloadGraceMinutes = parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
+  const automationSettings = await getCompanyAutomationSettings(companyId);
+  const unloadGraceMinutes = typeof automationSettings?.unloadGraceMinutes === "number"
+    ? clampUnloadGraceMinutes(automationSettings.unloadGraceMinutes)
+    : parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
+  const ctmRelayGraceMinutes = typeof automationSettings?.ctmRelayGraceMinutes === "number"
+    ? clampCtmRelayGraceMinutes(automationSettings.ctmRelayGraceMinutes)
+    : undefined;
+  const ctmRelayAutoCompletionEnabled = automationSettings?.ctmRelayAutoCompletionEnabled ?? undefined;
   const automationStartAt = parseAutomationStartAt(runtimeEnv.WHATSAPP_AUTOMATION_START_AT);
   // Below ~10 vehicles this is a no-op (the whole fleet processes every
   // tick, same as always). Above it, only a rotating subset gets fully
@@ -61,6 +69,8 @@ export async function runFleetAutomation(): Promise<AutomationRunResult> {
     store,
     observeArrivalCompletion,
     automationStartAt,
+    ctmRelayGraceMinutes,
+    ctmRelayAutoCompletionEnabled,
   });
 
   console.info("[trackfleet:automation] tick", {
