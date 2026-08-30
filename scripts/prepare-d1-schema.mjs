@@ -208,6 +208,9 @@ await runStatements([
     brand_name text,
     brand_logo_data_url text,
     brand_color text,
+    unload_grace_minutes integer,
+    ctm_relay_grace_minutes integer,
+    ctm_relay_auto_completion_enabled integer,
     created_at integer NOT NULL,
     updated_at integer NOT NULL
   )`,
@@ -312,6 +315,9 @@ for (const [name, definition] of [
   ["brand_name", "text"],
   ["brand_logo_data_url", "text"],
   ["brand_color", "text"],
+  ["unload_grace_minutes", "integer"],
+  ["ctm_relay_grace_minutes", "integer"],
+  ["ctm_relay_auto_completion_enabled", "integer"],
 ]) addMissingColumn(alterations, "companies", companyColumns, name, definition);
 await runStatements(alterations);
 

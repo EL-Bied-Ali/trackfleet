@@ -3,7 +3,10 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import "./unloading-delay-suppression.test.mjs";
 import "./unload-departure-guard.test.mjs";
-import { evaluateArrivalDwell, parseUnloadGraceMinutes } from "../app/lib/delivery-arrival.ts";
+import {
+  evaluateArrivalDwell, parseUnloadGraceMinutes,
+  clampUnloadGraceMinutes, clampCtmRelayGraceMinutes,
+} from "../app/lib/delivery-arrival.ts";
 
 const [routeProgress, serverAutomation, businessTick, vercelCompletion, cloudflareCompletion, sharedPostgresCompletion, manualRoute, siteManager] = await Promise.all([
   readFile(new URL("../app/lib/route-progress.ts", import.meta.url), "utf8"),
@@ -23,6 +26,15 @@ test("unload grace defaults to two hours and stays within safe bounds", () => {
   assert.equal(parseUnloadGraceMinutes("1"), 15);
   assert.equal(parseUnloadGraceMinutes("9999"), 720);
   assert.equal(parseUnloadGraceMinutes("broken"), 120);
+});
+
+test("a company's own grace-period overrides are clamped to the same safe bounds as the env-var default", () => {
+  assert.equal(clampUnloadGraceMinutes(60), 60);
+  assert.equal(clampUnloadGraceMinutes(1), 15);
+  assert.equal(clampUnloadGraceMinutes(9999), 720);
+  assert.equal(clampCtmRelayGraceMinutes(6 * 60), 6 * 60);
+  assert.equal(clampCtmRelayGraceMinutes(1), 60);
+  assert.equal(clampCtmRelayGraceMinutes(999999), 7 * 24 * 60);
 });
 
 test("continuous arrival dwell requires the full configured unloading time", () => {
@@ -75,6 +87,18 @@ test("automation applies arrival dwell before reloading deliveries", () => {
   assert.match(businessTick, /observeArrivalCompletion/);
   assert.match(businessTick, /ARRIVED_AT_SITE/);
   assert.match(businessTick, /const deliveries = await store\.listForCompany\(companyId\)/);
+});
+
+test("the scheduled tick fetches the company's own automation overrides and only falls back to the env-var default when unset", () => {
+  assert.match(serverAutomation, /const automationSettings = await getCompanyAutomationSettings\(companyId\);/);
+  assert.match(serverAutomation, /clampUnloadGraceMinutes\(automationSettings\.unloadGraceMinutes\)\s*:\s*parseUnloadGraceMinutes\(runtimeEnv\.TRACKFLEET_UNLOAD_GRACE_MINUTES\)/s);
+  assert.match(serverAutomation, /clampCtmRelayGraceMinutes\(automationSettings\.ctmRelayGraceMinutes\)/);
+  assert.match(serverAutomation, /ctmRelayAutoCompletionEnabled,/);
+});
+
+test("manual arrival confirmation also honors the company's own unload grace override instead of always using the env-var default", () => {
+  assert.match(manualRoute, /const automationSettings = await getCompanyAutomationSettings\(session\.companyId\);/);
+  assert.match(manualRoute, /clampUnloadGraceMinutes\(automationSettings\.unloadGraceMinutes\)\s*:\s*parseUnloadGraceMinutes\(runtimeEnv\.TRACKFLEET_UNLOAD_GRACE_MINUTES\)/s);
 });
 
 test("both persistent runtimes reset continuity after a GPS observation gap", () => {

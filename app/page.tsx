@@ -142,6 +142,7 @@ type IntegrationState = { configured: boolean; connected: boolean; vehicleCount:
 type FeatureState = { whatsappDemoEnabled: boolean; whatsappAvailable: boolean };
 type CompanyBranding = { name: string | null; logoDataUrl: string | null; color: string | null };
 const emptyCompanyBranding: CompanyBranding = { name: null, logoDataUrl: null, color: null };
+type CompanyAutomationSettings = { unloadGraceMinutes: number | null; ctmRelayGraceMinutes: number | null; ctmRelayAutoCompletionEnabled: boolean | null };
 type TripHistoryItem = { id: string; routeTemplateId: string; vehicleKey: string; truck: string; sendatrackVehicleId: string; originSiteId: string | null; stops: Array<{ siteId: string; destination: string; sequence: number; plannedArrivalAt: string | null }>; status: "planned" | "active" | "completed"; createdAt: string; updatedAt: string };
 
 type MessageEvent = {
@@ -360,6 +361,20 @@ export default function Home() {
   const [companySettingsName, setCompanySettingsName] = useState("");
   const [companySettingsColor, setCompanySettingsColor] = useState("#c1272d");
   const [companySettingsLogoDataUrl, setCompanySettingsLogoDataUrl] = useState<string | null>(null);
+  // Empty string means "no override, inherit the deploy-wide default" --
+  // same convention as the branding fields above (blank name/color/logo
+  // keeps the TrackFleet default). Only a non-empty value becomes a stored
+  // per-company override on save.
+  const [companySettingsUnloadGraceMinutes, setCompanySettingsUnloadGraceMinutes] = useState("");
+  const [companySettingsCtmRelayGraceHours, setCompanySettingsCtmRelayGraceHours] = useState("");
+  const [companySettingsCtmRelayAutoEnabled, setCompanySettingsCtmRelayAutoEnabled] = useState(true);
+  // If the fetch inside openCompanySettings fails, the three fields above
+  // stay at their blank/default placeholders without actually reflecting
+  // whatever overrides (if any) are stored server-side. Saving in that state
+  // must not send the automation-settings request at all -- otherwise a
+  // dispatcher who only meant to change the branding color would silently
+  // wipe an existing grace-period override they never got to see.
+  const [companySettingsAutomationLoadFailed, setCompanySettingsAutomationLoadFailed] = useState(false);
   const [companySettingsSaving, setCompanySettingsSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [filter, setFilter] = useState("All deliveries");
@@ -1737,11 +1752,27 @@ export default function Home() {
     }
   }
 
-  function openCompanySettings() {
+  async function openCompanySettings() {
     setCompanySettingsName(companyBranding.name ?? "");
     setCompanySettingsColor(companyBranding.color ?? "#c1272d");
     setCompanySettingsLogoDataUrl(companyBranding.logoDataUrl ?? null);
+    setCompanySettingsUnloadGraceMinutes("");
+    setCompanySettingsCtmRelayGraceHours("");
+    setCompanySettingsCtmRelayAutoEnabled(true);
+    setCompanySettingsAutomationLoadFailed(false);
     setCompanySettingsOpen(true);
+    try {
+      const response = await fetch("/api/company/automation-settings", { cache: "no-store" });
+      if (!response.ok) throw new Error("automation_settings_fetch_failed");
+      const data = await response.json() as { settings?: CompanyAutomationSettings };
+      const settings = data.settings;
+      if (!settings) return;
+      if (typeof settings.unloadGraceMinutes === "number") setCompanySettingsUnloadGraceMinutes(String(settings.unloadGraceMinutes));
+      if (typeof settings.ctmRelayGraceMinutes === "number") setCompanySettingsCtmRelayGraceHours(String(Math.round(settings.ctmRelayGraceMinutes / 60)));
+      if (typeof settings.ctmRelayAutoCompletionEnabled === "boolean") setCompanySettingsCtmRelayAutoEnabled(settings.ctmRelayAutoCompletionEnabled);
+    } catch {
+      setCompanySettingsAutomationLoadFailed(true);
+    }
   }
 
   // Resized/compressed client-side before it ever reaches the server --
@@ -1783,6 +1814,22 @@ export default function Home() {
         body: JSON.stringify({ name: companySettingsName.trim(), color: companySettingsColor, logoDataUrl: companySettingsLogoDataUrl ?? "" }),
       });
       if (!response.ok) throw new Error("branding_save_failed");
+
+      if (!companySettingsAutomationLoadFailed) {
+        const trimmedUnloadGrace = companySettingsUnloadGraceMinutes.trim();
+        const trimmedCtmRelayHours = companySettingsCtmRelayGraceHours.trim();
+        const automationResponse = await fetch("/api/company/automation-settings", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            unloadGraceMinutes: trimmedUnloadGrace === "" ? null : Number(trimmedUnloadGrace),
+            ctmRelayGraceMinutes: trimmedCtmRelayHours === "" ? null : Number(trimmedCtmRelayHours) * 60,
+            ctmRelayAutoCompletionEnabled: companySettingsCtmRelayAutoEnabled,
+          }),
+        });
+        if (!automationResponse.ok) throw new Error("automation_settings_save_failed");
+      }
+
       window.dispatchEvent(new Event("trackfleet-branding-changed"));
       setCompanySettingsOpen(false);
       setToast(locale === "fr" ? "Identité visuelle mise à jour." : locale === "nl" ? "Huisstijl bijgewerkt." : "Branding updated.");
@@ -2235,7 +2282,7 @@ export default function Home() {
 
       {demoModalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="demo-delivery-title"><div className="modal-header"><div><p className="eyebrow">{locale === "fr" ? "DÉMONSTRATION" : locale === "nl" ? "DEMONSTRATIE" : "DEMO"}</p><h2 id="demo-delivery-title">{locale === "fr" ? "Créer une livraison démo" : locale === "nl" ? "Demozending aanmaken" : "Create demo delivery"}</h2><span>{locale === "fr" ? "Pour montrer la notification WhatsApp d’arrivée sans attendre un vrai camion." : locale === "nl" ? "Om de WhatsApp-aankomstmelding te tonen zonder op een echte vrachtwagen te wachten." : "To show off the WhatsApp arrival notification without waiting for a real truck."}</span></div><button onClick={() => setDemoModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDemoDelivery}><div className="form-row"><label>{locale === "fr" ? "Numéro WhatsApp à utiliser pour la démo" : locale === "nl" ? "WhatsApp-nummer voor de demo" : "WhatsApp number to demo with"}<input value={demoContact} onChange={(event) => setDemoContact(event.target.value)} inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" required /></label><label>{locale === "fr" ? "Agence de destination" : locale === "nl" ? "Bestemmingsagentschap" : "Destination agency"}<select value={demoDestinationSiteId} onChange={(event) => setDemoDestinationSiteId(event.target.value)} required><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><small>{locale === "fr" ? "Une livraison réelle et marquée [DEMO] sera créée et apparaîtra immédiatement dans le tableau de bord de cette agence." : locale === "nl" ? "Er wordt een echte, als [DEMO] gemarkeerde zending aangemaakt die meteen verschijnt in het dashboard van dit agentschap." : "A real delivery marked [DEMO] will be created and will appear immediately in that agency's dashboard."}</small><div className="modal-footer"><button type="button" onClick={() => setDemoModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={demoBusy}>{demoBusy ? t.creating : (locale === "fr" ? "Créer" : locale === "nl" ? "Aanmaken" : "Create")}<span>→</span></button></div></form></section></div>}
 
-      {companySettingsOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="company-settings-title"><div className="modal-header"><div><p className="eyebrow">{locale === "fr" ? "IDENTITÉ VISUELLE" : locale === "nl" ? "HUISSTIJL" : "BRANDING"}</p><h2 id="company-settings-title">{locale === "fr" ? "Paramètres de l’entreprise" : locale === "nl" ? "Bedrijfsinstellingen" : "Company settings"}</h2><span>{locale === "fr" ? "Votre nom, logo et couleur remplacent la marque TrackFleet sur la page de suivi client et dans le tableau de bord." : locale === "nl" ? "Uw naam, logo en kleur vervangen het TrackFleet-merk op de klant-trackingpagina en in het dashboard." : "Your name, logo and color replace TrackFleet's branding on the customer tracking page and in the dashboard."}</span></div><button onClick={() => setCompanySettingsOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={saveCompanySettings}><div className="form-row"><label>{locale === "fr" ? "Nom de l’entreprise" : locale === "nl" ? "Bedrijfsnaam" : "Company name"}<input value={companySettingsName} onChange={(event) => setCompanySettingsName(event.target.value)} maxLength={80} placeholder="TrackFleet" /></label><label>{locale === "fr" ? "Couleur de la marque" : locale === "nl" ? "Merkkleur" : "Brand color"}<input type="color" value={companySettingsColor} onChange={(event) => setCompanySettingsColor(event.target.value)} /></label></div><label>{locale === "fr" ? "Logo" : "Logo"}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleLogoFileChange(file); }} /></label>{companySettingsLogoDataUrl && <div className="company-logo-preview"><img src={companySettingsLogoDataUrl} alt="" />{/* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */}<button type="button" onClick={() => setCompanySettingsLogoDataUrl(null)}>{locale === "fr" ? "Retirer le logo" : locale === "nl" ? "Logo verwijderen" : "Remove logo"}</button></div>}<small>{locale === "fr" ? "Laissez le nom vide pour garder la marque TrackFleet par défaut." : locale === "nl" ? "Laat de naam leeg om de standaard TrackFleet-branding te behouden." : "Leave the name blank to keep the default TrackFleet branding."}</small><div className="modal-footer"><button type="button" onClick={() => setCompanySettingsOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={companySettingsSaving}>{companySettingsSaving ? (locale === "fr" ? "Enregistrement…" : locale === "nl" ? "Opslaan…" : "Saving…") : (locale === "fr" ? "Enregistrer" : locale === "nl" ? "Opslaan" : "Save")}<span>→</span></button></div></form></section></div>}
+      {companySettingsOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="company-settings-title"><div className="modal-header"><div><p className="eyebrow">{locale === "fr" ? "IDENTITÉ VISUELLE" : locale === "nl" ? "HUISSTIJL" : "BRANDING"}</p><h2 id="company-settings-title">{locale === "fr" ? "Paramètres de l’entreprise" : locale === "nl" ? "Bedrijfsinstellingen" : "Company settings"}</h2><span>{locale === "fr" ? "Votre nom, logo et couleur remplacent la marque TrackFleet sur la page de suivi client et dans le tableau de bord." : locale === "nl" ? "Uw naam, logo en kleur vervangen het TrackFleet-merk op de klant-trackingpagina en in het dashboard." : "Your name, logo and color replace TrackFleet's branding on the customer tracking page and in the dashboard."}</span></div><button onClick={() => setCompanySettingsOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={saveCompanySettings}><div className="form-row"><label>{locale === "fr" ? "Nom de l’entreprise" : locale === "nl" ? "Bedrijfsnaam" : "Company name"}<input value={companySettingsName} onChange={(event) => setCompanySettingsName(event.target.value)} maxLength={80} placeholder="TrackFleet" /></label><label>{locale === "fr" ? "Couleur de la marque" : locale === "nl" ? "Merkkleur" : "Brand color"}<input type="color" value={companySettingsColor} onChange={(event) => setCompanySettingsColor(event.target.value)} /></label></div><label>{locale === "fr" ? "Logo" : "Logo"}<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleLogoFileChange(file); }} /></label>{companySettingsLogoDataUrl && <div className="company-logo-preview"><img src={companySettingsLogoDataUrl} alt="" />{/* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */}<button type="button" onClick={() => setCompanySettingsLogoDataUrl(null)}>{locale === "fr" ? "Retirer le logo" : locale === "nl" ? "Logo verwijderen" : "Remove logo"}</button></div>}<small>{locale === "fr" ? "Laissez le nom vide pour garder la marque TrackFleet par défaut." : locale === "nl" ? "Laat de naam leeg om de standaard TrackFleet-branding te behouden." : "Leave the name blank to keep the default TrackFleet branding."}</small><div className="form-section"><strong>{locale === "fr" ? "Automatisation" : locale === "nl" ? "Automatisering" : "Automation"}</strong><div className="toggle-row"><div><span className="field-label">{locale === "fr" ? "Complétion automatique du relais CTM" : locale === "nl" ? "Automatische CTM-relaisafronding" : "Automatic CTM relay completion"}</span><small>{locale === "fr" ? "Si désactivé, une agence en relais (hors Casablanca/Tanger Med) attend toujours une confirmation manuelle — jamais de bascule automatique." : locale === "nl" ? "Indien uitgeschakeld wacht een relaisagentschap (buiten Casablanca/Tanger Med) altijd op een handmatige bevestiging — nooit een automatische overgang." : "When off, a relay agency (outside Casablanca/Tanger Med) always waits for a manual confirmation — never an automatic switch."}</small></div><label className="toggle-switch"><input type="checkbox" checked={companySettingsCtmRelayAutoEnabled} onChange={(event) => setCompanySettingsCtmRelayAutoEnabled(event.target.checked)} aria-label={locale === "fr" ? "Complétion automatique du relais CTM" : locale === "nl" ? "Automatische CTM-relaisafronding" : "Automatic CTM relay completion"} /><span /></label></div><div className="form-row"><label>{locale === "fr" ? "Délai de déchargement (minutes)" : locale === "nl" ? "Losvertraging (minuten)" : "Unloading grace period (minutes)"}<input type="number" min={15} max={720} value={companySettingsUnloadGraceMinutes} onChange={(event) => setCompanySettingsUnloadGraceMinutes(event.target.value)} placeholder="120" /></label><label>{locale === "fr" ? "Délai relais CTM (heures)" : locale === "nl" ? "CTM-relaisvertraging (uren)" : "CTM relay grace period (hours)"}<input type="number" min={1} max={168} value={companySettingsCtmRelayGraceHours} onChange={(event) => setCompanySettingsCtmRelayGraceHours(event.target.value)} placeholder="24" disabled={!companySettingsCtmRelayAutoEnabled} /></label></div><small>{locale === "fr" ? "Laissez vide pour garder les délais par défaut (2h de déchargement, 24h de relais)." : locale === "nl" ? "Laat leeg om de standaardtijden te behouden (2u lossen, 24u relais)." : "Leave blank to keep the default timings (2h unloading, 24h relay)."}</small></div><div className="modal-footer"><button type="button" onClick={() => setCompanySettingsOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={companySettingsSaving}>{companySettingsSaving ? (locale === "fr" ? "Enregistrement…" : locale === "nl" ? "Opslaan…" : "Saving…") : (locale === "fr" ? "Enregistrer" : locale === "nl" ? "Opslaan" : "Save")}<span>→</span></button></div></form></section></div>}
       {toast && <div className="toast" role="status" aria-live="polite"><span>✓</span>{toast}</div>}
     </main>
   );

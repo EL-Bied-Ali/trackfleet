@@ -7,8 +7,11 @@ import {
   getServerSession,
   getCompanyBranding,
   updateCompanyBranding as updatePrimaryCompanyBranding,
+  getCompanyAutomationSettings,
+  updateCompanyAutomationSettings as updatePrimaryCompanyAutomationSettings,
   type StoredCompanySession,
   type CompanyBranding,
+  type CompanyAutomationSettings,
 } from "./auth-session-store.vercel";
 
 type D1MirrorStatement = {
@@ -117,5 +120,28 @@ export async function updateCompanyBranding(companyId: string, input: CompanyBra
   await mirrorBranding(companyId, input);
 }
 
-export { getServerSession, getCompanyBranding };
-export type { StoredCompanySession, CompanyBranding };
+function tristateToD1(value: boolean | null): number | null {
+  return value === null ? null : (value ? 1 : 0);
+}
+
+async function mirrorAutomationSettings(companyId: string, input: CompanyAutomationSettings) {
+  const db = d1();
+  if (!db) return;
+  try {
+    await db.prepare(`UPDATE companies SET unload_grace_minutes = ?, ctm_relay_grace_minutes = ?, ctm_relay_auto_completion_enabled = ?, updated_at = ? WHERE id = ?`)
+      .bind(input.unloadGraceMinutes, input.ctmRelayGraceMinutes, tristateToD1(input.ctmRelayAutoCompletionEnabled), Date.now(), companyId)
+      .run();
+  } catch (error) {
+    console.error("[trackfleet:replication] D1 company automation settings mirror failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
+}
+
+export async function updateCompanyAutomationSettings(companyId: string, input: CompanyAutomationSettings) {
+  await updatePrimaryCompanyAutomationSettings(companyId, input);
+  await mirrorAutomationSettings(companyId, input);
+}
+
+export { getServerSession, getCompanyBranding, getCompanyAutomationSettings };
+export type { StoredCompanySession, CompanyBranding, CompanyAutomationSettings };
