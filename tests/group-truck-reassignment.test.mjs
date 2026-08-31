@@ -145,7 +145,7 @@ test("the group header row stretches to fill its full row width, not just its co
   assert.doesNotMatch(css, /\.group-header-row \{ display: block; \}/);
   assert.match(css, /\.group-header-row td \{ padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var\(--line\); cursor: default; \}/);
   assert.match(css, /\.group-header-row-inner \{ position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; \}/);
-  assert.match(page, /<td colSpan=\{company\?\.role === "dispatcher" \? 3 : 2\}><div className="group-header-row-inner">/);
+  assert.match(page, /<td colSpan=\{company\?\.role === "dispatcher" \? 4 : 3\}><div className="group-header-row-inner">/);
   assert.match(page, /<\/>\}<\/td><td className="col-actions"><div className="group-header-row-inner">.*<\/div><\/td><\/tr>/s);
 });
 

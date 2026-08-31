@@ -158,6 +158,18 @@ export type DeliveryScanRow = DeliveryScanInput & {
   scannedAt: Date;
 };
 
+// The dashboard only needs the latest proof at each operational handoff,
+// rather than the complete audit history. "arrived" intentionally means
+// unloaded at an intermediate hub, never arrived at the customer's final
+// destination.
+export type DeliveryScanSummary = {
+  deliveryId: string;
+  loadedAt: Date | null;
+  loadedTruck: string | null;
+  hubArrivedAt: Date | null;
+  hubLabel: string | null;
+};
+
 export type PendingDeliveryNotification = {
   delivery: DeliveryRow;
   event: DeliveryEventRow;
@@ -220,6 +232,10 @@ export interface DeliveryStore {
   // Most-recent-first, used both to render a delivery's scan history and to
   // detect an accidental duplicate scan (see app/api/scan/route.ts).
   listScansForDelivery(deliveryId: string, limit?: number): Promise<DeliveryScanRow[]>;
+  // One bounded query for the dashboard's parcel-control column. This avoids
+  // adding one database request per delivery merely to show the latest load
+  // and hub-unload proof.
+  listScanSummaries(companyId: string, deliveryIds: string[]): Promise<DeliveryScanSummary[]>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;

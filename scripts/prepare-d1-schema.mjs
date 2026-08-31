@@ -347,6 +347,7 @@ await runStatements([
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_parcel_code ON deliveries(company_id, parcel_code)",
   "CREATE INDEX IF NOT EXISTS idx_delivery_scans_delivery_id ON delivery_scans(delivery_id, scanned_at DESC)",
+  "CREATE INDEX IF NOT EXISTS idx_delivery_scans_company_delivery_checkpoint ON delivery_scans(company_id, delivery_id, checkpoint, scanned_at DESC)",
   "CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)",
   "CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)",
   "CREATE INDEX IF NOT EXISTS idx_eta_observations_company_route_destination ON delivery_eta_observations(company_id, route_template_id, destination_site_id, position_at DESC)",

@@ -3,7 +3,7 @@ import { progressRouteDestination } from "./delivery-progress-destination";
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import { createDeliveryId } from "./delivery-id";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanCheckpoint, DeliveryScanRow, DeliveryStatus, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanCheckpoint, DeliveryScanRow, DeliveryScanSummary, DeliveryStatus, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics, resolveGpsBaselineProgress } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
@@ -241,6 +241,7 @@ async function ensureSchema() {
       scanned_at timestamptz NOT NULL
     )`;
     await sql`CREATE INDEX IF NOT EXISTS idx_delivery_scans_delivery_id ON delivery_scans(delivery_id, scanned_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_delivery_scans_company_delivery_checkpoint ON delivery_scans(company_id, delivery_id, checkpoint, scanned_at DESC)`;
     await sql`CREATE TABLE IF NOT EXISTS delivery_events (
       delivery_id text NOT NULL,
       type text NOT NULL,
@@ -795,6 +796,34 @@ export const postgresStore: DeliveryStore = {
       id: row.id, companyId: row.company_id, deliveryId: row.delivery_id, checkpoint: row.checkpoint,
       scannedBy: row.scanned_by, truck: row.truck, locationLabel: row.location_label, scannedAt: new Date(row.scanned_at),
     }));
+  },
+
+  async listScanSummaries(companyId, deliveryIds) {
+    if (!deliveryIds.length) return [];
+    await ensureSchema();
+    const rows = await sql`SELECT delivery_id, checkpoint, truck, location_label, scanned_at FROM delivery_scans
+      WHERE company_id = ${companyId} AND delivery_id = ANY(${deliveryIds}::text[])
+        AND checkpoint IN ('loaded', 'arrived')
+      ORDER BY delivery_id ASC, scanned_at DESC` as Array<{
+        delivery_id: string; checkpoint: DeliveryScanCheckpoint; truck: string | null;
+        location_label: string | null; scanned_at: string | Date;
+      }>;
+    const summaries = new Map<string, DeliveryScanSummary>();
+    for (const row of rows) {
+      const summary = summaries.get(row.delivery_id) ?? {
+        deliveryId: row.delivery_id, loadedAt: null, loadedTruck: null, hubArrivedAt: null, hubLabel: null,
+      };
+      if (row.checkpoint === "loaded" && !summary.loadedAt) {
+        summary.loadedAt = new Date(row.scanned_at);
+        summary.loadedTruck = row.truck;
+      }
+      if (row.checkpoint === "arrived" && !summary.hubArrivedAt) {
+        summary.hubArrivedAt = new Date(row.scanned_at);
+        summary.hubLabel = row.location_label;
+      }
+      summaries.set(row.delivery_id, summary);
+    }
+    return [...summaries.values()];
   },
 
   async deleteDemoDeliveries(companyId) {

@@ -1,7 +1,7 @@
 import { seedDeliveries } from "./delivery-seed.ts";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events.ts";
 import { createDeliveryId } from "./delivery-id.ts";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types.ts";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanRow, DeliveryScanSummary, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types.ts";
 import { NotificationClaimState } from "./notification-claim-state.ts";
 import { progressRouteDestination } from "./delivery-progress-destination.ts";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress.ts";
@@ -288,6 +288,26 @@ export const memoryStore: DeliveryStore = {
       .filter((scan) => scan.deliveryId === deliveryId)
       .sort((a, b) => b.scannedAt.getTime() - a.scannedAt.getTime())
       .slice(0, Math.max(1, Math.min(500, limit)));
+  },
+  async listScanSummaries(companyId, deliveryIds) {
+    const ids = new Set(deliveryIds);
+    const summaries = new Map<string, DeliveryScanSummary>();
+    for (const scan of [...deliveryScans].sort((a, b) => b.scannedAt.getTime() - a.scannedAt.getTime())) {
+      if (scan.companyId !== companyId || !ids.has(scan.deliveryId) || (scan.checkpoint !== "loaded" && scan.checkpoint !== "arrived")) continue;
+      const summary = summaries.get(scan.deliveryId) ?? {
+        deliveryId: scan.deliveryId, loadedAt: null, loadedTruck: null, hubArrivedAt: null, hubLabel: null,
+      };
+      if (scan.checkpoint === "loaded" && !summary.loadedAt) {
+        summary.loadedAt = scan.scannedAt;
+        summary.loadedTruck = scan.truck;
+      }
+      if (scan.checkpoint === "arrived" && !summary.hubArrivedAt) {
+        summary.hubArrivedAt = scan.scannedAt;
+        summary.hubLabel = scan.locationLabel;
+      }
+      summaries.set(scan.deliveryId, summary);
+    }
+    return [...summaries.values()];
   },
   async deleteDemoDeliveries(companyId) {
     const ids = new Set(deliveryStore.filter((delivery) => delivery.companyId === companyId && delivery.customer.startsWith(DEMO_DELIVERY_CUSTOMER_PREFIX)).map((delivery) => delivery.id));
