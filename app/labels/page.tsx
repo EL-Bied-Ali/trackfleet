@@ -12,17 +12,33 @@ type LabelDelivery = {
   parcelCode: string | null;
 };
 
+type LabelBranding = { name: string | null; logoDataUrl: string | null };
+const emptyBranding: LabelBranding = { name: null, logoDataUrl: null };
+
 // A4 sheet of pre-cut adhesive labels, printed on a plain office printer --
 // no thermal printer assumed (see the product spec this was built from).
-// Two columns keeps each label a comfortable ~9cm wide with A4's 10mm
-// margins; break-inside: avoid (in the print stylesheet below) keeps one
-// label from being split across a page boundary.
+// 2 columns x 4 rows of ~105x74mm labels exactly fills a 210x297mm page with
+// no gap between them, so @page margin is 0 below. There's no universal
+// standard for the printed gutter on physical pre-cut sheets though -- if
+// yours has a border/margin printed on it, adjust LABEL_WIDTH_MM /
+// LABEL_HEIGHT_MM to match and test-print one sheet before a full batch.
 const LABELS_PER_ROW = 2;
+const LABELS_PER_COLUMN = 4;
+const LABELS_PER_PAGE = LABELS_PER_ROW * LABELS_PER_COLUMN;
+const LABEL_WIDTH_MM = 105;
+const LABEL_HEIGHT_MM = 74.25;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const pages: T[][] = [];
+  for (let i = 0; i < items.length; i += size) pages.push(items.slice(i, i + size));
+  return pages;
+}
 
 export default function LabelsPage() {
   const [auth, setAuth] = useState<"loading" | "ready" | "denied">("loading");
   const [deliveries, setDeliveries] = useState<LabelDelivery[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [branding, setBranding] = useState<LabelBranding>(emptyBranding);
   const qrCanvases = useRef(new Map<string, HTMLCanvasElement>());
   const barcodeCanvases = useRef(new Map<string, HTMLCanvasElement>());
 
@@ -33,6 +49,16 @@ export default function LabelsPage() {
       .catch(() => { if (active) setAuth("denied"); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (auth !== "ready") return;
+    let active = true;
+    void fetch("/api/company/branding", { cache: "no-store" })
+      .then((response) => response.json() as Promise<{ branding?: LabelBranding }>)
+      .then((data) => { if (active) setBranding(data.branding ?? emptyBranding); })
+      .catch(() => { if (active) setBranding(emptyBranding); });
+    return () => { active = false; };
+  }, [auth]);
 
   useEffect(() => {
     if (auth !== "ready") return;
@@ -82,14 +108,17 @@ export default function LabelsPage() {
     </main>
   );
 
+  const pages = chunk(deliveries, LABELS_PER_PAGE);
+
   return (
     <main style={{ fontFamily: "system-ui", color: "#111827", background: "#e5e7eb", minHeight: "100vh" }}>
       <style>{`
-        @page { size: A4; margin: 10mm; }
+        @page { size: A4; margin: 0; }
         @media print {
           .no-print { display: none !important; }
           main { background: #fff !important; padding: 0 !important; }
-          .label-sheet { box-shadow: none !important; margin: 0 !important; width: auto !important; }
+          .label-page { box-shadow: none !important; margin: 0 !important; }
+          .label-page:not(:last-child) { break-after: page; }
           .label { break-inside: avoid; }
         }
       `}</style>
@@ -98,6 +127,7 @@ export default function LabelsPage() {
         <div>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#9ca3af" }}>TRACKFLEET · ÉTIQUETTES</p>
           <h1 style={{ margin: "4px 0 0", fontSize: 18 }}>{deliveries.length} étiquette{deliveries.length > 1 ? "s" : ""} prête{deliveries.length > 1 ? "s" : ""}</h1>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{LABELS_PER_PAGE} par feuille A4 ({LABEL_WIDTH_MM}×{LABEL_HEIGHT_MM}mm) · {pages.length} feuille{pages.length > 1 ? "s" : ""}</p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <Link href="/?lang=fr" style={{ color: "#fff", fontWeight: 700, fontSize: 13, alignSelf: "center" }}>← Tableau</Link>
@@ -109,33 +139,52 @@ export default function LabelsPage() {
 
       {loadError && <p className="no-print" style={{ padding: 24, color: "#b91c1c" }}>{loadError}</p>}
 
-      <div className="label-sheet" style={{ maxWidth: "190mm", margin: "16px auto", padding: "10mm", background: "#fff", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${LABELS_PER_ROW}, 1fr)`, gap: "6mm" }}>
-          {deliveries.map((delivery) => (
-            <div key={delivery.id} className="label" style={{ border: "1px solid #000", borderRadius: 4, padding: "5mm", display: "flex", flexDirection: "column", gap: "2mm", minHeight: "45mm" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm" }}>
+      {pages.map((pageDeliveries, pageIndex) => (
+        <div
+          key={pageIndex}
+          className="label-page"
+          style={{
+            width: "210mm",
+            margin: "16px auto",
+            background: "#fff",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
+            display: "grid",
+            gridTemplateColumns: `repeat(${LABELS_PER_ROW}, ${LABEL_WIDTH_MM}mm)`,
+            gridTemplateRows: `repeat(${LABELS_PER_COLUMN}, ${LABEL_HEIGHT_MM}mm)`,
+            justifyContent: "center",
+          }}
+        >
+          {pageDeliveries.map((delivery) => (
+            <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", flexDirection: "column", gap: "1.5mm", overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "2mm" }}>
+                {branding.logoDataUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
+                  <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "8mm", maxWidth: "22mm", objectFit: "contain", flex: "0 0 auto" }} />
+                )}
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm", flex: 1, minHeight: 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", color: "#000" }}>TRACKFLEET</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginTop: "1mm", wordBreak: "break-word" }}>{delivery.id}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, wordBreak: "break-word" }}>{delivery.id}</div>
                   <div style={{ fontSize: 12, marginTop: "1.5mm", wordBreak: "break-word" }}>{delivery.customer}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, marginTop: "0.5mm", wordBreak: "break-word" }}>→ {delivery.destination}</div>
                   {delivery.truck && <div style={{ fontSize: 11, marginTop: "0.5mm", color: "#333" }}>Camion : {delivery.truck}</div>}
                 </div>
                 {delivery.parcelCode ? (
-                  <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: "32mm", height: "32mm", flex: "0 0 auto" }} />
+                  <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: "28mm", height: "28mm", flex: "0 0 auto" }} />
                 ) : (
-                  <div style={{ width: "32mm", height: "32mm", flex: "0 0 auto", border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", textAlign: "center", padding: "2mm" }}>
+                  <div style={{ width: "28mm", height: "28mm", flex: "0 0 auto", border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", textAlign: "center", padding: "2mm" }}>
                     Code non disponible
                   </div>
                 )}
               </div>
               {delivery.parcelCode && (
-                <canvas ref={(element) => { if (element) barcodeCanvases.current.set(delivery.id, element); }} style={{ width: "100%", height: "10mm" }} />
+                <canvas ref={(element) => { if (element) barcodeCanvases.current.set(delivery.id, element); }} style={{ width: "100%", height: "9mm", flex: "0 0 auto" }} />
               )}
             </div>
           ))}
         </div>
-      </div>
+      ))}
     </main>
   );
 }
