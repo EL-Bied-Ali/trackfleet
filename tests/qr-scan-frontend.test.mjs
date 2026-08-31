@@ -51,10 +51,27 @@ test("the labels page requires an authenticated session and loads only the reque
   assert.match(labelsPage, /const ids = new Set\(new URLSearchParams\(window\.location\.search\)\.get\("ids"\)\?\.split\(","\)\.filter\(Boolean\) \?\? \[\]\);/);
 });
 
-test("the labels page renders A4-print CSS with break-inside protection per label, and a print button", () => {
-  assert.match(labelsPage, /@page \{ size: A4; margin: 10mm; \}/);
+test("the labels page renders A4-print CSS with break-inside protection per label, a page break between sheets, and a print button", () => {
+  assert.match(labelsPage, /@page \{ size: A4; margin: 0; \}/);
   assert.match(labelsPage, /\.label \{ break-inside: avoid; \}/);
+  assert.match(labelsPage, /\.label-page:not\(:last-child\) \{ break-after: page; \}/);
   assert.match(labelsPage, /onClick=\{\(\) => window\.print\(\)\}/);
+});
+
+test("labels are laid out 8 per A4 sheet (2x4) at ~105x74mm each, paginating into multiple sheets when there are more deliveries", () => {
+  assert.match(labelsPage, /const LABELS_PER_ROW = 2;/);
+  assert.match(labelsPage, /const LABELS_PER_COLUMN = 4;/);
+  assert.match(labelsPage, /const LABEL_WIDTH_MM = 105;/);
+  assert.match(labelsPage, /const LABEL_HEIGHT_MM = 74\.25;/);
+  assert.match(labelsPage, /function chunk<T>\(items: T\[\], size: number\): T\[\]\[\] \{/);
+  assert.match(labelsPage, /const pages = chunk\(deliveries, LABELS_PER_PAGE\);/);
+});
+
+test("each label shows the company's own logo and name from /api/company/branding, falling back to the TrackFleet wordmark when no logo is set", () => {
+  assert.match(labelsPage, /fetch\("\/api\/company\/branding", \{ cache: "no-store" \}\)/);
+  assert.match(labelsPage, /branding\.logoDataUrl && \(/);
+  assert.match(labelsPage, /<img src=\{branding\.logoDataUrl\} alt="" /);
+  assert.match(labelsPage, /\{branding\.name \|\| "TRACKFLEET"\}/);
 });
 
 test("each label renders a QR code (deep link) and a Code128 barcode from the same parcel code, generated client-side", () => {
