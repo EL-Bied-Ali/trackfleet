@@ -521,6 +521,21 @@ export const postgresStore: DeliveryStore = {
     const updated = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} LIMIT 1` as RawDelivery[];
     return updated[0] ? hydrate(updated[0]) : null;
   },
+  async updateDetails(deliveryId, companyId, input) {
+    await ensureSchema();
+    const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];
+    if (!rows[0]) return null;
+    await sql`UPDATE deliveries SET
+      customer = ${input.customer}, contact = ${input.contact}, customer_email = ${input.customerEmail},
+      recipient_name = ${input.recipientName}, recipient_contact = ${input.recipientContact},
+      weight_kg = ${input.weightKg}, price_amount = ${input.priceAmount}, price_currency = ${input.priceCurrency},
+      item_description = ${input.itemDescription}, destination_site_id = ${input.destinationSiteId}, destination = ${input.destination},
+      destination_latitude = ${input.destinationLatitude}, destination_longitude = ${input.destinationLongitude},
+      arrival_radius_km = ${input.arrivalRadiusKm}, planned_arrival_at = ${input.plannedArrivalAt?.toISOString() ?? null}
+      WHERE id = ${deliveryId} AND company_id = ${companyId}`;
+    const updated = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} LIMIT 1` as RawDelivery[];
+    return updated[0] ? hydrate(updated[0]) : null;
+  },
   async recordEvent(deliveryId, type, progress) {
     await ensureSchema();
     const rows = await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at)

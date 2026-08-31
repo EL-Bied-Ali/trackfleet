@@ -150,6 +150,12 @@ export const memoryStore: DeliveryStore = {
     Object.assign(delivery, { plannedArrivalAt: input.plannedArrivalAt, nextTruckDepartureAt: input.nextTruckDepartureAt });
     return { ...delivery };
   },
+  async updateDetails(deliveryId, companyId, input) {
+    const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId) ?? null;
+    if (!delivery || delivery.status === "Delivered") return null;
+    Object.assign(delivery, input);
+    return { ...delivery };
+  },
   async recordEvent(deliveryId, type, progress) {
     if (deliveryEvents.some((event) => event.deliveryId === deliveryId && event.type === type)) return false;
     deliveryEvents.push({ deliveryId, type, progress, createdAt: new Date() });

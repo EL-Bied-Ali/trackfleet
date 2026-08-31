@@ -201,6 +201,23 @@ export const store: DeliveryStore = {
     const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
     return updated ? hydrate(updated) : null;
   },
+  async updateDetails(deliveryId, companyId, input) {
+    const raw = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
+    if (!raw) return null;
+    await db().prepare(`UPDATE deliveries SET
+      customer = ?, contact = ?, customer_email = ?, recipient_name = ?, recipient_contact = ?,
+      weight_kg = ?, price_amount = ?, price_currency = ?, item_description = ?, destination_site_id = ?, destination = ?,
+      destination_latitude = ?, destination_longitude = ?, arrival_radius_km = ?, planned_arrival_at = ?
+      WHERE id = ? AND company_id = ?`)
+      .bind(
+        input.customer, input.contact, input.customerEmail, input.recipientName, input.recipientContact,
+        input.weightKg, input.priceAmount, input.priceCurrency, input.itemDescription, input.destinationSiteId, input.destination,
+        input.destinationLatitude, input.destinationLongitude, input.arrivalRadiusKm, input.plannedArrivalAt?.getTime() ?? null,
+        deliveryId, companyId,
+      ).run();
+    const updated = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
+    return updated ? hydrate(updated) : null;
+  },
   async recordEvent(deliveryId, type, progress) {
     const result = await db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, ?, ?, ?)`).bind(deliveryId, type, progress, Date.now()).run();
     return Boolean(result.meta?.changes);
