@@ -62,6 +62,10 @@ export type DeliveryRow = {
   // existed, or for any single-parcel submission (no siblings to link).
   shipmentId?: string | null;
   createdAt: Date;
+  // Short QR/Code128 label identifier, separate from trackingToken (see
+  // parcel-code.ts) -- generated at creation, null only for deliveries
+  // created before this feature existed.
+  parcelCode?: string | null;
 };
 
 export type DeliveryEventRow = {
@@ -128,6 +132,27 @@ export type DeliveryTransition = {
   events: DeliveryEventType[];
 };
 
+export type DeliveryScanCheckpoint = "loaded" | "departed" | "arrived" | "delivered";
+
+// A full, unconstrained audit trail (see app/api/scan/route.ts) -- unlike
+// DeliveryEventRow, the same (deliveryId, checkpoint) pair can appear more
+// than once here, since a legitimate re-scan of the same checkpoint (a
+// second handler, a QC re-check) is real information, not a duplicate to
+// silently drop the way recordEvent's UNIQUE (delivery_id, type) does.
+export type DeliveryScanInput = {
+  companyId: string;
+  deliveryId: string;
+  checkpoint: DeliveryScanCheckpoint;
+  scannedBy: string;
+  truck: string | null;
+  locationLabel: string | null;
+};
+
+export type DeliveryScanRow = DeliveryScanInput & {
+  id: string;
+  scannedAt: Date;
+};
+
 export type PendingDeliveryNotification = {
   delivery: DeliveryRow;
   event: DeliveryEventRow;
@@ -181,6 +206,15 @@ export interface DeliveryStore {
   // folded in here. Blocked once Delivered, same guard as
   // updateSchedule/linkVehicle.
   updateDetails(deliveryId: string, companyId: string, input: DeliveryDetailsUpdateInput): Promise<DeliveryRow | null>;
+  // Company-scoped so a scan session (dispatcher or agency, never a bare
+  // public lookup like getPublic/trackingToken) can only ever resolve its
+  // own company's parcels -- see app/lib/parcel-code.ts for why this code
+  // doesn't need to be a standalone bearer secret the way trackingToken is.
+  findByParcelCode(companyId: string, parcelCode: string): Promise<DeliveryRow | null>;
+  recordScan(input: DeliveryScanInput): Promise<DeliveryScanRow>;
+  // Most-recent-first, used both to render a delivery's scan history and to
+  // detect an accidental duplicate scan (see app/api/scan/route.ts).
+  listScansForDelivery(deliveryId: string, limit?: number): Promise<DeliveryScanRow[]>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;

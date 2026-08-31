@@ -25,6 +25,7 @@ import { getSubscription, subscriptionGrantsAccess, whatsappIncludedInPlan } fro
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { publicTrackingIsActive, publicTrackingTokenIsValid, trackingExpiresAt } from "../../lib/tracking-access";
 import { normalizeCustomerEmail, normalizeCustomerPhone } from "../../lib/customer-contact";
+import { createParcelCode } from "../../lib/parcel-code";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
@@ -690,6 +691,7 @@ export async function POST(request: Request) {
         companyId: session.companyId,
         trackingToken: idempotencyTrackingToken ?? createTrackingToken(),
         shipmentId: shipmentIdInput || null,
+        parcelCode: createParcelCode(),
         driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
         latitude: liveVehicle?.latitude ?? originLatitude, longitude: liveVehicle?.longitude ?? originLongitude,
         speed: liveVehicle?.speed ?? null, lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,

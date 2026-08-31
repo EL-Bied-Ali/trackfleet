@@ -70,7 +70,7 @@ test("the notify-departure route only records WHATSAPP_DEPARTURE_NOTIFIED after 
 });
 
 test("WHATSAPP_DEPARTURE_NOTIFIED and MANUAL_DEPARTURE_CONFIRMED are excluded from the customer-facing event timeline -- internal markers, not route milestones", () => {
-  assert.match(deliveryEventsLib, /&& event !== "MANUAL_DEPARTURE_CONFIRMED"\s*\n\s*&& event !== "WHATSAPP_DEPARTURE_NOTIFIED";/);
+  assert.match(deliveryEventsLib, /&& event !== "MANUAL_DEPARTURE_CONFIRMED"\s*\n\s*&& event !== "WHATSAPP_DEPARTURE_NOTIFIED"/);
 });
 
 test("the notify-departure route signs the message with the company's own branding, looked up once for the whole batch of recipients", () => {

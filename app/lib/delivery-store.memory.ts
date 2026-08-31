@@ -1,7 +1,7 @@
 import { seedDeliveries } from "./delivery-seed.ts";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events.ts";
 import { createDeliveryId } from "./delivery-id.ts";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types.ts";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanRow, DeliveryStore, DeliveryTransition, EtaObservationRow, FleetPositionRow, TripPositionRow } from "./delivery-store.types.ts";
 import { NotificationClaimState } from "./notification-claim-state.ts";
 import { progressRouteDestination } from "./delivery-progress-destination.ts";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress.ts";
@@ -19,6 +19,7 @@ const fleetPositions: FleetPositionRow[] = [];
 const trips: TripRecord[] = [];
 const deliveryTripAssignments = new Map<string, string>();
 const notificationClaims = new NotificationClaimState();
+const deliveryScans: DeliveryScanRow[] = [];
 
 function notificationKey(deliveryId: string, type: DeliveryEventType) { return `${deliveryId}:${type}:whatsapp`; }
 function baselineProgress(deliveryId: string) {
@@ -274,6 +275,20 @@ export const memoryStore: DeliveryStore = {
     deliveryStore.push(delivery);
     return delivery;
   },
+  async findByParcelCode(companyId, parcelCode) {
+    return deliveryStore.find((delivery) => delivery.companyId === companyId && delivery.parcelCode === parcelCode) ?? null;
+  },
+  async recordScan(input) {
+    const scan: DeliveryScanRow = { ...input, id: createDeliveryId(), scannedAt: new Date() };
+    deliveryScans.push(scan);
+    return scan;
+  },
+  async listScansForDelivery(deliveryId, limit = 50) {
+    return deliveryScans
+      .filter((scan) => scan.deliveryId === deliveryId)
+      .sort((a, b) => b.scannedAt.getTime() - a.scannedAt.getTime())
+      .slice(0, Math.max(1, Math.min(500, limit)));
+  },
   async deleteDemoDeliveries(companyId) {
     const ids = new Set(deliveryStore.filter((delivery) => delivery.companyId === companyId && delivery.customer.startsWith(DEMO_DELIVERY_CUSTOMER_PREFIX)).map((delivery) => delivery.id));
     if (!ids.size) return 0;
@@ -286,6 +301,9 @@ export const memoryStore: DeliveryStore = {
     for (let index = etaObservations.length - 1; index >= 0; index -= 1) {
       if (ids.has(etaObservations[index].deliveryId)) etaObservations.splice(index, 1);
     }
+    for (let index = deliveryScans.length - 1; index >= 0; index -= 1) {
+      if (ids.has(deliveryScans[index].deliveryId)) deliveryScans.splice(index, 1);
+    }
     return ids.size;
   },
   async deleteDelivery(deliveryId, companyId) {
@@ -297,6 +315,9 @@ export const memoryStore: DeliveryStore = {
     }
     for (let etaIndex = etaObservations.length - 1; etaIndex >= 0; etaIndex -= 1) {
       if (etaObservations[etaIndex].deliveryId === deliveryId) etaObservations.splice(etaIndex, 1);
+    }
+    for (let scanIndex = deliveryScans.length - 1; scanIndex >= 0; scanIndex -= 1) {
+      if (deliveryScans[scanIndex].deliveryId === deliveryId) deliveryScans.splice(scanIndex, 1);
     }
     return true;
   },
