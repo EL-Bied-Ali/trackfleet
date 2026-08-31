@@ -7,6 +7,7 @@ import {
   type ArrivalCompletionObservation,
   type ArrivalCompletionResult,
 } from "./delivery-completion.vercel";
+import { queueD1Mirror } from "./d1-mirror-queue";
 
 type D1MirrorStatement = {
   bind(...values: unknown[]): D1MirrorStatement;
@@ -34,24 +35,20 @@ async function mirrorArrivalObservation(input: ArrivalCompletionObservation, res
   if (!db) return;
   try {
     if (!input.insideArrivalZone) {
-      await db.batch([
-        db.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
-          .bind(input.companyId, input.deliveryId),
-        db.prepare("DELETE FROM delivery_events WHERE delivery_id = ? AND type = 'ARRIVED_AT_SITE'")
-          .bind(input.deliveryId),
-      ]);
+      queueD1Mirror(db.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
+        .bind(input.companyId, input.deliveryId));
+      queueD1Mirror(db.prepare("DELETE FROM delivery_events WHERE delivery_id = ? AND type = 'ARRIVED_AT_SITE'")
+        .bind(input.deliveryId));
       return;
     }
 
     if (result.deliveredNow) {
-      await db.batch([
-        db.prepare("UPDATE deliveries SET status = 'Delivered', progress = 100 WHERE id = ? AND company_id = ?")
-          .bind(input.deliveryId, input.companyId),
-        db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'ARRIVED', 100, ?)")
-          .bind(input.deliveryId, input.observationAt.getTime()),
-        db.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
-          .bind(input.companyId, input.deliveryId),
-      ]);
+      queueD1Mirror(db.prepare("UPDATE deliveries SET status = 'Delivered', progress = 100 WHERE id = ? AND company_id = ?")
+        .bind(input.deliveryId, input.companyId));
+      queueD1Mirror(db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'ARRIVED', 100, ?)")
+        .bind(input.deliveryId, input.observationAt.getTime()));
+      queueD1Mirror(db.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
+        .bind(input.companyId, input.deliveryId));
       return;
     }
 
@@ -75,7 +72,7 @@ async function mirrorArrivalObservation(input: ArrivalCompletionObservation, res
           .bind(input.deliveryId),
       );
     }
-    await db.batch(statements);
+    for (const statement of statements) queueD1Mirror(statement);
   } catch (error) {
     replicationError("arrival completion", error, {
       companyId: input.companyId,
@@ -89,16 +86,14 @@ async function mirrorManualCompletion(companyId: string, deliveryId: string) {
   if (!db) return;
   const now = Date.now();
   try {
-    await db.batch([
-      db.prepare("UPDATE deliveries SET status = 'Delivered', progress = 100 WHERE id = ? AND company_id = ?")
-        .bind(deliveryId, companyId),
-      db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'MANUAL_DELIVERED', 100, ?)")
-        .bind(deliveryId, now),
-      db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'ARRIVED', 100, ?)")
-        .bind(deliveryId, now),
-      db.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
-        .bind(companyId, deliveryId),
-    ]);
+    queueD1Mirror(db.prepare("UPDATE deliveries SET status = 'Delivered', progress = 100 WHERE id = ? AND company_id = ?")
+      .bind(deliveryId, companyId));
+    queueD1Mirror(db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'MANUAL_DELIVERED', 100, ?)")
+      .bind(deliveryId, now));
+    queueD1Mirror(db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'ARRIVED', 100, ?)")
+      .bind(deliveryId, now));
+    queueD1Mirror(db.prepare("DELETE FROM delivery_arrival_state WHERE company_id = ? AND delivery_id = ?")
+      .bind(companyId, deliveryId));
   } catch (error) {
     replicationError("manual completion", error, { companyId, deliveryId });
   }
@@ -112,14 +107,12 @@ async function mirrorManualDeparture(companyId: string, deliveryId: string) {
     // Loading-status deliveries -- the only ones this ever applies to --
     // have never had a GPS-observed progress update, so 0 is what the
     // primary's own subquery would read here too in practice.
-    await db.batch([
-      db.prepare("UPDATE deliveries SET status = 'In transit' WHERE id = ? AND company_id = ?")
-        .bind(deliveryId, companyId),
-      db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'MANUAL_DEPARTURE_CONFIRMED', 0, ?)")
-        .bind(deliveryId, now),
-      db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'DEPARTED', 0, ?)")
-        .bind(deliveryId, now),
-    ]);
+    queueD1Mirror(db.prepare("UPDATE deliveries SET status = 'In transit' WHERE id = ? AND company_id = ?")
+      .bind(deliveryId, companyId));
+    queueD1Mirror(db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'MANUAL_DEPARTURE_CONFIRMED', 0, ?)")
+      .bind(deliveryId, now));
+    queueD1Mirror(db.prepare("INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'DEPARTED', 0, ?)")
+      .bind(deliveryId, now));
   } catch (error) {
     replicationError("manual departure", error, { companyId, deliveryId });
   }

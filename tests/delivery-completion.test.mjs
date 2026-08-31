@@ -86,7 +86,7 @@ test("automation applies arrival dwell before reloading deliveries", () => {
   assert.match(serverAutomation, /TRACKFLEET_UNLOAD_GRACE_MINUTES/);
   assert.match(businessTick, /observeArrivalCompletion/);
   assert.match(businessTick, /ARRIVED_AT_SITE/);
-  assert.match(businessTick, /const deliveries = await store\.listForCompany\(companyId\)/);
+  assert.match(businessTick, /const deliveries = automaticCompletions > 0\s*\? await store\.listForCompany\(companyId\)\s*:\s*manualArrivalCandidates;/);
 });
 
 test("the scheduled tick fetches the company's own automation overrides and only falls back to the env-var default when unset", () => {
