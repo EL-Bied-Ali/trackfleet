@@ -12,13 +12,14 @@ test("the scan page requires an authenticated session, the same way /import does
   assert.match(scanPage, /if \(auth === "denied"\) return \(/);
 });
 
-test("the scan page offers only loaded/arrived (no 'départ' -- the GPS automation already detects that on its own; no 'livraison' -- 'arrivée' now covers it) and posts to /api/scan with the selected one", () => {
+test("the scanner exposes only the two warehouse handoffs: loading and hub unload", () => {
   for (const checkpoint of ["loaded", "arrived"]) {
     assert.match(scanPage, new RegExp(`value: "${checkpoint}"`));
   }
-  for (const removedCheckpoint of ["departed", "delivered"]) {
-    assert.doesNotMatch(scanPage, new RegExp(`value: "${removedCheckpoint}"`));
-  }
+  assert.doesNotMatch(scanPage, /value: "departed"/);
+  assert.doesNotMatch(scanPage, /value: "delivered"/);
+  assert.match(scanPage, /Déchargé au hub/);
+  assert.match(scanPage, /ne confirme jamais une arrivée finale/);
   assert.match(scanPage, /fetch\("\/api\/scan", \{/);
   assert.match(scanPage, /body: JSON\.stringify\(\{ parcelCode: code, checkpoint: modeRef\.current \}\)/);
 });
@@ -111,4 +112,12 @@ test("bulk label selection: a checkbox per row (dispatcher only) feeds a toolbar
   assert.match(dashboard, /const \[selectedForLabels, setSelectedForLabels\] = useState<Set<string>>\(new Set\(\)\);/);
   assert.match(dashboard, /className="label-select-checkbox"/);
   assert.match(dashboard, /window\.open\(`\/labels\?ids=\$\{Array\.from\(selectedForLabels\)\.join\(","\)\}`, "_blank"\); setSelectedForLabels\(new Set\(\)\);/);
+});
+
+test("the delivery table shows both handoff proofs without claiming that the hub scan is final delivery", () => {
+  assert.match(dashboard, /Contrôle colis/);
+  assert.match(dashboard, /scanSummary\?\.loadedAt/);
+  assert.match(dashboard, /scanSummary\?\.hubArrivedAt/);
+  assert.match(dashboard, /scanSummary\?\.hubLabel/);
+  assert.match(dashboard, /scan-control-cell/);
 });

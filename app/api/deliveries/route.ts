@@ -295,7 +295,7 @@ export async function GET(request: Request) {
     const needsManualArrivalEstimates = rows.some((row) => row.status !== "Delivered"
       && row.destinationSiteId
       && knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true);
-    const [companySites, manualArrivalEstimates, departureArrivalEstimates] = await Promise.all([
+    const [companySites, manualArrivalEstimates, departureArrivalEstimates, scanSummaries] = await Promise.all([
       siteStore.listForCompany(session.companyId),
       needsManualArrivalEstimates ? getManualArrivalDurationEstimates(session.companyId) : Promise.resolve(new Map<string, ManualArrivalDurationEstimate>()),
       // Unlike manualArrivalEstimates above, this isn't gated behind an
@@ -304,7 +304,11 @@ export async function GET(request: Request) {
       // agency exists yet. Cheap regardless (bounded to a handful of known
       // relay sites, no GPS join -- see departure-arrival-duration.postgres.ts).
       getDepartureArrivalDurationEstimates(session.companyId),
+      // A single, company-scoped read powers every parcel-control indicator
+      // in the table. Never fan this out into one scan query per delivery.
+      store.listScanSummaries(session.companyId, rows.map((row) => row.id)),
     ]);
+    const scanSummaryByDeliveryId = new Map(scanSummaries.map((summary) => [summary.deliveryId, summary]));
     const siteById = new Map(companySites.map((site) => [site.id, site]));
     const rowById = new Map(rows.map((row) => [row.id, row]));
     const stopPlans = buildTruckStopPlans(rows);
@@ -341,6 +345,10 @@ export async function GET(request: Request) {
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, rows, learnedDwell);
       const manualArrivalEstimate = row.destinationSiteId ? manualArrivalEstimates.get(row.destinationSiteId) ?? null : null;
       return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount, manualArrivalEstimate)).delivery;
+    }));
+    const enrichedRowsWithScans = enrichedRows.map((delivery) => ({
+      ...delivery,
+      scanSummary: scanSummaryByDeliveryId.get(delivery.id) ?? null,
     }));
     const stopPlansWithLearning = await Promise.all(stopPlans.map(async (plan) => {
       const deliveryIds = plan.stops.flatMap((stop) => stop.deliveryIds);
@@ -416,8 +424,8 @@ export async function GET(request: Request) {
     }));
 
     const visibleRows = session.role === "agency"
-      ? enrichedRows.filter((delivery) => agencyDeliveryIsVisible(delivery, session.siteId))
-      : enrichedRows;
+      ? enrichedRowsWithScans.filter((delivery) => agencyDeliveryIsVisible(delivery, session.siteId))
+      : enrichedRowsWithScans;
 
     return Response.json({
       deliveries: visibleRows,

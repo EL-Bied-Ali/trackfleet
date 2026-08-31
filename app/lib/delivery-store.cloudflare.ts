@@ -2,7 +2,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import { createDeliveryId } from "./delivery-id";
 import { progressRouteDestination } from "./delivery-progress-destination";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanRow, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanCheckpoint, DeliveryScanRow, DeliveryScanSummary, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
@@ -396,6 +396,34 @@ export const store: DeliveryStore = {
         scannedBy: string; truck: string | null; locationLabel: string | null; scannedAt: number;
       }>();
     return (result.results ?? []).map((row) => ({ ...row, scannedAt: new Date(row.scannedAt) }));
+  },
+
+  async listScanSummaries(companyId, deliveryIds) {
+    if (!deliveryIds.length) return [];
+    const placeholders = deliveryIds.map(() => "?").join(",");
+    const result = await db().prepare(`SELECT delivery_id AS deliveryId, checkpoint, truck, location_label AS locationLabel, scanned_at AS scannedAt
+      FROM delivery_scans WHERE company_id = ? AND delivery_id IN (${placeholders})
+        AND checkpoint IN ('loaded', 'arrived')
+      ORDER BY delivery_id ASC, scanned_at DESC`).bind(companyId, ...deliveryIds).all<{
+        deliveryId: string; checkpoint: DeliveryScanCheckpoint; truck: string | null;
+        locationLabel: string | null; scannedAt: number;
+      }>();
+    const summaries = new Map<string, DeliveryScanSummary>();
+    for (const row of result.results ?? []) {
+      const summary = summaries.get(row.deliveryId) ?? {
+        deliveryId: row.deliveryId, loadedAt: null, loadedTruck: null, hubArrivedAt: null, hubLabel: null,
+      };
+      if (row.checkpoint === "loaded" && !summary.loadedAt) {
+        summary.loadedAt = new Date(row.scannedAt);
+        summary.loadedTruck = row.truck;
+      }
+      if (row.checkpoint === "arrived" && !summary.hubArrivedAt) {
+        summary.hubArrivedAt = new Date(row.scannedAt);
+        summary.hubLabel = row.locationLabel;
+      }
+      summaries.set(row.deliveryId, summary);
+    }
+    return [...summaries.values()];
   },
 
   async deleteDemoDeliveries(companyId) {

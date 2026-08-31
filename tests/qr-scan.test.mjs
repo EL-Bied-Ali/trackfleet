@@ -70,7 +70,22 @@ test("recordScan and listScansForDelivery keep every scan, including repeats of 
   assert.deepEqual(new Set(scans.map((scan) => scan.scannedBy)), new Set(["dispatcher:alice", "dispatcher:bob"]));
 });
 
-test("SCAN_LOADED is internal bookkeeping, excluded from the customer-facing timeline like MANUAL_ARRIVAL_CONFIRMED -- the scanner's other checkpoint, 'arrived', has no scan-only event type at all since it reuses the real ARRIVED_AT_SITE milestone", () => {
+test("the dashboard scan summary exposes only the latest load and hub-unload proof for its own company", async () => {
+  const companyId = `scan-summary-test-${Date.now()}`;
+  const delivery = await memoryStore.create(baseDeliveryInput(companyId));
+  await memoryStore.recordScan({ companyId, deliveryId: delivery.id, checkpoint: "loaded", scannedBy: "dispatcher:alice", truck: "TRUCK-scan", locationLabel: null });
+  await memoryStore.recordScan({ companyId, deliveryId: delivery.id, checkpoint: "arrived", scannedBy: "agency:casa", truck: "TRUCK-scan", locationLabel: "Hub Casablanca" });
+
+  const [summary] = await memoryStore.listScanSummaries(companyId, [delivery.id]);
+  assert.equal(summary?.deliveryId, delivery.id);
+  assert.equal(summary?.loadedTruck, "TRUCK-scan");
+  assert.ok(summary?.loadedAt instanceof Date);
+  assert.ok(summary?.hubArrivedAt instanceof Date);
+  assert.equal(summary?.hubLabel, "Hub Casablanca");
+  assert.deepEqual(await memoryStore.listScanSummaries(`${companyId}-other`, [delivery.id]), []);
+});
+
+test("SCAN_LOADED is internal bookkeeping, excluded from the customer-facing timeline", () => {
   assert.equal(customerFacingEvent("SCAN_LOADED"), false);
 });
 
@@ -78,6 +93,7 @@ test("the DeliveryStore interface declares the scan methods and every backend im
   assert.match(typesFile, /findByParcelCode\(companyId: string, parcelCode: string\): Promise<DeliveryRow \| null>;/);
   assert.match(typesFile, /recordScan\(input: DeliveryScanInput\): Promise<DeliveryScanRow>;/);
   assert.match(typesFile, /listScansForDelivery\(deliveryId: string, limit\?: number\): Promise<DeliveryScanRow\[\]>;/);
+  assert.match(typesFile, /listScanSummaries\(companyId: string, deliveryIds: string\[\]\): Promise<DeliveryScanSummary\[\]>;/);
   for (const path of [
     "app/lib/delivery-store.postgres.ts",
     "app/lib/delivery-store.cloudflare.ts",
@@ -86,6 +102,7 @@ test("the DeliveryStore interface declares the scan methods and every backend im
     const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
     assert.match(source, /findByParcelCode/, `${path} must implement findByParcelCode`);
     assert.match(source, /recordScan/, `${path} must implement recordScan`);
+    assert.match(source, /listScanSummaries/, `${path} must implement the bounded dashboard scan summary`);
   }
   // shared-postgres.ts inherits findByParcelCode/listScansForDelivery via
   // its `...baseStore` spread (no D1 mirroring needed for reads) -- it only
@@ -94,7 +111,12 @@ test("the DeliveryStore interface declares the scan methods and every backend im
   assert.match(sharedPostgresSource, /async recordScan\(input\) \{/, "shared-postgres.ts must implement recordScan");
 });
 
-test("the scan route only offers loaded/arrived, is authenticated, same-origin protected, validates the parcel code and checkpoint, and scopes an agency to its own site", () => {
+test("the dashboard obtains all parcel scan proofs through one bulk store call, not one query per delivery", () => {
+  assert.match(creationRoute, /store\.listScanSummaries\(session\.companyId, rows\.map\(\(row\) => row\.id\)\)/);
+  assert.match(creationRoute, /scanSummary: scanSummaryByDeliveryId\.get\(delivery\.id\) \?\? null/);
+});
+
+test("the scan route offers only loaded/arrived, is authenticated, same-origin protected, validates the parcel code and scopes an agency to visible deliveries", () => {
   assert.match(route, /const CHECKPOINTS: DeliveryScanCheckpoint\[\] = \["loaded", "arrived"\];/);
   assert.match(route, /const session = await getCompanySession\(request\);/);
   assert.match(route, /requestIsSameOrigin\(request\)/);
@@ -103,23 +125,16 @@ test("the scan route only offers loaded/arrived, is authenticated, same-origin p
   assert.match(route, /if \(session\.role === "agency" && !agencyDeliveryIsVisible\(delivery, session\.siteId\)\)/);
 });
 
-test("the 'arrived' checkpoint reuses confirmArrivalManually directly -- the same real, customer-facing arrival confirmation (status/progress + WhatsApp) the dispatcher's 'Confirmer l'arrivée' button already uses, not a separate scan-only bookkeeping event", () => {
-  assert.match(route, /import \{ confirmArrivalManually \} from "\.\.\/\.\.\/lib\/confirm-arrival-manually";/);
-  assert.match(route, /if \(checkpoint === "arrived"\) \{\s*\n\s*await confirmArrivalManually\(session\.companyId, delivery\.id, delivery\.progress, new URL\(request\.url\)\.origin\);/);
+test("the hub-unload checkpoint is audit-only: it does not confirm final arrival, change delivery state, or notify the customer", () => {
+  assert.doesNotMatch(route, /confirmArrivalManually/);
+  assert.doesNotMatch(route, /completeDeliveryManually/);
   assert.match(route, /await store\.recordEvent\(delivery\.id, "SCAN_LOADED", delivery\.progress\);/);
 });
 
-test("scanning 'arrived' is refused for an already-delivered parcel, and an agency can only confirm arrival at its own destination -- same restriction as the 'Confirmer l'arrivée' button", () => {
-  assert.match(route, /if \(checkpoint === "arrived" && delivery\.status === "Delivered"\) \{\s*\n\s*return noStore\(\{ error: "already_delivered" \}, 409\);/);
-  assert.match(route, /if \(checkpoint === "arrived" && session\.role === "agency" && delivery\.destinationSiteId !== session\.siteId\) \{\s*\n\s*return noStore\(\{ error: "agency_destination_mismatch" \}, 403\);/);
-});
-
 test("a checkpoint effect is applied before its audit row, so an effect failure cannot turn the retry into a no-op duplicate", () => {
-  const completion = route.indexOf("await completeDeliveryManually(session.companyId, delivery.id)");
-  const event = route.indexOf("await store.recordEvent(delivery.id, eventType, delivery.progress)");
+  const event = route.indexOf('await store.recordEvent(delivery.id, "SCAN_LOADED", delivery.progress)');
   const audit = route.indexOf("await store.recordScan({");
-  assert.ok(completion >= 0 && completion < audit, "delivery completion must happen before the scan audit insert");
-  assert.ok(event >= 0 && event < audit, "checkpoint timeline event must happen before the scan audit insert");
+  assert.ok(event >= 0 && event < audit, "the load event must happen before the scan audit insert");
 });
 
 test("a duplicate scan of the same checkpoint within the debounce window is reported back but not re-recorded or re-applied", () => {

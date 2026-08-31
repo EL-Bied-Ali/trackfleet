@@ -15,19 +15,16 @@ declare global {
   }
 }
 
-// Just these two: "départ" isn't scanned at all (the GPS automation
-// already detects a truck leaving on its own), and "arrivée" now covers
-// what a separate "livraison" checkpoint would have -- it starts the same
-// unload-grace timer the "Confirmer l'arrivée" button does, so the
-// delivery still completes and notifies the customer on its own.
+// Just these two: "départ" is detected from truck GPS, while arrival is a
+// proof that this parcel was unloaded at a hub, never a final delivery.
 type Checkpoint = "loaded" | "arrived";
 type CompanyInfo = { account: string; role: "dispatcher" | "agency"; siteId: string | null };
 type ScanOutcome = "success" | "duplicate" | "error";
 type ScanLogEntry = { at: Date; checkpoint: Checkpoint; outcome: ScanOutcome; label: string };
 
 const CHECKPOINTS: Array<{ value: Checkpoint; label: string; help: string }> = [
-  { value: "loaded", label: "Chargement", help: "Le colis vient d’être chargé dans le camion." },
-  { value: "arrived", label: "Arrivée", help: "Le camion vient d’arriver à destination — confirme l’arrivée et prévient le client par WhatsApp." },
+  { value: "loaded", label: "Chargé", help: "Preuve que ce colis est monté dans le camion." },
+  { value: "arrived", label: "Déchargé au hub", help: "Preuve que ce colis a été déchargé au hub. Cela ne confirme jamais une arrivée finale." },
 ];
 
 const RESUBMIT_COOLDOWN_MS = 2500;
@@ -265,7 +262,7 @@ export default function ScanPage() {
         <Link href="/?lang=fr" style={{ color: "#f9fafb", fontWeight: 700, fontSize: 13 }}>← Tableau</Link>
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 14 }}>
         {CHECKPOINTS.map((checkpoint) => (
           <button
             key={checkpoint.value}
