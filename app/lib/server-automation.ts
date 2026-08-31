@@ -58,8 +58,8 @@ export async function runFleetAutomation(): Promise<AutomationRunResult> {
   // processed each tick -- see fleet-tick-rotation.ts -- so per-tick
   // subrequest cost stays bounded as the fleet grows, at the cost of full
   // freshness across the whole fleet taking a couple of ticks instead of
-  // one. This only applies to the scheduled tick; a dispatcher's own
-  // dashboard load (/api/deliveries) always processes the full live fleet.
+  // one. The dashboard reads the full live fleet independently through
+  // /api/sendatrack, while persisted delivery state is refreshed here.
   const rotatedSnapshot = { ...snapshot, vehicles: rotatedVehicleBatch(snapshot.vehicles) };
   const aliasedSnapshot = await applyVehicleAliases(rotatedSnapshot, companyId);
   const business = await runFleetBusinessTick({

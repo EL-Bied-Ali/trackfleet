@@ -10,6 +10,7 @@ export async function GET(request: Request) {
   return Response.json({
     configured: snapshot.configured,
     connected: snapshot.connected,
+    vehicleCount: snapshot.vehicles.length,
     error: snapshot.error ?? null,
     vehicles: snapshot.vehicles.map((vehicle) => ({
       id: vehicle.id,
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
       updatedAt: vehicle.updatedAt,
       latitude: vehicle.latitude,
       longitude: vehicle.longitude,
+      address: vehicle.address,
     })),
   }, {
     status: snapshot.configured && !snapshot.connected ? 502 : 200,

@@ -1,7 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { siteStore } from "trackfleet-site-store";
-import type { DeliveryRow, DeliveryTransition } from "../../lib/delivery-store.types";
+import type { DeliveryRow } from "../../lib/delivery-store.types";
 import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent, trackingLinkExpiryAnchorFromEvents } from "../../lib/delivery-events";
@@ -16,8 +16,6 @@ import { publicDeliveryView } from "../../lib/public-delivery-view";
 import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { calculateRouteMetrics, rebaseRouteMetrics } from "../../lib/route-progress";
-import { getSendatrackSnapshot } from "../../lib/sendatrack";
-import { applyVehicleAliases } from "../../lib/vehicle-alias-apply";
 import { buildTruckStopPlans, pendingServiceMinutesBefore, pendingServiceMinutesBeforeWithHistory } from "../../lib/truck-stop-plan";
 import { createTrackingToken, getCompanySession } from "../../lib/company-auth";
 import { getCompanyBranding } from "trackfleet-auth-session-store";
@@ -225,14 +223,6 @@ async function learnedStopMinutes(companyId: string, routeTemplateId: string | n
   return learned;
 }
 
-async function persistTransitionEvents(transitions: DeliveryTransition[]) {
-  for (const transition of transitions) {
-    for (const type of transition.events) {
-      await store.recordEvent(transition.delivery.id, type, transition.delivery.progress);
-    }
-  }
-}
-
 export async function GET(request: Request) {
   try {
     const requestUrl = new URL(request.url);
@@ -289,16 +279,11 @@ export async function GET(request: Request) {
       return Response.json({ error: "subscription_required" }, { status: 402, headers: { "cache-control": "no-store" } });
     }
 
-    const rawIntegration = await getSendatrackSnapshot(session.credentials);
-    // Applied once, right after the snapshot is fetched, so every downstream
-    // consumer of `integration` -- automatic vehicle matching below, the
-    // vehicle-picker list further down -- sees the dispatcher's chosen alias
-    // instead of the raw SENDATRACK name. See vehicle-alias-apply.ts: without
-    // this, a renamed truck reverted to its real fleet id the moment it
-    // actually matched a delivery, which happens on every single poll.
-    const integration = await applyVehicleAliases(rawIntegration, session.companyId);
-    const transitions = await store.applySendatrackSnapshot(integration, session.companyId);
-    await persistTransitionEvents(transitions);
+    // Keep this read endpoint inside the Worker's tight interactive CPU
+    // budget. The live SENDATRACK snapshot is fetched concurrently by the UI
+    // through /api/sendatrack, which gives provider parsing its own Worker
+    // invocation. Persisted delivery GPS/state continues to be refreshed by
+    // the native scheduled automation tick.
     const rows = await store.listForCompany(session.companyId);
     // getManualArrivalDurationEstimates joins against a vehicle's entire GPS
     // history and is real CPU-ms work regardless of how tight its own
@@ -406,8 +391,6 @@ export async function GET(request: Request) {
       });
     }
 
-    if (session.role === "dispatcher") await processPendingNotifications(session.companyId, requestUrl.origin);
-
     const allTripsForHistory = await store.listTrips(session.companyId, 500);
     const routeHistory = summarizeCompletedTripRoutes(allTripsForHistory).map((route) => ({
       routeTemplateId: route.routeTemplateId,
@@ -454,13 +437,6 @@ export async function GET(request: Request) {
         // subscription-store.ts, the exact same rule notification-runner.ts
         // gates actual sends on).
         whatsappAvailable: whatsappIncludedInPlan(subscription),
-      },
-      integration: {
-        configured: integration.configured,
-        connected: integration.connected,
-        vehicleCount: integration.vehicles.length,
-        error: integration.error ?? null,
-        vehicles: integration.vehicles.map((vehicle) => ({ id: vehicle.id, name: vehicle.name, speed: vehicle.speed, updatedAt: vehicle.updatedAt, latitude: vehicle.latitude, longitude: vehicle.longitude, address: vehicle.address })),
       },
     }, { headers: { "cache-control": "no-store" } });
   } catch (error) {

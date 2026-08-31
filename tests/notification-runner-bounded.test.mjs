@@ -53,6 +53,7 @@ test("the notification maintenance tick keeps its cap conservative even though i
   assert.match(maintenanceTickSource, /processPendingNotifications\(companyId, origin, 8\)/);
 });
 
-test("interactive dispatcher requests use the safe default cap", () => {
-  assert.match(deliveriesRoute, /processPendingNotifications\(session\.companyId, requestUrl\.origin\)/);
+test("interactive dispatcher reads never process the notification backlog", () => {
+  const getBody = deliveriesRoute.slice(deliveriesRoute.indexOf("export async function GET"), deliveriesRoute.indexOf("export async function POST"));
+  assert.doesNotMatch(getBody, /processPendingNotifications\(/);
 });
