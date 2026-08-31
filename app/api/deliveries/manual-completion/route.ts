@@ -1,12 +1,9 @@
-import { getCompanyAutomationSettings } from "trackfleet-auth-session-store";
-import { completeDeliveryManually, confirmDepartureManually, observeArrivalCompletion } from "trackfleet-delivery-completion";
+import { completeDeliveryManually, confirmDepartureManually } from "trackfleet-delivery-completion";
 import { store } from "trackfleet-delivery-store";
-import { runtimeEnv } from "trackfleet-runtime-env";
 import { arrivalConfirmationRecommendation } from "../../../lib/arrival-confirmation";
 import { getCompanySession } from "../../../lib/company-auth";
-import { clampUnloadGraceMinutes, parseUnloadGraceMinutes } from "../../../lib/delivery-arrival";
+import { confirmArrivalManually } from "../../../lib/confirm-arrival-manually";
 import { knownSite } from "../../../lib/known-sites";
-import { processPendingNotifications } from "../../../lib/notification-runner";
 import { readJsonObject, invalidJsonResponse } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 
@@ -78,21 +75,7 @@ export async function POST(request: Request) {
         return noStore({ error: "agency_destination_mismatch" }, 403);
       }
 
-      const now = new Date();
-      const automationSettings = await getCompanyAutomationSettings(session.companyId);
-      const unloadGraceMinutes = typeof automationSettings?.unloadGraceMinutes === "number"
-        ? clampUnloadGraceMinutes(automationSettings.unloadGraceMinutes)
-        : parseUnloadGraceMinutes(runtimeEnv.TRACKFLEET_UNLOAD_GRACE_MINUTES);
-      await observeArrivalCompletion({
-        companyId: session.companyId,
-        deliveryId,
-        insideArrivalZone: true,
-        observationAt: now,
-        unloadGraceMinutes,
-      });
-      await store.recordEvent(deliveryId, "MANUAL_ARRIVAL_CONFIRMED", Math.min(99, delivery.progress));
-      await store.recordEvent(deliveryId, "ARRIVED_AT_SITE", Math.min(99, delivery.progress));
-      await processPendingNotifications(session.companyId, new URL(request.url).origin);
+      const { unloadGraceMinutes } = await confirmArrivalManually(session.companyId, deliveryId, delivery.progress, new URL(request.url).origin);
       const updated = (await store.listForCompany(session.companyId)).find((candidate) => candidate.id === deliveryId);
       return noStore({ ok: true, deliveryId, arrivalConfirmed: true, automaticCompletionAfterMinutes: unloadGraceMinutes, delivery: updated });
     }
