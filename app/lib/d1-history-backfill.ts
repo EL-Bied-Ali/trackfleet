@@ -62,6 +62,7 @@ type RawDelivery = {
   trip_id: string | null;
   shipment_id: string | null;
   created_at: string | Date;
+  parcel_code: string | null;
 };
 
 type RawEvent = {
@@ -146,6 +147,7 @@ function hydrateDelivery(row: RawDelivery): DeliveryRow {
     tripId: row.trip_id ?? null,
     shipmentId: row.shipment_id ?? null,
     createdAt: new Date(row.created_at),
+    parcelCode: row.parcel_code ?? null,
   };
 }
 
@@ -184,8 +186,8 @@ function deliveryStatement(db: D1Binding, delivery: DeliveryRow) {
     destination_latitude, destination_longitude, arrival_radius_km, truck, driver, status, eta,
     planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at,
     sendatrack_vehicle_id, latitude, longitude, speed, last_position_at, gps_source, company_id,
-    tracking_token, trip_id, shipment_id, created_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    tracking_token, trip_id, shipment_id, created_at, parcel_code
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(id) DO UPDATE SET
     customer = excluded.customer,
     origin_site_id = excluded.origin_site_id,
@@ -225,7 +227,8 @@ function deliveryStatement(db: D1Binding, delivery: DeliveryRow) {
     company_id = excluded.company_id,
     tracking_token = excluded.tracking_token,
     trip_id = excluded.trip_id,
-    shipment_id = excluded.shipment_id`)
+    shipment_id = excluded.shipment_id,
+    parcel_code = excluded.parcel_code`)
     .bind(
       delivery.id, delivery.customer, delivery.originSiteId, delivery.originLatitude, delivery.originLongitude,
       delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude,
@@ -235,7 +238,7 @@ function deliveryStatement(db: D1Binding, delivery: DeliveryRow) {
       delivery.whatsappOptIn ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.recipientWhatsappOptIn ? 1 : 0, delivery.recipientWhatsappOptInAt?.getTime() ?? null,
       delivery.sendatrackVehicleId, delivery.latitude, delivery.longitude, delivery.speed,
       delivery.lastPositionAt?.getTime() ?? null, delivery.gpsSource, delivery.companyId,
-      delivery.trackingToken, delivery.tripId ?? null, delivery.shipmentId ?? null, delivery.createdAt.getTime(),
+      delivery.trackingToken, delivery.tripId ?? null, delivery.shipmentId ?? null, delivery.createdAt.getTime(), delivery.parcelCode ?? null,
     );
 }
 
