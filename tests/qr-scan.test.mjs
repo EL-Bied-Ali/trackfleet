@@ -114,6 +114,14 @@ test("scanning 'arrived' is refused for an already-delivered parcel, and an agen
   assert.match(route, /if \(checkpoint === "arrived" && session\.role === "agency" && delivery\.destinationSiteId !== session\.siteId\) \{\s*\n\s*return noStore\(\{ error: "agency_destination_mismatch" \}, 403\);/);
 });
 
+test("a checkpoint effect is applied before its audit row, so an effect failure cannot turn the retry into a no-op duplicate", () => {
+  const completion = route.indexOf("await completeDeliveryManually(session.companyId, delivery.id)");
+  const event = route.indexOf("await store.recordEvent(delivery.id, eventType, delivery.progress)");
+  const audit = route.indexOf("await store.recordScan({");
+  assert.ok(completion >= 0 && completion < audit, "delivery completion must happen before the scan audit insert");
+  assert.ok(event >= 0 && event < audit, "checkpoint timeline event must happen before the scan audit insert");
+});
+
 test("a duplicate scan of the same checkpoint within the debounce window is reported back but not re-recorded or re-applied", () => {
   assert.match(route, /const DUPLICATE_SCAN_WINDOW_MS = 30_000;/);
   assert.match(route, /now - scan\.scannedAt\.getTime\(\) < DUPLICATE_SCAN_WINDOW_MS/);
