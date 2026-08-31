@@ -38,7 +38,7 @@ test("the dispatcher-facing features payload exposes whatsappAvailable (computed
 });
 
 test("the new-delivery form only shows the WhatsApp consent checkbox when whatsappAvailable is true, and only nudges for missed consent in that case -- a Standard-tier dispatcher never collects consent for a channel that will silently never send", () => {
-  assert.match(page, /\{features\.whatsappAvailable && <label className="consent-choice">/);
+  assert.match(page, /\{!editingDeliveryId && features\.whatsappAvailable && <label className="consent-choice">/);
   assert.match(page, /if \(features\.whatsappAvailable && !whatsappOptIn && \(contactRaw \|\| recipientContactRaw\)\) \{/);
   assert.match(page, /type FeatureState = \{ whatsappDemoEnabled: boolean; whatsappAvailable: boolean \};/);
 });

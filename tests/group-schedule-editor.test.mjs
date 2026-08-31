@@ -40,10 +40,6 @@ test("the group schedule popover closes on outside click via the same pattern as
   assert.doesNotMatch(page, /<div className="group-schedule-editor-popover journey-editor-popover truck-editor-popover" onClick=/);
 });
 
-test("the per-row journey editor's schedule section is suppressed when the group already offers the shared editor, but the truck-reassignment section still shows", () => {
-  assert.match(page, /\{!group\.uniformDestination && <div className="journey-editor-divider" \/>\}<\/>\}\{!group\.uniformDestination && <><strong>\{locale === "fr" \? "Départ du prochain camion"/);
-});
-
 test("the group schedule popover anchors to the wrapping row, not its own small trigger span", () => {
   // Reported live (for the sibling group-truck-editor-popover, same row,
   // same pattern): the group header's flex content is a wrapping container

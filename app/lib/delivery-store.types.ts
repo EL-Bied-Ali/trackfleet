@@ -137,6 +137,24 @@ export type CreateDeliveryInput = Omit<DeliveryRow, "id" | "trackingToken" | "cr
   trackingToken: string;
 };
 
+export type DeliveryDetailsUpdateInput = {
+  customer: string;
+  contact: string;
+  customerEmail: string | null;
+  recipientName: string;
+  recipientContact: string;
+  weightKg: number | null;
+  priceAmount: number | null;
+  priceCurrency: DeliveryPriceCurrency | null;
+  itemDescription: string | null;
+  destinationSiteId: string | null;
+  destination: string;
+  destinationLatitude: number | null;
+  destinationLongitude: number | null;
+  arrivalRadiusKm: number;
+  plannedArrivalAt: Date | null;
+};
+
 export interface DeliveryStore {
   getPublic(tracking: string): Promise<DeliveryRow | null>;
   listForCompany(companyId: string): Promise<DeliveryRow[]>;
@@ -154,6 +172,15 @@ export interface DeliveryStore {
   // actually updated.
   linkVehicleToGroup(deliveryIds: string[], companyId: string, vehicle: SendatrackVehicle): Promise<DeliveryRow[]>;
   updateSchedule(deliveryId: string, companyId: string, input: { plannedArrivalAt: Date | null; nextTruckDepartureAt: Date | null }): Promise<DeliveryRow | null>;
+  // Edits the "content" fields of an existing, not-yet-delivered delivery
+  // (client identity, recipient, weight/price, description, and
+  // destination) -- everything the full creation form can set except
+  // truck/vehicle (linkVehicle/linkVehicleToGroup) and next departure
+  // (updateSchedule), which keep their own dedicated, already-hardened
+  // paths (trip reassignment, double-booking safety) rather than being
+  // folded in here. Blocked once Delivered, same guard as
+  // updateSchedule/linkVehicle.
+  updateDetails(deliveryId: string, companyId: string, input: DeliveryDetailsUpdateInput): Promise<DeliveryRow | null>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;

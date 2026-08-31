@@ -76,14 +76,11 @@ test("update-schedule also looks up the learned per-agency transit duration, sam
   assert.match(route, /const learnedTransitEstimate = knownSite\(existing\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true\s*\n\s*\? \(await getDepartureArrivalDurationEstimates\(session\.companyId\)\)\.get\(existing\.destinationSiteId!\) \?\? null\s*\n\s*: null;/);
 });
 
-test("the delivery table has a per-row schedule editor (dispatcher only) that pre-fills from the delivery's current dates", () => {
-  // Shares its trigger and popover with the truck editor (see
-  // delivery-truck-table-editor.test.mjs) -- both dates and the truck are
-  // part of the same "journey" for a delivery, so editing them no longer
-  // needs two separate icons.
-  assert.match(page, /const \[journeyEditorDeliveryId, setJourneyEditorDeliveryId\] = useState<string \| null>\(null\);/);
-  assert.match(page, /className="more-button journey-editor-trigger"/);
-  assert.match(page, /setScheduleEditorNextDeparture\(opening \? toDatetimeLocalValue\(delivery\.nextTruckDepartureAt\) : ""\);/);
-  assert.match(page, /async function updateDeliverySchedule\(deliveryId: string, plannedArrivalAt: string, nextTruckDepartureAt: string\)/);
+test("editing a delivery's departure date goes through the same update-schedule endpoint, only called when the date actually changed", () => {
+  // The per-row truck/date-only popover this used to describe was replaced
+  // by the full edit form (see delivery-edit-mode.test.mjs) -- saveDeliveryEdits
+  // calls update-schedule itself, diffed against the delivery's original
+  // departure date captured when the editor opened.
+  assert.match(page, /if \(editingOriginal && creationDepartureAt !== editingOriginal\.departureAt\) \{/);
   assert.match(page, /fetch\("\/api\/deliveries\/update-schedule", \{/);
 });

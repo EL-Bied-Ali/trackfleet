@@ -384,11 +384,6 @@ export default function Home() {
   const [filter, setFilter] = useState("All deliveries");
   const [searchQuery, setSearchQuery] = useState("");
   const [openContactPopover, setOpenContactPopover] = useState<string | null>(null);
-  const [journeyEditorDeliveryId, setJourneyEditorDeliveryId] = useState<string | null>(null);
-  const [truckEditorSelection, setTruckEditorSelection] = useState("");
-  const [truckEditorPending, setTruckEditorPending] = useState(false);
-  const [scheduleEditorNextDeparture, setScheduleEditorNextDeparture] = useState("");
-  const [scheduleEditorPending, setScheduleEditorPending] = useState(false);
   // Arrival/departure times are a property of the truck's run, not of any
   // one parcel on it -- editing them per row was the same redundancy the
   // destination/ETA/progress hoisting above already solved, just left over
@@ -457,6 +452,15 @@ export default function Home() {
     customer: string; contact: string; customerEmail: string;
     recipientName: string; recipientContact: string; whatsappOptIn: boolean;
   } | null>(null);
+  // Non-null when the same modal/form is open to edit an existing delivery
+  // instead of creating a new one -- reuses every field of the creation
+  // form (see openEditModal), but submits to /api/deliveries/update (plus
+  // link-vehicle/update-schedule for truck/departure, only if those
+  // actually changed) instead of POST /api/deliveries. truckId/departureAt
+  // are the delivery's values as of opening the editor, so the submit
+  // handler can tell whether the dispatcher actually touched them.
+  const [editingDeliveryId, setEditingDeliveryId] = useState<string | null>(null);
+  const [editingOriginal, setEditingOriginal] = useState<{ truckId: string; departureAt: string } | null>(null);
   // Closing without submitting (× or Cancel) used to silently wipe every
   // field the dispatcher had typed -- a multi-parcel form can take a while
   // to fill in, and an accidental close (or a reload before submitting)
@@ -466,7 +470,11 @@ export default function Home() {
   // down) because the Escape-key effect below needs it and, as a `const`,
   // it isn't hoisted the way a function declaration would be.
   const closeCreateModal = useCallback(() => {
-    if (company) {
+    // Editing an existing delivery isn't a "draft" the way an in-progress
+    // new delivery is -- the original data is already safely stored, so
+    // abandoning an edit should just discard it, not write it into (or
+    // clobber) the separate new-delivery draft slot.
+    if (company && !editingDeliveryId) {
       const formData = creationFormRef.current ? new FormData(creationFormRef.current) : null;
       const draft: DeliveryCreationDraft = {
         destinationSiteId: creationDestinationSiteId,
@@ -485,11 +493,13 @@ export default function Home() {
       else window.localStorage.removeItem(key);
     }
     setModalOpen(false);
+    setEditingDeliveryId(null);
+    setEditingOriginal(null);
     setParcelDrafts([{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" }]);
     setCreationDestinationSiteId("");
     setCreationDepartureAt("");
     setCreationDraftSeed(null);
-  }, [company, creationDestinationSiteId, creationDepartureAt, creationVehicleId, parcelDrafts]);
+  }, [company, editingDeliveryId, creationDestinationSiteId, creationDepartureAt, creationVehicleId, parcelDrafts]);
 
   const [renamingVehicleId, setRenamingVehicleId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -620,17 +630,6 @@ export default function Home() {
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
   }, [openContactPopover]);
-
-  useEffect(() => {
-    if (!journeyEditorDeliveryId) return;
-    const close = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest(".journey-editor-popover, .journey-editor-trigger")) return;
-      setJourneyEditorDeliveryId(null);
-    };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [journeyEditorDeliveryId]);
 
   useEffect(() => {
     if (!groupScheduleEditorLabel) return;
@@ -1008,31 +1007,6 @@ export default function Home() {
     await copyDeliveryLink(selected.id);
   }
 
-  async function reassignTruck(deliveryId: string, vehicleId: string) {
-    setTruckEditorPending(true);
-    try {
-      const response = await fetch("/api/deliveries/link-vehicle", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deliveryId, vehicleId }),
-      });
-      const data = (await response.json()) as { delivery?: Delivery; error?: string };
-      if (!response.ok || !data.delivery) {
-        setToast(data.error || (locale === "fr" ? "Impossible de changer le camion" : locale === "nl" ? "Kon het voertuig niet wijzigen" : "Couldn't change the truck"));
-        return;
-      }
-      const updated = data.delivery;
-      setDeliveries((items) => items.map((item) => item.id === updated.id ? updated : item));
-      setJourneyEditorDeliveryId(null);
-      setTruckEditorSelection("");
-      setToast(locale === "fr" ? "Camion mis à jour" : locale === "nl" ? "Voertuig bijgewerkt" : "Truck updated");
-    } catch {
-      setToast(locale === "fr" ? "Impossible de changer le camion" : locale === "nl" ? "Kon het voertuig niet wijzigen" : "Couldn't change the truck");
-    } finally {
-      setTruckEditorPending(false);
-    }
-  }
-
   // datetime-local inputs need "YYYY-MM-DDTHH:mm" in the browser's local
   // time, not the ISO string's UTC representation.
   function toDatetimeLocalValue(iso: string | null | undefined) {
@@ -1043,38 +1017,11 @@ export default function Home() {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
-  async function updateDeliverySchedule(deliveryId: string, plannedArrivalAt: string, nextTruckDepartureAt: string) {
-    setScheduleEditorPending(true);
-    try {
-      const response = await fetch("/api/deliveries/update-schedule", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          deliveryId,
-          plannedArrivalAt: plannedArrivalAt ? new Date(plannedArrivalAt).toISOString() : "",
-          nextTruckDepartureAt: nextTruckDepartureAt ? new Date(nextTruckDepartureAt).toISOString() : "",
-        }),
-      });
-      const data = (await response.json()) as { delivery?: Delivery; error?: string };
-      if (!response.ok || !data.delivery) {
-        setToast(data.error || (locale === "fr" ? "Impossible de mettre à jour les dates" : locale === "nl" ? "Kon de data niet bijwerken" : "Couldn't update the dates"));
-        return;
-      }
-      const updated = data.delivery;
-      setDeliveries((items) => items.map((item) => item.id === updated.id ? updated : item));
-      setJourneyEditorDeliveryId(null);
-      setToast(locale === "fr" ? "Dates mises à jour" : locale === "nl" ? "Data bijgewerkt" : "Dates updated");
-    } catch {
-      setToast(locale === "fr" ? "Impossible de mettre à jour les dates" : locale === "nl" ? "Kon de data niet bijwerken" : "Couldn't update the dates");
-    } finally {
-      setScheduleEditorPending(false);
-    }
-  }
-
-  // Same endpoint as updateDeliverySchedule above, one call per parcel in
-  // the truck's group -- there's no bulk update-schedule endpoint, and
-  // adding one for what's still a handful of parcels per truck isn't worth
-  // the extra API surface yet.
+  // Same /api/deliveries/update-schedule endpoint saveDeliveryEdits calls
+  // for one delivery at a time, one call per parcel in the truck's group --
+  // there's no bulk update-schedule endpoint, and adding one for what's
+  // still a handful of parcels per truck isn't worth the extra API surface
+  // yet.
   async function updateGroupSchedule(deliveryIds: string[], plannedArrivalAt: string, nextTruckDepartureAt: string) {
     setGroupSchedulePending(true);
     try {
@@ -1516,6 +1463,17 @@ export default function Home() {
   // create a delivery (see truck-preference.ts), falling back to unassigned
   // when nothing was saved yet or that truck isn't connected anymore.
   function openCreateModal() {
+    setEditingDeliveryId(null);
+    setEditingOriginal(null);
+    // openEditModal below overrides defaultOriginSiteId to the edited
+    // delivery's own origin (disabled in the form, view-only) -- restore
+    // the dispatcher's actual remembered origin here so a "Nouvelle
+    // livraison" right after closing an edit doesn't inherit it.
+    if (company && company.role !== "agency") {
+      const originIds = knownSites.filter((site) => site.roles.includes("origin")).map((site) => site.id);
+      const saved = window.localStorage.getItem(originPreferenceKey(company));
+      setDefaultOriginSiteId((current) => resolvePreferredOriginSite(saved, originIds, current));
+    }
     const preferredVehicleId = company
       ? resolvePreferredTruck(window.localStorage.getItem(truckPreferenceKey(company)), integration.vehicles.map((vehicle) => vehicle.id))
       : "";
@@ -1544,7 +1502,109 @@ export default function Home() {
     setModalOpen(true);
   }
 
+  // Reopens the same creation form pre-filled with an existing delivery's
+  // values, in place of the old truck/departure-only popover -- editing a
+  // parcel now goes through every field the creation form has, not just
+  // those two. Origin isn't editable (shown disabled, for context only);
+  // truck and departure keep using their own dedicated, already-hardened
+  // endpoints (see saveDeliveryEdits) rather than folding into the new
+  // /api/deliveries/update route.
+  function openEditModal(delivery: Delivery) {
+    if (delivery.status === "Delivered") return;
+    setEditingDeliveryId(delivery.id);
+    setEditingOriginal({ truckId: delivery.sendatrackVehicleId ?? "", departureAt: toDatetimeLocalValue(delivery.nextTruckDepartureAt) });
+    setDefaultOriginSiteId(delivery.originSiteId ?? "");
+    setCreationDestinationSiteId(delivery.destinationSiteId ?? "");
+    setCreationDepartureAt(toDatetimeLocalValue(delivery.nextTruckDepartureAt));
+    setCreationVehicleId(delivery.sendatrackVehicleId ?? "");
+    setParcelDrafts([{
+      key: "0",
+      weightKg: delivery.weightKg != null ? String(delivery.weightKg) : "",
+      manualPriceAmount: delivery.weightKg == null && delivery.priceAmount != null ? String(delivery.priceAmount) : "",
+      itemDescription: delivery.itemDescription ?? "",
+    }]);
+    setCreationDraftSeed({
+      customer: delivery.customer,
+      contact: delivery.contact ?? "",
+      customerEmail: delivery.customerEmail ?? "",
+      recipientName: delivery.recipientName ?? "",
+      recipientContact: delivery.recipientContact ?? "",
+      whatsappOptIn: false,
+    });
+    setModalOpen(true);
+  }
+
+  async function saveDeliveryEdits(event: React.FormEvent<HTMLFormElement>, deliveryId: string) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const parcel = parcelDrafts[0] ?? { weightKg: "", manualPriceAmount: "", itemDescription: "" };
+    setCreating(true);
+    try {
+      const response = await fetch("/api/deliveries/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          deliveryId,
+          customer: String(form.get("customer") ?? "").trim(),
+          destinationSiteId: creationDestinationSiteId,
+          contact: String(form.get("contact") ?? "").trim(),
+          customerEmail: String(form.get("customerEmail") ?? "").trim(),
+          recipientName: String(form.get("recipientName") ?? "").trim(),
+          recipientContact: String(form.get("recipientContact") ?? "").trim(),
+          weightKg: parcel.weightKg,
+          manualPriceAmount: parcel.manualPriceAmount,
+          itemDescription: parcel.itemDescription,
+        }),
+      });
+      const data = await response.json() as { delivery?: Delivery; error?: string };
+      if (!response.ok || !data.delivery) {
+        setToast(data.error || (locale === "fr" ? "Impossible d’enregistrer les modifications" : locale === "nl" ? "Kon de wijzigingen niet opslaan" : "Could not save the changes"));
+        return;
+      }
+      let latest = data.delivery;
+      // Truck and departure date keep using their own dedicated routes
+      // (already hardened against double-booking / trip drift), only
+      // called when the dispatcher actually changed that field.
+      if (editingOriginal && creationVehicleId && creationVehicleId !== editingOriginal.truckId) {
+        const vehicleResponse = await fetch("/api/deliveries/link-vehicle", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deliveryId, vehicleId: creationVehicleId }),
+        });
+        const vehicleData = await vehicleResponse.json() as { delivery?: Delivery };
+        if (vehicleResponse.ok && vehicleData.delivery) latest = vehicleData.delivery;
+      }
+      if (editingOriginal && creationDepartureAt !== editingOriginal.departureAt) {
+        const scheduleResponse = await fetch("/api/deliveries/update-schedule", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            deliveryId,
+            plannedArrivalAt: "",
+            nextTruckDepartureAt: creationDepartureAt ? new Date(creationDepartureAt).toISOString() : "",
+          }),
+        });
+        const scheduleData = await scheduleResponse.json() as { delivery?: Delivery };
+        if (scheduleResponse.ok && scheduleData.delivery) latest = scheduleData.delivery;
+      }
+      setDeliveries((items) => items.map((item) => item.id === latest.id ? latest : item));
+      setModalOpen(false);
+      setEditingDeliveryId(null);
+      setEditingOriginal(null);
+      setParcelDrafts([{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" }]);
+      setCreationDestinationSiteId("");
+      setCreationDepartureAt("");
+      setCreationDraftSeed(null);
+      setToast(locale === "fr" ? "Livraison mise à jour" : locale === "nl" ? "Zending bijgewerkt" : "Delivery updated");
+    } catch {
+      setToast(locale === "fr" ? "Impossible d’enregistrer les modifications" : locale === "nl" ? "Kon de wijzigingen niet opslaan" : "Could not save the changes");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function createDelivery(event: React.FormEvent<HTMLFormElement>) {
+    if (editingDeliveryId) return saveDeliveryEdits(event, editingDeliveryId);
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const vehicleChoice = resolveCreationVehicle({ manualTruck: "", selectedVehicleId: creationVehicleId, vehicles: integration.vehicles });
@@ -2174,7 +2234,7 @@ export default function Home() {
               return <button key={arrivalKey} type="button" className="more-button" disabled={groupArrivalPending === arrivalKey} title={locale === "fr" ? `Confirmer l’arrivée à ${subgroup.destination}` : locale === "nl" ? `Aankomst bevestigen bij ${subgroup.destination}` : `Confirm arrival at ${subgroup.destination}`} aria-label={locale === "fr" ? `Confirmer l’arrivée à ${subgroup.destination}` : locale === "nl" ? `Aankomst bevestigen bij ${subgroup.destination}` : `Confirm arrival at ${subgroup.destination}`} onClick={(event) => { event.stopPropagation(); void confirmGroupArrival(arrivalKey, eligible.map((delivery) => delivery.id)); }}>{groupArrivalPending === arrivalKey ? "…" : "✓"}</button>;
             })}
             </div></td></tr>
-            {group.deliveries.map((delivery) => <tr key={delivery.id} role="button" tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{registeredAtLabel(delivery)}</strong><span>{delivery.id}</span>{delivery.shipmentId && (shipmentSizes.get(delivery.shipmentId) ?? 0) > 1 && <span className="shipment-badge">{locale === "fr" ? `${shipmentSizes.get(delivery.shipmentId)} colis liés` : locale === "nl" ? `${shipmentSizes.get(delivery.shipmentId)} gekoppelde pakketten` : `${shipmentSizes.get(delivery.shipmentId)} linked parcels`}</span>}</td><td className="contact-cell-wrap"><button type="button" className="customer-cell contact-trigger" onClick={(event) => { event.stopPropagation(); setOpenContactPopover((current) => current === `${delivery.id}:customer` ? null : `${delivery.id}:customer`); }}><span>{delivery.customer}</span></button>{openContactPopover === `${delivery.id}:customer` && <div className="contact-popover"><strong>{locale === "fr" ? "Téléphone client" : locale === "nl" ? "Telefoon klant" : "Customer phone"}</strong>{delivery.contact ? <a href={`tel:${delivery.contact}`}>{delivery.contact}</a> : <span>—</span>}</div>}{delivery.recipientName && <div className="recipient-line"><button type="button" className="contact-trigger" onClick={(event) => { event.stopPropagation(); setOpenContactPopover((current) => current === `${delivery.id}:recipient` ? null : `${delivery.id}:recipient`); }}><span>→ {delivery.recipientName}</span></button>{openContactPopover === `${delivery.id}:recipient` && <div className="contact-popover"><strong>{locale === "fr" ? "Téléphone destinataire" : locale === "nl" ? "Telefoon ontvanger" : "Recipient phone"}</strong>{[delivery.contact, delivery.recipientContact].filter(Boolean).length > 0 ? [delivery.contact, delivery.recipientContact].filter(Boolean).map((number) => <a key={number} href={`tel:${number}`}>{number}</a>) : <span>—</span>}</div>}</div>}</td>{company?.role === "dispatcher" && <td>{knownSites.find((site) => site.id === delivery.originSiteId)?.label ?? "—"}</td>}<td className="col-journey">{!group.uniformDestination && <span className="journey-destination">{knownSites.find((site) => site.id === delivery.destinationSiteId)?.city ?? delivery.destination}{staticKnownSite(delivery.destinationSiteId)?.finalLegTrackingUnavailable && <b className="relay-badge">{locale === "fr" ? "Relais CTM" : locale === "nl" ? "CTM-relais" : "CTM relay"}</b>}</span>}{!group.uniformDestination && <span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span>}{!group.uniformDestination && <div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div>}{group.uniformDestination ? <span className="cell-hoisted">—</span> : <span className="journey-eta"><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></span>}</td><td className="col-actions">{company?.role === "dispatcher" && <div className="truck-editor-wrap"><button type="button" className="more-button journey-editor-trigger" title={locale === "fr" ? "Modifier le trajet" : locale === "nl" ? "Rit bewerken" : "Edit journey"} aria-label={locale === "fr" ? "Modifier le trajet" : locale === "nl" ? "Rit bewerken" : "Edit journey"} onClick={(event) => { event.stopPropagation(); const opening = journeyEditorDeliveryId !== delivery.id; setJourneyEditorDeliveryId(opening ? delivery.id : null); setTruckEditorSelection(opening ? (delivery.sendatrackVehicleId || "") : ""); setScheduleEditorNextDeparture(opening ? toDatetimeLocalValue(delivery.nextTruckDepartureAt) : ""); }}>✎</button>{journeyEditorDeliveryId === delivery.id && <div className="journey-editor-popover truck-editor-popover">{integration.connected && integration.vehicles.length > 0 && <><strong>{locale === "fr" ? "Affecter à un camion" : locale === "nl" ? "Toewijzen aan voertuig" : "Assign to a truck"}</strong><select value={truckEditorSelection} disabled={truckEditorPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setTruckEditorSelection(event.target.value)}><option value="">{locale === "fr" ? "Choisir un camion" : locale === "nl" ? "Kies een voertuig" : "Choose a truck"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{truckNumberLabel(vehicle.id) ? `${truckNumberLabel(vehicle.id)} · ${vehicle.name}` : vehicle.name}</option>)}</select>{truckEditorSelection && vehicleAssignmentConflict(truckEditorSelection, delivery.id) && <small className="warning">{locale === "fr" ? `⚠ Ce camion est encore en route (${vehicleAssignmentConflict(truckEditorSelection, delivery.id)!.id}). Vérifiez qu'il sera bien de retour.` : locale === "nl" ? `⚠ Dit voertuig is nog onderweg (${vehicleAssignmentConflict(truckEditorSelection, delivery.id)!.id}). Controleer of het op tijd terug is.` : `⚠ This truck is still en route (${vehicleAssignmentConflict(truckEditorSelection, delivery.id)!.id}). Confirm it will actually be back.`}</small>}<button type="button" disabled={!truckEditorSelection || truckEditorPending} onClick={(event) => { event.stopPropagation(); void reassignTruck(delivery.id, truckEditorSelection); }}>{truckEditorPending ? (locale === "fr" ? "Confirmation…" : locale === "nl" ? "Bevestigen…" : "Confirming…") : (locale === "fr" ? "Confirmer" : locale === "nl" ? "Bevestigen" : "Confirm")}</button>{!group.uniformDestination && <div className="journey-editor-divider" />}</>}{!group.uniformDestination && <><strong>{locale === "fr" ? "Départ du prochain camion" : locale === "nl" ? "Vertrek volgende vrachtwagen" : "Next truck departure"}</strong><input type="datetime-local" value={scheduleEditorNextDeparture} disabled={scheduleEditorPending} onClick={(event) => event.stopPropagation()} onChange={(event) => setScheduleEditorNextDeparture(event.target.value)} /><strong>{locale === "fr" ? "Arrivée estimée" : locale === "nl" ? "Geschatte aankomst" : "Estimated arrival"}</strong><div className="price-preview">{estimateRelayArrival(delivery.destinationSiteId, scheduleEditorNextDeparture ? new Date(scheduleEditorNextDeparture) : null, departureArrivalEstimates[delivery.destinationSiteId ?? ""]) ? <strong>{estimateRelayArrival(delivery.destinationSiteId, new Date(scheduleEditorNextDeparture), departureArrivalEstimates[delivery.destinationSiteId ?? ""])!.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</strong> : <span>—</span>}</div><button type="button" disabled={scheduleEditorPending} onClick={(event) => { event.stopPropagation(); void updateDeliverySchedule(delivery.id, "", scheduleEditorNextDeparture); }}>{scheduleEditorPending ? (locale === "fr" ? "Confirmation…" : locale === "nl" ? "Bevestigen…" : "Confirming…") : (locale === "fr" ? "Confirmer" : locale === "nl" ? "Bevestigen" : "Confirm")}</button></>}</div>}</div>}<button className="more-button" title={t.copyTrackingFor(delivery.id)} aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button>{company?.role === "dispatcher" && <button type="button" className="more-button delete-delivery-button" disabled={deleteBusyId === delivery.id} title={locale === "fr" ? `Supprimer la livraison ${delivery.id}` : locale === "nl" ? `Zending ${delivery.id} verwijderen` : `Delete delivery ${delivery.id}`} aria-label={locale === "fr" ? `Supprimer la livraison ${delivery.id}` : locale === "nl" ? `Zending ${delivery.id} verwijderen` : `Delete delivery ${delivery.id}`} onClick={(event) => { event.stopPropagation(); void deleteDelivery(delivery.id, delivery.customer); }}>🗑</button>}</td></tr>)}
+            {group.deliveries.map((delivery) => <tr key={delivery.id} role="button" tabIndex={0} onClick={() => { setSelectedId(delivery.id); setShowPopover(true); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(delivery.id); setShowPopover(true); } }} className={selectedId === delivery.id ? "row-selected" : ""}><td><strong>{registeredAtLabel(delivery)}</strong><span>{delivery.id}</span>{delivery.shipmentId && (shipmentSizes.get(delivery.shipmentId) ?? 0) > 1 && <span className="shipment-badge">{locale === "fr" ? `${shipmentSizes.get(delivery.shipmentId)} colis liés` : locale === "nl" ? `${shipmentSizes.get(delivery.shipmentId)} gekoppelde pakketten` : `${shipmentSizes.get(delivery.shipmentId)} linked parcels`}</span>}</td><td className="contact-cell-wrap"><button type="button" className="customer-cell contact-trigger" onClick={(event) => { event.stopPropagation(); setOpenContactPopover((current) => current === `${delivery.id}:customer` ? null : `${delivery.id}:customer`); }}><span>{delivery.customer}</span></button>{openContactPopover === `${delivery.id}:customer` && <div className="contact-popover"><strong>{locale === "fr" ? "Téléphone client" : locale === "nl" ? "Telefoon klant" : "Customer phone"}</strong>{delivery.contact ? <a href={`tel:${delivery.contact}`}>{delivery.contact}</a> : <span>—</span>}</div>}{delivery.recipientName && <div className="recipient-line"><button type="button" className="contact-trigger" onClick={(event) => { event.stopPropagation(); setOpenContactPopover((current) => current === `${delivery.id}:recipient` ? null : `${delivery.id}:recipient`); }}><span>→ {delivery.recipientName}</span></button>{openContactPopover === `${delivery.id}:recipient` && <div className="contact-popover"><strong>{locale === "fr" ? "Téléphone destinataire" : locale === "nl" ? "Telefoon ontvanger" : "Recipient phone"}</strong>{[delivery.contact, delivery.recipientContact].filter(Boolean).length > 0 ? [delivery.contact, delivery.recipientContact].filter(Boolean).map((number) => <a key={number} href={`tel:${number}`}>{number}</a>) : <span>—</span>}</div>}</div>}</td>{company?.role === "dispatcher" && <td>{knownSites.find((site) => site.id === delivery.originSiteId)?.label ?? "—"}</td>}<td className="col-journey">{!group.uniformDestination && <span className="journey-destination">{knownSites.find((site) => site.id === delivery.destinationSiteId)?.city ?? delivery.destination}{staticKnownSite(delivery.destinationSiteId)?.finalLegTrackingUnavailable && <b className="relay-badge">{locale === "fr" ? "Relais CTM" : locale === "nl" ? "CTM-relais" : "CTM relay"}</b>}</span>}{!group.uniformDestination && <span className={statusClass[delivery.status]}><i />{t.statuses[delivery.status]}</span>}{!group.uniformDestination && <div className="progress"><div><i style={{ width: `${delivery.progress}%` }} /></div><span>{delivery.progress}%</span></div>}{group.uniformDestination ? <span className="cell-hoisted">—</span> : <span className="journey-eta"><strong>{delivery.estimatedArrivalAt ? new Date(delivery.estimatedArrivalAt).toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : delivery.eta}</strong><span>{(delivery.etaDelayMinutes ?? 0) >= 60 ? `+${Math.round((delivery.etaDelayMinutes ?? 0) / 60)}h` : delivery.status === "Delivered" ? t.arrived : t.today}</span></span>}</td><td className="col-actions">{company?.role === "dispatcher" && delivery.status !== "Delivered" && <button type="button" className="more-button journey-editor-trigger" title={locale === "fr" ? "Modifier la livraison" : locale === "nl" ? "Zending bewerken" : "Edit delivery"} aria-label={locale === "fr" ? "Modifier la livraison" : locale === "nl" ? "Zending bewerken" : "Edit delivery"} onClick={(event) => { event.stopPropagation(); openEditModal(delivery); }}>✎</button>}<button className="more-button" title={t.copyTrackingFor(delivery.id)} aria-label={t.copyTrackingFor(delivery.id)} onClick={(event) => { event.stopPropagation(); void copyDeliveryLink(delivery.id); }}>↗</button>{company?.role === "dispatcher" && <button type="button" className="more-button delete-delivery-button" disabled={deleteBusyId === delivery.id} title={locale === "fr" ? `Supprimer la livraison ${delivery.id}` : locale === "nl" ? `Zending ${delivery.id} verwijderen` : `Delete delivery ${delivery.id}`} aria-label={locale === "fr" ? `Supprimer la livraison ${delivery.id}` : locale === "nl" ? `Zending ${delivery.id} verwijderen` : `Delete delivery ${delivery.id}`} onClick={(event) => { event.stopPropagation(); void deleteDelivery(delivery.id, delivery.customer); }}>🗑</button>}</td></tr>)}
           </tbody>)}
         </table>}
       </div>
@@ -2347,7 +2407,7 @@ export default function Home() {
         {company?.role !== "agency" && deliveriesPanel}
       </section>
 
-      {modalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title"><div className="modal-header"><div><p className="eyebrow">{t.createEyebrow}</p><h2 id="new-delivery-title">{t.createTitle}</h2><span>{integration.connected ? t.createHelpAutomatic : t.createHelp}</span></div><button onClick={closeCreateModal} aria-label={t.close}>×</button></div><form onSubmit={createDelivery} ref={creationFormRef}><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} disabled={company?.role === "agency"} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin") && (company?.role !== "agency" || site.id === company.siteId)).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{company?.role === "agency" ? (locale === "fr" ? "Les colis enregistrés sont automatiquement rattachés à votre agence." : locale === "nl" ? "Geregistreerde zendingen worden automatisch aan uw agentschap gekoppeld." : "Registered parcels are automatically assigned to your agency.") : (locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser.")}</small></label><label>{t.destination}<select name="destinationSiteId" required value={creationDestinationSiteId} onChange={(event) => setCreationDestinationSiteId(event.target.value)}><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination") && (company?.role !== "agency" || site.country !== creationOriginCountry)).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-section"><strong>{locale === "fr" ? "Expéditeur / client" : locale === "nl" ? "Afzender / klant" : "Sender / customer"}</strong><div className="form-row"><label>{t.customerCompany}<input name="customer" required placeholder={t.customerPlaceholder} defaultValue={creationDraftSeed?.customer ?? ""} /></label><label><span className="field-label">{t.customerContact} <span>({t.optional})</span></span><input name="contact" inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" defaultValue={creationDraftSeed?.contact ?? ""} /></label></div><div className="form-row"><label><span className="field-label">{locale === "fr" ? "E-mail du client" : locale === "nl" ? "E-mail klant" : "Customer email"} <span>({t.optional})</span></span><input name="customerEmail" type="email" autoComplete="email" placeholder="client@exemple.com" defaultValue={creationDraftSeed?.customerEmail ?? ""} /></label></div><small>{locale === "fr" ? "L'e-mail reçoit les mêmes mises à jour de suivi, sans consentement séparé à cocher." : locale === "nl" ? "Dit e-mailadres ontvangt dezelfde trackingupdates, zonder aparte toestemming aan te vinken." : "This email receives the same tracking updates, no separate consent checkbox needed."}</small></div><div className="form-section"><strong>{locale === "fr" ? "Personne qui reçoit le colis" : locale === "nl" ? "Ontvanger van het pakket" : "Parcel recipient"}</strong><div className="form-row"><label><span className="field-label">{locale === "fr" ? "Nom du destinataire" : locale === "nl" ? "Naam ontvanger" : "Recipient name"} <span>({t.optional})</span></span><input name="recipientName" autoComplete="name" placeholder={locale === "fr" ? "Nom et prénom" : locale === "nl" ? "Voor- en achternaam" : "Full name"} defaultValue={creationDraftSeed?.recipientName ?? ""} /></label><label><span className="field-label">{locale === "fr" ? "Téléphone du destinataire" : locale === "nl" ? "Telefoon ontvanger" : "Recipient phone"} <span>({t.optional})</span></span><input name="recipientContact" inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" defaultValue={creationDraftSeed?.recipientContact ?? ""} /></label></div><small>{locale === "fr" ? "Renseignez le nom et le téléphone ensemble. Le destinataire recevra les mêmes mises à jour utiles." : locale === "nl" ? "Vul naam en telefoon samen in. De ontvanger krijgt dezelfde nuttige updates." : "Enter name and phone together. The recipient receives the same useful updates."}</small></div><div className="parcel-list">{parcelDrafts.map((parcel, index) => { const preview = creationPricePreviewFor(parcel.weightKg); return <div className="form-row parcel-row" key={parcel.key}>{parcelDrafts.length > 1 && <div className="parcel-row-head">{locale === "fr" ? `Colis ${index + 1}` : locale === "nl" ? `Pakket ${index + 1}` : `Parcel ${index + 1}`}</div>}<label><span className="field-label">{locale === "fr" ? "Poids du colis" : locale === "nl" ? "Gewicht zending" : "Parcel weight"} <span>({t.optional})</span></span><input type="number" min="0.001" max="100000" step="0.001" inputMode="decimal" placeholder="kg" value={parcel.weightKg} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, weightKg: value } : row)); }} /><small>{locale === "fr" ? "Laissez vide pour un objet volumineux (machine à laver, télé…)" : locale === "nl" ? "Laat leeg voor een groot voorwerp (wasmachine, tv…)" : "Leave blank for a bulky item (washing machine, TV…)"}</small></label><label>{parcel.weightKg ? (locale === "fr" ? "Prix calculé" : locale === "nl" ? "Berekende prijs" : "Calculated price") : (locale === "fr" ? "Prix manuel" : locale === "nl" ? "Handmatige prijs" : "Manual price")}{parcel.weightKg ? <div className="price-preview">{preview.priceAmount != null ? <strong>{preview.priceAmount.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {preview.priceCurrency}</strong> : <span>{locale === "fr" ? "Renseignez le poids" : locale === "nl" ? "Vul het gewicht in" : "Enter the weight"}</span>}</div> : <input type="number" min="0.01" max="1000000" step="0.01" inputMode="decimal" placeholder={creationOriginCountry === "MA" ? "MAD" : "EUR"} value={parcel.manualPriceAmount} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, manualPriceAmount: value } : row)); }} />}<small>{parcel.weightKg ? (creationOriginCountry === "MA" ? (locale === "fr" ? "15 DH/kg au départ du Maroc" : locale === "nl" ? "15 DH/kg vanuit Marokko" : "15 MAD/kg from Morocco") : (locale === "fr" ? "1,50 €/kg" : locale === "nl" ? "1,50 €/kg" : "1.50 EUR/kg")) : (locale === "fr" ? "Objet volumineux : indiquez le prix directement" : locale === "nl" ? "Groot voorwerp: geef de prijs rechtstreeks op" : "Bulky item: enter the price directly")}</small></label>{!parcel.weightKg && <label>{locale === "fr" ? "Description de l'objet" : locale === "nl" ? "Omschrijving van het voorwerp" : "Item description"}<input type="text" required maxLength={200} placeholder={locale === "fr" ? "Ex. : télévision, lave-linge…" : locale === "nl" ? "Bijv. televisie, wasmachine…" : "E.g. TV, washing machine…"} value={parcel.itemDescription} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, itemDescription: value } : row)); }} /><small>{locale === "fr" ? "Obligatoire pour un objet non pesé, pour le distinguer des autres colis." : locale === "nl" ? "Verplicht voor een niet-gewogen voorwerp, om het van andere zendingen te onderscheiden." : "Required for an unweighed item, to tell it apart from other parcels."}</small></label>}{parcelDrafts.length > 1 && <button type="button" className="remove-parcel-row" aria-label={locale === "fr" ? "Retirer ce colis" : locale === "nl" ? "Dit pakket verwijderen" : "Remove this parcel"} onClick={() => setParcelDrafts((rows) => rows.filter((row) => row.key !== parcel.key))}>×</button>}</div>; })}<button type="button" className="add-parcel-row" onClick={() => setParcelDrafts((rows) => [...rows, { key: crypto.randomUUID(), weightKg: "", manualPriceAmount: "", itemDescription: "" }])}>{locale === "fr" ? "+ Ajouter un colis pour ce client" : locale === "nl" ? "+ Pakket toevoegen voor deze klant" : "+ Add another parcel for this customer"}</button></div><div className="form-row"><label><span className="field-label">{locale === "fr" ? "Date de départ" : locale === "nl" ? "Vertrekdatum" : "Departure date"} <span>({t.optional})</span></span><input type="datetime-local" name="nextTruckDepartureAt" value={creationDepartureAt} onChange={(event) => setCreationDepartureAt(event.target.value)} /></label><label>{locale === "fr" ? "Date d'arrivée estimée" : locale === "nl" ? "Geschatte aankomstdatum" : "Estimated arrival date"}<div className="price-preview">{creationEstimatedArrival ? <strong>{creationEstimatedArrival.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</strong> : <span>{locale === "fr" ? "Choisissez l'agence et la date de départ" : locale === "nl" ? "Kies het agentschap en de vertrekdatum" : "Choose the agency and departure date"}</span>}</div><small>{locale === "fr" ? "Calculée automatiquement selon le délai CTM de l'agence de destination." : locale === "nl" ? "Automatisch berekend volgens de CTM-termijn van het bestemmingsagentschap." : "Calculated automatically from the destination agency's CTM transit time."}</small></label></div>{company?.role === "dispatcher" && integration.connected && integration.vehicles.length > 0 && <div className="form-row"><label><span className="field-label">{locale === "fr" ? "Camion" : locale === "nl" ? "Vrachtwagen" : "Truck"} <span>({t.optional})</span></span><select value={creationVehicleId} onChange={(event) => setCreationVehicleId(event.target.value)}><option value="">{locale === "fr" ? "À affecter plus tard" : locale === "nl" ? "Later toewijzen" : "Assign later"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{truckNumberLabel(vehicle.id) ? `${truckNumberLabel(vehicle.id)} · ${vehicle.name}` : vehicle.name}</option>)}</select><small>{locale === "fr" ? "Le dernier camion choisi est mémorisé pour la prochaine création." : locale === "nl" ? "De laatst gekozen vrachtwagen wordt onthouden voor de volgende aanmaak." : "The last truck you chose is remembered for the next delivery."}</small></label></div>}{features.whatsappAvailable && <label className="consent-choice"><input type="checkbox" name="whatsappOptIn" defaultChecked={creationDraftSeed?.whatsappOptIn ?? false} /><span>{locale === "fr" ? "Nouveau consentement WhatsApp confirmé pour les numéros renseignés" : locale === "nl" ? "Nieuwe WhatsApp-toestemming bevestigd voor de ingevulde nummers" : "New WhatsApp consent confirmed for the entered numbers"}<small>{locale === "fr" ? "Inutile de cocher si ce numéro a déjà consenti auparavant : TrackFleet le reconnaît automatiquement. Le consentement peut toujours être retiré." : locale === "nl" ? "Niet nodig als dit nummer eerder toestemming gaf: TrackFleet herkent dit automatisch. Toestemming kan altijd worden ingetrokken." : "Do not check this when the number already consented: TrackFleet remembers it automatically. Consent can always be withdrawn."}</small></span></label>}<div className="modal-footer"><button type="button" onClick={closeCreateModal}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : t.createDelivery}<span>→</span></button></div></form></section></div>}
+      {modalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="new-delivery-title"><div className="modal-header"><div><p className="eyebrow">{editingDeliveryId ? (locale === "fr" ? "MODIFIER" : locale === "nl" ? "BEWERKEN" : "EDIT") : t.createEyebrow}</p><h2 id="new-delivery-title">{editingDeliveryId ? (locale === "fr" ? "Modifier la livraison" : locale === "nl" ? "Zending bewerken" : "Edit delivery") : t.createTitle}</h2><span>{editingDeliveryId ? (locale === "fr" ? "Le camion et la date de départ utilisent leurs propres confirmations, séparées de l’enregistrement du reste." : locale === "nl" ? "Voertuig en vertrekdatum gebruiken hun eigen bevestiging, los van het opslaan van de rest." : "Truck and departure date are confirmed separately from saving the rest.") : (integration.connected ? t.createHelpAutomatic : t.createHelp)}</span></div><button onClick={closeCreateModal} aria-label={t.close}>×</button></div><form onSubmit={createDelivery} ref={creationFormRef}><div className="form-row"><label>{locale === "fr" ? "Site de départ" : locale === "nl" ? "Vertreklocatie" : "Origin site"}<select name="originSiteId" required value={defaultOriginSiteId} disabled={company?.role === "agency" || Boolean(editingDeliveryId)} onChange={(event) => { const siteId = event.target.value; setDefaultOriginSiteId(siteId); if (company) window.localStorage.setItem(originPreferenceKey(company), siteId); }}><option value="" disabled>{locale === "fr" ? "Choisir le site" : locale === "nl" ? "Kies locatie" : "Choose site"}</option>{knownSites.filter((site) => site.roles.includes("origin") && (company?.role !== "agency" || site.id === company.siteId)).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select><small>{company?.role === "agency" ? (locale === "fr" ? "Les colis enregistrés sont automatiquement rattachés à votre agence." : locale === "nl" ? "Geregistreerde zendingen worden automatisch aan uw agentschap gekoppeld." : "Registered parcels are automatically assigned to your agency.") : (locale === "fr" ? "Ce choix sera mémorisé pour cet utilisateur sur ce navigateur." : locale === "nl" ? "Deze keuze wordt voor deze gebruiker in deze browser onthouden." : "This choice will be remembered for this user on this browser.")}</small></label><label>{t.destination}<select name="destinationSiteId" required value={creationDestinationSiteId} onChange={(event) => setCreationDestinationSiteId(event.target.value)}><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination") && (company?.role !== "agency" || site.country !== creationOriginCountry)).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><div className="form-section"><strong>{locale === "fr" ? "Expéditeur / client" : locale === "nl" ? "Afzender / klant" : "Sender / customer"}</strong><div className="form-row"><label>{t.customerCompany}<input name="customer" required placeholder={t.customerPlaceholder} defaultValue={creationDraftSeed?.customer ?? ""} /></label><label><span className="field-label">{t.customerContact} <span>({t.optional})</span></span><input name="contact" inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" defaultValue={creationDraftSeed?.contact ?? ""} /></label></div><div className="form-row"><label><span className="field-label">{locale === "fr" ? "E-mail du client" : locale === "nl" ? "E-mail klant" : "Customer email"} <span>({t.optional})</span></span><input name="customerEmail" type="email" autoComplete="email" placeholder="client@exemple.com" defaultValue={creationDraftSeed?.customerEmail ?? ""} /></label></div><small>{locale === "fr" ? "L'e-mail reçoit les mêmes mises à jour de suivi, sans consentement séparé à cocher." : locale === "nl" ? "Dit e-mailadres ontvangt dezelfde trackingupdates, zonder aparte toestemming aan te vinken." : "This email receives the same tracking updates, no separate consent checkbox needed."}</small></div><div className="form-section"><strong>{locale === "fr" ? "Personne qui reçoit le colis" : locale === "nl" ? "Ontvanger van het pakket" : "Parcel recipient"}</strong><div className="form-row"><label><span className="field-label">{locale === "fr" ? "Nom du destinataire" : locale === "nl" ? "Naam ontvanger" : "Recipient name"} <span>({t.optional})</span></span><input name="recipientName" autoComplete="name" placeholder={locale === "fr" ? "Nom et prénom" : locale === "nl" ? "Voor- en achternaam" : "Full name"} defaultValue={creationDraftSeed?.recipientName ?? ""} /></label><label><span className="field-label">{locale === "fr" ? "Téléphone du destinataire" : locale === "nl" ? "Telefoon ontvanger" : "Recipient phone"} <span>({t.optional})</span></span><input name="recipientContact" inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" defaultValue={creationDraftSeed?.recipientContact ?? ""} /></label></div><small>{locale === "fr" ? "Renseignez le nom et le téléphone ensemble. Le destinataire recevra les mêmes mises à jour utiles." : locale === "nl" ? "Vul naam en telefoon samen in. De ontvanger krijgt dezelfde nuttige updates." : "Enter name and phone together. The recipient receives the same useful updates."}</small></div><div className="parcel-list">{parcelDrafts.map((parcel, index) => { const preview = creationPricePreviewFor(parcel.weightKg); return <div className="form-row parcel-row" key={parcel.key}>{parcelDrafts.length > 1 && <div className="parcel-row-head">{locale === "fr" ? `Colis ${index + 1}` : locale === "nl" ? `Pakket ${index + 1}` : `Parcel ${index + 1}`}</div>}<label><span className="field-label">{locale === "fr" ? "Poids du colis" : locale === "nl" ? "Gewicht zending" : "Parcel weight"} <span>({t.optional})</span></span><input type="number" min="0.001" max="100000" step="0.001" inputMode="decimal" placeholder="kg" value={parcel.weightKg} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, weightKg: value } : row)); }} /><small>{locale === "fr" ? "Laissez vide pour un objet volumineux (machine à laver, télé…)" : locale === "nl" ? "Laat leeg voor een groot voorwerp (wasmachine, tv…)" : "Leave blank for a bulky item (washing machine, TV…)"}</small></label><label>{parcel.weightKg ? (locale === "fr" ? "Prix calculé" : locale === "nl" ? "Berekende prijs" : "Calculated price") : (locale === "fr" ? "Prix manuel" : locale === "nl" ? "Handmatige prijs" : "Manual price")}{parcel.weightKg ? <div className="price-preview">{preview.priceAmount != null ? <strong>{preview.priceAmount.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {preview.priceCurrency}</strong> : <span>{locale === "fr" ? "Renseignez le poids" : locale === "nl" ? "Vul het gewicht in" : "Enter the weight"}</span>}</div> : <input type="number" min="0.01" max="1000000" step="0.01" inputMode="decimal" placeholder={creationOriginCountry === "MA" ? "MAD" : "EUR"} value={parcel.manualPriceAmount} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, manualPriceAmount: value } : row)); }} />}<small>{parcel.weightKg ? (creationOriginCountry === "MA" ? (locale === "fr" ? "15 DH/kg au départ du Maroc" : locale === "nl" ? "15 DH/kg vanuit Marokko" : "15 MAD/kg from Morocco") : (locale === "fr" ? "1,50 €/kg" : locale === "nl" ? "1,50 €/kg" : "1.50 EUR/kg")) : (locale === "fr" ? "Objet volumineux : indiquez le prix directement" : locale === "nl" ? "Groot voorwerp: geef de prijs rechtstreeks op" : "Bulky item: enter the price directly")}</small></label>{!parcel.weightKg && <label>{locale === "fr" ? "Description de l'objet" : locale === "nl" ? "Omschrijving van het voorwerp" : "Item description"}<input type="text" required maxLength={200} placeholder={locale === "fr" ? "Ex. : télévision, lave-linge…" : locale === "nl" ? "Bijv. televisie, wasmachine…" : "E.g. TV, washing machine…"} value={parcel.itemDescription} onChange={(event) => { const value = event.target.value; setParcelDrafts((rows) => rows.map((row) => row.key === parcel.key ? { ...row, itemDescription: value } : row)); }} /><small>{locale === "fr" ? "Obligatoire pour un objet non pesé, pour le distinguer des autres colis." : locale === "nl" ? "Verplicht voor een niet-gewogen voorwerp, om het van andere zendingen te onderscheiden." : "Required for an unweighed item, to tell it apart from other parcels."}</small></label>}{parcelDrafts.length > 1 && <button type="button" className="remove-parcel-row" aria-label={locale === "fr" ? "Retirer ce colis" : locale === "nl" ? "Dit pakket verwijderen" : "Remove this parcel"} onClick={() => setParcelDrafts((rows) => rows.filter((row) => row.key !== parcel.key))}>×</button>}</div>; })}{!editingDeliveryId && <button type="button" className="add-parcel-row" onClick={() => setParcelDrafts((rows) => [...rows, { key: crypto.randomUUID(), weightKg: "", manualPriceAmount: "", itemDescription: "" }])}>{locale === "fr" ? "+ Ajouter un colis pour ce client" : locale === "nl" ? "+ Pakket toevoegen voor deze klant" : "+ Add another parcel for this customer"}</button>}</div><div className="form-row"><label><span className="field-label">{locale === "fr" ? "Date de départ" : locale === "nl" ? "Vertrekdatum" : "Departure date"} <span>({t.optional})</span></span><input type="datetime-local" name="nextTruckDepartureAt" value={creationDepartureAt} onChange={(event) => setCreationDepartureAt(event.target.value)} /></label><label>{locale === "fr" ? "Date d'arrivée estimée" : locale === "nl" ? "Geschatte aankomstdatum" : "Estimated arrival date"}<div className="price-preview">{creationEstimatedArrival ? <strong>{creationEstimatedArrival.toLocaleString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</strong> : <span>{locale === "fr" ? "Choisissez l'agence et la date de départ" : locale === "nl" ? "Kies het agentschap en de vertrekdatum" : "Choose the agency and departure date"}</span>}</div><small>{locale === "fr" ? "Calculée automatiquement selon le délai CTM de l'agence de destination." : locale === "nl" ? "Automatisch berekend volgens de CTM-termijn van het bestemmingsagentschap." : "Calculated automatically from the destination agency's CTM transit time."}</small></label></div>{company?.role === "dispatcher" && integration.connected && integration.vehicles.length > 0 && <div className="form-row"><label><span className="field-label">{locale === "fr" ? "Camion" : locale === "nl" ? "Vrachtwagen" : "Truck"} <span>({t.optional})</span></span><select value={creationVehicleId} onChange={(event) => setCreationVehicleId(event.target.value)}><option value="">{locale === "fr" ? "À affecter plus tard" : locale === "nl" ? "Later toewijzen" : "Assign later"}</option>{integration.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{truckNumberLabel(vehicle.id) ? `${truckNumberLabel(vehicle.id)} · ${vehicle.name}` : vehicle.name}</option>)}</select>{editingDeliveryId && creationVehicleId && vehicleAssignmentConflict(creationVehicleId, editingDeliveryId) ? <small className="warning">{locale === "fr" ? `⚠ Ce camion est encore en route (${vehicleAssignmentConflict(creationVehicleId, editingDeliveryId)!.id}). Vérifiez qu'il sera bien de retour.` : locale === "nl" ? `⚠ Dit voertuig is nog onderweg (${vehicleAssignmentConflict(creationVehicleId, editingDeliveryId)!.id}). Controleer of het op tijd terug is.` : `⚠ This truck is still en route (${vehicleAssignmentConflict(creationVehicleId, editingDeliveryId)!.id}). Confirm it will actually be back.`}</small> : <small>{locale === "fr" ? "Le dernier camion choisi est mémorisé pour la prochaine création." : locale === "nl" ? "De laatst gekozen vrachtwagen wordt onthouden voor de volgende aanmaak." : "The last truck you chose is remembered for the next delivery."}</small>}</label></div>}{!editingDeliveryId && features.whatsappAvailable && <label className="consent-choice"><input type="checkbox" name="whatsappOptIn" defaultChecked={creationDraftSeed?.whatsappOptIn ?? false} /><span>{locale === "fr" ? "Nouveau consentement WhatsApp confirmé pour les numéros renseignés" : locale === "nl" ? "Nieuwe WhatsApp-toestemming bevestigd voor de ingevulde nummers" : "New WhatsApp consent confirmed for the entered numbers"}<small>{locale === "fr" ? "Inutile de cocher si ce numéro a déjà consenti auparavant : TrackFleet le reconnaît automatiquement. Le consentement peut toujours être retiré." : locale === "nl" ? "Niet nodig als dit nummer eerder toestemming gaf: TrackFleet herkent dit automatisch. Toestemming kan altijd worden ingetrokken." : "Do not check this when the number already consented: TrackFleet remembers it automatically. Consent can always be withdrawn."}</small></span></label>}<div className="modal-footer"><button type="button" onClick={closeCreateModal}>{t.cancel}</button><button className="primary-button" type="submit" disabled={creating}>{creating ? t.creating : editingDeliveryId ? (locale === "fr" ? "Enregistrer les modifications" : locale === "nl" ? "Wijzigingen opslaan" : "Save changes") : t.createDelivery}<span>→</span></button></div></form></section></div>}
 
       {demoModalOpen && <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="demo-delivery-title"><div className="modal-header"><div><p className="eyebrow">{locale === "fr" ? "DÉMONSTRATION" : locale === "nl" ? "DEMONSTRATIE" : "DEMO"}</p><h2 id="demo-delivery-title">{locale === "fr" ? "Créer une livraison démo" : locale === "nl" ? "Demozending aanmaken" : "Create demo delivery"}</h2><span>{locale === "fr" ? "Pour montrer la notification WhatsApp d’arrivée sans attendre un vrai camion." : locale === "nl" ? "Om de WhatsApp-aankomstmelding te tonen zonder op een echte vrachtwagen te wachten." : "To show off the WhatsApp arrival notification without waiting for a real truck."}</span></div><button onClick={() => setDemoModalOpen(false)} aria-label={t.close}>×</button></div><form onSubmit={createDemoDelivery}><div className="form-row"><label>{locale === "fr" ? "Numéro WhatsApp à utiliser pour la démo" : locale === "nl" ? "WhatsApp-nummer voor de demo" : "WhatsApp number to demo with"}<input value={demoContact} onChange={(event) => setDemoContact(event.target.value)} inputMode="tel" autoComplete="tel" placeholder="+32… / +212…" required /></label><label>{locale === "fr" ? "Agence de destination" : locale === "nl" ? "Bestemmingsagentschap" : "Destination agency"}<select value={demoDestinationSiteId} onChange={(event) => setDemoDestinationSiteId(event.target.value)} required><option value="" disabled>{locale === "fr" ? "Choisir l'agence" : locale === "nl" ? "Kies agentschap" : "Choose agency"}</option>{knownSites.filter((site) => site.roles.includes("destination")).map((site) => <option key={site.id} value={site.id}>{site.label}</option>)}</select></label></div><small>{locale === "fr" ? "Une livraison réelle et marquée [DEMO] sera créée et apparaîtra immédiatement dans le tableau de bord de cette agence." : locale === "nl" ? "Er wordt een echte, als [DEMO] gemarkeerde zending aangemaakt die meteen verschijnt in het dashboard van dit agentschap." : "A real delivery marked [DEMO] will be created and will appear immediately in that agency's dashboard."}</small><div className="modal-footer"><button type="button" onClick={() => setDemoModalOpen(false)}>{t.cancel}</button><button className="primary-button" type="submit" disabled={demoBusy}>{demoBusy ? t.creating : (locale === "fr" ? "Créer" : locale === "nl" ? "Aanmaken" : "Create")}<span>→</span></button></div></form></section></div>}
 

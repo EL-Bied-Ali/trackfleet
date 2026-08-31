@@ -208,6 +208,11 @@ export const store: DeliveryStore = {
     return primaryStore.updateSchedule(deliveryId, companyId, input);
   },
 
+  async updateDetails(deliveryId, companyId, input) {
+    if (await d1ReadFailoverActive()) return null;
+    return primaryStore.updateDetails(deliveryId, companyId, input);
+  },
+
   create: primaryStore.create,
 
   deleteDemoDeliveries(companyId) {

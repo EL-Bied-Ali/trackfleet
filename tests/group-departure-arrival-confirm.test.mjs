@@ -98,7 +98,7 @@ test("every icon-only table action button now has a hover tooltip (title) matchi
     /className="more-button group-schedule-editor-trigger" title=\{locale === "fr" \? "Modifier les dates pour ce camion"/,
     /disabled=\{groupDeparturePending === group\.label\} title=\{locale === "fr" \? "Confirmer le départ pour tout le groupe"/,
     /disabled=\{groupArrivalPending === arrivalKey\} title=\{locale === "fr" \? `Confirmer l’arrivée à \$\{subgroup\.destination\}`/,
-    /className="more-button journey-editor-trigger" title=\{locale === "fr" \? "Modifier le trajet"/,
+    /className="more-button journey-editor-trigger" title=\{locale === "fr" \? "Modifier la livraison"/,
     /className="more-button" title=\{t\.copyTrackingFor\(delivery\.id\)\} aria-label=\{t\.copyTrackingFor\(delivery\.id\)\}/,
   ];
   for (const pattern of buttonPatterns) assert.match(page, pattern, `expected a title alongside this button's existing aria-label: ${pattern}`);
