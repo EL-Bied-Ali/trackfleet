@@ -41,7 +41,7 @@ test("isValidParcelCode rejects the customer-facing tracking token shape and oth
 
 test("parcelScanUrl builds a deep link a phone's native camera can also open directly", () => {
   const code = createParcelCode();
-  assert.equal(parcelScanUrl("https://trackfleet.example", code), `https://trackfleet.example/scan/${code}`);
+  assert.equal(parcelScanUrl("https://trackfleet.example", code), `https://trackfleet.example/scan?code=${code}`);
 });
 
 test("findByParcelCode is company-scoped -- a code never resolves across companies", async () => {

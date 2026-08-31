@@ -22,9 +22,12 @@ export function isValidParcelCode(value: string): boolean {
   return PARCEL_CODE_PATTERN.test(value);
 }
 
-// The QR encodes a full deep link (opens the scan page directly to this
-// parcel if scanned outside the app, e.g. with the phone's native camera)
-// rather than the bare code -- see scan-url.ts's companion parse function.
+// The QR encodes a full deep link (opens the scan page pre-filled with this
+// code if scanned outside the app, e.g. with the phone's native camera app
+// instead of the in-app scanner) rather than the bare code -- satisfies
+// "no sensitive parcel data directly in the QR" with a URL a backend can
+// resolve, per the product spec, and doubles as something a delivery
+// person can just tap.
 export function parcelScanUrl(origin: string, parcelCode: string): string {
-  return `${origin}/scan/${parcelCode}`;
+  return `${origin}/scan?code=${parcelCode}`;
 }
