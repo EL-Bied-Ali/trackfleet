@@ -118,7 +118,7 @@ test("the dashboard obtains all parcel scan proofs through one bulk store call, 
 
 test("the scan route offers only loaded/arrived, is authenticated, same-origin protected, validates the parcel code and scopes an agency to visible deliveries", () => {
   assert.match(route, /const CHECKPOINTS: DeliveryScanCheckpoint\[\] = \["loaded", "arrived"\];/);
-  assert.match(route, /const session = await getCompanySession\(request\);/);
+  assert.match(route, /const session = await getScannerSession\(request\) \?\? await getCompanySession\(request\);/);
   assert.match(route, /requestIsSameOrigin\(request\)/);
   assert.match(route, /if \(!isValidParcelCode\(parcelCode\)\) return noStore\(\{ error: "invalid_parcel_code" \}, 400\);/);
   assert.match(route, /if \(!CHECKPOINTS\.includes\(checkpoint\)\) return noStore\(\{ error: "invalid_checkpoint" \}, 400\);/);

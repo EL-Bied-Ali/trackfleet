@@ -96,7 +96,15 @@ export default function ScanPage() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/auth/session", { cache: "no-store" })
+    const pairCode = new URLSearchParams(window.location.search).get("pair");
+    const activate = pairCode
+      ? fetch("/api/scan/pair/consume", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: pairCode }),
+      }).then(() => window.history.replaceState({}, "", "/scan"))
+      : Promise.resolve();
+    void activate.then(() => fetch("/api/scan/session", { cache: "no-store" }))
       .then((response) => response.json() as Promise<{ authenticated: boolean; company?: CompanyInfo }>)
       .then((data) => {
         if (!active) return;
@@ -244,7 +252,7 @@ export default function ScanPage() {
   if (auth === "denied") return (
     <main style={{ padding: 40, fontFamily: "system-ui", maxWidth: 480, margin: "0 auto" }}>
       <h1>Connexion requise</h1>
-      <p>Connectez-vous d’abord à TrackFleet avant de scanner des colis.</p>
+      <p>Scannez le QR affiché dans TrackFleet pour connecter cet appareil au scanner.</p>
       <Link href="/">Retour à TrackFleet</Link>
     </main>
   );

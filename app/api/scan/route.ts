@@ -1,6 +1,7 @@
 import { store } from "trackfleet-delivery-store";
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { getCompanySession } from "../../lib/company-auth";
+import { getScannerSession } from "../../lib/scanner-pairing";
 import type { DeliveryScanCheckpoint } from "../../lib/delivery-store.types";
 import { knownSite } from "../../lib/known-sites";
 import { isValidParcelCode } from "../../lib/parcel-code";
@@ -28,7 +29,9 @@ function noStore(body: Record<string, unknown>, status = 200) {
 export async function POST(request: Request) {
   try {
     if (!requestIsSameOrigin(request)) return originRejectedResponse();
-    const session = await getCompanySession(request);
+    // A paired phone carries a separate, scan-only cookie. It is accepted
+    // here and nowhere else in the application.
+    const session = await getScannerSession(request) ?? await getCompanySession(request);
     if (!session) return noStore({ error: "unauthorized" }, 401);
 
     const payload = await readJsonObject(request);

@@ -2281,7 +2281,7 @@ export default function Home() {
           {company?.role === "dispatcher" && <a className="nav-item" href="/api/operations/export"><Icon>⇩</Icon>{t.exportTool}</a>}
           <a className="nav-item" href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
           <a className="nav-item" href="/guide"><Icon>◈</Icon>{t.guideTool}</a>
-          <a className="nav-item" href="/scan"><Icon>▦</Icon>{t.scanTool}</a>
+          <a className="nav-item" href="/scan/connect"><Icon>▦</Icon>{t.scanTool}</a>
         </nav>
         <div className="sidebar-divider" />
         <nav>

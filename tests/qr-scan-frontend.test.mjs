@@ -7,8 +7,10 @@ const labelsPage = await readFile(new URL("../app/labels/page.tsx", import.meta.
 const dashboard = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 const i18n = await readFile(new URL("../app/i18n.ts", import.meta.url), "utf8");
 
-test("the scan page requires an authenticated session, the same way /import does", () => {
-  assert.match(scanPage, /fetch\("\/api\/auth\/session", \{ cache: "no-store" \}\)/);
+test("the scan page accepts either a normal session or a one-time QR pairing, then checks the scanner-only session endpoint", () => {
+  assert.match(scanPage, /fetch\("\/api\/scan\/pair\/consume", \{/);
+  assert.match(scanPage, /window\.history\.replaceState\(\{\}, "", "\/scan"\)/);
+  assert.match(scanPage, /fetch\("\/api\/scan\/session", \{ cache: "no-store" \}\)/);
   assert.match(scanPage, /if \(auth === "denied"\) return \(/);
 });
 
@@ -97,8 +99,8 @@ test("the label prints TrackFleet id, client, destination and truck, per the pro
   assert.match(labelsPage, /delivery\.truck && <div[^>]*>Camion : \{delivery\.truck\}<\/div>/);
 });
 
-test("the dashboard sidebar links to the scanner for both dispatcher and agency roles, not gated to dispatcher-only like the delete/export tools", () => {
-  assert.match(dashboard, /<a className="nav-item" href="\/scan"><Icon>▦<\/Icon>\{t\.scanTool\}<\/a>/);
+test("the dashboard sidebar opens the phone-pairing QR for both dispatcher and agency roles", () => {
+  assert.match(dashboard, /<a className="nav-item" href="\/scan\/connect"><Icon>▦<\/Icon>\{t\.scanTool\}<\/a>/);
   assert.match(i18n, /scanTool: "Scan",/);
   assert.match(i18n, /scanTool: "Scanner",/);
   assert.match(i18n, /scanTool: "Scannen",/);
