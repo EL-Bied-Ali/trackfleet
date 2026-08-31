@@ -3,6 +3,7 @@ import { siteStore } from "trackfleet-site-store";
 import { createTrackingToken, getCompanySession } from "../../../lib/company-auth";
 import { normalizeCustomerPhone } from "../../../lib/customer-contact";
 import { DEMO_DELIVERY_CUSTOMER_PREFIX } from "../../../lib/demo-delivery";
+import { createParcelCode } from "../../../lib/parcel-code";
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
     companyId: session.companyId,
     trackingToken: createTrackingToken(),
     shipmentId: null,
+    parcelCode: createParcelCode(),
   });
 
   return noStore({ ok: true, deliveryId: delivery.id, delivery });
