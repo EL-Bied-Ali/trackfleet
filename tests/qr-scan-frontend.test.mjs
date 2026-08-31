@@ -12,9 +12,12 @@ test("the scan page requires an authenticated session, the same way /import does
   assert.match(scanPage, /if \(auth === "denied"\) return \(/);
 });
 
-test("the scan page offers all four checkpoints and posts to /api/scan with the selected one", () => {
-  for (const checkpoint of ["loaded", "departed", "arrived", "delivered"]) {
+test("the scan page offers only loaded/arrived (no 'départ' -- the GPS automation already detects that on its own; no 'livraison' -- 'arrivée' now covers it) and posts to /api/scan with the selected one", () => {
+  for (const checkpoint of ["loaded", "arrived"]) {
     assert.match(scanPage, new RegExp(`value: "${checkpoint}"`));
+  }
+  for (const removedCheckpoint of ["departed", "delivered"]) {
+    assert.doesNotMatch(scanPage, new RegExp(`value: "${removedCheckpoint}"`));
   }
   assert.match(scanPage, /fetch\("\/api\/scan", \{/);
   assert.match(scanPage, /body: JSON\.stringify\(\{ parcelCode: code, checkpoint: modeRef\.current \}\)/);

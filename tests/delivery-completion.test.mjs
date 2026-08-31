@@ -8,7 +8,7 @@ import {
   clampUnloadGraceMinutes, clampCtmRelayGraceMinutes,
 } from "../app/lib/delivery-arrival.ts";
 
-const [routeProgress, serverAutomation, businessTick, vercelCompletion, cloudflareCompletion, sharedPostgresCompletion, manualRoute, siteManager] = await Promise.all([
+const [routeProgress, serverAutomation, businessTick, vercelCompletion, cloudflareCompletion, sharedPostgresCompletion, manualRoute, confirmArrivalHelper, siteManager] = await Promise.all([
   readFile(new URL("../app/lib/route-progress.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/server-automation.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/fleet-business-tick.ts", import.meta.url), "utf8"),
@@ -16,6 +16,7 @@ const [routeProgress, serverAutomation, businessTick, vercelCompletion, cloudfla
   readFile(new URL("../app/lib/delivery-completion.cloudflare.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-completion.shared-postgres.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/deliveries/manual-completion/route.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/confirm-arrival-manually.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/SiteManager.tsx", import.meta.url), "utf8"),
 ]);
 
@@ -96,9 +97,10 @@ test("the scheduled tick fetches the company's own automation overrides and only
   assert.match(serverAutomation, /ctmRelayAutoCompletionEnabled,/);
 });
 
-test("manual arrival confirmation also honors the company's own unload grace override instead of always using the env-var default", () => {
-  assert.match(manualRoute, /const automationSettings = await getCompanyAutomationSettings\(session\.companyId\);/);
-  assert.match(manualRoute, /clampUnloadGraceMinutes\(automationSettings\.unloadGraceMinutes\)\s*:\s*parseUnloadGraceMinutes\(runtimeEnv\.TRACKFLEET_UNLOAD_GRACE_MINUTES\)/s);
+test("manual arrival confirmation also honors the company's own unload grace override instead of always using the env-var default -- shared with the QR scan route's 'arrivée' checkpoint via confirmArrivalManually", () => {
+  assert.match(manualRoute, /const \{ unloadGraceMinutes \} = await confirmArrivalManually\(session\.companyId, deliveryId, delivery\.progress, new URL\(request\.url\)\.origin\);/);
+  assert.match(confirmArrivalHelper, /const automationSettings = await getCompanyAutomationSettings\(companyId\);/);
+  assert.match(confirmArrivalHelper, /clampUnloadGraceMinutes\(automationSettings\.unloadGraceMinutes\)\s*:\s*parseUnloadGraceMinutes\(runtimeEnv\.TRACKFLEET_UNLOAD_GRACE_MINUTES\)/s);
 });
 
 test("both persistent runtimes reset continuity after a GPS observation gap", () => {
@@ -120,11 +122,12 @@ test("manual arrival and completion are authenticated, same-origin and tenant sc
   assert.match(manualRoute, /deliveryId\.length > 100/);
   assert.match(manualRoute, /confirmArrival !== true && payload\.confirmDelivered !== true/);
   assert.match(manualRoute, /find\(\(candidate\) => candidate\.id === deliveryId/);
-  assert.match(manualRoute, /observeArrivalCompletion/);
-  assert.match(manualRoute, /MANUAL_ARRIVAL_CONFIRMED/);
-  assert.match(manualRoute, /recordEvent\(deliveryId, "ARRIVED_AT_SITE"/);
-  assert.match(manualRoute, /processPendingNotifications/);
+  assert.match(manualRoute, /confirmArrivalManually\(session\.companyId, deliveryId, delivery\.progress, new URL\(request\.url\)\.origin\)/);
   assert.match(manualRoute, /readJsonObject\(request\)/);
+  assert.match(confirmArrivalHelper, /observeArrivalCompletion/);
+  assert.match(confirmArrivalHelper, /MANUAL_ARRIVAL_CONFIRMED/);
+  assert.match(confirmArrivalHelper, /recordEvent\(deliveryId, "ARRIVED_AT_SITE"/);
+  assert.match(confirmArrivalHelper, /processPendingNotifications/);
 });
 
 test("manual completion UI requires explicit operator confirmation", () => {

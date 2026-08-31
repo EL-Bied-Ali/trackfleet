@@ -15,16 +15,19 @@ declare global {
   }
 }
 
-type Checkpoint = "loaded" | "departed" | "arrived" | "delivered";
+// Just these two: "départ" isn't scanned at all (the GPS automation
+// already detects a truck leaving on its own), and "arrivée" now covers
+// what a separate "livraison" checkpoint would have -- it starts the same
+// unload-grace timer the "Confirmer l'arrivée" button does, so the
+// delivery still completes and notifies the customer on its own.
+type Checkpoint = "loaded" | "arrived";
 type CompanyInfo = { account: string; role: "dispatcher" | "agency"; siteId: string | null };
 type ScanOutcome = "success" | "duplicate" | "error";
 type ScanLogEntry = { at: Date; checkpoint: Checkpoint; outcome: ScanOutcome; label: string };
 
 const CHECKPOINTS: Array<{ value: Checkpoint; label: string; help: string }> = [
   { value: "loaded", label: "Chargement", help: "Le colis vient d’être chargé dans le camion." },
-  { value: "departed", label: "Départ", help: "Le camion vient de partir." },
-  { value: "arrived", label: "Arrivée", help: "Le camion vient d’arriver à l’agence." },
-  { value: "delivered", label: "Livraison", help: "Le colis est remis au destinataire — marque la livraison comme terminée." },
+  { value: "arrived", label: "Arrivée", help: "Le camion vient d’arriver à destination — confirme l’arrivée et prévient le client par WhatsApp." },
 ];
 
 const RESUBMIT_COOLDOWN_MS = 2500;

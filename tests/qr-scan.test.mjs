@@ -70,10 +70,8 @@ test("recordScan and listScansForDelivery keep every scan, including repeats of 
   assert.deepEqual(new Set(scans.map((scan) => scan.scannedBy)), new Set(["dispatcher:alice", "dispatcher:bob"]));
 });
 
-test("SCAN_LOADED/SCAN_DEPARTED/SCAN_ARRIVED are internal bookkeeping, excluded from the customer-facing timeline like MANUAL_ARRIVAL_CONFIRMED", () => {
+test("SCAN_LOADED is internal bookkeeping, excluded from the customer-facing timeline like MANUAL_ARRIVAL_CONFIRMED -- the scanner's other checkpoint, 'arrived', has no scan-only event type at all since it reuses the real ARRIVED_AT_SITE milestone", () => {
   assert.equal(customerFacingEvent("SCAN_LOADED"), false);
-  assert.equal(customerFacingEvent("SCAN_DEPARTED"), false);
-  assert.equal(customerFacingEvent("SCAN_ARRIVED"), false);
 });
 
 test("the DeliveryStore interface declares the scan methods and every backend implements them", async () => {
@@ -96,7 +94,8 @@ test("the DeliveryStore interface declares the scan methods and every backend im
   assert.match(sharedPostgresSource, /async recordScan\(input\) \{/, "shared-postgres.ts must implement recordScan");
 });
 
-test("the scan route is authenticated, same-origin protected, validates the parcel code and checkpoint, and scopes an agency to its own site", () => {
+test("the scan route only offers loaded/arrived, is authenticated, same-origin protected, validates the parcel code and checkpoint, and scopes an agency to its own site", () => {
+  assert.match(route, /const CHECKPOINTS: DeliveryScanCheckpoint\[\] = \["loaded", "arrived"\];/);
   assert.match(route, /const session = await getCompanySession\(request\);/);
   assert.match(route, /requestIsSameOrigin\(request\)/);
   assert.match(route, /if \(!isValidParcelCode\(parcelCode\)\) return noStore\(\{ error: "invalid_parcel_code" \}, 400\);/);
@@ -104,10 +103,15 @@ test("the scan route is authenticated, same-origin protected, validates the parc
   assert.match(route, /if \(session\.role === "agency" && !agencyDeliveryIsVisible\(delivery, session\.siteId\)\)/);
 });
 
-test("the 'delivered' checkpoint reuses completeDeliveryManually directly, and CHECKPOINT_EVENT has no entry for it -- no separate scan-only event type exists for delivered", () => {
-  assert.match(route, /import \{ completeDeliveryManually \} from "trackfleet-delivery-completion";/);
-  assert.match(route, /if \(checkpoint === "delivered"\) \{\s*\n\s*await completeDeliveryManually\(session\.companyId, delivery\.id\);/);
-  assert.match(route, /const CHECKPOINT_EVENT: Partial<Record<DeliveryScanCheckpoint, "SCAN_LOADED" \| "SCAN_DEPARTED" \| "SCAN_ARRIVED">>/);
+test("the 'arrived' checkpoint reuses confirmArrivalManually directly -- the same real, customer-facing arrival confirmation (status/progress + WhatsApp) the dispatcher's 'Confirmer l'arrivée' button already uses, not a separate scan-only bookkeeping event", () => {
+  assert.match(route, /import \{ confirmArrivalManually \} from "\.\.\/\.\.\/lib\/confirm-arrival-manually";/);
+  assert.match(route, /if \(checkpoint === "arrived"\) \{\s*\n\s*await confirmArrivalManually\(session\.companyId, delivery\.id, delivery\.progress, new URL\(request\.url\)\.origin\);/);
+  assert.match(route, /await store\.recordEvent\(delivery\.id, "SCAN_LOADED", delivery\.progress\);/);
+});
+
+test("scanning 'arrived' is refused for an already-delivered parcel, and an agency can only confirm arrival at its own destination -- same restriction as the 'Confirmer l'arrivée' button", () => {
+  assert.match(route, /if \(checkpoint === "arrived" && delivery\.status === "Delivered"\) \{\s*\n\s*return noStore\(\{ error: "already_delivered" \}, 409\);/);
+  assert.match(route, /if \(checkpoint === "arrived" && session\.role === "agency" && delivery\.destinationSiteId !== session\.siteId\) \{\s*\n\s*return noStore\(\{ error: "agency_destination_mismatch" \}, 403\);/);
 });
 
 test("a duplicate scan of the same checkpoint within the debounce window is reported back but not re-recorded or re-applied", () => {
