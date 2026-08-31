@@ -29,7 +29,20 @@ export type DeliveryEventType =
   // Same idea as WHATSAPP_ARRIVAL_NOTIFIED, but for a dispatcher's manual
   // "the truck just left" notice (see
   // app/api/deliveries/notify-departure/route.ts).
-  | "WHATSAPP_DEPARTURE_NOTIFIED";
+  | "WHATSAPP_DEPARTURE_NOTIFIED"
+  // Recorded the first time a QR-code scan (see app/api/scan/route.ts)
+  // reaches each mid-journey checkpoint -- internal bookkeeping only, like
+  // MANUAL_ARRIVAL_CONFIRMED, deliberately decoupled from the GPS-driven
+  // status/progress machine rather than trying to map "loaded"/"departed
+  // per a warehouse scan" onto it. The full, repeatable scan history (who,
+  // when, which truck) lives in the separate delivery_scans table -- this
+  // is just enough to show a milestone in the existing timeline. The
+  // "delivered" checkpoint has no SCAN_DELIVERED counterpart: it reuses
+  // completeDeliveryManually directly, the same proven path the existing
+  // "Marquer livré" button already uses.
+  | "SCAN_LOADED"
+  | "SCAN_DEPARTED"
+  | "SCAN_ARRIVED";
 
 export type DeliveryEventInput = {
   previousStatus: "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -88,7 +101,10 @@ export function customerFacingEvent(event: DeliveryEventType) {
     && event !== "MANUAL_DELIVERED"
     && event !== "WHATSAPP_ARRIVAL_NOTIFIED"
     && event !== "MANUAL_DEPARTURE_CONFIRMED"
-    && event !== "WHATSAPP_DEPARTURE_NOTIFIED";
+    && event !== "WHATSAPP_DEPARTURE_NOTIFIED"
+    && event !== "SCAN_LOADED"
+    && event !== "SCAN_DEPARTED"
+    && event !== "SCAN_ARRIVED";
 }
 
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {

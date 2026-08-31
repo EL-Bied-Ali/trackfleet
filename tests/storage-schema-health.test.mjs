@@ -23,6 +23,7 @@ test("schema contract covers every persistent production subsystem", async () =>
     "delivery_eta_observations",
     "delivery_events",
     "delivery_notifications",
+    "delivery_scans",
     "fleet_position_observations",
     "google_links",
     "login_rate_limits",

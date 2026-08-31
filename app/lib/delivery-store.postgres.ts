@@ -3,7 +3,7 @@ import { progressRouteDestination } from "./delivery-progress-destination";
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import { createDeliveryId } from "./delivery-id";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStatus, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanCheckpoint, DeliveryScanRow, DeliveryStatus, DeliveryStore, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics, resolveGpsBaselineProgress } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
@@ -59,6 +59,7 @@ type RawDelivery = {
   trip_id: string | null;
   shipment_id: string | null;
   created_at: string | Date;
+  parcel_code: string | null;
 };
 
 type RawEvent = {
@@ -123,6 +124,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     tripId: row.trip_id ?? null,
     shipmentId: row.shipment_id ?? null,
     createdAt: new Date(row.created_at),
+    parcelCode: row.parcel_code ?? null,
   };
 }
 function hydrateEvent(row: RawEvent): DeliveryEventRow {
@@ -202,7 +204,8 @@ async function ensureSchema() {
       company_id text NOT NULL DEFAULT 'demo',
       tracking_token text UNIQUE,
       shipment_id text,
-      created_at timestamptz NOT NULL
+      created_at timestamptz NOT NULL,
+      parcel_code text UNIQUE
     )`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS origin_site_id text`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS origin_latitude double precision`;
@@ -222,9 +225,22 @@ async function ensureSchema() {
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS customer_email text`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS next_truck_departure_at timestamptz`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS shipment_id text`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS parcel_code text UNIQUE`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_shipment ON deliveries(company_id, shipment_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_parcel_code ON deliveries(company_id, parcel_code)`;
+    await sql`CREATE TABLE IF NOT EXISTS delivery_scans (
+      id text PRIMARY KEY,
+      company_id text NOT NULL,
+      delivery_id text NOT NULL,
+      checkpoint text NOT NULL,
+      scanned_by text NOT NULL,
+      truck text,
+      location_label text,
+      scanned_at timestamptz NOT NULL
+    )`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_delivery_scans_delivery_id ON delivery_scans(delivery_id, scanned_at DESC)`;
     await sql`CREATE TABLE IF NOT EXISTS delivery_events (
       delivery_id text NOT NULL,
       type text NOT NULL,
@@ -745,13 +761,40 @@ export const postgresStore: DeliveryStore = {
     await sql`INSERT INTO deliveries (
       id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
       truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
-      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at
+      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at, parcel_code
     ) VALUES (
       ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
       ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.customerEmail ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
-      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}
+      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}, ${delivery.parcelCode ?? null}
     )`;
     return delivery;
+  },
+
+  async findByParcelCode(companyId, parcelCode) {
+    await ensureSchema();
+    const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} AND parcel_code = ${parcelCode} LIMIT 1` as RawDelivery[];
+    return rows[0] ? hydrate(rows[0]) : null;
+  },
+
+  async recordScan(input) {
+    await ensureSchema();
+    const scan: DeliveryScanRow = { ...input, id: createDeliveryId(), scannedAt: new Date() };
+    await sql`INSERT INTO delivery_scans (id, company_id, delivery_id, checkpoint, scanned_by, truck, location_label, scanned_at)
+      VALUES (${scan.id}, ${scan.companyId}, ${scan.deliveryId}, ${scan.checkpoint}, ${scan.scannedBy}, ${scan.truck}, ${scan.locationLabel}, ${scan.scannedAt.toISOString()})`;
+    return scan;
+  },
+
+  async listScansForDelivery(deliveryId, limit = 50) {
+    await ensureSchema();
+    const rows = await sql`SELECT id, company_id, delivery_id, checkpoint, scanned_by, truck, location_label, scanned_at FROM delivery_scans
+      WHERE delivery_id = ${deliveryId} ORDER BY scanned_at DESC LIMIT ${Math.max(1, Math.min(500, limit))}` as Array<{
+        id: string; company_id: string; delivery_id: string; checkpoint: DeliveryScanCheckpoint;
+        scanned_by: string; truck: string | null; location_label: string | null; scanned_at: string | Date;
+      }>;
+    return rows.map((row) => ({
+      id: row.id, companyId: row.company_id, deliveryId: row.delivery_id, checkpoint: row.checkpoint,
+      scannedBy: row.scanned_by, truck: row.truck, locationLabel: row.location_label, scannedAt: new Date(row.scanned_at),
+    }));
   },
 
   async deleteDemoDeliveries(companyId) {
@@ -762,6 +805,7 @@ export const postgresStore: DeliveryStore = {
     await sql`DELETE FROM delivery_events WHERE delivery_id = ANY(${ids}::text[])`;
     await sql`DELETE FROM delivery_notifications WHERE delivery_id = ANY(${ids}::text[])`;
     await sql`DELETE FROM delivery_eta_observations WHERE delivery_id = ANY(${ids}::text[])`;
+    await sql`DELETE FROM delivery_scans WHERE delivery_id = ANY(${ids}::text[])`;
     await sql`DELETE FROM deliveries WHERE id = ANY(${ids}::text[])`;
     return ids.length;
   },
@@ -773,6 +817,7 @@ export const postgresStore: DeliveryStore = {
     await sql`DELETE FROM delivery_events WHERE delivery_id = ${deliveryId}`;
     await sql`DELETE FROM delivery_notifications WHERE delivery_id = ${deliveryId}`;
     await sql`DELETE FROM delivery_eta_observations WHERE delivery_id = ${deliveryId}`;
+    await sql`DELETE FROM delivery_scans WHERE delivery_id = ${deliveryId}`;
     await sql`DELETE FROM deliveries WHERE id = ${deliveryId}`;
     return true;
   },

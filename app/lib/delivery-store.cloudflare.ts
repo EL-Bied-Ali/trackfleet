@@ -2,7 +2,7 @@ import { runtimeEnv } from "trackfleet-runtime-env";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
 import { createDeliveryId } from "./delivery-id";
 import { progressRouteDestination } from "./delivery-progress-destination";
-import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
+import type { CreateDeliveryInput, DeliveryEventRow, DeliveryRow, DeliveryScanRow, DeliveryStore, DeliveryStatus, DeliveryTransition, EtaObservationRow } from "./delivery-store.types";
 import { calculateRouteMetrics, deriveDeliveryState, rebaseRouteMetrics } from "./route-progress";
 import type { SendatrackSnapshot } from "./sendatrack";
 import { matchDeliveryVehicle } from "./vehicle-linking";
@@ -21,7 +21,7 @@ type RawDelivery = {
   truck: string; driver: string; status: DeliveryStatus; eta: string; plannedArrivalAt: number | null; nextTruckDepartureAt: number | null;
   progress: number; color: string; contact: string; recipientName: string | null; recipientContact: string | null; weightKg: number | null; priceAmount: number | null; priceCurrency: "EUR" | "MAD" | null; itemDescription: string | null; customerEmail: string | null; whatsappOptIn: number | null; whatsappOptInAt: number | null; recipientWhatsappOptIn: number | null; recipientWhatsappOptInAt: number | null;
   sendatrackVehicleId: string; latitude: number | null; longitude: number | null; speed: number | null;
-  lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; tripId: string | null; shipmentId: string | null; createdAt: number;
+  lastPositionAt: number | null; gpsSource: string; companyId: string; trackingToken: string | null; tripId: string | null; shipmentId: string | null; createdAt: number; parcelCode: string | null;
 };
 type RawDeliveryEvent = { deliveryId: string; type: DeliveryEventType; progress: number; createdAt: number };
 function hydrate(row: RawDelivery): DeliveryRow {
@@ -49,6 +49,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     recipientWhatsappOptInAt: row.recipientWhatsappOptInAt ? new Date(row.recipientWhatsappOptInAt) : null,
     lastPositionAt: row.lastPositionAt ? new Date(row.lastPositionAt) : null,
     createdAt: new Date(row.createdAt),
+    parcelCode: row.parcelCode ?? null,
   };
 }
 function hydrateEvent(row: RawDeliveryEvent): DeliveryEventRow { return { ...row, createdAt: new Date(row.createdAt) }; }
@@ -71,7 +72,7 @@ const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_lati
   recipient_whatsapp_opt_in AS recipientWhatsappOptIn, recipient_whatsapp_opt_in_at AS recipientWhatsappOptInAt,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
   last_position_at AS lastPositionAt, gps_source AS gpsSource, company_id AS companyId,
-  tracking_token AS trackingToken, trip_id AS tripId, shipment_id AS shipmentId, created_at AS createdAt`;
+  tracking_token AS trackingToken, trip_id AS tripId, shipment_id AS shipmentId, created_at AS createdAt, parcel_code AS parcelCode`;
 
 async function baselineProgress(deliveryId: string) {
   const row = await db().prepare("SELECT progress FROM delivery_events WHERE delivery_id = ? AND type = 'GPS_BASELINE' LIMIT 1").bind(deliveryId).first<{ progress: number }>();
@@ -366,14 +367,35 @@ export const store: DeliveryStore = {
     await db().prepare(`INSERT INTO deliveries
       (id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
        truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
-       latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at, parcel_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(delivery.id, delivery.customer, delivery.originSiteId, delivery.originLatitude, delivery.originLongitude, delivery.destinationSiteId, delivery.destination, delivery.destinationLatitude, delivery.destinationLongitude, delivery.arrivalRadiusKm,
         delivery.truck, delivery.driver, delivery.status, delivery.eta, delivery.plannedArrivalAt?.getTime() ?? null, delivery.nextTruckDepartureAt?.getTime() ?? null,
         delivery.progress, delivery.color, delivery.contact, delivery.recipientName ?? "", delivery.recipientContact ?? "", delivery.weightKg ?? null, delivery.priceAmount ?? null, delivery.priceCurrency ?? null, delivery.itemDescription ?? null, delivery.customerEmail ?? null, delivery.whatsappOptIn === true ? 1 : 0, delivery.whatsappOptInAt?.getTime() ?? null, delivery.recipientWhatsappOptIn === true ? 1 : 0, delivery.recipientWhatsappOptInAt?.getTime() ?? null, delivery.sendatrackVehicleId,
         delivery.latitude, delivery.longitude, delivery.speed, delivery.lastPositionAt?.getTime() ?? null,
-        delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.shipmentId ?? null, delivery.createdAt.getTime()).run();
+        delivery.gpsSource, delivery.companyId, delivery.trackingToken, delivery.shipmentId ?? null, delivery.createdAt.getTime(), delivery.parcelCode ?? null).run();
     return delivery;
+  },
+
+  async findByParcelCode(companyId, parcelCode) {
+    const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE company_id = ? AND parcel_code = ? LIMIT 1`).bind(companyId, parcelCode).first<RawDelivery>();
+    return row ? hydrate(row) : null;
+  },
+
+  async recordScan(input) {
+    const scan = { ...input, id: createDeliveryId(), scannedAt: new Date() };
+    await db().prepare(`INSERT INTO delivery_scans (id, company_id, delivery_id, checkpoint, scanned_by, truck, location_label, scanned_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(scan.id, scan.companyId, scan.deliveryId, scan.checkpoint, scan.scannedBy, scan.truck, scan.locationLabel, scan.scannedAt.getTime()).run();
+    return scan;
+  },
+
+  async listScansForDelivery(deliveryId, limit = 50) {
+    const result = await db().prepare(`SELECT id, company_id AS companyId, delivery_id AS deliveryId, checkpoint, scanned_by AS scannedBy, truck, location_label AS locationLabel, scanned_at AS scannedAt
+      FROM delivery_scans WHERE delivery_id = ? ORDER BY scanned_at DESC LIMIT ?`).bind(deliveryId, Math.max(1, Math.min(500, limit))).all<{
+        id: string; companyId: string; deliveryId: string; checkpoint: DeliveryScanRow["checkpoint"];
+        scannedBy: string; truck: string | null; locationLabel: string | null; scannedAt: number;
+      }>();
+    return (result.results ?? []).map((row) => ({ ...row, scannedAt: new Date(row.scannedAt) }));
   },
 
   async deleteDemoDeliveries(companyId) {
@@ -385,6 +407,7 @@ export const store: DeliveryStore = {
       db().prepare(`DELETE FROM delivery_events WHERE delivery_id IN (${placeholders})`).bind(...ids),
       db().prepare(`DELETE FROM delivery_notifications WHERE delivery_id IN (${placeholders})`).bind(...ids),
       db().prepare(`DELETE FROM delivery_eta_observations WHERE delivery_id IN (${placeholders})`).bind(...ids),
+      db().prepare(`DELETE FROM delivery_scans WHERE delivery_id IN (${placeholders})`).bind(...ids),
       db().prepare(`DELETE FROM deliveries WHERE id IN (${placeholders})`).bind(...ids),
     ]);
     return ids.length;
@@ -397,6 +420,7 @@ export const store: DeliveryStore = {
       db().prepare(`DELETE FROM delivery_events WHERE delivery_id = ?`).bind(deliveryId),
       db().prepare(`DELETE FROM delivery_notifications WHERE delivery_id = ?`).bind(deliveryId),
       db().prepare(`DELETE FROM delivery_eta_observations WHERE delivery_id = ?`).bind(deliveryId),
+      db().prepare(`DELETE FROM delivery_scans WHERE delivery_id = ?`).bind(deliveryId),
       db().prepare(`DELETE FROM deliveries WHERE id = ?`).bind(deliveryId),
     ]);
     return true;

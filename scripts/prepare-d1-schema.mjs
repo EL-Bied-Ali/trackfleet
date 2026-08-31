@@ -112,7 +112,18 @@ await runStatements([
     tracking_token text,
     trip_id text,
     shipment_id text,
-    created_at integer NOT NULL
+    created_at integer NOT NULL,
+    parcel_code text
+  )`,
+  `CREATE TABLE IF NOT EXISTS delivery_scans (
+    id text PRIMARY KEY NOT NULL,
+    company_id text NOT NULL,
+    delivery_id text NOT NULL,
+    checkpoint text NOT NULL,
+    scanned_by text NOT NULL,
+    truck text,
+    location_label text,
+    scanned_at integer NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS delivery_events (
     delivery_id text NOT NULL,
@@ -293,6 +304,7 @@ for (const [name, definition] of [
   ["gps_source", "text DEFAULT 'simulation' NOT NULL"],
   ["company_id", "text DEFAULT 'demo' NOT NULL"],
   ["tracking_token", "text"],
+  ["parcel_code", "text"],
 ]) addMissingColumn(alterations, "deliveries", deliveryColumns, name, definition);
 
 for (const [name, definition] of [
@@ -333,6 +345,8 @@ await runStatements([
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)",
   "CREATE INDEX IF NOT EXISTS idx_deliveries_company_shipment ON deliveries(company_id, shipment_id)",
   "CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_tracking_token ON deliveries(tracking_token)",
+  "CREATE INDEX IF NOT EXISTS idx_deliveries_company_parcel_code ON deliveries(company_id, parcel_code)",
+  "CREATE INDEX IF NOT EXISTS idx_delivery_scans_delivery_id ON delivery_scans(delivery_id, scanned_at DESC)",
   "CREATE INDEX IF NOT EXISTS idx_delivery_events_delivery_id ON delivery_events(delivery_id)",
   "CREATE INDEX IF NOT EXISTS idx_eta_observations_delivery_position ON delivery_eta_observations(delivery_id, position_at DESC)",
   "CREATE INDEX IF NOT EXISTS idx_eta_observations_company_route_destination ON delivery_eta_observations(company_id, route_template_id, destination_site_id, position_at DESC)",
