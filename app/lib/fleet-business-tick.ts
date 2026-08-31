@@ -100,6 +100,18 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
   let automaticCompletions = 0;
   const observedArrivalIds = new Set<string>();
 
+  // The shared Postgres store coalesces event reads requested in the same
+  // microtask into one ANY(...) query. Prime the cache for the whole active
+  // working set before entering the sequential business loops; awaiting each
+  // delivery inside those loops defeated the batcher and still cost one
+  // Cloudflare subrequest per parcel.
+  const manualArrivalCandidates = await store.listForCompany(companyId);
+  const eventPrefetchIds = new Set([
+    ...transitions.map((transition) => transition.delivery.id),
+    ...manualArrivalCandidates.filter((delivery) => delivery.status !== "Delivered").map((delivery) => delivery.id),
+  ]);
+  await Promise.all([...eventPrefetchIds].map((deliveryId) => eventsFor(deliveryId)));
+
   for (const transition of transitions) {
     for (const type of transition.events) {
       if (await recordEventTracked(transition.delivery.id, type, transition.delivery.progress)) newEvents += 1;
@@ -150,7 +162,6 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
   // A human-confirmed arrival must keep advancing through unloading even when
   // SENDATRACK has no fresh vehicle in this tick. The explicit confirmation is
   // the arrival evidence; subsequent ticks only measure the configured grace.
-  const manualArrivalCandidates = await store.listForCompany(companyId);
   for (const delivery of manualArrivalCandidates) {
     if (delivery.status === "Delivered" || observedArrivalIds.has(delivery.id)) continue;
     const events = await eventsFor(delivery.id);
@@ -215,9 +226,20 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
     }
   }
 
-  const deliveries = await store.listForCompany(companyId);
+  // Arrival completion is the only operation above that mutates delivery rows
+  // after this working set was loaded. Reuse it on the normal path, but reload
+  // when a completion occurred so trip status is never calculated from stale
+  // data.
+  const deliveries = automaticCompletions > 0
+    ? await store.listForCompany(companyId)
+    : manualArrivalCandidates;
   const routeContexts = buildEtaRouteContexts(deliveries);
   const stableContexts = new Map<string, ReturnType<typeof stableEtaRouteContext>>();
+  const activeDeliveries = deliveries.filter((delivery) => delivery.status !== "Delivered");
+  const etaHistoryEntries = await Promise.all(activeDeliveries.map(async (delivery) => (
+    [delivery.id, await store.listEtaObservations(delivery.id, 2000)] as const
+  )));
+  const etaHistoryById = new Map(etaHistoryEntries);
   let etaObservations = 0;
   for (const delivery of deliveries) {
     // listForCompany returns every delivery a company has ever created, not
@@ -242,7 +264,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
       newEvents += 1;
       events = await eventsFor(delivery.id);
     }
-    const previousEtaObservations = await store.listEtaObservations(delivery.id, 2000);
+    const previousEtaObservations = etaHistoryById.get(delivery.id) ?? [];
     const routeContext = stableEtaRouteContext(routeContexts.get(delivery.id) ?? null, previousEtaObservations, events);
     stableContexts.set(delivery.id, routeContext);
     const etaObservation = buildEtaObservation(delivery, events, deliveries, routeContext);

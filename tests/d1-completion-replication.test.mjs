@@ -31,3 +31,9 @@ test("completion mirroring is best-effort", () => {
   assert.match(source, /function replicationError/);
   assert.doesNotMatch(source, /throw error/);
 });
+
+test("completion mirroring joins the shared D1 batch instead of spending one subrequest per delivery", () => {
+  assert.match(source, /import \{ queueD1Mirror \} from "\.\/d1-mirror-queue"/);
+  assert.match(source, /queueD1Mirror\(db\.prepare/);
+  assert.doesNotMatch(source, /await db\.batch\(/);
+});

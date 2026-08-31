@@ -48,12 +48,13 @@ async function ensureSchema() {
 }
 
 async function clearArrivalState(sql: ReturnType<typeof sqlClient>, companyId: string, deliveryId: string) {
-  await Promise.all([
-    sql`DELETE FROM delivery_arrival_state WHERE company_id = ${companyId} AND delivery_id = ${deliveryId}`,
-    sql`DELETE FROM delivery_events
+  await sql`WITH cleared_arrival_state AS (
+      DELETE FROM delivery_arrival_state WHERE company_id = ${companyId} AND delivery_id = ${deliveryId}
+      RETURNING delivery_id
+    )
+    DELETE FROM delivery_events
       WHERE delivery_id = ${deliveryId} AND type = 'ARRIVED_AT_SITE'
-        AND EXISTS (SELECT 1 FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId})`,
-  ]);
+        AND EXISTS (SELECT 1 FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId})`;
 }
 
 export async function observeArrivalCompletion(input: ArrivalCompletionObservation): Promise<ArrivalCompletionResult> {
