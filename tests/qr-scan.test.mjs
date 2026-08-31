@@ -130,3 +130,27 @@ test("demo delivery creation also generates a parcel code -- it has its own stor
   assert.match(demoCreationRoute, /import \{ createParcelCode \} from "\.\.\/\.\.\/\.\.\/lib\/parcel-code";/);
   assert.match(demoCreationRoute, /parcelCode: createParcelCode\(\),/);
 });
+
+// Reported live: the field is generated correctly at creation (confirmed
+// via the create response) but vanished from the dashboard's own delivery
+// list moments later. Root cause: listForCompany doesn't use the generic
+// hydrate() in delivery-store.postgres.ts at all -- it's overridden to a
+// separate, purpose-built "operational" read path (loadOperationalDeliveries,
+// optimized for the live dashboard's active+recent-completed query shape)
+// with its own field-by-field row-to-DeliveryRow mapping that this feature
+// never touched, so parcel_code came back from Postgres (SELECT delivery.*)
+// but was silently dropped on the way out. Every other place a delivery
+// row gets reconstructed from raw SQL columns has the identical shape and
+// was checked for the same gap.
+test("every delivery-row hydration path (not just the primary store) carries parcel_code through -- the live dashboard's optimized read path uses a completely separate mapping function from the one create()/findByParcelCode() use", async () => {
+  for (const path of [
+    "app/lib/delivery-operational.postgres.ts",
+    "app/lib/delivery-operational.cloudflare.ts",
+    "app/lib/d1-standby-read-store.ts",
+    "app/lib/d1-history-backfill.ts",
+    "app/lib/d1-reconciliation.ts",
+  ]) {
+    const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
+    assert.match(source, /parcel_code/, `${path} must read/write parcel_code, not silently drop it`);
+  }
+});
