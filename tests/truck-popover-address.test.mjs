@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [route, page, normalize] = await Promise.all([
-  readFile(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8"),
+const [sendatrackRoute, page, normalize] = await Promise.all([
+  readFile(new URL("../app/api/sendatrack/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/sendatrack-normalize.ts", import.meta.url), "utf8"),
 ]);
@@ -17,7 +17,7 @@ test("SENDATRACK already provides a reverse-geocoded address per vehicle, so the
 });
 
 test("the vehicle's address reaches the client instead of being dropped at the API boundary", () => {
-  assert.match(route, /vehicles: integration\.vehicles\.map\(\(vehicle\) => \(\{[^}]*address: vehicle\.address/);
+  assert.match(sendatrackRoute, /vehicles: snapshot\.vehicles\.map\(\(vehicle\) => \(\{[^}]*address: vehicle\.address/);
 });
 
 test("the truck popover shows the vehicle's current address, for both an idle truck and one with an active delivery", () => {

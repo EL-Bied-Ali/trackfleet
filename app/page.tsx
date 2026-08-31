@@ -686,6 +686,13 @@ export default function Home() {
         const tracking = new URLSearchParams(window.location.search).get("tracking");
         if (!tracking && authState !== "authenticated") return;
         const endpoint = tracking ? `/api/deliveries?tracking=${encodeURIComponent(tracking)}` : "/api/deliveries";
+        // SENDATRACK payload normalization and the delivery dashboard used to
+        // share one Cloudflare invocation. Splitting them gives each request
+        // its own CPU budget; a fleet-provider failure also no longer blanks
+        // otherwise healthy persisted delivery data.
+        const integrationRequest = tracking
+          ? null
+          : fetch("/api/sendatrack", { cache: "no-store" }).catch(() => null);
         const response = await fetch(endpoint, { cache: "no-store" });
         if (response.status === 402 && !tracking) {
           if (active) setDispatchDataState("subscription_required");
@@ -718,10 +725,14 @@ export default function Home() {
             setSelectedId((current) => data.deliveries.length && !data.deliveries.some((delivery) => delivery.id === current) ? data.deliveries[0].id : current);
           }
         }
-        if (data.integration) setIntegration(data.integration);
         if (data.features) setFeatures(data.features);
         if (!tracking) setTrips(data.trips ?? []);
         if (!tracking) setDepartureArrivalEstimates(data.departureArrivalEstimates ?? {});
+        const integrationResponse = await integrationRequest;
+        if (integrationResponse?.ok) {
+          const liveIntegration = await integrationResponse.json() as IntegrationState;
+          if (active) setIntegration(liveIntegration);
+        }
       } catch {
         const tracking = new URLSearchParams(window.location.search).get("tracking");
         if (tracking) setPublicTrackingState("error");

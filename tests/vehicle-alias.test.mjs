@@ -89,7 +89,6 @@ test("vehicle-alias-apply.ts substitutes the dispatcher's alias for the raw SEND
 
 test("every place that reads a live SENDATRACK snapshot applies the alias substitution before using it, not just the vehicle-picker list", () => {
   for (const [name, source] of [
-    ["GET /api/deliveries (both the automatic matching pass and the picker list)", deliveriesRoute],
     ["GET /api/sendatrack", sendatrackRoute],
     ["POST /api/deliveries/link-vehicle (single and group reassignment)", linkVehicleRoute],
     ["POST /api/deliveries/create-trip", createTripRoute],
@@ -99,9 +98,14 @@ test("every place that reads a live SENDATRACK snapshot applies the alias substi
   }
 });
 
-test("GET /api/deliveries no longer duplicates its own alias lookup for the picker list -- it reuses the already-aliased snapshot", () => {
+test("GET /api/deliveries leaves live provider work to the dedicated SENDATRACK request", () => {
+  const getBody = deliveriesRoute.slice(deliveriesRoute.indexOf("export async function GET"), deliveriesRoute.indexOf("export async function POST"));
   assert.doesNotMatch(deliveriesRoute, /vehicleAliasStore\.listForCompany/);
-  assert.match(deliveriesRoute, /name: vehicle\.name, speed: vehicle\.speed/);
+  assert.doesNotMatch(getBody, /getSendatrackSnapshot\(/);
+  assert.doesNotMatch(getBody, /applySendatrackSnapshot\(/);
+  assert.match(page, /fetch\("\/api\/sendatrack", \{ cache: "no-store" \}\)/);
+  assert.match(sendatrackRoute, /name: vehicle\.name,/);
+  assert.match(sendatrackRoute, /address: vehicle\.address,/);
 });
 
 test("renaming a vehicle from the dashboard is dispatcher-only and posts to the alias endpoint", () => {
