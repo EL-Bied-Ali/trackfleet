@@ -55,15 +55,19 @@ test("the GET /api/deliveries response exposes the learned per-agency estimates 
 // live arrival-estimate preview has a destination to work with as early as
 // possible.
 test("the origin/destination row is the first thing in the creation form, before the customer and recipient sections", () => {
-  const formStart = page.indexOf("onSubmit={createDelivery}>") + "onSubmit={createDelivery}>".length;
+  const formStart = page.indexOf("onSubmit={createDelivery}") + "onSubmit={createDelivery}".length;
   const destinationSelectIndex = page.indexOf('name="destinationSiteId"', formStart);
   const customerSectionIndex = page.indexOf("Expéditeur / client", formStart);
   assert.ok(destinationSelectIndex > -1 && customerSectionIndex > -1, "expected both the destination select and the customer section to be found");
   assert.ok(destinationSelectIndex < customerSectionIndex, "expected the destination select to come before the customer section");
 });
 
-test("creation form and edit resets both clear the destination/departure selection so the next delivery starts blank", () => {
-  const resetOccurrences = page.match(/setCreationDestinationSiteId\(""\); setCreationDepartureAt\(""\);/g) ?? [];
-  assert.ok(resetOccurrences.length >= 1, "expected at least the post-creation success reset");
-  assert.match(page, /setModalOpen\(false\); setParcelDrafts\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" \}\]\); setCreationDestinationSiteId\(""\); setCreationDepartureAt\(""\);/);
+test("creation form resets the destination/departure selection after a successful submit, and closeCreateModal (× / Cancel / Escape) does the same after saving a draft", () => {
+  const resetOccurrences = page.match(/setCreationDestinationSiteId\(""\);\s*setCreationDepartureAt\(""\);/g) ?? [];
+  assert.ok(resetOccurrences.length >= 2, "expected the post-creation success reset and the closeCreateModal reset");
+  assert.match(page, /setModalOpen\(false\);\s*setParcelDrafts\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" \}\]\);\s*setCreationDestinationSiteId\(""\);\s*setCreationDepartureAt\(""\);\s*setCreationDraftSeed\(null\);/);
+  // Both the × button and the footer Cancel button close via the same
+  // draft-saving function, rather than each duplicating the reset inline.
+  assert.match(page, /<button onClick=\{closeCreateModal\} aria-label=\{t\.close\}>×<\/button>/);
+  assert.match(page, /<button type="button" onClick=\{closeCreateModal\}>\{t\.cancel\}<\/button>/);
 });

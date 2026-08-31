@@ -55,7 +55,10 @@ test("new parcel creation immediately queues registration and processes notifica
 
 test("WhatsApp consent is explicit for new numbers, remembered, and persisted for both contacts", () => {
   assert.match(page, /type=["']checkbox["'] name=["']whatsappOptIn["']/);
-  assert.doesNotMatch(page, /type=["']checkbox["'] name=["']whatsappOptIn["'][^>]*defaultChecked/);
+  // The only way this checkbox can start checked is a restored form draft
+  // reflecting the dispatcher's own prior explicit choice (see
+  // delivery-creation-draft.ts) -- never a hardcoded opt-in-by-default.
+  assert.match(page, /type=["']checkbox["'] name=["']whatsappOptIn["'][^>]*defaultChecked=\{creationDraftSeed\?\.whatsappOptIn \?\? false\}/);
   assert.match(page, /form\.get\(["']whatsappOptIn["']\) === ["']on["']/);
   assert.match(deliveryRoute, /payload\.whatsappOptIn === true/);
   assert.match(deliveryRoute, /rememberedConsentForPhone/);
