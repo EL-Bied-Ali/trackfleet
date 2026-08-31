@@ -8,6 +8,7 @@ import { customerFacingEvent } from "../app/lib/delivery-events.ts";
 const route = await readFile(new URL("../app/api/scan/route.ts", import.meta.url), "utf8");
 const typesFile = await readFile(new URL("../app/lib/delivery-store.types.ts", import.meta.url), "utf8");
 const creationRoute = await readFile(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8");
+const demoCreationRoute = await readFile(new URL("../app/api/deliveries/demo/route.ts", import.meta.url), "utf8");
 
 function baseDeliveryInput(companyId, overrides = {}) {
   return {
@@ -118,4 +119,14 @@ test("a duplicate scan of the same checkpoint within the debounce window is repo
 test("delivery creation generates a parcel code for every new delivery", () => {
   assert.match(creationRoute, /import \{ createParcelCode \} from "\.\.\/\.\.\/lib\/parcel-code";/);
   assert.match(creationRoute, /parcelCode: createParcelCode\(\),/);
+});
+
+// Reported live: a demo delivery has its own store.create call, separate
+// from the real creation route -- the first version of this feature only
+// wired parcelCode into the real route, so every demo delivery (including
+// the ones this app's own guide encourages showing to a prospective
+// client) silently had no printable label / scannable code at all.
+test("demo delivery creation also generates a parcel code -- it has its own store.create call, separate from the real creation route", () => {
+  assert.match(demoCreationRoute, /import \{ createParcelCode \} from "\.\.\/\.\.\/\.\.\/lib\/parcel-code";/);
+  assert.match(demoCreationRoute, /parcelCode: createParcelCode\(\),/);
 });
