@@ -7,8 +7,8 @@ const wrangler = fs.readFileSync("wrangler.jsonc", "utf8");
 
 test("Cloudflare schedules automation and standby maintenance as separate invocations", () => {
   assert.match(wrangler, /"\*\/5 \* \* \* \*"/);
-  assert.match(wrangler, /"\*\/15 \* \* \* \*"/);
-  assert.match(wrangler, /"5,20,35,50 \* \* \* \*"/);
+  assert.match(wrangler, /"18 \* \* \* \*"/);
+  assert.match(wrangler, /"48 \* \* \* \*"/);
   assert.match(wrangler, /"10,25,40,55 \* \* \* \*"/);
   assert.match(worker, /async scheduled\(/);
   assert.match(worker, /controller\.cron/);

@@ -45,8 +45,15 @@ const productionOrigin = "https://trackfleet.chronoplan.workers.dev";
 
 const automationCron = "*/5 * * * *";
 const notificationMaintenanceCron = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
-const operationalReconciliationCron = "*/15 * * * *";
-const telemetryReconciliationCron = "5,20,35,50 * * * *";
+// Reduced from every 15 minutes (96/day each) to hourly on 2026-09-01 --
+// reconcileD1Standby/reconcileD1Telemetry were the top two D1 rows_written
+// consumers, together pushing the free-tier 100k/day cap. Telemetry now
+// also does exact delta sync (see d1-telemetry-reconciliation.ts); standby
+// still does a full resync each run, so it stays on the less frequent
+// hourly cadence -- acceptable staleness for a Postgres-outage-only
+// failover copy, not a normal read path.
+const operationalReconciliationCron = "18 * * * *";
+const telemetryReconciliationCron = "48 * * * *";
 const historyBackfillCron = "10,25,40,55 * * * *";
 
 const securityHeaders = {

@@ -29,6 +29,16 @@ test("telemetry reconciliation records attempt, success and failure freshness", 
   assert.match(source, /last_failure_at/);
 });
 
+test("telemetry reconciliation only re-syncs positions newer than the last successful run", () => {
+  // Regression: previously re-upserted the most-recent 100 positions per
+  // company every 15 minutes unconditionally, re-writing mostly-unchanged
+  // rows and driving D1 rows_written toward the daily free-tier cap.
+  assert.match(source, /SELECT last_success_at FROM automation_runtime_state WHERE id = 'd1_telemetry_reconciliation'/);
+  assert.match(source, /const maxCatchUpWindowMs = 24 \* 60 \* 60 \* 1000;/);
+  assert.match(source, /FROM fleet_position_observations WHERE company_id = \$\{companyId\} AND position_at > \$\{since\}/);
+  assert.match(source, /FROM trip_position_observations WHERE company_id = \$\{companyId\} AND position_at > \$\{since\}/);
+});
+
 test("telemetry reconciliation endpoint is protected", () => {
   assert.match(route, /runtimeEnv\.CRON_SECRET\?\.trim\(\)/);
   assert.match(route, /Bearer \$\{secret\}/);
