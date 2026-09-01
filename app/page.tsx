@@ -1587,8 +1587,18 @@ export default function Home() {
       const saved = window.localStorage.getItem(originPreferenceKey(company));
       setDefaultOriginSiteId((current) => resolvePreferredOriginSite(saved, originIds, current));
     }
+    // Don't silently re-default to a truck that's already en route on other
+    // active work -- it hasn't returned to base, and nobody has confirmed
+    // it's starting this delivery's leg. Falls back to unassigned instead
+    // (same as a saved-but-disconnected truck), so picking that truck again
+    // is always a conscious choice made by the dispatcher, not a remembered
+    // default silently carried forward from the previous delivery. Scoped to
+    // "In transit" only (matches vehicleCurrentlyEnRoute below) -- a truck
+    // still "Loading" at origin is exactly the normal multi-parcel-per-truck
+    // workflow and should keep defaulting to it.
+    const busyVehicleIds = new Set(deliveries.filter((delivery) => delivery.status === "In transit" && delivery.sendatrackVehicleId).map((delivery) => delivery.sendatrackVehicleId));
     const preferredVehicleId = company
-      ? resolvePreferredTruck(window.localStorage.getItem(truckPreferenceKey(company)), integration.vehicles.map((vehicle) => vehicle.id))
+      ? resolvePreferredTruck(window.localStorage.getItem(truckPreferenceKey(company)), integration.vehicles.map((vehicle) => vehicle.id).filter((id) => !busyVehicleIds.has(id)))
       : "";
     let draft: DeliveryCreationDraft | null = null;
     if (company) {
