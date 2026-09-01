@@ -31,6 +31,21 @@ const MAX_LABEL_MM = 200;
 const PAGE_WIDTH_MM = 210;
 const PAGE_HEIGHT_MM = 297;
 
+// Each preset divides the A4 sheet exactly (cols/rows chosen so
+// PAGE_WIDTH_MM/PAGE_HEIGHT_MM come out even) -- the whole sheet is used,
+// no leftover margin strip on the right or bottom the way an arbitrary
+// width/height can leave. Not tied to any specific commercial label
+// product (there's no single standard) -- a starting point to test-print
+// against your actual sheet, then fine-tune with the manual mm inputs.
+const LABEL_PRESETS: Array<{ cols: number; rows: number }> = [
+  { cols: 1, rows: 2 },
+  { cols: 2, rows: 2 },
+  { cols: 2, rows: 3 },
+  { cols: 2, rows: 4 },
+  { cols: 2, rows: 5 },
+  { cols: 3, rows: 4 },
+];
+
 function clampLabelMm(value: number, fallback: number) {
   return Number.isFinite(value) ? Math.min(MAX_LABEL_MM, Math.max(MIN_LABEL_MM, value)) : fallback;
 }
@@ -176,27 +191,56 @@ export default function LabelsPage() {
         }
       `}</style>
 
-      <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 24px", background: "#111827", color: "#fff" }}>
-        <div>
-          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#9ca3af" }}>TRACKFLEET · ÉTIQUETTES</p>
-          <h1 style={{ margin: "4px 0 0", fontSize: 18 }}>{deliveries.length} étiquette{deliveries.length > 1 ? "s" : ""} prête{deliveries.length > 1 ? "s" : ""}</h1>
-          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{labelsPerPage} par feuille A4 · {pages.length} feuille{pages.length > 1 ? "s" : ""}</p>
+      <div className="no-print" style={{ padding: "16px 24px", background: "#111827", color: "#fff" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#9ca3af" }}>TRACKFLEET · ÉTIQUETTES</p>
+            <h1 style={{ margin: "4px 0 0", fontSize: 18 }}>{deliveries.length} étiquette{deliveries.length > 1 ? "s" : ""} prête{deliveries.length > 1 ? "s" : ""}</h1>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{labelsPerPage} par feuille A4 ({labelSize.width}×{labelSize.height}mm) · {pages.length} feuille{pages.length > 1 ? "s" : ""}</p>
+          </div>
+          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c9cdd3" }}>
+              Largeur
+              <input type="number" min={MIN_LABEL_MM} max={MAX_LABEL_MM} step={1} value={labelSize.width} onChange={(event) => updateLabelSize({ width: Number(event.target.value) })} style={{ width: 52, padding: "5px 6px", borderRadius: 6, border: "1px solid #374151", background: "#1f2937", color: "#fff", fontSize: 12 }} />
+              mm
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c9cdd3" }}>
+              Hauteur
+              <input type="number" min={MIN_LABEL_MM} max={MAX_LABEL_MM} step={1} value={labelSize.height} onChange={(event) => updateLabelSize({ height: Number(event.target.value) })} style={{ width: 52, padding: "5px 6px", borderRadius: 6, border: "1px solid #374151", background: "#1f2937", color: "#fff", fontSize: 12 }} />
+              mm
+            </label>
+            <Link href="/?lang=fr" style={{ color: "#fff", fontWeight: 700, fontSize: 13, alignSelf: "center" }}>← Tableau</Link>
+            <button type="button" onClick={() => void handlePrint()} disabled={!deliveries.length} style={{ padding: "10px 18px", borderRadius: 10, border: 0, background: "#22c55e", color: "#052e12", fontWeight: 700, cursor: deliveries.length ? "pointer" : "default" }}>
+              Imprimer
+            </button>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c9cdd3" }}>
-            Largeur
-            <input type="number" min={MIN_LABEL_MM} max={MAX_LABEL_MM} step={1} value={labelSize.width} onChange={(event) => updateLabelSize({ width: Number(event.target.value) })} style={{ width: 52, padding: "5px 6px", borderRadius: 6, border: "1px solid #374151", background: "#1f2937", color: "#fff", fontSize: 12 }} />
-            mm
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c9cdd3" }}>
-            Hauteur
-            <input type="number" min={MIN_LABEL_MM} max={MAX_LABEL_MM} step={1} value={labelSize.height} onChange={(event) => updateLabelSize({ height: Number(event.target.value) })} style={{ width: 52, padding: "5px 6px", borderRadius: 6, border: "1px solid #374151", background: "#1f2937", color: "#fff", fontSize: 12 }} />
-            mm
-          </label>
-          <Link href="/?lang=fr" style={{ color: "#fff", fontWeight: 700, fontSize: 13, alignSelf: "center" }}>← Tableau</Link>
-          <button type="button" onClick={() => void handlePrint()} disabled={!deliveries.length} style={{ padding: "10px 18px", borderRadius: 10, border: 0, background: "#22c55e", color: "#052e12", fontWeight: 700, cursor: deliveries.length ? "pointer" : "default" }}>
-            Imprimer
-          </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
+          <span style={{ fontSize: 11, color: "#9ca3af" }}>Préconfigurations (feuille A4 utilisée entièrement) :</span>
+          {LABEL_PRESETS.map((preset) => {
+            const presetWidth = Math.floor((PAGE_WIDTH_MM / preset.cols) * 100) / 100;
+            const presetHeight = Math.floor((PAGE_HEIGHT_MM / preset.rows) * 100) / 100;
+            const active = labelSize.width === presetWidth && labelSize.height === presetHeight;
+            return (
+              <button
+                key={`${preset.cols}x${preset.rows}`}
+                type="button"
+                onClick={() => updateLabelSize({ width: presetWidth, height: presetHeight })}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: 999,
+                  border: active ? "1px solid #22c55e" : "1px solid #374151",
+                  background: active ? "#052e12" : "#1f2937",
+                  color: active ? "#22c55e" : "#c9cdd3",
+                  fontSize: 11,
+                  fontWeight: 650,
+                  cursor: "pointer",
+                }}
+              >
+                {preset.cols * preset.rows}/feuille
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -218,36 +262,41 @@ export default function LabelsPage() {
           }}
         >
           {pageDeliveries.map((delivery) => (
-            <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", flexDirection: "column", gap: "1.5mm", overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
-                {branding.logoDataUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
-                  <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "19mm", maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
-                )}
-                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm", flex: 1, minHeight: 0 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, wordBreak: "break-word" }}>{delivery.id}</div>
-                  <div style={{ fontSize: 12, marginTop: "1.5mm", wordBreak: "break-word" }}>{delivery.customer}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, marginTop: "0.5mm", wordBreak: "break-word" }}>→ {delivery.destination}</div>
-                  {delivery.truck && <div style={{ fontSize: 11, marginTop: "0.5mm", color: "#333" }}>Camion : {delivery.truck}</div>}
+            // Two real columns spanning the label's full height (not a
+            // header row above a content row) -- reported live as a big
+            // empty gap next to the logo, since the QR only ever sat in
+            // the lower content row while the header row above it had
+            // nothing on its right side. The QR/code column now runs the
+            // full height, growing with whatever space the logo+text
+            // column doesn't need.
+            <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", gap: "3mm", overflow: "hidden" }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "1.5mm" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
+                  {branding.logoDataUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
+                    <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "19mm", maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
+                  )}
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
                 </div>
-                {delivery.parcelCode ? (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1mm", flex: "0 0 auto" }}>
-                    <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: "28mm", height: "28mm" }} />
-                    {/* Plain-text fallback for manual entry on /scan when no
-                        camera/scanner is available -- see the barcode
-                        removal note above for why this replaced the
-                        Code128 image instead of just disappearing with it. */}
-                    <div style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: ".05em", color: "#333" }}>{delivery.parcelCode}</div>
-                  </div>
-                ) : (
-                  <div style={{ width: "28mm", height: "28mm", flex: "0 0 auto", border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", textAlign: "center", padding: "2mm" }}>
-                    Code non disponible
-                  </div>
-                )}
+                <div style={{ fontSize: 13, fontWeight: 700, wordBreak: "break-word" }}>{delivery.id}</div>
+                <div style={{ fontSize: 12, wordBreak: "break-word" }}>{delivery.customer}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, wordBreak: "break-word" }}>→ {delivery.destination}</div>
+                {delivery.truck && <div style={{ fontSize: 11, color: "#333" }}>Camion : {delivery.truck}</div>}
               </div>
+              {delivery.parcelCode ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5mm", flex: "0 0 auto" }}>
+                  <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: "28mm", height: "28mm" }} />
+                  {/* Plain-text fallback for manual entry on /scan when no
+                      camera/scanner is available -- see the barcode
+                      removal note above for why this replaced the
+                      Code128 image instead of just disappearing with it. */}
+                  <div style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: ".05em", color: "#333" }}>{delivery.parcelCode}</div>
+                </div>
+              ) : (
+                <div style={{ width: "28mm", height: "28mm", flex: "0 0 auto", alignSelf: "center", border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", textAlign: "center", padding: "2mm" }}>
+                  Code non disponible
+                </div>
+              )}
             </div>
           ))}
         </div>
