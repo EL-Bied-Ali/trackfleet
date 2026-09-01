@@ -155,12 +155,15 @@ test("the group header row lines up with the columns below it instead of one fle
   // (truck info, hoisted status/destination/ETA/progress, both edit
   // triggers) crammed into one flex line -- reported live as not lining up
   // with LIVRAISON/CLIENT/AGENCE/TRAJET below it, and feeling cluttered.
-  // Split into 3 real cells matching the table's own columns instead: truck
-  // info spans LIVRAISON/CLIENT/[AGENCE], hoisted journey info gets its own
-  // col-journey cell (reusing the exact class the per-row journey cell
-  // already uses), and both edit triggers share a col-actions cell (same
-  // pattern the per-row journey-editor trigger already uses).
-  assert.match(page, /<td className="col-journey">\{group\.uniformDestination && <div className="col-journey-inner">/);
+  // Split into real cells matching the table's own columns instead: truck
+  // info spans LIVRAISON/CLIENT/[AGENCE], hoisted destination/status get
+  // their own col-destination/col-status cells (reusing the exact classes
+  // the per-row cells already use, the latter later split further -- see
+  // table-row-height-overflow-fix.test.mjs), and both edit triggers share
+  // a col-actions cell (same pattern the per-row journey-editor trigger
+  // already uses).
+  assert.match(page, /<td className="col-destination">\{group\.uniformDestination && <span className="group-header-destination">/);
+  assert.match(page, /<td className="col-status">\{group\.uniformDestination && <div className="col-journey-inner">/);
   assert.match(css, /\.col-journey-inner \{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; \}/);
 });
 

@@ -322,6 +322,14 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
    into the row(s) below -- worse once .scan-control-cell (below) started
    routinely wrapping to 2-3 lines too. */
 .col-journey-inner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Reported live: Trajet was cramming destination+badge, status, progress
+   bar and ETA into one narrow column, 2-3 lines deep on every row. Split
+   into two columns instead. Widened by reclaiming the Agence column's
+   space, which repeated the exact same origin site on every row of a
+   truck group (a run departs from one place) -- hoisted to the group
+   header the same way a uniform destination already was, so the per-row
+   cells collapse to "—" and the column shrinks to fit. */
+.col-destination { min-width: 90px; }
 .journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
 .journey-destination { color: #63525b; font-size: 9px; font-weight: 650; }
 .relay-badge { display: inline-block; margin-left: 5px; padding: 2px 6px; border-radius: 5px; color: #92400e; background: #fef3c7; font-size: 7px; font-weight: 650; }

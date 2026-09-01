@@ -41,5 +41,5 @@ test("agency employees see their own deliveries before the fleet map; dispatcher
 
 test("the delivery table shows which agency registered each parcel, but only for the dispatcher who oversees every agency", () => {
   assert.match(page, /company\?\.role === "dispatcher" && <th>\{locale === "fr" \? "Agence"/);
-  assert.match(page, /company\?\.role === "dispatcher" && <td>\{knownSites\.find\(\(site\) => site\.id === delivery\.originSiteId\)\?\.label \?\? "—"\}<\/td>/);
+  assert.match(page, /company\?\.role === "dispatcher" && <td>\{group\.uniformOrigin \? <span className="cell-hoisted">—<\/span> : knownSites\.find\(\(site\) => site\.id === delivery\.originSiteId\)\?\.label \?\? "—"\}<\/td>/);
 });
