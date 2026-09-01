@@ -30,19 +30,11 @@ export type DeliveryEventType =
   // "the truck just left" notice (see
   // app/api/deliveries/notify-departure/route.ts).
   | "WHATSAPP_DEPARTURE_NOTIFIED"
-  // Recorded the first time a QR-code scan (see app/api/scan/route.ts)
-  // marks a parcel loaded onto its truck -- internal bookkeeping only,
-  // like MANUAL_ARRIVAL_CONFIRMED, deliberately decoupled from the
-  // GPS-driven status/progress machine (loading doesn't move status). The
-  // full, repeatable scan history (who, when, which truck) lives in the
-  // separate delivery_scans table -- this is just enough to show a
-  // milestone in the existing timeline. The scanner's other checkpoint,
-  // "arrived", has no SCAN_ARRIVED counterpart: it reuses
-  // confirmArrivalManually directly (see confirm-arrival-manually.ts), the
-  // same proven path the existing "Confirmer l'arrivée" button already
-  // uses, so scanning at arrival really does move status/progress and
-  // trigger the WhatsApp arrival notice -- not just log a marker.
-  | "SCAN_LOADED";
+  // QR handoff proofs are customer-visible tracking milestones only. They
+  // deliberately stay outside the GPS/status machine and automatic-message
+  // policy: a hub is not necessarily the customer's final agency.
+  | "SCAN_LOADED"
+  | "SCAN_HUB_ARRIVED";
 
 export type DeliveryEventInput = {
   previousStatus: "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -101,8 +93,7 @@ export function customerFacingEvent(event: DeliveryEventType) {
     && event !== "MANUAL_DELIVERED"
     && event !== "WHATSAPP_ARRIVAL_NOTIFIED"
     && event !== "MANUAL_DEPARTURE_CONFIRMED"
-    && event !== "WHATSAPP_DEPARTURE_NOTIFIED"
-    && event !== "SCAN_LOADED";
+    && event !== "WHATSAPP_DEPARTURE_NOTIFIED";
 }
 
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {
