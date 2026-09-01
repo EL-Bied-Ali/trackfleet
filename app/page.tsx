@@ -2157,6 +2157,7 @@ export default function Home() {
           ARRIVED: "Livraison arrivée",
           GPS_STALE: "Position GPS ancienne",
         } as Record<DeliveryEventType, string>,
+        arrivedAtRelayHub: "Camion arrivé au point de relais CTM",
       },
       en: {
         progress: "Trip completed",
@@ -2183,6 +2184,7 @@ export default function Home() {
           ARRIVED: "Delivery arrived",
           GPS_STALE: "GPS position is old",
         } as Record<DeliveryEventType, string>,
+        arrivedAtRelayHub: "Truck arrived at the CTM relay point",
       },
       nl: {
         progress: "Traject voltooid",
@@ -2209,6 +2211,7 @@ export default function Home() {
           ARRIVED: "Levering aangekomen",
           GPS_STALE: "GPS-positie is verouderd",
         } as Record<DeliveryEventType, string>,
+        arrivedAtRelayHub: "Vrachtwagen aangekomen op het CTM-overslagpunt",
       },
     }[locale];
     const dateLocale = locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB";
@@ -2219,19 +2222,31 @@ export default function Home() {
         ? `${copy.fresh} · ${selected.positionAgeMinutes} min`
         : `${selected.positionAgeMinutes} min`;
     // Confirmed from real fleet GPS history (see KnownSite.finalLegTrackingUnavailable):
-    // past the relay hub, the truck's position goes stale, so a live map and
-    // GPS-derived stats (progress/speed/remaining distance/GPS freshness)
-    // would show numbers that stopped meaning anything -- shown as a plain
-    // relay notice instead of a map that looks like it's just stuck. Dynamic,
-    // not a blanket "this route always relays" flag: a relay-destined
+    // past the relay hub, the truck's position usually goes stale, so a live
+    // map and GPS-derived stats (progress/speed/remaining distance/GPS
+    // freshness) would show numbers that stopped meaning anything -- shown as
+    // a plain relay notice instead of a map that looks like it's just stuck.
+    // Dynamic, not a blanket "this route always relays" flag: a relay-destined
     // delivery still gets real live GPS for the Brussels-to-hub leg (same as
     // any other truck), so the live map stays up as long as positions keep
     // arriving (gpsFresh) and only switches once they actually stop
     // (positionAgeMinutes not null -- it has GPS history -- but stale). Before
     // the truck has any GPS history yet (positionAgeMinutes null), the normal
     // map still shows rather than jumping straight to the relay notice.
+    //
+    // Staleness alone isn't reliable, though: a shared fleet truck that drops
+    // off at the hub and immediately starts another run keeps reporting fresh
+    // GPS the whole time -- staleness never arrives, so the map (and the
+    // "Camion arrivé à l'agence" timeline label) kept implying live tracking
+    // of THIS parcel long after the truck had moved on to unrelated work.
+    // ARRIVED_AT_SITE already is the authoritative "reached the hub" signal
+    // (the completion pipeline's own relay-grace timer keys off it -- see
+    // fleet-business-tick.ts) regardless of what the truck's GPS does next,
+    // so it forces relay mode immediately once recorded, on top of the
+    // staleness fallback for the rare case a delivery never got that event.
     const relayDestination = staticKnownSite(selected.destinationSiteId)?.finalLegTrackingUnavailable === true;
-    const relayInEffect = relayDestination && selected.positionAgeMinutes != null && !selected.gpsFresh;
+    const hubArrived = deliveryEvents.some((event) => event.type === "ARRIVED_AT_SITE");
+    const relayInEffect = relayDestination && (hubArrived || (selected.positionAgeMinutes != null && !selected.gpsFresh));
     // Reported live: for a relay destination, estimatedArrivalAt is only a
     // GPS-based ETA to the confirmed hub (route/progress math is capped
     // there -- see delivery-progress-destination.ts), not to the parcel's
@@ -2319,7 +2334,7 @@ export default function Home() {
                 {deliveryEvents.length > 0 ? deliveryEvents.map((event) => (
                   <div className={`timeline-step ${event.type === "GPS_STALE" || event.type === "DELAY_DETECTED" ? "is-delayed" : "done"}`} key={`${event.deliveryId}-${event.type}`}>
                     <i>{event.type === "GPS_STALE" || event.type === "DELAY_DETECTED" ? "!" : "✓"}</i>
-                    <div><strong>{copy.events[event.type]}</strong><span>{formatEventTime(event.createdAt)} · {event.progress}%</span></div>
+                    <div><strong>{event.type === "ARRIVED_AT_SITE" && relayDestination ? copy.arrivedAtRelayHub : copy.events[event.type]}</strong><span>{formatEventTime(event.createdAt)} · {event.progress}%</span></div>
                   </div>
                 )) : <div className="timeline-step done"><i>✓</i><div><strong>{t.orderPrepared}</strong><span>{t.deliveryLabel} {selected.id}</span></div></div>}
                 {selected.status !== "Delivered" && <div className="timeline-step active"><i>●</i><div><strong>{relayInEffect ? copy.relayCurrent : copy.current}</strong><span>{relayInEffect ? copy.relayCurrentDetail : copy.currentDetail(selected.progress)}</span></div></div>}

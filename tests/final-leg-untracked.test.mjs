@@ -27,7 +27,7 @@ test("both customer and dispatcher ETA displays resolve the untracked-final-leg 
   // the Brussels-to-hub leg, so this must not be a blanket "this route always
   // relays" switch (see the dynamic-relay test below).
   assert.match(files["app/page.tsx"], /const relayDestination = staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true;/);
-  assert.match(files["app/page.tsx"], /const relayInEffect = relayDestination && selected\.positionAgeMinutes != null && !selected\.gpsFresh;/);
+  assert.match(files["app/page.tsx"], /const relayInEffect = relayDestination && \(hubArrived \|\| \(selected\.positionAgeMinutes != null && !selected\.gpsFresh\)\);/);
   assert.match(files["app/page.tsx"], /customerEtaNote\(\{[\s\S]{0,200}finalLegTrackingUnavailable: relayInEffect,/);
   assert.match(files["app/page.tsx"], /etaExplanation\(\{ source: selected\.etaSource, confidence: selected\.etaConfidence, historyTrips: selected\.etaHistoryTrips, finalLegTrackingUnavailable: staticKnownSite\(selected\.destinationSiteId\)\?\.finalLegTrackingUnavailable === true/);
 });
@@ -97,6 +97,32 @@ test("the timeline's active step switches to CTM-relay wording once relayInEffec
   assert.match(page, /relayCurrent: "Relais CTM en cours"/);
   assert.match(page, /relayCurrentDetail: "Notre partenaire local achemine le colis vers l.agence"/);
   assert.match(page, /<strong>\{relayInEffect \? copy\.relayCurrent : copy\.current\}<\/strong><span>\{relayInEffect \? copy\.relayCurrentDetail : copy\.currentDetail\(selected\.progress\)\}<\/span>/);
+});
+
+// Reported live on a real Tétouan delivery: the truck (a shared fleet
+// vehicle) dropped off at the Tanger Med hub and immediately started another
+// unrelated run, so its GPS kept reporting fresh positions the whole time --
+// staleness never arrived, so relayInEffect never triggered, and the
+// customer page kept showing the live map plus "Position actuelle · 99%"
+// long after this parcel's truck leg had actually ended.
+test("hub arrival (ARRIVED_AT_SITE) forces relay mode immediately, regardless of whether the truck's GPS stays fresh afterward", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /const hubArrived = deliveryEvents\.some\(\(event\) => event\.type === "ARRIVED_AT_SITE"\);/);
+  assert.match(page, /relayDestination && \(hubArrived \|\|/);
+});
+
+// Companion fix: "Camion arrivé à l'agence" on the ARRIVED_AT_SITE timeline
+// step implied the parcel had reached its actual destination agency, when
+// for a relay destination it had only reached the hub -- the CTM leg from
+// hub to agency hadn't started yet. Reported live alongside the stale-GPS
+// issue above ("faudrai que sa soit plus clair que y'a un trajet entre le
+// hub et les agences").
+test("the ARRIVED_AT_SITE timeline step uses relay-hub wording for a relay destination instead of implying the parcel reached its actual agency", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /arrivedAtRelayHub: "Camion arrivé au point de relais CTM"/);
+  assert.match(page, /arrivedAtRelayHub: "Truck arrived at the CTM relay point"/);
+  assert.match(page, /arrivedAtRelayHub: "Vrachtwagen aangekomen op het CTM-overslagpunt"/);
+  assert.match(page, /<strong>\{event\.type === "ARRIVED_AT_SITE" && relayDestination \? copy\.arrivedAtRelayHub : copy\.events\[event\.type\]\}<\/strong>/);
 });
 
 test("all three delivery-enrichment call sites (list, public tracking, and just-created) thread a manual-arrival duration estimate through", () => {
