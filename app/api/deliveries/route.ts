@@ -111,6 +111,7 @@ function enrichDelivery<T extends {
     trackingExpiresAt: "createdAt" in row && row.createdAt instanceof Date ? trackingExpiresAt({ plannedArrivalAt: row.plannedArrivalAt ?? null, createdAt: row.createdAt, deliveredAt: trackingLinkExpiryAnchorFromEvents(events) }).toISOString() : null,
     manualArrivalEstimateHours: manualArrivalEstimate?.medianHours ?? null,
     manualArrivalEstimateSampleCount: manualArrivalEstimate?.sampleCount ?? 0,
+    labelPrintRequestedAt: events.find((event) => event.type === "LABEL_PRINT_REQUESTED")?.createdAt.toISOString() ?? null,
   };
 }
 
