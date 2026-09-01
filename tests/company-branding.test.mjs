@@ -86,3 +86,18 @@ test("the sidebar uses a quiet light palette so uploaded logos do not fight the 
   assert.match(css, /\.sidebar \{ width: 240px;.*background: #fbfcfa; color: #334155;/);
   assert.match(css, /\.nav-item\.active \{ color: #1f2937; background: #e8efec;/);
 });
+
+// Reported live, with a screenshot: in dark mode, the sidebar logo showed a
+// dark navy box behind it, reading as a quality drop even though the logo's
+// own pixels were untouched. Root cause: .company-brand-mark carries the
+// .brand-mark class too, and the generic dark-mode ".brand-mark" rule
+// (meant only for the small placeholder icon square) tied in specificity
+// with the light-mode ".brand.company-brand .company-brand-mark { background:
+// transparent }" rule -- source order let the dark rule win, repainting a
+// solid background behind what should be a transparent logo slot.
+test("the sidebar logo stays transparent in dark mode, not just in light mode", () => {
+  assert.match(css, /:root\[data-theme="dark"\] \.brand\.company-brand \.company-brand-mark \{ background: transparent; \}/);
+  const darkBrandMarkIndex = css.indexOf(':root[data-theme="dark"] .brand-mark {');
+  const darkCompanyMarkIndex = css.indexOf(':root[data-theme="dark"] .brand.company-brand .company-brand-mark');
+  assert.ok(darkBrandMarkIndex > -1 && darkCompanyMarkIndex > darkBrandMarkIndex, "the transparent override must come after the generic dark .brand-mark rule to win the cascade");
+});
