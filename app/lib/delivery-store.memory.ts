@@ -25,6 +25,9 @@ function notificationKey(deliveryId: string, type: DeliveryEventType) { return `
 function baselineProgress(deliveryId: string) {
   return deliveryEvents.find((event) => event.deliveryId === deliveryId && event.type === "GPS_BASELINE")?.progress ?? 0;
 }
+function hasScanLoaded(deliveryId: string) {
+  return deliveryEvents.some((event) => event.deliveryId === deliveryId && event.type === "SCAN_LOADED");
+}
 function explicitDestination(delivery: DeliveryRow): [number, number] | null {
   return typeof delivery.destinationLatitude === "number" && typeof delivery.destinationLongitude === "number"
     ? [delivery.destinationLongitude, delivery.destinationLatitude]
@@ -67,6 +70,10 @@ export const memoryStore: DeliveryStore = {
       const vehicle = match.vehicle;
       if (!vehicle) continue;
       const firstLink = delivery.gpsSource !== "sendatrack";
+      // No mid-route pickups in this business -- see the matching comment in
+      // delivery-store.postgres.ts for the full rationale. Only gates the
+      // very first link; a delivery already tracking is never frozen.
+      if (firstLink && !hasScanLoaded(delivery.id)) continue;
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
@@ -86,10 +93,15 @@ export const memoryStore: DeliveryStore = {
   async linkVehicle(deliveryId, companyId, vehicle) {
     const delivery = deliveryStore.find((item) => item.id === deliveryId && item.companyId === companyId) ?? null;
     if (!delivery || delivery.status === "Delivered") return null;
-    const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
-    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
-    if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
-      deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
+    // Same "no mid-route pickups" rule as applySendatrackSnapshot -- see the
+    // full rationale there. A delivery already tracking is never frozen.
+    const scanned = delivery.gpsSource === "sendatrack" || hasScanLoaded(delivery.id);
+    if (scanned) {
+      const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
+      if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
+        deliveryEvents.push({ deliveryId: delivery.id, type: "GPS_BASELINE", progress: metrics.progress, createdAt: new Date() });
+      }
     }
     // No longer clears the vehicle off any other active delivery already
     // riding it (that used to run unconditionally here). One truck legitimately
@@ -110,9 +122,12 @@ export const memoryStore: DeliveryStore = {
     // that isn't actually what this delivery is on. Re-linking the same
     // vehicle it already has (a no-op reassignment) leaves the trip intact.
     const truckIsChanging = delivery.sendatrackVehicleId !== vehicle.id;
-    Object.assign(delivery, {
+    Object.assign(delivery, scanned ? {
       sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude,
       speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", status: "Loading",
+      ...(truckIsChanging ? { tripId: null } : {}),
+    } : {
+      sendatrackVehicleId: vehicle.id, truck: vehicle.name, status: "Loading",
       ...(truckIsChanging ? { tripId: null } : {}),
     });
     return { ...delivery };
@@ -121,7 +136,11 @@ export const memoryStore: DeliveryStore = {
     const ids = new Set(deliveryIds);
     const deliveries = deliveryStore.filter((item) => ids.has(item.id) && item.companyId === companyId && item.status !== "Delivered");
     if (!deliveries.length) return [];
+    // Same "no mid-route pickups" rule as linkVehicle/applySendatrackSnapshot
+    // -- see linkVehicle for the full rationale.
+    const scannedById = new Map(deliveries.map((delivery) => [delivery.id, delivery.gpsSource === "sendatrack" || hasScanLoaded(delivery.id)]));
     for (const delivery of deliveries) {
+      if (!scannedById.get(delivery.id)) continue;
       const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
       if (!deliveryEvents.some((event) => event.deliveryId === delivery.id && event.type === "GPS_BASELINE")) {
@@ -137,9 +156,12 @@ export const memoryStore: DeliveryStore = {
     // unassigned, with its last GPS position/status still attached.
     for (const delivery of deliveries) {
       const truckIsChanging = delivery.sendatrackVehicleId !== vehicle.id;
-      Object.assign(delivery, {
+      Object.assign(delivery, scannedById.get(delivery.id) ? {
         sendatrackVehicleId: vehicle.id, truck: vehicle.name, latitude: vehicle.latitude, longitude: vehicle.longitude,
         speed: vehicle.speed, lastPositionAt: new Date(vehicle.updatedAt), gpsSource: "sendatrack", status: "Loading",
+        ...(truckIsChanging ? { tripId: null } : {}),
+      } : {
+        sendatrackVehicleId: vehicle.id, truck: vehicle.name, status: "Loading",
         ...(truckIsChanging ? { tripId: null } : {}),
       });
     }
