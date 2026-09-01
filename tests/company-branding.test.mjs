@@ -71,9 +71,10 @@ test("company branding writes are suppressed (not silently lost) during an activ
   assert.match(failover, /export async function getCompanyBranding\(companyId: string\): Promise<CompanyBranding \| null> \{\s*return withD1ReadFailover\(/s);
 });
 
-test("branding css preserves the full company logo and gives it a dedicated sidebar slot", () => {
+test("branding css gives the sidebar logo a clean, enlarged slot without an added background", () => {
   assert.match(css, /\.brand-mark \{ display: grid; place-items: center; width: 29px; height: 29px;.*overflow: hidden; \}/);
   assert.match(css, /\.company-brand-name \{ max-width: 100%;.*font-size: 22px;/);
-  assert.match(css, /\.company-brand-mark \{ width: 48px; height: 48px;.*background: white;/);
+  assert.match(css, /\.brand\.company-brand \.company-brand-mark \{ width: 56px; height: 56px;.*background: transparent;/);
   assert.match(css, /\.brand-mark img \{ width: 100%; height: 100%; object-fit: contain; transform: none;/);
+  assert.match(css, /\.brand\.company-brand \.company-brand-mark img \{ transform: scale\(1\.7\); \}/);
 });
