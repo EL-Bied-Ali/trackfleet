@@ -34,8 +34,10 @@ test("the customer tracking header shows the company's own name/logo, falling ba
 });
 
 test("the dispatcher sidebar shows the same company branding as the customer page", () => {
-  const sidebarBrand = page.indexOf('<div className="brand"><span className="brand-mark">{companyBranding.logoDataUrl');
+  const sidebarBrand = page.indexOf('<div className="brand company-brand">');
   assert.ok(sidebarBrand >= 0, "expected the sidebar brand mark to use companyBranding, not a hardcoded TrackFleet span");
+  assert.match(page, /<span className="company-brand-name">\{companyBranding\.name \|\| "TrackFleet"\}<\/span>/);
+  assert.match(page, /<span className="brand-mark company-brand-mark">\{companyBranding\.logoDataUrl \?/);
 });
 
 test("the settings nav item opens company settings for a dispatcher, but stays disabled for an agency", () => {
@@ -69,7 +71,9 @@ test("company branding writes are suppressed (not silently lost) during an activ
   assert.match(failover, /export async function getCompanyBranding\(companyId: string\): Promise<CompanyBranding \| null> \{\s*return withD1ReadFailover\(/s);
 });
 
-test("branding css keeps the logo image inside the same rounded brand-mark slot the ↗ glyph already used", () => {
+test("branding css preserves the full company logo and gives it a dedicated sidebar slot", () => {
   assert.match(css, /\.brand-mark \{ display: grid; place-items: center; width: 29px; height: 29px;.*overflow: hidden; \}/);
-  assert.match(css, /\.brand-mark img \{ width: 100%; height: 100%; object-fit: cover;/);
+  assert.match(css, /\.company-brand-name \{ max-width: 100%;.*font-size: 22px;/);
+  assert.match(css, /\.company-brand-mark \{ width: 48px; height: 48px;.*background: white;/);
+  assert.match(css, /\.brand-mark img \{ width: 100%; height: 100%; object-fit: contain; transform: none;/);
 });

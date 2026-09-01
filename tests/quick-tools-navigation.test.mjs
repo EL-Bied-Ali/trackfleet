@@ -6,16 +6,14 @@ const pageUrl = new URL("../app/page.tsx", import.meta.url);
 const layoutUrl = new URL("../app/layout.tsx", import.meta.url);
 const i18nUrl = new URL("../app/i18n.ts", import.meta.url);
 
-test("quick tools render as native sidebar nav items, not a separate floating component", async () => {
+test("customer sidebar keeps only customer-facing quick tools, not internal operations", async () => {
   const page = await readFile(pageUrl, "utf8");
-  assert.match(page, /a className="nav-item" href=\{`\/operations\?lang=\$\{locale\}`\}/);
-  assert.match(page, /a className="nav-item" href=\{`\/operations\/history\?lang=\$\{locale\}`\}/);
   assert.match(page, /a className="nav-item" href=\{`\/import\?lang=\$\{locale\}`\}/);
+  assert.doesNotMatch(page, /href=\{`\/operations(?:\/history|\/revenue|\/storage)?\?lang=\$\{locale\}`\}/);
 });
 
-test("storage and export tools are hidden from non-dispatcher (agency) sessions", async () => {
+test("export remains limited to dispatcher sessions", async () => {
   const page = await readFile(pageUrl, "utf8");
-  assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href=\{`\/operations\/storage\?lang=\$\{locale\}`\}/);
   assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href="\/api\/operations\/export"/);
 });
 

@@ -2272,7 +2272,10 @@ export default function Home() {
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">{companyBranding.logoDataUrl ? <img src={companyBranding.logoDataUrl} alt="" /> /* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */ : <span>↗</span>}</span><span>{companyBranding.name || "TrackFleet"}</span></div>
+        <div className="brand company-brand">
+          <span className="company-brand-name">{companyBranding.name || "TrackFleet"}</span>
+          <span className="brand-mark company-brand-mark">{companyBranding.logoDataUrl ? <img src={companyBranding.logoDataUrl} alt="" /> /* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */ : <span>↗</span>}</span>
+        </div>
         <nav aria-label="Main navigation">
           <button className="nav-item active"><Icon>▦</Icon>{t.overview}</button>
           <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">{integration.connected ? integration.vehicleCount : "—"}</span></button>
@@ -2281,10 +2284,6 @@ export default function Home() {
         </nav>
         <div className="sidebar-divider" />
         <nav aria-label={locale === "fr" ? "Outils TrackFleet" : locale === "nl" ? "TrackFleet-tools" : "TrackFleet tools"}>
-          <a className="nav-item" href={`/operations?lang=${locale}`}><Icon>△</Icon>{t.operationsTool}</a>
-          <a className="nav-item" href={`/operations/history?lang=${locale}`}><Icon>≡</Icon>{t.historyTool}</a>
-          <a className="nav-item" href={`/operations/revenue?lang=${locale}`}><Icon>€</Icon>{t.revenueTool}</a>
-          {company?.role === "dispatcher" && <a className="nav-item" href={`/operations/storage?lang=${locale}`}><Icon>▥</Icon>{t.storageTool}</a>}
           {company?.role === "dispatcher" && <a className="nav-item" href="/api/operations/export"><Icon>⇩</Icon>{t.exportTool}</a>}
           <a className="nav-item" href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
           <a className="nav-item" href="/guide"><Icon>◈</Icon>{t.guideTool}</a>
