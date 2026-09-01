@@ -125,6 +125,7 @@ test("the delivery table shows both handoff proofs without claiming that the hub
   assert.match(dashboard, /scanSummary\?\.hubArrivedAt/);
   assert.match(dashboard, /scanSummary\?\.hubLabel/);
   assert.match(dashboard, /scan-control-cell/);
+  assert.match(dashboard, /delivery-identification/);
 });
 
 test("the parcel-control column distinguishes labels awaiting print from a print dialog that was actually launched", () => {
