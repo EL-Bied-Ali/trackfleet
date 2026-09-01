@@ -24,9 +24,17 @@ test("the journey editor popover CSS (position/anchoring) is still used by the g
   assert.match(css, /\.truck-editor-popover \{ position: absolute;/);
 });
 
-test("status, progress and ETA are consolidated into a single Journey column instead of three separate ones", () => {
-  assert.match(page, /<th>\{t\.tableJourney\}<\/th><th className="col-actions">/);
-  assert.match(page, /<td className="col-journey"><div className="col-journey-inner">\{!group\.uniformDestination && <span className="journey-destination">.*?\}<\/span>\}\{!group\.uniformDestination && <span className=\{statusClass\[delivery\.status\]\}/);
+// Originally consolidated status/progress/ETA/destination into one Journey
+// column (replacing three separate ones); later split back into two --
+// Destination and Statut -- once that single column was routinely 2-3 lines
+// deep on every row. See table-row-height-overflow-fix.test.mjs for the
+// td/div split itself, and delivery-truck-grouping.test.mjs for the Agence
+// column being hoisted the same way to make room without widening the table.
+test("destination and status/progress/ETA are two columns, not the three separate ones from before the original Journey consolidation", () => {
+  assert.match(page, /<th>\{locale === "fr" \? "Destination"/);
+  assert.match(page, /<th>\{locale === "fr" \? "Statut"/);
+  assert.match(page, /<td className="col-destination">\{!group\.uniformDestination && <span className="journey-destination">/);
+  assert.match(page, /<td className="col-status"><div className="col-journey-inner">\{!group\.uniformDestination && <span className=\{statusClass\[delivery\.status\]\}/);
   assert.doesNotMatch(page, /<th>\{t\.tableStatus\}<\/th>/);
   assert.match(css, /\.col-journey-inner \{ display: flex; align-items: center;/);
 });

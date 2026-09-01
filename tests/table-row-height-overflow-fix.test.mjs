@@ -22,16 +22,17 @@ const [page, css] = await Promise.all([
 // whatever was below. Fix: keep the <td> a real table-cell and move the
 // flex layout onto a plain <div> nested inside it, same as the group
 // header row's own fix for the identical symptom.
-test("neither .col-journey nor .scan-control-cell puts display:flex directly on the <td> -- both push it onto a nested div instead, so wrapped content grows the row instead of overflowing past it", () => {
-  assert.doesNotMatch(css, /\.col-journey\s*\{[^}]*display:\s*flex/);
+test("neither .col-status nor .scan-control-cell puts display:flex directly on the <td> -- both push it onto a nested div instead, so wrapped content grows the row instead of overflowing past it", () => {
+  assert.doesNotMatch(css, /\.col-status\s*\{[^}]*display:\s*flex/);
+  assert.doesNotMatch(css, /\.col-journey\s*\{/, "the old combined column class should be fully gone, not just unstyled");
   assert.doesNotMatch(css, /\.scan-control-cell\s*\{[^}]*display:\s*flex/);
   assert.match(css, /\.col-journey-inner\s*\{\s*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*10px;\s*flex-wrap:\s*wrap;\s*\}/);
   assert.match(css, /\.scan-control-inner\s*\{\s*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*5px;\s*flex-wrap:\s*wrap;\s*\}/);
 });
 
-test("both col-journey cells (the hoisted group-header one and the per-delivery one) wrap their content in a .col-journey-inner div, not directly in the td", () => {
-  assert.match(page, /<td className="col-journey">\{group\.uniformDestination && <div className="col-journey-inner">/);
-  assert.match(page, /<td className="col-journey"><div className="col-journey-inner">\{!group\.uniformDestination/);
+test("both col-status cells (the hoisted group-header one and the per-delivery one) wrap their content in a .col-journey-inner div, not directly in the td", () => {
+  assert.match(page, /<td className="col-status">\{group\.uniformDestination && <div className="col-journey-inner">/);
+  assert.match(page, /<td className="col-status"><div className="col-journey-inner">\{!group\.uniformDestination/);
 });
 
 test("the scan-control-cell wraps its three pills in a .scan-control-inner div, not directly in the td", () => {
