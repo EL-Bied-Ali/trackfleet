@@ -39,7 +39,13 @@ test("agency employees see their own deliveries before the fleet map; dispatcher
   assert.ok(dispatcherPositionIndex > mapPanelIndex, "the dispatcher-visible placement must stay after the map panel, unchanged");
 });
 
-test("the delivery table shows which agency registered each parcel, but only for the dispatcher who oversees every agency", () => {
-  assert.match(page, /company\?\.role === "dispatcher" && <th>\{locale === "fr" \? "Agence"/);
-  assert.match(page, /company\?\.role === "dispatcher" && <td>\{group\.uniformOrigin \? <span className="cell-hoisted">—<\/span> : knownSites\.find\(\(site\) => site\.id === delivery\.originSiteId\)\?\.label \?\? "—"\}<\/td>/);
+// The dedicated Agence column (which showed the origin site) was dropped
+// entirely -- reported live as a column of nothing but "—" once its
+// content moved to the group header, since a truck run is essentially
+// always from one origin (unlike the destination, which genuinely varies
+// on a multi-agency relay run). See delivery-truck-grouping.test.mjs's
+// uniformOrigin test for where it lives now.
+test("origin only ever appears hoisted in the group header, not as its own per-row column anymore", () => {
+  assert.doesNotMatch(page, /<th>\{locale === "fr" \? "Agence" : locale === "nl" \? "Agentschap" : "Agency"\}<\/th>/);
+  assert.match(page, /\{group\.uniformOrigin && <span>\{knownSites\.find\(\(site\) => site\.id === group\.uniformOrigin\)\?\.label \?\? "—"\}<\/span>\}/);
 });

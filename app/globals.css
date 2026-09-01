@@ -314,22 +314,28 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .contact-popover a:hover { text-decoration: underline; }
 .status { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; width: max-content; margin: 0; padding: 4px 7px; border-radius: 12px; font-size: 8px; font-weight: 650; }.status i { width: 5px; height: 5px; border-radius: 50%; }.status.transit { color: #167354; background: #e5f4ed; }.status.transit i { background: #006233; }.status.delayed { color: #a6681d; background: #fff1da; }.status.delayed i { background: #e29a34; }.status.loading { color: #7653a3; background: #f0eaf8; }.status.loading i { background: #916ed7; }.status.delivered { color: #7b6f75; background: #edf0ee; }.status.delivered i { background: #89938e; }
 .progress { display: flex; align-items: center; gap: 7px; }.progress > div { width: 65px; height: 4px; overflow: hidden; border-radius: 4px; background: #e7ece9; }.progress > div i { display: block; height: 100%; border-radius: inherit; background: #7b2b61; }.progress span { color: #897d83; font-size: 8px; }
+/* Reported live: Trajet was cramming destination+badge, status, progress
+   bar and ETA into one narrow column, 2-3 lines deep on every row. Split
+   into two columns instead, widened by reclaiming the Agence column's
+   space -- it repeated the exact same origin site on every row of a truck
+   group (a run departs from one place), so it was dropped as a dedicated
+   column entirely (see the uniformOrigin comment above) rather than left
+   as a column of nothing but "—". */
+.col-destination { min-width: 90px; }
 /* Same lesson as .group-header-row-inner above (see the comment on why
    the flex layout lives on a plain div nested inside the td, not on the
    td itself): a flex td doesn't report its wrapped height back to the
    table's row-height calculation the way a real table-cell does, so
    wrapped content silently overflowed past the row and visually bled
    into the row(s) below -- worse once .scan-control-cell (below) started
-   routinely wrapping to 2-3 lines too. */
-.col-journey-inner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-/* Reported live: Trajet was cramming destination+badge, status, progress
-   bar and ETA into one narrow column, 2-3 lines deep on every row. Split
-   into two columns instead. Widened by reclaiming the Agence column's
-   space, which repeated the exact same origin site on every row of a
-   truck group (a run departs from one place) -- hoisted to the group
-   header the same way a uniform destination already was, so the per-row
-   cells collapse to "—" and the column shrinks to fit. */
-.col-destination { min-width: 90px; }
+   routinely wrapping to 2-3 lines too.
+   Reported live again once that was fixed: even split from Destination,
+   Statut was still 3 lines deep (badge, then progress, then ETA date each
+   on their own line) -- the tallest cell in every row by a wide margin.
+   Badge and ETA now share a top line (col-status-top); only the progress
+   bar gets its own line below. */
+.col-status-inner { display: flex; flex-direction: column; gap: 4px; }
+.col-status-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
 .journey-destination { color: #63525b; font-size: 9px; font-weight: 650; }
 .relay-badge { display: inline-block; margin-left: 5px; padding: 2px 6px; border-radius: 5px; color: #92400e; background: #fef3c7; font-size: 7px; font-weight: 650; }
