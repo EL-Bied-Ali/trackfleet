@@ -54,12 +54,15 @@ const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 } as const;
 
-function withSecurityHeaders(response: Response) {
+const defaultPermissionsPolicy = "camera=(), microphone=(), geolocation=()";
+const scannerPermissionsPolicy = "camera=(self), microphone=(), geolocation=()";
+
+function withSecurityHeaders(response: Response, pathname = "") {
   const secured = new Response(response.body, response);
   for (const [key, value] of Object.entries(securityHeaders)) secured.headers.set(key, value);
+  secured.headers.set("Permissions-Policy", pathname === "/scan" ? scannerPermissionsPolicy : defaultPermissionsPolicy);
   return secured;
 }
 
@@ -151,7 +154,7 @@ const worker = {
     // batched subrequest after the response is already on its way, so
     // batching doesn't add latency to the request itself.
     ctx.waitUntil(flushD1MirrorQueue());
-    return withSecurityHeaders(response);
+    return withSecurityHeaders(response, new URL(request.url).pathname);
   },
 
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
