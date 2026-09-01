@@ -77,7 +77,7 @@ test("company branding writes are suppressed (not silently lost) during an activ
 test("branding css gives the sidebar logo a clean, prominent slot without blurry CSS zoom", () => {
   assert.match(css, /\.brand-mark \{ display: grid; place-items: center; width: 29px; height: 29px;.*overflow: hidden; \}/);
   assert.match(css, /\.company-brand-name \{ max-width: 100%;.*font-size: 22px;/);
-  assert.match(css, /\.brand\.company-brand \.company-brand-mark \{ width: 152px; height: 76px;.*background: transparent;/);
+  assert.match(css, /\.brand\.company-brand \.company-brand-mark \{ width: 152px; height: 76px; display: flex;.*overflow: hidden;/);
   assert.match(css, /\.brand-mark img \{ width: 100%; height: 100%; object-fit: contain; transform: none;/);
-  assert.match(css, /\.brand\.company-brand \.company-brand-mark img \{ width: 100%; height: 100%; object-fit: contain; object-position: left center; transform: none; \}/);
+  assert.match(css, /\.brand\.company-brand \.company-brand-mark img \{ display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; object-position: left center; transform: none; \}/);
 });
