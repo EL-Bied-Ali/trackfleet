@@ -26,13 +26,13 @@ test("neither .col-status nor .scan-control-cell puts display:flex directly on t
   assert.doesNotMatch(css, /\.col-status\s*\{[^}]*display:\s*flex/);
   assert.doesNotMatch(css, /\.col-journey\s*\{/, "the old combined column class should be fully gone, not just unstyled");
   assert.doesNotMatch(css, /\.scan-control-cell\s*\{[^}]*display:\s*flex/);
-  assert.match(css, /\.col-journey-inner\s*\{\s*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*10px;\s*flex-wrap:\s*wrap;\s*\}/);
+  assert.match(css, /\.col-status-inner\s*\{\s*display:\s*flex;\s*flex-direction:\s*column;\s*gap:\s*4px;\s*\}/);
   assert.match(css, /\.scan-control-inner\s*\{\s*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*5px;\s*flex-wrap:\s*wrap;\s*\}/);
 });
 
-test("both col-status cells (the hoisted group-header one and the per-delivery one) wrap their content in a .col-journey-inner div, not directly in the td", () => {
-  assert.match(page, /<td className="col-status">\{group\.uniformDestination && <div className="col-journey-inner">/);
-  assert.match(page, /<td className="col-status"><div className="col-journey-inner">\{!group\.uniformDestination/);
+test("both col-status cells (the hoisted group-header one and the per-delivery one) wrap their content in a .col-status-inner div, not directly in the td", () => {
+  assert.match(page, /<td className="col-status">\{group\.uniformDestination && <div className="col-status-inner">/);
+  assert.match(page, /<td className="col-status"><div className="col-status-inner">/);
 });
 
 test("the scan-control-cell wraps its three pills in a .scan-control-inner div, not directly in the td", () => {

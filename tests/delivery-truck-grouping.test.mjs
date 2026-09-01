@@ -23,7 +23,7 @@ test("unassigned parcels collect into their own trailing group instead of scatte
 
 test("each group renders as its own tbody with a header row showing the truck and parcel count, and the vehicle column is gone from data rows (redundant with the header)", () => {
   assert.match(page, /\{groupedDeliveries\.map\(\(group\) => <tbody key=\{group\.label\}>/);
-  assert.match(page, /<tr className="group-header-row"><td colSpan=\{company\?\.role === "dispatcher" \? 4 : 3\}><div className="group-header-row-inner">\{group\.numberLabel && <span className="truck-number-badge"[^>]*>\{group\.numberLabel\}<\/span>\}<strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
+  assert.match(page, /<tr className="group-header-row"><td colSpan=\{3\}><div className="group-header-row-inner">\{group\.numberLabel && <span className="truck-number-badge"[^>]*>\{group\.numberLabel\}<\/span>\}<strong>\{group\.label\}<\/strong><span>\{group\.deliveries\.length\}/);
   // No more per-row <th>/<td> for the vehicle -- that information now lives
   // exactly once, in the group header, instead of once per row.
   assert.doesNotMatch(page, /<th>\{t\.tableVehicle\}<\/th>/);
@@ -75,8 +75,13 @@ test("status/destination/ETA/progress are hoisted into the group header only whe
   assert.match(page, /return \{ \.\.\.group, uniformDestination, uniformOrigin, destinationSubgroups \};/);
 });
 
+test("origin is hoisted the same way, but verified rather than assumed uniform even though a truck run is essentially always from one place", () => {
+  assert.match(page, /const firstOriginSiteId = group\.deliveries\[0\]\?\.originSiteId \?\? null;/);
+  assert.match(page, /const uniformOrigin = group\.deliveries\.length > 1\s*\n\s*&& firstOriginSiteId\s*\n\s*&& group\.deliveries\.every\(\(delivery\) => delivery\.originSiteId === firstOriginSiteId\)\s*\n\s*\? firstOriginSiteId\s*\n\s*: null;/);
+});
+
 test("the group header shows the hoisted status/destination/ETA/progress, and per-row cells go fully blank instead of repeating any of it", () => {
-  assert.match(page, /\{group\.uniformDestination && <div className="col-journey-inner">/);
+  assert.match(page, /\{group\.uniformDestination && <div className="col-status-inner">/);
   assert.match(page, /<span className=\{statusClass\[group\.uniformDestination\.status\]\}><i \/>\{t\.statuses\[group\.uniformDestination\.status\]\}<\/span>/);
   assert.match(page, /<span className="group-header-destination">\{group\.uniformDestination\.destination\}/);
   assert.match(page, /<span className="group-header-progress"><div className="progress">/);

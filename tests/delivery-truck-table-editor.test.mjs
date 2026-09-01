@@ -34,7 +34,7 @@ test("destination and status/progress/ETA are two columns, not the three separat
   assert.match(page, /<th>\{locale === "fr" \? "Destination"/);
   assert.match(page, /<th>\{locale === "fr" \? "Statut"/);
   assert.match(page, /<td className="col-destination">\{!group\.uniformDestination && <span className="journey-destination">/);
-  assert.match(page, /<td className="col-status"><div className="col-journey-inner">\{!group\.uniformDestination && <span className=\{statusClass\[delivery\.status\]\}/);
+  assert.match(page, /<td className="col-status"><div className="col-status-inner"><div className="col-status-top">\{!group\.uniformDestination && <span className=\{statusClass\[delivery\.status\]\}/);
   assert.doesNotMatch(page, /<th>\{t\.tableStatus\}<\/th>/);
-  assert.match(css, /\.col-journey-inner \{ display: flex; align-items: center;/);
+  assert.match(css, /\.col-status-inner \{ display: flex; flex-direction: column;/);
 });
