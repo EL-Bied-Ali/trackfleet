@@ -26,7 +26,7 @@ test("creation lets the dispatcher pick a truck up front, defaulting to unassign
 test("the creation truck picker remembers the last truck chosen, per dispatcher user, and re-validates it's still connected each time the modal opens", () => {
   assert.match(page, /import \{ truckPreferenceKey, resolvePreferredTruck \} from "\.\/lib\/truck-preference";/);
   assert.match(page, /function openCreateModal\(\) \{/);
-  assert.match(page, /resolvePreferredTruck\(window\.localStorage\.getItem\(truckPreferenceKey\(company\)\), integration\.vehicles\.map\(\(vehicle\) => vehicle\.id\)\)/);
+  assert.match(page, /resolvePreferredTruck\(window\.localStorage\.getItem\(truckPreferenceKey\(company\)\), integration\.vehicles\.map\(\(vehicle\) => vehicle\.id\)\.filter\(\(id\) => !busyVehicleIds\.has\(id\)\)\)/);
   assert.match(page, /if \(company\) window\.localStorage\.setItem\(truckPreferenceKey\(company\), vehicleChoice\.sendatrackVehicleId\);/);
 });
 
