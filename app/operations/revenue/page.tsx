@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import styles from "./revenue.module.css";
 import { knownSites } from "../../lib/known-sites";
+import { AppShellLayout } from "../../AppShellLayout";
 
 type CurrencyTotal = { currency: "EUR" | "MAD"; totalAmount: number; parcelCount: number };
 type Window = { key: "today" | "last7d" | "last30d" | "allTime"; totals: CurrencyTotal[]; unpricedCount: number };
@@ -108,11 +108,10 @@ export default function RevenueOperationsPage() {
   const last30dTotals = report?.windows.find((window) => window.key === "last30d")?.totals ?? [];
 
   return (
-    <main className={styles.page}>
+    <AppShellLayout activePage="revenue" locale={locale}>
       <div className={styles.shell}>
         <header className={styles.header}>
           <div><p className={styles.eyebrow}>{t.eyebrow}</p><h1>{t.title}</h1><p>{t.subtitle}</p></div>
-          <Link className={styles.button} href={`/operations?lang=${locale}`}>{t.back}</Link>
         </header>
 
         {state === "error" ? <section className={styles.message}>{t.unavailable}</section> : null}
@@ -195,6 +194,6 @@ export default function RevenueOperationsPage() {
           </>
         ) : null}
       </div>
-    </main>
+    </AppShellLayout>
   );
 }

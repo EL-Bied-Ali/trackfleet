@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AppShellLayout } from "../../AppShellLayout";
+import type { Locale } from "../../i18n";
 
 type HistoryItem = {
   id: string;
@@ -20,7 +22,7 @@ type HistoryItem = {
 type HistoryCursor = { beforeCreatedAt: string; beforeId: string };
 type HistoryPage = { items: HistoryItem[]; nextCursor: HistoryCursor | null };
 
-function locale() {
+function locale(): Locale {
   if (typeof window === "undefined") return "fr";
   const value = new URLSearchParams(window.location.search).get("lang");
   return value === "en" || value === "nl" ? value : "fr";
@@ -39,12 +41,6 @@ export default function DeliveryHistoryPage() {
     else setLoading(true);
     setError(false);
     try {
-      const session = await fetch("/api/auth/session", { cache: "no-store" });
-      if (session.status === 401) {
-        window.location.assign(`/?lang=${language}`);
-        return;
-      }
-      if (!session.ok) throw new Error("session_unavailable");
       const query = new URLSearchParams({ limit: "50" });
       if (next) {
         query.set("beforeCreatedAt", next.beforeCreatedAt);
@@ -61,7 +57,7 @@ export default function DeliveryHistoryPage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [language]);
+  }, []);
 
   useEffect(() => {
     const initial = window.setTimeout(() => void loadPage(null, false), 0);
@@ -70,48 +66,47 @@ export default function DeliveryHistoryPage() {
 
   const dateLocale = language === "nl" ? "nl-BE" : language === "en" ? "en-GB" : "fr-BE";
   const copy = language === "nl"
-    ? { eyebrow: "TRACKFLEET · HISTORIEK", title: "Leveringsgeschiedenis", back: "Terug naar operaties", empty: "Nog geen voltooide leveringen.", more: "Meer laden", loading: "Geschiedenis laden…", retry: "Opnieuw proberen", error: "Geschiedenis kon niet worden geladen.", weight: "Gewicht", price: "Prijs" }
+    ? { eyebrow: "TRACKFLEET · HISTORIEK", title: "Leveringsgeschiedenis", empty: "Nog geen voltooide leveringen.", more: "Meer laden", loading: "Geschiedenis laden…", retry: "Opnieuw proberen", error: "Geschiedenis kon niet worden geladen.", weight: "Gewicht", price: "Prijs" }
     : language === "en"
-      ? { eyebrow: "TRACKFLEET · HISTORY", title: "Delivery history", back: "Back to operations", empty: "No completed deliveries yet.", more: "Load more", loading: "Loading history…", retry: "Retry", error: "Unable to load delivery history.", weight: "Weight", price: "Price" }
-      : { eyebrow: "TRACKFLEET · HISTORIQUE", title: "Historique des livraisons", back: "Retour aux opérations", empty: "Aucune livraison terminée pour le moment.", more: "Charger plus", loading: "Chargement de l’historique…", retry: "Réessayer", error: "Impossible de charger l’historique.", weight: "Poids", price: "Prix" };
+      ? { eyebrow: "TRACKFLEET · HISTORY", title: "Delivery history", empty: "No completed deliveries yet.", more: "Load more", loading: "Loading history…", retry: "Retry", error: "Unable to load delivery history.", weight: "Weight", price: "Price" }
+      : { eyebrow: "TRACKFLEET · HISTORIQUE", title: "Historique des livraisons", empty: "Aucune livraison terminée pour le moment.", more: "Charger plus", loading: "Chargement de l’historique…", retry: "Réessayer", error: "Impossible de charger l’historique.", weight: "Poids", price: "Prix" };
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 24px 64px", fontFamily: "system-ui", color: "#111827" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", marginBottom: 24 }}>
-        <div><p style={{ margin: 0, color: "#6b7280", fontSize: 12, fontWeight: 700, letterSpacing: ".12em" }}>{copy.eyebrow}</p><h1 style={{ margin: "6px 0" }}>{copy.title}</h1></div>
-        <a href={`/operations?lang=${language}`} style={{ color: "#111827", fontWeight: 700 }}>{copy.back}</a>
-      </header>
+    <AppShellLayout activePage="history" locale={language}>
+      <div className="topbar">
+        <div><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1></div>
+      </div>
 
       {loading ? <p>{copy.loading}</p> : error && items.length === 0 ? (
-        <section style={{ border: "1px solid #fecaca", background: "#fef2f2", padding: 18, borderRadius: 14 }}>
-          <p>{copy.error}</p><button onClick={() => void loadPage(null, false)}>{copy.retry}</button>
-        </section>
+        <div className="deliveries-empty">
+          <p>{copy.error}</p><button className="secondary-button" onClick={() => void loadPage(null, false)}>{copy.retry}</button>
+        </div>
       ) : items.length === 0 ? <p>{copy.empty}</p> : (
         <>
-          <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 16 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead><tr style={{ background: "#f9fafb", textAlign: "left" }}>
-                {['ID', 'Client', 'Destinataire', 'Destination', 'Camion', copy.weight, copy.price, 'Arrivée prévue', 'Créée le'].map((label) => <th key={label} style={{ padding: 12, borderBottom: "1px solid #e5e7eb" }}>{label}</th>)}
+          <div className="deliveries-panel">
+            <table>
+              <thead><tr>
+                {["ID", "Client", "Destinataire", "Destination", "Camion", copy.weight, copy.price, "Arrivée prévue", "Créée le"].map((label) => <th key={label}>{label}</th>)}
               </tr></thead>
               <tbody>{items.map((item) => <tr key={item.id}>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6", fontFamily: "monospace" }}>{item.id}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.customer}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.recipientName || "—"}{item.recipientContact ? <small style={{ display: "block", color: "#6b7280" }}>{item.recipientContact}</small> : null}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.destination}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.truck}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.weightKg == null ? "—" : `${item.weightKg} kg`}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.priceAmount == null ? "—" : `${item.priceAmount.toFixed(2)} ${item.priceCurrency}`}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{item.plannedArrivalAt ? new Date(item.plannedArrivalAt).toLocaleString(dateLocale) : "—"}</td>
-                <td style={{ padding: 12, borderBottom: "1px solid #f3f4f6" }}>{new Date(item.createdAt).toLocaleString(dateLocale)}</td>
+                <td><span style={{ fontFamily: "monospace" }}>{item.id}</span></td>
+                <td>{item.customer}</td>
+                <td>{item.recipientName || "—"}{item.recipientContact ? <span>{item.recipientContact}</span> : null}</td>
+                <td>{item.destination}</td>
+                <td>{item.truck}</td>
+                <td>{item.weightKg == null ? "—" : `${item.weightKg} kg`}</td>
+                <td>{item.priceAmount == null ? "—" : `${item.priceAmount.toFixed(2)} ${item.priceCurrency}`}</td>
+                <td>{item.plannedArrivalAt ? new Date(item.plannedArrivalAt).toLocaleString(dateLocale) : "—"}</td>
+                <td>{new Date(item.createdAt).toLocaleString(dateLocale)}</td>
               </tr>)}</tbody>
             </table>
           </div>
-          <div style={{ display: "flex", justifyContent: "center", marginTop: 20 }}>
-            {cursor && <button disabled={loadingMore} onClick={() => void loadPage(cursor, true)} style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid #d1d5db", background: "white", fontWeight: 700 }}>{loadingMore ? copy.loading : copy.more}</button>}
-            {error && items.length > 0 && <button onClick={() => void loadPage(cursor, true)} style={{ marginLeft: 12 }}>{copy.retry}</button>}
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 20, gap: 12 }}>
+            {cursor && <button className="secondary-button" disabled={loadingMore} onClick={() => void loadPage(cursor, true)}>{loadingMore ? copy.loading : copy.more}</button>}
+            {error && items.length > 0 && <button className="secondary-button" onClick={() => void loadPage(cursor, true)}>{copy.retry}</button>}
           </div>
         </>
       )}
-    </main>
+    </AppShellLayout>
   );
 }

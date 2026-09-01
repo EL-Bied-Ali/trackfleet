@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { detectOperationalAlerts, type OperationalAlert, type OperationalDelivery } from "../lib/operational-alerts";
 import styles from "./operations.module.css";
+import { AppShellLayout } from "../AppShellLayout";
 
 type IntegrationState = { configured: boolean; connected: boolean; vehicleCount: number; error: string | null };
 type DeliveriesResponse = { deliveries: OperationalDelivery[]; integration?: IntegrationState };
@@ -100,12 +101,12 @@ export default function OperationsPage() {
   );
   const visible = filter === "all" ? summary.alerts : summary.alerts.filter((alert) => alert.severity === filter);
 
-  if (state === "loading") return <main className={styles.page}><div className={styles.shell}><div className={styles.loading}>{t.loading}</div></div></main>;
+  if (state === "loading") return <AppShellLayout activePage="overview" locale={locale}><div className={styles.loading}>{t.loading}</div></AppShellLayout>;
 
   return (
-    <main className={styles.page}><div className={styles.shell}>
+    <AppShellLayout activePage="overview" locale={locale}>
       <header className={styles.header}><div><p className={styles.eyebrow}>{t.eyebrow}</p><h1>{t.title}</h1></div><div className={styles.actions}>
-        <Link className={styles.button} href={`/?lang=${locale}`}>{t.back}</Link><Link className={styles.button} href={`/import?lang=${locale}`}>{t.import}</Link><button className={styles.buttonPrimary} onClick={() => void refresh()}>{t.refresh}</button>
+        <Link className={styles.button} href={`/import?lang=${locale}`}>{t.import}</Link><button className={styles.buttonPrimary} onClick={() => void refresh()}>{t.refresh}</button>
       </div></header>
       {state === "error" ? <section className={styles.error}><h2>{t.errorTitle}</h2><p>{t.errorBody}</p><button className={styles.buttonPrimary} onClick={() => void refresh()}>{t.refresh}</button></section> : <>
         <section className={styles.summary} aria-label="Operational alert summary">
@@ -114,6 +115,6 @@ export default function OperationsPage() {
         <div className={styles.toolbar}><div className={styles.filters}>{(["all", "critical", "high", "medium"] as SeverityFilter[]).map((severity) => <button key={severity} className={filter === severity ? styles.filterActive : styles.filter} onClick={() => setFilter(severity)}>{severity === "all" ? t.all : severity === "critical" ? t.critical : severity === "high" ? t.high : t.medium}</button>)}</div><span className={styles.updated}>{t.updated}: {updatedAt?.toLocaleTimeString(locale === "fr" ? "fr-BE" : locale === "nl" ? "nl-BE" : "en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span></div>
         {visible.length === 0 ? <section className={styles.empty}><h2>{t.emptyTitle}</h2><p>{t.emptyBody}</p></section> : <section className={styles.list}>{visible.map((alert) => <article key={alert.id} className={`${styles.alert} ${styles[alert.severity]}`}><span className={styles.severity}>{alert.severity === "critical" ? t.critical : alert.severity === "high" ? t.high : t.medium}</span><div className={styles.alertBody}><strong>{t.labels[alert.kind]}</strong><p>{t.descriptions[alert.kind](alert as never)}{alert.destination ? ` · ${alert.destination}` : ""}</p></div><div className={styles.alertActions}><span className={styles.deliveryId}>{alert.deliveryId ?? "SYSTEM"}</span>{alert.deliveryId && <button type="button" className={styles.alertLink} onClick={() => window.location.assign(`/?lang=${locale}&delivery=${encodeURIComponent(alert.deliveryId!)}`)}>{t.viewDelivery}</button>}</div></article>)}</section>}
       </>}
-    </div></main>
+    </AppShellLayout>
   );
 }

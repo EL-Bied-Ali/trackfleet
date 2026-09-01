@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./storage.module.css";
+import { AppShellLayout } from "../../AppShellLayout";
 
 type Metric = {
   key: "fleet_positions" | "trip_positions" | "eta_observations" | "delivery_events";
@@ -74,11 +74,10 @@ export default function StorageOperationsPage() {
   const totalProjected = useMemo(() => report?.metrics.reduce((sum, metric) => sum + metric.projected30dRows, 0) ?? 0, [report]);
 
   return (
-    <main className={styles.page}>
+    <AppShellLayout activePage="overview" locale={locale}>
       <div className={styles.shell}>
         <header className={styles.header}>
           <div><p className={styles.eyebrow}>{t.eyebrow}</p><h1>{t.title}</h1><p>{t.subtitle}</p></div>
-          <Link className={styles.button} href={`/operations?lang=${locale}`}>{t.back}</Link>
         </header>
 
         {state === "error" ? <section className={styles.message}>{t.unavailable}</section> : null}
@@ -107,6 +106,6 @@ export default function StorageOperationsPage() {
           </>
         ) : null}
       </div>
-    </main>
+    </AppShellLayout>
   );
 }

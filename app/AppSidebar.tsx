@@ -7,7 +7,7 @@ import { Icon, CompanyLogo } from "./CompanyLogo";
 export type AppSidebarCompany = { account: string; user: string; role: "dispatcher" | "agency"; siteId: string | null } | null;
 export type AppSidebarBranding = { name: string | null; logoDataUrl: string | null };
 export type AppSidebarIntegration = { connected: boolean; configured: boolean; vehicleCount: number };
-export type AppSidebarActivePage = "overview" | "revenue" | "history" | "guide";
+export type AppSidebarActivePage = "overview" | "revenue" | "history" | "guide" | "import";
 
 // Shared across the dashboard (app/page.tsx) and every standalone page
 // (Revenue, History, Guide, Import, the operations hub, Storage) so none of
@@ -62,7 +62,7 @@ export function AppSidebar({
       <div className="sidebar-divider" />
       <nav>
         {company?.role === "dispatcher" && <a className="nav-item" href="/api/operations/export"><Icon>⇩</Icon>{t.exportTool}</a>}
-        <a className="nav-item" href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
+        <a className={`nav-item ${activePage === "import" ? "active" : ""}`} href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
       </nav>
       <div className="sidebar-spacer" />
       <div className="gps-card">
