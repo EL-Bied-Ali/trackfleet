@@ -66,13 +66,24 @@ test("the labels page renders A4-print CSS with break-inside protection per labe
   assert.match(labelsPage, /finally \{\s*window\.print\(\);\s*\}/);
 });
 
-test("labels are laid out 8 per A4 sheet (2x4) at ~105x74mm each, paginating into multiple sheets when there are more deliveries", () => {
-  assert.match(labelsPage, /const LABELS_PER_ROW = 2;/);
-  assert.match(labelsPage, /const LABELS_PER_COLUMN = 4;/);
-  assert.match(labelsPage, /const LABEL_WIDTH_MM = 105;/);
-  assert.match(labelsPage, /const LABEL_HEIGHT_MM = 74\.25;/);
+// Reported live: label width/height were fixed constants, so matching an
+// actual physical pre-cut sheet meant editing code and redeploying just to
+// test a different size. Made editable directly on the page instead (two
+// number inputs, remembered per browser via localStorage), with the A4
+// per-page count recomputed from whatever size is currently set rather than
+// assumed fixed at 8.
+test("label width/height are editable on the page (not fixed constants), remembered via localStorage, and the per-page grid is computed from the current size", () => {
+  assert.match(labelsPage, /const DEFAULT_LABEL_WIDTH_MM = 100;/);
+  assert.match(labelsPage, /const DEFAULT_LABEL_HEIGHT_MM = 65;/);
+  assert.match(labelsPage, /const LABEL_SIZE_STORAGE_KEY = "trackfleet-label-size-mm";/);
+  assert.match(labelsPage, /const \[labelSize, setLabelSize\] = useState\(\(\) => readStoredLabelSize\(\)\);/);
+  assert.match(labelsPage, /window\.localStorage\.setItem\(LABEL_SIZE_STORAGE_KEY, JSON\.stringify\(updated\)\);/);
+  assert.match(labelsPage, /const labelsPerRow = Math\.max\(1, Math\.floor\(PAGE_WIDTH_MM \/ labelSize\.width\)\);/);
+  assert.match(labelsPage, /const labelsPerColumn = Math\.max\(1, Math\.floor\(PAGE_HEIGHT_MM \/ labelSize\.height\)\);/);
+  assert.match(labelsPage, /input type="number" min=\{MIN_LABEL_MM\} max=\{MAX_LABEL_MM\} step=\{1\} value=\{labelSize\.width\}/);
+  assert.match(labelsPage, /input type="number" min=\{MIN_LABEL_MM\} max=\{MAX_LABEL_MM\} step=\{1\} value=\{labelSize\.height\}/);
   assert.match(labelsPage, /function chunk<T>\(items: T\[\], size: number\): T\[\]\[\] \{/);
-  assert.match(labelsPage, /const pages = chunk\(deliveries, LABELS_PER_PAGE\);/);
+  assert.match(labelsPage, /const pages = chunk\(deliveries, labelsPerPage\);/);
 });
 
 test("each label shows the company's own logo and name from /api/company/branding, falling back to the TrackFleet wordmark when no logo is set", () => {

@@ -17,16 +17,38 @@ const emptyBranding: LabelBranding = { name: null, logoDataUrl: null };
 
 // A4 sheet of pre-cut adhesive labels, printed on a plain office printer --
 // no thermal printer assumed (see the product spec this was built from).
-// 2 columns x 4 rows of ~105x74mm labels exactly fills a 210x297mm page with
-// no gap between them, so @page margin is 0 below. There's no universal
-// standard for the printed gutter on physical pre-cut sheets though -- if
-// yours has a border/margin printed on it, adjust LABEL_WIDTH_MM /
-// LABEL_HEIGHT_MM to match and test-print one sheet before a full batch.
-const LABELS_PER_ROW = 2;
-const LABELS_PER_COLUMN = 4;
-const LABELS_PER_PAGE = LABELS_PER_ROW * LABELS_PER_COLUMN;
-const LABEL_WIDTH_MM = 105;
-const LABEL_HEIGHT_MM = 74.25;
+// There's no universal standard for a physical pre-cut sheet's exact label
+// size or printed gutter, so width/height are editable right on this page
+// (see LabelSizeControls below) instead of fixed constants -- test-print one
+// sheet against your actual label paper and adjust until it lines up, no
+// code change needed. Remembered per browser via localStorage so it's a
+// one-time setup, not a per-print chore.
+const DEFAULT_LABEL_WIDTH_MM = 100;
+const DEFAULT_LABEL_HEIGHT_MM = 65;
+const LABEL_SIZE_STORAGE_KEY = "trackfleet-label-size-mm";
+const MIN_LABEL_MM = 40;
+const MAX_LABEL_MM = 200;
+const PAGE_WIDTH_MM = 210;
+const PAGE_HEIGHT_MM = 297;
+
+function clampLabelMm(value: number, fallback: number) {
+  return Number.isFinite(value) ? Math.min(MAX_LABEL_MM, Math.max(MIN_LABEL_MM, value)) : fallback;
+}
+
+function readStoredLabelSize(): { width: number; height: number } {
+  if (typeof window === "undefined") return { width: DEFAULT_LABEL_WIDTH_MM, height: DEFAULT_LABEL_HEIGHT_MM };
+  try {
+    const raw = window.localStorage.getItem(LABEL_SIZE_STORAGE_KEY);
+    if (!raw) return { width: DEFAULT_LABEL_WIDTH_MM, height: DEFAULT_LABEL_HEIGHT_MM };
+    const parsed = JSON.parse(raw) as { width?: number; height?: number };
+    return {
+      width: clampLabelMm(Number(parsed.width), DEFAULT_LABEL_WIDTH_MM),
+      height: clampLabelMm(Number(parsed.height), DEFAULT_LABEL_HEIGHT_MM),
+    };
+  } catch {
+    return { width: DEFAULT_LABEL_WIDTH_MM, height: DEFAULT_LABEL_HEIGHT_MM };
+  }
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const pages: T[][] = [];
@@ -39,8 +61,20 @@ export default function LabelsPage() {
   const [deliveries, setDeliveries] = useState<LabelDelivery[]>([]);
   const [loadError, setLoadError] = useState("");
   const [branding, setBranding] = useState<LabelBranding>(emptyBranding);
+  const [labelSize, setLabelSize] = useState(() => readStoredLabelSize());
   const qrCanvases = useRef(new Map<string, HTMLCanvasElement>());
   const barcodeCanvases = useRef(new Map<string, HTMLCanvasElement>());
+
+  function updateLabelSize(next: { width?: number; height?: number }) {
+    setLabelSize((current) => {
+      const updated = {
+        width: clampLabelMm(next.width ?? current.width, current.width),
+        height: clampLabelMm(next.height ?? current.height, current.height),
+      };
+      try { window.localStorage.setItem(LABEL_SIZE_STORAGE_KEY, JSON.stringify(updated)); } catch { /* per-viewer convenience only */ }
+      return updated;
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -108,7 +142,10 @@ export default function LabelsPage() {
     </main>
   );
 
-  const pages = chunk(deliveries, LABELS_PER_PAGE);
+  const labelsPerRow = Math.max(1, Math.floor(PAGE_WIDTH_MM / labelSize.width));
+  const labelsPerColumn = Math.max(1, Math.floor(PAGE_HEIGHT_MM / labelSize.height));
+  const labelsPerPage = labelsPerRow * labelsPerColumn;
+  const pages = chunk(deliveries, labelsPerPage);
 
   async function handlePrint() {
     const deliveryIds = deliveries.map((delivery) => delivery.id);
@@ -142,9 +179,19 @@ export default function LabelsPage() {
         <div>
           <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#9ca3af" }}>TRACKFLEET · ÉTIQUETTES</p>
           <h1 style={{ margin: "4px 0 0", fontSize: 18 }}>{deliveries.length} étiquette{deliveries.length > 1 ? "s" : ""} prête{deliveries.length > 1 ? "s" : ""}</h1>
-          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{LABELS_PER_PAGE} par feuille A4 ({LABEL_WIDTH_MM}×{LABEL_HEIGHT_MM}mm) · {pages.length} feuille{pages.length > 1 ? "s" : ""}</p>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{labelsPerPage} par feuille A4 · {pages.length} feuille{pages.length > 1 ? "s" : ""}</p>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c9cdd3" }}>
+            Largeur
+            <input type="number" min={MIN_LABEL_MM} max={MAX_LABEL_MM} step={1} value={labelSize.width} onChange={(event) => updateLabelSize({ width: Number(event.target.value) })} style={{ width: 52, padding: "5px 6px", borderRadius: 6, border: "1px solid #374151", background: "#1f2937", color: "#fff", fontSize: 12 }} />
+            mm
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c9cdd3" }}>
+            Hauteur
+            <input type="number" min={MIN_LABEL_MM} max={MAX_LABEL_MM} step={1} value={labelSize.height} onChange={(event) => updateLabelSize({ height: Number(event.target.value) })} style={{ width: 52, padding: "5px 6px", borderRadius: 6, border: "1px solid #374151", background: "#1f2937", color: "#fff", fontSize: 12 }} />
+            mm
+          </label>
           <Link href="/?lang=fr" style={{ color: "#fff", fontWeight: 700, fontSize: 13, alignSelf: "center" }}>← Tableau</Link>
           <button type="button" onClick={() => void handlePrint()} disabled={!deliveries.length} style={{ padding: "10px 18px", borderRadius: 10, border: 0, background: "#22c55e", color: "#052e12", fontWeight: 700, cursor: deliveries.length ? "pointer" : "default" }}>
             Imprimer
@@ -164,19 +211,19 @@ export default function LabelsPage() {
             background: "#fff",
             boxShadow: "0 1px 4px rgba(0,0,0,0.15)",
             display: "grid",
-            gridTemplateColumns: `repeat(${LABELS_PER_ROW}, ${LABEL_WIDTH_MM}mm)`,
-            gridTemplateRows: `repeat(${LABELS_PER_COLUMN}, ${LABEL_HEIGHT_MM}mm)`,
+            gridTemplateColumns: `repeat(${labelsPerRow}, ${labelSize.width}mm)`,
+            gridTemplateRows: `repeat(${labelsPerColumn}, ${labelSize.height}mm)`,
             justifyContent: "center",
           }}
         >
           {pageDeliveries.map((delivery) => (
             <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", flexDirection: "column", gap: "1.5mm", overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "2mm" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "2.5mm" }}>
                 {branding.logoDataUrl && (
                   // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
-                  <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "8mm", maxWidth: "22mm", objectFit: "contain", flex: "0 0 auto" }} />
+                  <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "13mm", maxWidth: "32mm", objectFit: "contain", flex: "0 0 auto" }} />
                 )}
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm", flex: 1, minHeight: 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
