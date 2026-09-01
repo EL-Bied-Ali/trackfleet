@@ -63,7 +63,6 @@ export default function LabelsPage() {
   const [branding, setBranding] = useState<LabelBranding>(emptyBranding);
   const [labelSize, setLabelSize] = useState(() => readStoredLabelSize());
   const qrCanvases = useRef(new Map<string, HTMLCanvasElement>());
-  const barcodeCanvases = useRef(new Map<string, HTMLCanvasElement>());
 
   function updateLabelSize(next: { width?: number; height?: number }) {
     setLabelSize((current) => {
@@ -115,18 +114,20 @@ export default function LabelsPage() {
     if (!deliveries.length) return;
     let cancelled = false;
     void (async () => {
-      const [{ default: QRCode }, { default: JsBarcode }] = await Promise.all([import("qrcode"), import("jsbarcode")]);
+      // Code128 barcode dropped (was the only other consumer of the
+      // jsbarcode import): it only ever added value paired with a
+      // dedicated handheld barcode scanner, which nobody here owns -- the
+      // parcel code is already printed as plain text under the QR for
+      // manual entry, so the barcode image itself was pure duplication for
+      // now. Easy to bring back if that hardware shows up later.
+      const { default: QRCode } = await import("qrcode");
       if (cancelled) return;
       const origin = window.location.origin;
       for (const delivery of deliveries) {
         if (!delivery.parcelCode) continue;
         const qrCanvas = qrCanvases.current.get(delivery.id);
-        const barcodeCanvas = barcodeCanvases.current.get(delivery.id);
         if (qrCanvas) {
           await QRCode.toCanvas(qrCanvas, parcelScanUrl(origin, delivery.parcelCode), { width: 160, margin: 1 });
-        }
-        if (barcodeCanvas) {
-          JsBarcode(barcodeCanvas, delivery.parcelCode, { format: "CODE128", width: 1.6, height: 36, fontSize: 12, margin: 0 });
         }
       }
     })();
@@ -218,12 +219,12 @@ export default function LabelsPage() {
         >
           {pageDeliveries.map((delivery) => (
             <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", flexDirection: "column", gap: "1.5mm", overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "2.5mm" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
                 {branding.logoDataUrl && (
                   // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
-                  <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "13mm", maxWidth: "32mm", objectFit: "contain", flex: "0 0 auto" }} />
+                  <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "19mm", maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
                 )}
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "3mm", flex: 1, minHeight: 0 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -233,16 +234,20 @@ export default function LabelsPage() {
                   {delivery.truck && <div style={{ fontSize: 11, marginTop: "0.5mm", color: "#333" }}>Camion : {delivery.truck}</div>}
                 </div>
                 {delivery.parcelCode ? (
-                  <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: "28mm", height: "28mm", flex: "0 0 auto" }} />
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1mm", flex: "0 0 auto" }}>
+                    <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: "28mm", height: "28mm" }} />
+                    {/* Plain-text fallback for manual entry on /scan when no
+                        camera/scanner is available -- see the barcode
+                        removal note above for why this replaced the
+                        Code128 image instead of just disappearing with it. */}
+                    <div style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: ".05em", color: "#333" }}>{delivery.parcelCode}</div>
+                  </div>
                 ) : (
                   <div style={{ width: "28mm", height: "28mm", flex: "0 0 auto", border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", textAlign: "center", padding: "2mm" }}>
                     Code non disponible
                   </div>
                 )}
               </div>
-              {delivery.parcelCode && (
-                <canvas ref={(element) => { if (element) barcodeCanvases.current.set(delivery.id, element); }} style={{ width: "100%", height: "9mm", flex: "0 0 auto" }} />
-              )}
             </div>
           ))}
         </div>

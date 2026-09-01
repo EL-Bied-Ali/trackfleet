@@ -6,6 +6,7 @@ const scanPage = await readFile(new URL("../app/scan/page.tsx", import.meta.url)
 const labelsPage = await readFile(new URL("../app/labels/page.tsx", import.meta.url), "utf8");
 const dashboard = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 const i18n = await readFile(new URL("../app/i18n.ts", import.meta.url), "utf8");
+const packageJson = await readFile(new URL("../package.json", import.meta.url), "utf8");
 
 test("the scan page accepts either a normal session or a one-time QR pairing, then checks the scanner-only session endpoint", () => {
   assert.match(scanPage, /fetch\("\/api\/scan\/pair\/consume", \{/);
@@ -93,11 +94,24 @@ test("each label shows the company's own logo and name from /api/company/brandin
   assert.match(labelsPage, /\{branding\.name \|\| "TRACKFLEET"\}/);
 });
 
-test("each label renders a QR code (deep link) and a Code128 barcode from the same parcel code, generated client-side", () => {
+test("each label renders a QR code (deep link) from the parcel code, generated client-side, with the raw code printed as plain text underneath for manual entry on /scan", () => {
   assert.match(labelsPage, /import\("qrcode"\)/);
-  assert.match(labelsPage, /import\("jsbarcode"\)/);
   assert.match(labelsPage, /QRCode\.toCanvas\(qrCanvas, parcelScanUrl\(origin, delivery\.parcelCode\), \{ width: 160, margin: 1 \}\)/);
-  assert.match(labelsPage, /JsBarcode\(barcodeCanvas, delivery\.parcelCode, \{ format: "CODE128"/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 9, fontFamily: "monospace", letterSpacing: "\.05em", color: "#333" \}\}>\{delivery\.parcelCode\}<\/div>/);
+});
+
+// Reported live: the Code128 barcode only ever added value paired with a
+// dedicated handheld barcode scanner, which nobody here owns -- the
+// plain-text code (test above) already covers manual entry on /scan
+// without any scanner at all, so the barcode image itself was dropped as
+// pure duplication. jsbarcode is fully gone (not just unused) -- see
+// package.json.
+test("the Code128 barcode is gone -- no jsbarcode import, no JsBarcode call, no barcode canvas, and the dependency itself is removed", () => {
+  assert.doesNotMatch(labelsPage, /import\("jsbarcode"\)/);
+  assert.doesNotMatch(labelsPage, /JsBarcode\(/);
+  assert.doesNotMatch(labelsPage, /barcodeCanvas/);
+  assert.doesNotMatch(packageJson, /"jsbarcode"/);
+  assert.doesNotMatch(packageJson, /"@types\/jsbarcode"/);
 });
 
 test("a delivery with no parcel code (created before this feature existed) shows a placeholder instead of a broken QR", () => {
