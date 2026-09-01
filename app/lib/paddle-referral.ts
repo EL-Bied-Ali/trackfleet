@@ -10,10 +10,10 @@ const requestTimeoutMs = 10_000;
 // subscription so it applies to their next renewal automatically -- no
 // coupon code for them to redeem, no manual invoice adjustment.
 //
-// This is the first code in this repo to call Paddle's Discounts endpoint
-// or PATCH a subscription's `discount` field -- worth a live sandbox
-// smoke-test after this ships, since it's untested against Paddle's real
-// API from this environment (no PADDLE_API_KEY available locally).
+// Verified live 2026-09-01 against Paddle's sandbox API (via a temporary
+// diagnostic route, since PADDLE_API_KEY isn't available locally): discount
+// creation worked first try, subscription attachment needed the
+// effective_from fix below.
 export async function grantOneFreeInvoice(paddleSubscriptionId: string): Promise<boolean> {
   const apiKey = runtimeEnv.PADDLE_API_KEY?.trim();
   if (!apiKey) {
@@ -50,10 +50,15 @@ export async function grantOneFreeInvoice(paddleSubscriptionId: string): Promise
     return false;
   }
 
+  // Confirmed live against Paddle's sandbox API: `discount` alone 400s --
+  // Paddle requires `effective_from` alongside `id` (one of two allowed
+  // shapes; the other is `discount: null`, to remove one). "next_billing_period"
+  // is also exactly the right semantics here: the reward is "your next
+  // invoice is free," not an immediate, mid-cycle credit.
   const applyResponse = await fetch(`${paddleApiBase()}/subscriptions/${paddleSubscriptionId}`, {
     method: "PATCH",
     headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify({ discount: { id: discountId } }),
+    body: JSON.stringify({ discount: { id: discountId, effective_from: "next_billing_period" } }),
     signal: AbortSignal.timeout(requestTimeoutMs),
   }).catch((error: unknown) => {
     console.error("[trackfleet:referral] discount attachment request failed", { message: error instanceof Error ? error.message : "unknown_error" });
