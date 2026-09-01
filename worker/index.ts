@@ -43,8 +43,21 @@ interface ScheduledController {
 // live the first time a real notification successfully sent.
 const productionOrigin = "https://trackfleet.chronoplan.workers.dev";
 
-const automationCron = "*/5 * * * *";
-const notificationMaintenanceCron = "2,7,12,17,22,27,32,37,42,47,52,57 * * * *";
+// Slowed from every 5 minutes to every 15 on 2026-09-02, after D1
+// rows_written actually hit the free-tier 100k/day cap (not just the 76%
+// warning from the reconciliation-cron fix the day before) -- the live
+// automation tick's own D1 mirror writes (position/status/ETA per vehicle,
+// every tick) were still a meaningful, legitimate contributor on top of
+// that fix. This is a multi-day Belgium-Morocco corridor, not last-mile
+// delivery -- 15-minute position granularity is imperceptible to a customer
+// tracking a days-long trip, unlike the reconciliation crons' pure waste.
+// Deliberately NOT reduced further overnight (e.g. paused entirely
+// midnight-6am): the corridor includes a real Tanger Med ferry crossing, a
+// truck can plausibly reach the hub at any hour, and delaying arrival
+// detection (and the customer's WhatsApp notification) by hours for a
+// modest additional saving isn't worth the risk.
+const automationCron = "*/15 * * * *";
+const notificationMaintenanceCron = "5,20,35,50 * * * *";
 // Reduced from every 15 minutes (96/day each) to hourly on 2026-09-01 --
 // reconcileD1Standby/reconcileD1Telemetry were the top two D1 rows_written
 // consumers, together pushing the free-tier 100k/day cap. Telemetry now
