@@ -60,7 +60,8 @@ export async function grantOneFreeInvoice(paddleSubscriptionId: string): Promise
     return null;
   });
   if (!applyResponse || !applyResponse.ok) {
-    console.error("[trackfleet:referral] discount attachment failed", { status: applyResponse?.status ?? null, discountId });
+    const errorBody = applyResponse ? await applyResponse.text().catch(() => "") : "";
+    console.error("[trackfleet:referral] discount attachment failed", { status: applyResponse?.status ?? null, discountId, errorBody });
     return false;
   }
 
