@@ -478,6 +478,7 @@ export default function Home() {
   const [creating, setCreating] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
   const [locale, setLocale] = useState<Locale>("fr");
+  const [darkMode, setDarkMode] = useState(false);
   const [authState, setAuthState] = useState<"loading" | "anonymous" | "authenticated">("loading");
   const [dispatchDataState, setDispatchDataState] = useState<"loading" | "ready" | "error" | "subscription_required">("loading");
   const [company, setCompany] = useState<CompanyIdentity | null>(null);
@@ -747,6 +748,16 @@ export default function Home() {
     const savedLocale = window.localStorage.getItem("trackfleet-locale");
     if (!requestedLocale && (savedLocale === "en" || savedLocale === "fr" || savedLocale === "nl")) setLocale(savedLocale);
   }, []);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("trackfleet-theme");
+    setDarkMode(savedTheme === "dark" || (savedTheme === null && window.matchMedia("(prefers-color-scheme: dark)").matches));
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    window.localStorage.setItem("trackfleet-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   useEffect(() => {
     window.localStorage.setItem("trackfleet-locale", locale);
@@ -2371,6 +2382,7 @@ export default function Home() {
         </nav>
         <div className="sidebar-divider" />
         <nav>
+          <button className="nav-item theme-toggle" type="button" aria-pressed={darkMode} onClick={() => setDarkMode((current) => !current)}><Icon>{darkMode ? "☀" : "☾"}</Icon>{darkMode ? (locale === "fr" ? "Mode clair" : locale === "nl" ? "Lichte modus" : "Light mode") : (locale === "fr" ? "Mode sombre" : locale === "nl" ? "Donkere modus" : "Dark mode")}</button>
           {company?.role === "dispatcher" ? <button className="nav-item" onClick={openCompanySettings}><Icon>⚙</Icon>{t.settings}</button> : <button className="nav-item" disabled><Icon>⚙</Icon>{t.settings}</button>}
           <button className="nav-item" disabled><Icon>?</Icon>{t.helpCentre}</button>
         </nav>

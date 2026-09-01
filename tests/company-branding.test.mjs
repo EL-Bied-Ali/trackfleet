@@ -82,7 +82,7 @@ test("branding css gives the sidebar logo a clean, prominent slot without blurry
   assert.match(css, /\.brand\.company-brand \.company-brand-mark img \{ display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; object-position: left center; transform: none; \}/);
 });
 
-test("the sidebar uses a neutral blue-charcoal palette so uploaded logos do not fight the background", () => {
-  assert.match(css, /\.sidebar \{ width: 240px;.*background: #24313d; color: #dce5ec;/);
-  assert.match(css, /\.nav-item\.active \{ color: white; background: #36495a;/);
+test("the sidebar uses a quiet light palette so uploaded logos do not fight the background", () => {
+  assert.match(css, /\.sidebar \{ width: 240px;.*background: #fbfcfa; color: #334155;/);
+  assert.match(css, /\.nav-item\.active \{ color: #1f2937; background: #e8efec;/);
 });
