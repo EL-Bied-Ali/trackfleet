@@ -29,6 +29,9 @@ test("a truck reaching the Tanger Med hub shows a relay-bound delivery (Tétouan
   const delivery = await memoryStore.create(baseDeliveryInput({
     companyId, customer: "Relay client", destinationSiteId: "tetouan-cortoba-146", destination: "146 Avenue Cortoba, 93000 Tétouan, Maroc",
   }));
+  // No mid-route pickups: linking a truck only starts GPS tracking once the
+  // parcel has been scanned "chargé" onto it (see delivery-store.memory.ts).
+  await memoryStore.recordEvent(delivery.id, "SCAN_LOADED", 0);
 
   const linked = await memoryStore.linkVehicle(delivery.id, companyId, vehicleAtTangerMedHub);
   assert.ok(linked);
@@ -50,6 +53,9 @@ test("a delivery bound for a confirmed hub itself (not a relay-only city) is una
   const delivery = await memoryStore.create(baseDeliveryInput({
     companyId, customer: "Hub client", destinationSiteId: "tanger-med-ksar-al-majaz", destination: "Oued Ghlala, Ksar Al Majaz, 93000 Tanger Med, Maroc",
   }));
+  // No mid-route pickups: linking a truck only starts GPS tracking once the
+  // parcel has been scanned "chargé" onto it (see delivery-store.memory.ts).
+  await memoryStore.recordEvent(delivery.id, "SCAN_LOADED", 0);
 
   const linked = await memoryStore.linkVehicle(delivery.id, companyId, vehicleAtTangerMedHub);
   assert.ok(linked);

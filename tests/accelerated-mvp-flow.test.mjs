@@ -126,6 +126,11 @@ test("accelerated multi-tick MVP flow exercises the production business core end
     "the same import key must not collide across tenants",
   );
 
+  // No mid-route pickups: the automation tick only starts GPS tracking once
+  // the parcel has been scanned "chargé" onto its assigned truck (see
+  // delivery-store.memory.ts's applySendatrackSnapshot).
+  await memoryStore.recordEvent(created.delivery.id, "SCAN_LOADED", 0);
+
   const t0 = new Date(baseTime);
   const linked = await runFleetBusinessTick({
     snapshot: snapshot(vehicle(t0, 50.8503, 4.3517, 0)),

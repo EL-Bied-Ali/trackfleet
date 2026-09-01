@@ -105,13 +105,28 @@ export const store: DeliveryStore = {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
     const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE company_id = ? AND status != 'Delivered'`).bind(companyId).all<RawDelivery>();
+    const rows = result.results ?? [];
+    // Batched with the same subrequest-budget reasoning as the baseline
+    // lookup elsewhere in this codebase -- one query per tick, not one per
+    // delivery.
+    const unlinkedIds = rows.filter((row) => row.gpsSource !== "sendatrack").map((row) => row.id);
+    const scanLoadedIds = new Set<string>();
+    if (unlinkedIds.length) {
+      const placeholders = unlinkedIds.map(() => "?").join(",");
+      const scanResult = await db().prepare(`SELECT DISTINCT delivery_id AS deliveryId FROM delivery_events WHERE delivery_id IN (${placeholders}) AND type = 'SCAN_LOADED'`).bind(...unlinkedIds).all<{ deliveryId: string }>();
+      for (const row of scanResult.results ?? []) scanLoadedIds.add(row.deliveryId);
+    }
     const statements = [];
-    for (const rawDelivery of result.results ?? []) {
+    for (const rawDelivery of rows) {
       const delivery = hydrate(rawDelivery);
       const match = matchDeliveryVehicle(delivery, snapshot.vehicles);
       const vehicle = match.vehicle;
       if (!vehicle) continue;
       const firstLink = delivery.gpsSource !== "sendatrack";
+      // No mid-route pickups in this business -- see the matching comment in
+      // delivery-store.postgres.ts for the full rationale. Only gates the
+      // very first link; a delivery already tracking is never frozen.
+      if (firstLink && !scanLoadedIds.has(delivery.id)) continue;
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const origin = explicitOrigin(delivery);
@@ -132,8 +147,11 @@ export const store: DeliveryStore = {
     const raw = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE id = ? AND company_id = ? AND status != 'Delivered' LIMIT 1`).bind(deliveryId, companyId).first<RawDelivery>();
     if (!raw) return null;
     const delivery = hydrate(raw);
-    const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
-    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
+    // Same "no mid-route pickups" rule as applySendatrackSnapshot -- see the
+    // full rationale there. A delivery already tracking is never frozen.
+    const alreadyTracking = delivery.gpsSource === "sendatrack";
+    const scanRow = alreadyTracking ? null : await db().prepare(`SELECT 1 FROM delivery_events WHERE delivery_id = ? AND type = 'SCAN_LOADED' LIMIT 1`).bind(delivery.id).first();
+    const scanned = alreadyTracking || Boolean(scanRow);
     // No longer clears the vehicle off any other active delivery already
     // riding it (that used to be the first statement here). One truck
     // legitimately carrying several parcels at once is the group feature's
@@ -146,10 +164,17 @@ export const store: DeliveryStore = {
     // time. vehicleAssignmentConflict in page.tsx still warns the dispatcher
     // the truck is in use; trusting that warning (not blocking) was already
     // the design, this just stopped corrupting data when they proceed.
-    const statements = [
-      db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now()),
-      db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id = ? AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, delivery.id, companyId),
-    ];
+    const statements = [];
+    if (scanned) {
+      const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
+      statements.push(
+        db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now()),
+        db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id = ? AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, delivery.id, companyId),
+      );
+    } else {
+      statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, status = 'Loading' WHERE id = ? AND company_id = ?`).bind(vehicle.id, vehicle.name, delivery.id, companyId));
+    }
     // A trip groups deliveries that share one truck's route (see
     // buildTruckStopPlans in truck-stop-plan.ts, keyed by trip_id when
     // present). Moving this delivery onto a genuinely different truck means
@@ -172,7 +197,17 @@ export const store: DeliveryStore = {
     if (!deliveries.length) return [];
     const matchedIds = deliveries.map((delivery) => delivery.id);
     const matchedPlaceholders = matchedIds.map(() => "?").join(",");
-    const statements = deliveries.map((delivery) => {
+    // Same "no mid-route pickups" rule as linkVehicle/applySendatrackSnapshot
+    // -- see linkVehicle for the full rationale. Batched (one query for the
+    // whole group) rather than per-delivery.
+    const unscannedIds = new Set(deliveries.filter((delivery) => delivery.gpsSource !== "sendatrack").map((delivery) => delivery.id));
+    if (unscannedIds.size) {
+      const scanPlaceholders = [...unscannedIds].map(() => "?").join(",");
+      const scanResult = await db().prepare(`SELECT DISTINCT delivery_id AS deliveryId FROM delivery_events WHERE delivery_id IN (${scanPlaceholders}) AND type = 'SCAN_LOADED'`).bind(...unscannedIds).all<{ deliveryId: string }>();
+      for (const row of scanResult.results ?? []) unscannedIds.delete(row.deliveryId);
+    }
+    const scannedIds = matchedIds.filter((id) => !unscannedIds.has(id));
+    const statements = deliveries.filter((delivery) => scannedIds.includes(delivery.id)).map((delivery) => {
       const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
       return db().prepare(`INSERT OR IGNORE INTO delivery_events (delivery_id, type, progress, created_at) VALUES (?, 'GPS_BASELINE', ?, ?)`).bind(delivery.id, metrics.progress, Date.now());
@@ -184,7 +219,14 @@ export const store: DeliveryStore = {
     // linkVehicle used to (see that fix). Reassigning group A onto a truck
     // that already carries group B would otherwise silently kick B back to
     // unassigned, with its last GPS position/status still attached.
-    statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id IN (${matchedPlaceholders}) AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, ...matchedIds, companyId));
+    if (scannedIds.length) {
+      const scannedPlaceholders = scannedIds.map(() => "?").join(",");
+      statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, latitude = ?, longitude = ?, speed = ?, last_position_at = ?, gps_source = 'sendatrack', status = 'Loading' WHERE id IN (${scannedPlaceholders}) AND company_id = ?`).bind(vehicle.id, vehicle.name, vehicle.latitude, vehicle.longitude, vehicle.speed, vehicle.updatedAt, ...scannedIds, companyId));
+    }
+    if (unscannedIds.size) {
+      const unscannedPlaceholders = [...unscannedIds].map(() => "?").join(",");
+      statements.push(db().prepare(`UPDATE deliveries SET sendatrack_vehicle_id = ?, truck = ?, status = 'Loading' WHERE id IN (${unscannedPlaceholders}) AND company_id = ?`).bind(vehicle.id, vehicle.name, ...unscannedIds, companyId));
+    }
     const changingVehicleIds = deliveries.filter((delivery) => delivery.sendatrackVehicleId !== vehicle.id).map((delivery) => delivery.id);
     if (changingVehicleIds.length) {
       const changingPlaceholders = changingVehicleIds.map(() => "?").join(",");

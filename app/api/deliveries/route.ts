@@ -613,9 +613,6 @@ export async function POST(request: Request) {
     }
     const requestedRadius = optionalNumber(payload.arrivalRadiusKm);
     const arrivalRadiusKm = Math.max(0.05, Math.min(10, requestedRadius ?? site?.arrivalRadiusKm ?? 0.5));
-    const exactDestination: [number, number] | null = destinationLatitude !== null && destinationLongitude !== null
-      ? [destinationLongitude, destinationLatitude]
-      : null;
 
     const idempotencyTrackingToken = idempotencyKey
       ? await deliveryIdempotencyTrackingToken(session.companyId, idempotencyKey)
@@ -634,16 +631,17 @@ export async function POST(request: Request) {
       }
     }
 
+    // Resolved only to normalize the truck name/id below -- no mid-route
+    // pickups in this business, so a brand-new delivery never captures the
+    // assigned truck's live GPS position as its own baseline (see the
+    // matching change in delivery-store.postgres.ts's applySendatrackSnapshot
+    // /linkVehicle). It stays origin-anchored and untracked until the parcel
+    // is actually scanned "chargé" onto that truck; the automation tick picks
+    // up tracking from there, the same way it does for a post-creation link.
     const snapshot = await getSendatrackSnapshot(session.credentials);
     const liveVehicle = matchDeliveryVehicle({ sendatrackVehicleId, truck }, snapshot.vehicles).vehicle;
-    const originLatitude = liveVehicle?.latitude ?? originSite?.latitude ?? null;
-    const originLongitude = liveVehicle?.longitude ?? originSite?.longitude ?? null;
-    const exactOrigin: [number, number] | null = originLatitude !== null && originLongitude !== null
-      ? [originLongitude, originLatitude]
-      : null;
-    const baselineMetrics = liveVehicle
-      ? calculateRouteMetrics(liveVehicle.latitude, liveVehicle.longitude, destination, exactDestination, exactOrigin)
-      : null;
+    const originLatitude = originSite?.latitude ?? null;
+    const originLongitude = originSite?.longitude ?? null;
 
     let delivery: DeliveryRow;
     try {
@@ -679,9 +677,9 @@ export async function POST(request: Request) {
         shipmentId: shipmentIdInput || null,
         parcelCode: createParcelCode(),
         driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
-        latitude: liveVehicle?.latitude ?? originLatitude, longitude: liveVehicle?.longitude ?? originLongitude,
-        speed: liveVehicle?.speed ?? null, lastPositionAt: liveVehicle ? new Date(liveVehicle.updatedAt) : null,
-        gpsSource: liveVehicle ? "sendatrack" : "simulation",
+        latitude: originLatitude, longitude: originLongitude,
+        speed: null, lastPositionAt: null,
+        gpsSource: "simulation",
       });
     } catch (error) {
       if (idempotencyTrackingToken) {
@@ -694,7 +692,6 @@ export async function POST(request: Request) {
       }
       throw error;
     }
-    if (baselineMetrics) await store.recordEvent(delivery.id, "GPS_BASELINE", baselineMetrics.progress);
     await store.recordEvent(delivery.id, "REGISTERED", delivery.progress);
     await processPendingNotifications(session.companyId, new URL(request.url).origin);
 

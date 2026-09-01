@@ -403,10 +403,13 @@ export const postgresStore: DeliveryStore = {
     // already holds that pre-existing row, so it's used instead of the
     // fresh (and in that case wrong) computed value.
     const deliveryIds = rows.map((row) => row.id);
-    const baselineRows = deliveryIds.length
-      ? await sql`SELECT delivery_id, progress FROM delivery_events WHERE delivery_id = ANY(${deliveryIds}::text[]) AND type = 'GPS_BASELINE'` as Array<{ delivery_id: string; progress: number }>
+    // Batched with the baseline lookup for the same subrequest-budget reason
+    // documented above -- one query per tick, not one per delivery.
+    const trackingEventRows = deliveryIds.length
+      ? await sql`SELECT delivery_id, type, progress FROM delivery_events WHERE delivery_id = ANY(${deliveryIds}::text[]) AND type IN ('GPS_BASELINE', 'SCAN_LOADED')` as Array<{ delivery_id: string; type: string; progress: number }>
       : [];
-    const baselineProgressById = new Map(baselineRows.map((row) => [row.delivery_id, Number(row.progress)]));
+    const baselineProgressById = new Map(trackingEventRows.filter((row) => row.type === "GPS_BASELINE").map((row) => [row.delivery_id, Number(row.progress)]));
+    const scanLoadedIds = new Set(trackingEventRows.filter((row) => row.type === "SCAN_LOADED").map((row) => row.delivery_id));
 
     for (const raw of rows) {
       const delivery = hydrate(raw);
@@ -415,6 +418,15 @@ export const postgresStore: DeliveryStore = {
       if (!vehicle) continue;
 
       const firstLink = delivery.gpsSource !== "sendatrack";
+      // No mid-route pickups in this business -- a delivery only starts
+      // being tracked on its assigned truck once the parcel has actually
+      // been scanned "chargé" onto it. Without this, a truck already en
+      // route (or one that departs before the delivery is truly loaded)
+      // would silently start counting progress the moment automation
+      // linked it, with no confirmation the parcel is physically aboard.
+      // Only gates the very first link -- a delivery already tracking
+      // (gpsSource === "sendatrack") is never retroactively frozen.
+      if (firstLink && !scanLoadedIds.has(delivery.id)) continue;
       const previousStatus = delivery.status;
       const previousProgress = delivery.progress;
       const origin = explicitOrigin(delivery);
@@ -465,9 +477,18 @@ export const postgresStore: DeliveryStore = {
     const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];
     const delivery = rows[0] ? hydrate(rows[0]) : null;
     if (!delivery) return null;
-    const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
-    const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
-    await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${metrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
+    // Same "no mid-route pickups" rule as applySendatrackSnapshot: manually
+    // linking a truck from the table assigns it, but doesn't start counting
+    // GPS progress until the parcel has actually been scanned "chargé" onto
+    // it. A delivery already tracking (gpsSource === "sendatrack") is never
+    // retroactively frozen by this.
+    const alreadyTracking = delivery.gpsSource === "sendatrack";
+    const scanned = alreadyTracking || Boolean((await sql`SELECT 1 FROM delivery_events WHERE delivery_id = ${delivery.id} AND type = 'SCAN_LOADED' LIMIT 1` as unknown[])[0]);
+    if (scanned) {
+      const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
+      const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
+      await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${metrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
+    }
     // No longer clears the vehicle off any other active delivery already
     // riding it (that used to run unconditionally here). One truck legitimately
     // carrying several parcels at once is the group feature's whole premise --
@@ -479,10 +500,15 @@ export const postgresStore: DeliveryStore = {
     // the map) every time. vehicleAssignmentConflict in page.tsx still warns the
     // dispatcher the truck is in use; trusting that warning (not blocking) was
     // already the design, this just stopped corrupting data when they proceed.
-    await sql`UPDATE deliveries SET
-      sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
-      speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'
-      WHERE id = ${delivery.id} AND company_id = ${companyId}`;
+    if (scanned) {
+      await sql`UPDATE deliveries SET
+        sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
+        speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'
+        WHERE id = ${delivery.id} AND company_id = ${companyId}`;
+    } else {
+      await sql`UPDATE deliveries SET sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, status = 'Loading'
+        WHERE id = ${delivery.id} AND company_id = ${companyId}`;
+    }
     // A trip groups deliveries that share one truck's route (see
     // buildTruckStopPlans in truck-stop-plan.ts, keyed by trip_id when
     // present). Moving this delivery onto a genuinely different truck means
@@ -504,7 +530,17 @@ export const postgresStore: DeliveryStore = {
     if (!rows.length) return [];
     const deliveries = rows.map(hydrate);
     const matchedIds = deliveries.map((delivery) => delivery.id);
+    // Same "no mid-route pickups" rule as linkVehicle/applySendatrackSnapshot
+    // -- see linkVehicle for the full rationale. Batched (one query for the
+    // whole group) rather than per-delivery.
+    const unscannedIds = new Set(deliveries.filter((delivery) => delivery.gpsSource !== "sendatrack").map((delivery) => delivery.id));
+    const scannedRows = unscannedIds.size
+      ? await sql`SELECT DISTINCT delivery_id FROM delivery_events WHERE delivery_id = ANY(${[...unscannedIds]}::text[]) AND type = 'SCAN_LOADED'` as Array<{ delivery_id: string }>
+      : [];
+    for (const row of scannedRows) unscannedIds.delete(row.delivery_id);
+    const scannedIds = matchedIds.filter((id) => !unscannedIds.has(id));
     for (const delivery of deliveries) {
+      if (!scannedIds.includes(delivery.id)) continue;
       const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
       await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at) VALUES (${delivery.id}, 'GPS_BASELINE', ${metrics.progress}, ${new Date().toISOString()}) ON CONFLICT (delivery_id, type) DO NOTHING`;
@@ -516,10 +552,16 @@ export const postgresStore: DeliveryStore = {
     // linkVehicle used to (see that fix). Reassigning group A onto a truck
     // that already carries group B would otherwise silently kick B back to
     // unassigned, with its last GPS position/status still attached.
-    await sql`UPDATE deliveries SET
-      sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
-      speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'
-      WHERE id = ANY(${matchedIds}::text[]) AND company_id = ${companyId}`;
+    if (scannedIds.length) {
+      await sql`UPDATE deliveries SET
+        sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, latitude = ${vehicle.latitude}, longitude = ${vehicle.longitude},
+        speed = ${vehicle.speed}, last_position_at = ${new Date(vehicle.updatedAt).toISOString()}, gps_source = 'sendatrack', status = 'Loading'
+        WHERE id = ANY(${scannedIds}::text[]) AND company_id = ${companyId}`;
+    }
+    if (unscannedIds.size) {
+      await sql`UPDATE deliveries SET sendatrack_vehicle_id = ${vehicle.id}, truck = ${vehicle.name}, status = 'Loading'
+        WHERE id = ANY(${[...unscannedIds]}::text[]) AND company_id = ${companyId}`;
+    }
     const changingVehicleIds = deliveries.filter((delivery) => delivery.sendatrackVehicleId !== vehicle.id).map((delivery) => delivery.id);
     if (changingVehicleIds.length) {
       await sql`UPDATE deliveries SET trip_id = NULL WHERE id = ANY(${changingVehicleIds}::text[]) AND company_id = ${companyId}`;
