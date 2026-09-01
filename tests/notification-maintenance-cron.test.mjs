@@ -14,8 +14,8 @@ test("notification maintenance runs on its own cron, offset from fleet sync", ()
   // finished fleet sync fine still failed to record success because the
   // notification/telemetry work tacked onto the same invocation pushed it
   // over Cloudflare's per-invocation subrequest limit.
-  assert.match(wrangler, /"2,7,12,17,22,27,32,37,42,47,52,57 \* \* \* \*"/);
-  assert.match(worker, /const notificationMaintenanceCron = "2,7,12,17,22,27,32,37,42,47,52,57 \* \* \* \*";/);
+  assert.match(wrangler, /"5,20,35,50 \* \* \* \*"/);
+  assert.match(worker, /const notificationMaintenanceCron = "5,20,35,50 \* \* \* \*";/);
   assert.match(worker, /cron === notificationMaintenanceCron[\s\S]*await runNotificationMaintenanceTick\(env, ctx\)/);
   assert.match(worker, /new Request\(`\$\{productionOrigin\}\/api\/automation\/notification-tick`/);
 });
