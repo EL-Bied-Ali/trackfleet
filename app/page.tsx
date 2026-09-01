@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { localeOptions, translations, type Locale } from "./i18n";
-import { Icon, CompanyLogo } from "./CompanyLogo";
+import { Icon, CompanyLogo, cropLogoDataUrl } from "./CompanyLogo";
 import { AppSidebar } from "./AppSidebar";
 import InteractiveFleetMap from "./InteractiveFleetMap";
 import AgencyLocationSetup from "./AgencyLocationSetup";
