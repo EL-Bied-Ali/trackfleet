@@ -238,6 +238,8 @@ a.nav-item { text-decoration: none; }
 .table-wrap { position: relative; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; white-space: nowrap; }
 th { height: 35px; padding: 0 15px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #9b9095; background: #fafbfa; font-size: 8px; font-weight: 650; text-align: left; text-transform: uppercase; letter-spacing: .5px; }
+th.col-actions, td.col-actions { width: 126px; min-width: 126px; text-align: right; white-space: nowrap; }
+td.col-actions { padding-left: 8px; padding-right: 12px; }
 td { height: 58px; padding: 0 15px; border-bottom: 1px solid #edf0ee; font-size: 9.5px; cursor: pointer; }
 /* Two earlier fix attempts here both failed, verified live via a DOM
    measurement harness (getBoundingClientRect) before landing this one --
