@@ -86,27 +86,37 @@ export type CompanyWithSubscription = {
   subscriptionStatus: SubscriptionStatus | null;
   plan: string | null;
   currentPeriodEnd: Date | null;
+  referredByCompanyId: string | null;
+  referredByAccountLabel: string | null;
+  referralRewardGrantedAt: Date | null;
 };
 
 // Admin-only (see app/api/admin/companies/route.ts) -- every company, not
 // scoped to one tenant, which is exactly what makes this admin-only rather
-// than something any dispatcher session could call.
+// than something any dispatcher session could call. The self-join resolves
+// referred_by_company_id to a human-readable account label so the admin
+// panel doesn't have to cross-reference the same list twice.
 export async function listCompaniesWithSubscriptions(): Promise<CompanyWithSubscription[]> {
   const sql = sqlClient();
   const rows = await sql`
     SELECT c.id AS company_id, c.account_label, c.user_label, c.created_at,
-           s.status, s.plan, s.current_period_end
+           c.referred_by_company_id, ref.account_label AS referred_by_account_label,
+           s.status, s.plan, s.current_period_end, s.referral_reward_granted_at
     FROM companies c
     LEFT JOIN subscriptions s ON s.company_id = c.id
+    LEFT JOIN companies ref ON ref.id = c.referred_by_company_id
     ORDER BY c.created_at DESC
   ` as Array<{
     company_id: string;
     account_label: string;
     user_label: string;
     created_at: string | Date;
+    referred_by_company_id: string | null;
+    referred_by_account_label: string | null;
     status: string | null;
     plan: string | null;
     current_period_end: string | Date | null;
+    referral_reward_granted_at: string | Date | null;
   }>;
   return rows.map((row) => ({
     companyId: row.company_id,
@@ -116,7 +126,43 @@ export async function listCompaniesWithSubscriptions(): Promise<CompanyWithSubsc
     subscriptionStatus: isSubscriptionStatus(row.status) ? row.status : null,
     plan: row.plan,
     currentPeriodEnd: row.current_period_end ? new Date(row.current_period_end) : null,
+    referredByCompanyId: row.referred_by_company_id,
+    referredByAccountLabel: row.referred_by_account_label,
+    referralRewardGrantedAt: row.referral_reward_granted_at ? new Date(row.referral_reward_granted_at) : null,
   }));
+}
+
+// Admin-only write (see app/api/admin/companies/referral/route.ts) -- null
+// clears a mistakenly-set referral. Deliberately does not validate that
+// referredByCompanyId refers to a real company: the admin UI only ever
+// offers a dropdown of real companies, and a dangling id would just mean
+// referral-reward.ts's later lookup finds no Paddle subscription to reward
+// (logged, not thrown) rather than corrupting anything.
+export async function setReferredByCompanyId(companyId: string, referredByCompanyId: string | null): Promise<void> {
+  const sql = sqlClient();
+  await sql`UPDATE companies SET referred_by_company_id = ${referredByCompanyId}, updated_at = ${new Date().toISOString()} WHERE id = ${companyId}`;
+}
+
+export async function getReferredByCompanyId(companyId: string): Promise<string | null> {
+  const sql = sqlClient();
+  const rows = await sql`SELECT referred_by_company_id FROM companies WHERE id = ${companyId} LIMIT 1` as Array<{ referred_by_company_id: string | null }>;
+  return rows[0]?.referred_by_company_id ?? null;
+}
+
+// Atomically claims the right to grant this company's referral reward --
+// the UPDATE only touches a row that hasn't been claimed yet, so two
+// concurrent/retried webhook deliveries for the same company can race here
+// and only one will get `true` back, no separate locking needed. Returns
+// false both when a row exists but was already claimed AND when no
+// subscription row exists at all for this company (nothing to claim).
+export async function claimReferralReward(companyId: string): Promise<boolean> {
+  const sql = sqlClient();
+  const claimed = await sql`
+    UPDATE subscriptions SET referral_reward_granted_at = ${new Date().toISOString()}
+    WHERE company_id = ${companyId} AND referral_reward_granted_at IS NULL
+    RETURNING company_id
+  ` as Array<{ company_id: string }>;
+  return claimed.length > 0;
 }
 
 // Admin-only: fetches a company's stored, encrypted SENDATRACK credentials

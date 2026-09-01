@@ -25,6 +25,8 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "companies", column: "unload_grace_minutes" },
   { table: "companies", column: "ctm_relay_grace_minutes" },
   { table: "companies", column: "ctm_relay_auto_completion_enabled" },
+  { table: "companies", column: "referred_by_company_id" },
+  { table: "subscriptions", column: "referral_reward_granted_at" },
   { table: "deliveries", column: "origin_site_id" },
   { table: "deliveries", column: "destination_site_id" },
   { table: "deliveries", column: "next_truck_departure_at" },

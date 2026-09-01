@@ -4,7 +4,8 @@ import {
   parsePaddleSubscriptionEvent,
   verifyPaddleWebhookSignature,
 } from "../../../lib/paddle-webhook";
-import { upsertSubscription } from "../../../lib/subscription-store";
+import { maybeGrantReferralReward } from "../../../lib/referral-reward";
+import { getSubscription, upsertSubscription } from "../../../lib/subscription-store";
 
 const maxBodyBytes = 64 * 1024;
 
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const previousStatus = (await getSubscription(event.companyId))?.status ?? null;
     await upsertSubscription({
       companyId: event.companyId,
       status: event.status,
@@ -64,6 +66,20 @@ export async function POST(request: Request) {
       paddleSubscriptionId: event.paddleSubscriptionId,
       currentPeriodEnd: event.currentPeriodEnd,
     });
+
+    // Reward a referral the moment this company's first real payment lands
+    // (previousStatus is the cheap filter -- claimReferralReward is the
+    // actual once-only guarantee, so re-activating later never double-pays).
+    // Best-effort: never lets a Paddle hiccup here fail the webhook itself,
+    // since the subscription state above already committed successfully.
+    if (event.status === "active" && previousStatus !== "active") {
+      await maybeGrantReferralReward(event.companyId).catch((error: unknown) => {
+        console.error("[trackfleet:referral] reward check failed", {
+          message: error instanceof Error ? error.message : "unknown_error",
+          companyId: event.companyId,
+        });
+      });
+    }
   } catch (error) {
     console.error("[trackfleet:paddle] failed to update subscription from webhook", {
       message: error instanceof Error ? error.message : "unknown_error",

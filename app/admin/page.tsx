@@ -10,6 +10,9 @@ type Company = {
   subscriptionStatus: string | null;
   plan: string | null;
   currentPeriodEnd: string | null;
+  referredByCompanyId: string | null;
+  referredByAccountLabel: string | null;
+  referralRewardGrantedAt: string | null;
 };
 
 const statusOptions = ["grandfathered", "trialing", "active", "past_due", "canceled"];
@@ -28,6 +31,7 @@ export default function AdminPage() {
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [pendingCompanyId, setPendingCompanyId] = useState<string | null>(null);
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
+  const [referralDrafts, setReferralDrafts] = useState<Record<string, string>>({});
   const [toast, setToast] = useState("");
   // Computed once from the URL at mount via a lazy initializer, rather than
   // an effect that calls setState synchronously -- the URL is read exactly
@@ -101,6 +105,23 @@ export default function AdminPage() {
     }
   }
 
+  async function saveReferral(companyId: string) {
+    const referredByCompanyId = referralDrafts[companyId] ?? "";
+    setPendingCompanyId(companyId);
+    try {
+      const response = await fetch("/api/admin/companies/referral", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ companyId, referredByCompanyId: referredByCompanyId || null }),
+      });
+      if (!response.ok) { setToast("Failed to update referral."); return; }
+      setToast("Referral updated.");
+      await loadCompanies();
+    } finally {
+      setPendingCompanyId(null);
+    }
+  }
+
   async function viewAs(companyId: string) {
     setPendingCompanyId(companyId);
     try {
@@ -158,6 +179,8 @@ export default function AdminPage() {
               <th style={{ padding: 8 }}>Plan</th>
               <th style={{ padding: 8 }}>Subscription</th>
               <th style={{ padding: 8 }}>Set status</th>
+              <th style={{ padding: 8 }}>Referred by</th>
+              <th style={{ padding: 8 }}>Referral reward</th>
               <th style={{ padding: 8 }}>Actions</th>
             </tr>
           </thead>
@@ -178,6 +201,25 @@ export default function AdminPage() {
                   <button disabled={pendingCompanyId === company.companyId} onClick={() => void saveStatus(company.companyId)} style={{ marginLeft: 8 }}>
                     Save
                   </button>
+                </td>
+                <td style={{ padding: 8 }}>
+                  <select
+                    value={referralDrafts[company.companyId] ?? company.referredByCompanyId ?? ""}
+                    onChange={(event) => setReferralDrafts((current) => ({ ...current, [company.companyId]: event.target.value }))}
+                  >
+                    <option value="">none</option>
+                    {companies.filter((candidate) => candidate.companyId !== company.companyId).map((candidate) => (
+                      <option key={candidate.companyId} value={candidate.companyId}>{candidate.accountLabel}</option>
+                    ))}
+                  </select>
+                  <button disabled={pendingCompanyId === company.companyId} onClick={() => void saveReferral(company.companyId)} style={{ marginLeft: 8 }}>
+                    Save
+                  </button>
+                </td>
+                <td style={{ padding: 8 }}>
+                  {company.referralRewardGrantedAt
+                    ? `granted ${new Date(company.referralRewardGrantedAt).toLocaleDateString()}`
+                    : company.referredByCompanyId ? "pending first payment" : "—"}
                 </td>
                 <td style={{ padding: 8 }}>
                   <button disabled={pendingCompanyId === company.companyId} onClick={() => void viewAs(company.companyId)}>
