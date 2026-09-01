@@ -6,10 +6,15 @@ const maxFleetPositionsPerCompany = 100;
 const maxTripPositionsPerCompany = 100;
 const d1BatchSize = 50;
 const maxD1StatementsPerPass = 1000;
+// Bounds how far back a first-ever (or long-overdue) sync catches up --
+// beyond this, rely on the maxPositionsPerCompany LIMIT as the safety net
+// instead of pulling unbounded history.
+const maxCatchUpWindowMs = 24 * 60 * 60 * 1000;
 
 type D1Statement = {
   bind(...values: unknown[]): D1Statement;
   run(): Promise<unknown>;
+  first<T>(): Promise<T | null>;
 };
 
 type D1Binding = {
@@ -133,6 +138,16 @@ export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationR
   const url = databaseUrl();
   if (!url) return { ran: false, reason: "postgres_not_configured", companies: 0, fleetPositions: 0, tripPositions: 0 };
 
+  // Only rows newer than the last successful sync need re-writing -- D1's
+  // ON CONFLICT upsert made every previously-synced position count as a
+  // fresh write every 15 minutes even though its content never changed,
+  // which is what drove this job to be one of the top D1 rows_written
+  // consumers (see the 2026-09-01 investigation).
+  const watermark = await d1.prepare(`SELECT last_success_at FROM automation_runtime_state WHERE id = 'd1_telemetry_reconciliation' LIMIT 1`)
+    .first<{ last_success_at: number | null }>();
+  const sinceMs = watermark?.last_success_at ? Math.max(watermark.last_success_at, Date.now() - maxCatchUpWindowMs) : Date.now() - maxCatchUpWindowMs;
+  const since = new Date(sinceMs);
+
   await recordState(d1, "last_attempt_at", Date.now());
   const sql = neon(url);
   try {
@@ -145,11 +160,11 @@ export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationR
     let tripPositions = 0;
     for (const { id: companyId } of companies) {
       const fleetPromise = sql`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
-        FROM fleet_position_observations WHERE company_id = ${companyId}
+        FROM fleet_position_observations WHERE company_id = ${companyId} AND position_at > ${since}
         ORDER BY position_at DESC LIMIT ${maxFleetPositionsPerCompany}`
         .then((rows) => rows as unknown as FleetPositionRow[]);
       const tripPromise = sql`SELECT company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
-        FROM trip_position_observations WHERE company_id = ${companyId}
+        FROM trip_position_observations WHERE company_id = ${companyId} AND position_at > ${since}
         ORDER BY position_at DESC LIMIT ${maxTripPositionsPerCompany}`
         .then((rows) => rows as unknown as TripPositionRow[]);
       const [fleetRows, tripRows] = await Promise.all([fleetPromise, tripPromise]);
