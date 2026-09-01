@@ -40,7 +40,7 @@ test("grantOneFreeInvoice creates a single-use, single-cycle 100% discount and a
   assert.match(paddleReferral, /export async function grantOneFreeInvoice\(paddleSubscriptionId: string\): Promise<boolean> \{/);
   assert.match(paddleReferral, /type: "percentage",\s*\n\s*amount: "100",\s*\n\s*recur: true,\s*\n\s*maximum_recurring_intervals: 1,\s*\n\s*usage_limit: 1,/);
   assert.match(paddleReferral, /method: "PATCH",/);
-  assert.match(paddleReferral, /body: JSON\.stringify\(\{ discount: \{ id: discountId \} \}\)/);
+  assert.match(paddleReferral, /body: JSON\.stringify\(\{ discount: \{ id: discountId, effective_from: "next_billing_period" \} \}\)/);
   assert.match(paddleReferral, /AbortSignal\.timeout\(requestTimeoutMs\)/g);
   assert.doesNotMatch(paddleReferral, /\bthrow\b/);
 });
