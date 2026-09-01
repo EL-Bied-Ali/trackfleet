@@ -70,7 +70,7 @@ button { color: inherit; }
 @media (max-width: 560px) { .plan-cards { grid-template-columns: 1fr; } }
 
 .app-shell { min-height: 100vh; display: flex; background: #f6f8f5; }
-.sidebar { width: 240px; flex: 0 0 240px; min-height: 100vh; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 26px 17px 19px; background: #3f1734; color: #e9dce3; }
+.sidebar { width: 240px; flex: 0 0 240px; min-height: 100vh; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 26px 17px 19px; background: #24313d; color: #dce5ec; }
 .brand { color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 11px; padding: 0 10px; margin-bottom: 31px; font-weight: 760; font-size: 18px; letter-spacing: -.3px; }
 .company-brand { display: grid; justify-items: start; gap: 9px; }
 .company-brand-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 22px; line-height: 1.1; letter-spacing: -.7px; }
@@ -83,29 +83,29 @@ button { color: inherit; }
 .company-logo-preview img { width: 44px; height: 44px; object-fit: contain; border: 1px solid var(--line); border-radius: 9px; padding: 4px; background: white; }
 .company-logo-preview button { padding: 0; border: 0; background: none; color: #9a3e31; font-size: 10.5px; text-decoration: underline; cursor: pointer; }
 .sidebar nav { display: grid; gap: 4px; }
-.nav-item { width: 100%; height: 42px; display: flex; gap: 12px; align-items: center; padding: 0 12px; border: 0; background: transparent; border-radius: 9px; color: #cbb8c3; font-size: 13.5px; text-align: left; cursor: pointer; transition: .2s ease; }
+.nav-item { width: 100%; height: 42px; display: flex; gap: 12px; align-items: center; padding: 0 12px; border: 0; background: transparent; border-radius: 9px; color: #b9c7d3; font-size: 13.5px; text-align: left; cursor: pointer; transition: .2s ease; }
 .nav-item:hover { color: white; background: rgba(255,255,255,.05); }
-.nav-item.active { color: white; background: rgba(238, 205, 222, .12); font-weight: 650; }
+.nav-item.active { color: white; background: #36495a; font-weight: 650; }
 .nav-item:disabled { opacity: .52; cursor: not-allowed; }
-.nav-item:disabled:hover { color: #cbb8c3; background: transparent; }
+.nav-item:disabled:hover { color: #b9c7d3; background: transparent; }
 a.nav-item { text-decoration: none; }
 .icon { width: 18px; height: 18px; display: inline-grid; place-items: center; font-size: 16px; }
-.nav-count { margin-left: auto; font-size: 11px; color: #c0a8b6; background: rgba(255,255,255,.08); padding: 2px 7px; border-radius: 10px; }
+.nav-count { margin-left: auto; font-size: 11px; color: #bfd0dc; background: rgba(255,255,255,.08); padding: 2px 7px; border-radius: 10px; }
 .sidebar-divider { height: 1px; margin: 20px 11px; background: rgba(255,255,255,.09); }
 .sidebar-spacer { flex: 1; }
-.gps-card { padding: 16px; border: 1px solid rgba(244, 222, 234, .12); border-radius: 12px; background: rgba(255,255,255,.055); }
-.gps-icon { margin-bottom: 10px; color: #f3cbc4; font-size: 20px; }
+.gps-card { padding: 16px; border: 1px solid rgba(220, 229, 236, .18); border-radius: 12px; background: rgba(255,255,255,.055); }
+.gps-icon { margin-bottom: 10px; color: #d6e5ee; font-size: 20px; }
 .gps-card strong { display: block; color: white; font-size: 12.5px; }
-.gps-card p { margin: 7px 0 13px; color: #b49eaa; font-size: 10.5px; line-height: 1.5; }
-.gps-card button { padding: 0; border: 0; color: #e9c5d7; background: transparent; font-size: 10.5px; text-decoration: underline; cursor: pointer; }
-.gps-coming { display: block; color: #d7b8c8; font-size: 9px; line-height: 1.4; }
+.gps-card p { margin: 7px 0 13px; color: #afc0cc; font-size: 10.5px; line-height: 1.5; }
+.gps-card button { padding: 0; border: 0; color: #d6e5ee; background: transparent; font-size: 10.5px; text-decoration: underline; cursor: pointer; }
+.gps-coming { display: block; color: #c5d4de; font-size: 9px; line-height: 1.4; }
 .profile { display: flex; align-items: center; gap: 10px; padding: 19px 4px 0; margin-top: 18px; border-top: 1px solid rgba(255,255,255,.09); }
 .avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #f0d5d0; color: #9a1f24; font-size: 10px; font-weight: 750; }
 .profile div:nth-child(2) { min-width: 0; flex: 1; }
 .profile strong, .profile span { display: block; }
 .profile strong { color: #f4f8f6; font-size: 11px; }
-.profile span { margin-top: 3px; color: #ac97a3; font-size: 9.5px; }
-.profile button { border: 0; background: transparent; color: #b29da9; cursor: pointer; }
+.profile span { margin-top: 3px; color: #aebfcb; font-size: 9.5px; }
+.profile button { border: 0; background: transparent; color: #b7c7d2; cursor: pointer; }
 
 @media (max-width: 820px) { .login-layout { grid-template-columns: 1fr; gap: 35px; padding-top: 25px; }.login-story h1 { font-size: 42px; }.login-route { margin-top: 28px; }.login-card { padding: 25px; } }
 .agency-location-page { min-height: 100vh; padding: 0 22px 48px; background: #f4f7f5; color: var(--ink); }.agency-location-header { width: min(900px, 100%); height: 76px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }.agency-location-actions { display: flex; gap: 8px; }.agency-location-actions select, .agency-location-actions button { height: 38px; padding: 0 12px; border: 1px solid #d7e0db; border-radius: 9px; background: white; color: var(--ink); }.agency-location-card { width: min(680px, 100%); margin: 38px auto 0; padding: 32px; border: 1px solid #dce5e0; border-radius: 18px; background: white; box-shadow: 0 14px 40px rgba(52,26,43,.08); }.agency-location-card h1 { margin: 5px 0 10px; font-size: clamp(28px, 5vw, 42px); }.agency-location-card > p { color: #796670; line-height: 1.6; }.agency-location-site, .agency-location-current { display: grid; gap: 5px; margin-top: 22px; padding: 15px; border-radius: 12px; background: #f5f8f6; }.agency-location-site span, .agency-location-current span { color: #82717a; font-size: 12px; }.agency-location-capture { width: 100%; margin-top: 18px; }.agency-location-candidate { display: grid; gap: 13px; margin-top: 18px; }.agency-location-candidate iframe { width: 100%; height: 290px; border: 1px solid #dce5e0; border-radius: 12px; }.agency-location-candidate p { display: flex; justify-content: space-between; gap: 12px; margin: 0; }.agency-location-candidate p span { color: #796670; }.agency-location-message { margin-top: 16px; padding: 12px; border-radius: 10px; background: #edf6f1; color: #5f284d!important; }
