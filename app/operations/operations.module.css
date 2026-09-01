@@ -223,3 +223,20 @@
   .deliveryId { white-space: normal; }
   .alertActions { justify-items: start; }
 }
+
+:root[data-theme="dark"] .button { background: #1d2a35; color: #e7edf2; border-color: #334553; }
+:root[data-theme="dark"] .summaryCard,
+:root[data-theme="dark"] .alert,
+:root[data-theme="dark"] .empty,
+:root[data-theme="dark"] .error,
+:root[data-theme="dark"] .loading {
+  background: #17212b;
+  border-color: #2b3a47;
+  color: #e7edf2;
+}
+:root[data-theme="dark"] .summaryCard span,
+:root[data-theme="dark"] .updated,
+:root[data-theme="dark"] .alertBody p {
+  color: #9aabb9;
+}
+:root[data-theme="dark"] .filter { background: #1d2a35; border-color: #334553; color: #e7edf2; }

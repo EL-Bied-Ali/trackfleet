@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import styles from "./guide.module.css";
+import { AppShellLayout } from "../AppShellLayout";
 
 export const metadata: Metadata = {
   title: "Ce que TrackFleet fait vraiment — TrackFleet",
@@ -9,10 +9,9 @@ export const metadata: Metadata = {
 
 export default function GuidePage() {
   return (
-    <main className={styles.page}>
+    <AppShellLayout activePage="guide" locale="fr">
+      <main className={styles.page}>
       <div className={styles.shell}>
-        <Link className={styles.backLink} href="/">← Retour au tableau de bord</Link>
-
         <header className={styles.masthead}>
           <div className={styles.mastheadEyebrow}>Manifeste interne · TrackFleet</div>
           <h1 className={styles.title}>Ce que TrackFleet fait vraiment</h1>
@@ -153,6 +152,7 @@ export default function GuidePage() {
           TrackFleet — vérifié en conditions réelles, pas seulement dans le code.
         </footer>
       </div>
-    </main>
+      </main>
+    </AppShellLayout>
   );
 }
