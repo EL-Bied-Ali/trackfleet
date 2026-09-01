@@ -76,7 +76,7 @@ test("status/destination/ETA/progress are hoisted into the group header only whe
 });
 
 test("the group header shows the hoisted status/destination/ETA/progress, and per-row cells go fully blank instead of repeating any of it", () => {
-  assert.match(page, /\{group\.uniformDestination && <>/);
+  assert.match(page, /\{group\.uniformDestination && <div className="col-journey-inner">/);
   assert.match(page, /<span className=\{statusClass\[group\.uniformDestination\.status\]\}><i \/>\{t\.statuses\[group\.uniformDestination\.status\]\}<\/span>/);
   assert.match(page, /<span className="group-header-destination">\{group\.uniformDestination\.destination\}/);
   assert.match(page, /<span className="group-header-progress"><div className="progress">/);

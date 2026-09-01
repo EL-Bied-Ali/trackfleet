@@ -146,7 +146,7 @@ test("the group header row stretches to fill its full row width, not just its co
   assert.match(css, /\.group-header-row td \{ padding: 9px 15px; background: #f5f8f6; border-bottom: 1px solid var\(--line\); cursor: default; \}/);
   assert.match(css, /\.group-header-row-inner \{ position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; \}/);
   assert.match(page, /<td colSpan=\{company\?\.role === "dispatcher" \? 4 : 3\}><div className="group-header-row-inner">/);
-  assert.match(page, /<\/>\}<\/td><td className="col-actions"><div className="group-header-row-inner">.*<\/div><\/td><\/tr>/s);
+  assert.match(page, /<\/div>\}<\/td><td className="col-actions"><div className="group-header-row-inner">.*<\/div><\/td><\/tr>/s);
 });
 
 test("the group header row lines up with the columns below it instead of one flex row crammed across the whole width -- reported live as misaligned, cluttered, and inconsistent with the data rows underneath", () => {
@@ -160,8 +160,8 @@ test("the group header row lines up with the columns below it instead of one fle
   // col-journey cell (reusing the exact class the per-row journey cell
   // already uses), and both edit triggers share a col-actions cell (same
   // pattern the per-row journey-editor trigger already uses).
-  assert.match(page, /<td className="col-journey">\{group\.uniformDestination && <>/);
-  assert.match(css, /\.col-journey \{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; \}/);
+  assert.match(page, /<td className="col-journey">\{group\.uniformDestination && <div className="col-journey-inner">/);
+  assert.match(css, /\.col-journey-inner \{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; \}/);
 });
 
 test("the two group header action triggers stay on one line even when the col-journey cell wraps to two -- reported live as the truck and schedule icons stacking vertically on a long destination address", () => {

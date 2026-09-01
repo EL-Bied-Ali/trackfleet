@@ -313,7 +313,14 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .contact-popover a:hover { text-decoration: underline; }
 .status { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; width: max-content; margin: 0; padding: 4px 7px; border-radius: 12px; font-size: 8px; font-weight: 650; }.status i { width: 5px; height: 5px; border-radius: 50%; }.status.transit { color: #167354; background: #e5f4ed; }.status.transit i { background: #006233; }.status.delayed { color: #a6681d; background: #fff1da; }.status.delayed i { background: #e29a34; }.status.loading { color: #7653a3; background: #f0eaf8; }.status.loading i { background: #916ed7; }.status.delivered { color: #7b6f75; background: #edf0ee; }.status.delivered i { background: #89938e; }
 .progress { display: flex; align-items: center; gap: 7px; }.progress > div { width: 65px; height: 4px; overflow: hidden; border-radius: 4px; background: #e7ece9; }.progress > div i { display: block; height: 100%; border-radius: inherit; background: #7b2b61; }.progress span { color: #897d83; font-size: 8px; }
-.col-journey { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Same lesson as .group-header-row-inner above (see the comment on why
+   the flex layout lives on a plain div nested inside the td, not on the
+   td itself): a flex td doesn't report its wrapped height back to the
+   table's row-height calculation the way a real table-cell does, so
+   wrapped content silently overflowed past the row and visually bled
+   into the row(s) below -- worse once .scan-control-cell (below) started
+   routinely wrapping to 2-3 lines too. */
+.col-journey-inner { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
 .journey-destination { color: #63525b; font-size: 9px; font-weight: 650; }
 .relay-badge { display: inline-block; margin-left: 5px; padding: 2px 6px; border-radius: 5px; color: #92400e; background: #fef3c7; font-size: 7px; font-weight: 650; }
@@ -462,7 +469,8 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .delivery-cell .label-select-checkbox { position: absolute; top: 50%; left: 15px; width: 15px; height: 15px; margin: 0; transform: translateY(-50%); cursor: pointer; }
 .label-print-button { height: 32px; padding: 0 11px; border: 1px solid #ddd3d8; border-radius: 8px; color: #55384a; background: #fff; font-size: 9px; font-weight: 750; cursor: pointer; white-space: nowrap; }
 .label-print-button:disabled { color: #a99ca3; background: #f7f8f7; cursor: not-allowed; }
-.scan-control-cell { min-width: 225px; display: flex; align-items: center; gap: 5px; }
+.scan-control-cell { min-width: 225px; }
+.scan-control-inner { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .scan-proof { display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 3px 6px; border-radius: 999px; color: #8a7d83; background: #f1f3f2; font-size: 8px; line-height: 1; }
 .scan-proof b { font-size: 8px; color: #72666d; }
 .scan-proof small { font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 76px; }
