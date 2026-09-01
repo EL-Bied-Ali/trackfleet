@@ -18,3 +18,15 @@ test("the sidebar exposes an accessible dark-mode toggle and the whole app has d
   assert.match(css, /:root\[data-theme="dark"\] body, :root\[data-theme="dark"\] \.app-shell, :root\[data-theme="dark"\] \.customer-page/);
   assert.match(css, /:root\[data-theme="dark"\] \.sidebar \{ border-right-color: #2b3a47; background: #17212b;/);
 });
+
+// Reported live, with a computed-style check confirming it: the generic dark
+// ".gps-coming" text-color rule (meant for the small non-live sub-label) beat
+// ".is-live"'s own green in a same-element specificity tie, leaving grayish
+// text (#9fb0bd) on the light mint success background (#dff3e9) -- a muddy
+// "SYNCHRONISATION AUTOMATIQUE" badge instead of a clean success chip.
+test("the 'automatic sync' badge keeps its clean green-on-mint look in dark mode, not grayish text on a mismatched background", () => {
+  assert.match(css, /:root\[data-theme="dark"\] \.gps-coming\.is-live \{ color: #126f50; background: #dff3e9; \}/);
+  const genericDarkRuleIndex = css.indexOf(':root[data-theme="dark"] .gps-card p, :root[data-theme="dark"] .gps-coming,');
+  const liveOverrideIndex = css.indexOf(':root[data-theme="dark"] .gps-coming.is-live {');
+  assert.ok(genericDarkRuleIndex > -1 && liveOverrideIndex > genericDarkRuleIndex, "the .is-live override must come after the generic dark .gps-coming rule to win the cascade");
+});

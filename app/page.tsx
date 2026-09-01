@@ -2408,16 +2408,21 @@ export default function Home() {
         </nav>
         <div className="sidebar-divider" />
         <nav aria-label={locale === "fr" ? "Outils TrackFleet" : locale === "nl" ? "TrackFleet-tools" : "TrackFleet tools"}>
-          {company?.role === "dispatcher" && <a className="nav-item" href="/api/operations/export"><Icon>⇩</Icon>{t.exportTool}</a>}
-          <a className="nav-item" href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
-          <a className="nav-item" href="/guide"><Icon>◈</Icon>{t.guideTool}</a>
           <a className="nav-item" href="/scan/connect"><Icon>▦</Icon>{t.scanTool}</a>
+          <a className="nav-item" href={`/operations/revenue?lang=${locale}`}><Icon>€</Icon>{t.revenueTool}</a>
+          <a className="nav-item" href={`/operations/history?lang=${locale}`}><Icon>◷</Icon>{t.historyTool}</a>
+          <a className="nav-item" href="/guide"><Icon>◈</Icon>{t.guideTool}</a>
         </nav>
         <div className="sidebar-divider" />
         <nav>
           <button className="nav-item theme-toggle" type="button" aria-pressed={darkMode} onClick={() => setDarkMode((current) => !current)}><Icon>{darkMode ? "☀" : "☾"}</Icon>{darkMode ? (locale === "fr" ? "Mode clair" : locale === "nl" ? "Lichte modus" : "Light mode") : (locale === "fr" ? "Mode sombre" : locale === "nl" ? "Donkere modus" : "Dark mode")}</button>
           {company?.role === "dispatcher" ? <button className="nav-item" onClick={openCompanySettings}><Icon>⚙</Icon>{t.settings}</button> : <button className="nav-item" disabled><Icon>⚙</Icon>{t.settings}</button>}
           <button className="nav-item" disabled><Icon>?</Icon>{t.helpCentre}</button>
+        </nav>
+        <div className="sidebar-divider" />
+        <nav>
+          {company?.role === "dispatcher" && <a className="nav-item" href="/api/operations/export"><Icon>⇩</Icon>{t.exportTool}</a>}
+          <a className="nav-item" href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
         </nav>
         <div className="sidebar-spacer" />
         <div className="gps-card">

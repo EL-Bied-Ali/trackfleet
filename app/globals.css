@@ -528,6 +528,14 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 :root[data-theme="dark"] .gps-icon, :root[data-theme="dark"] .gps-card button { color: #b8d1d2; }
 :root[data-theme="dark"] .gps-card strong, :root[data-theme="dark"] .profile strong { color: #f2f6f8; }
 :root[data-theme="dark"] .gps-card p, :root[data-theme="dark"] .gps-coming, :root[data-theme="dark"] .profile span, :root[data-theme="dark"] .profile button { color: #9fb0bd; }
+/* The rule above's grayish text color still won over .is-live's own green
+   (a same-element specificity tie broken by source order), leaving grayish
+   text on the light mint success background -- a muddy, "not quite right"
+   look reported live. Restoring the light-mode green-on-mint combo here
+   (rather than a dark background) matches how every other status chip in
+   this app (.status.transit etc.) stays a small saturated light pill even
+   in dark mode, instead of trying to darken every badge individually. */
+:root[data-theme="dark"] .gps-coming.is-live { color: #126f50; background: #dff3e9; }
 :root[data-theme="dark"] .stat-card, :root[data-theme="dark"] .map-panel, :root[data-theme="dark"] .deliveries-panel, :root[data-theme="dark"] .tours-panel, :root[data-theme="dark"] .modal, :root[data-theme="dark"] .customer-grid, :root[data-theme="dark"] .agency-location-card, :root[data-theme="dark"] .plan-card { border-color: #2b3a47; background: #17212b; box-shadow: none; }
 :root[data-theme="dark"] .language-switcher, :root[data-theme="dark"] .icon-button, :root[data-theme="dark"] .panel-actions button, :root[data-theme="dark"] .panel-actions select, :root[data-theme="dark"] .panel-actions .table-search, :root[data-theme="dark"] .modal input, :root[data-theme="dark"] .modal select, :root[data-theme="dark"] .company-logo-preview img, :root[data-theme="dark"] .contact-popover, :root[data-theme="dark"] .truck-editor-popover { border-color: #334553; color: var(--ink); background: #1d2a35; }
 :root[data-theme="dark"] th, :root[data-theme="dark"] .group-header-row td, :root[data-theme="dark"] .row-selected td, :root[data-theme="dark"] tbody tr { border-color: #2b3a47; background: #17212b; }
