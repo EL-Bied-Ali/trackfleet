@@ -13,7 +13,11 @@ function paddleIsLive() {
   return runtimeEnv.PADDLE_ENVIRONMENT?.trim() === "live";
 }
 
-function paddleApiBase() {
+// Exported for paddle-referral.ts, which calls Paddle endpoints
+// (Discounts, Subscriptions) this file doesn't otherwise need -- both must
+// target the same environment paddleIsLive() resolves here, so this stays
+// the one place that decision is made.
+export function paddleApiBase() {
   return paddleIsLive() ? "https://api.paddle.com" : "https://sandbox-api.paddle.com";
 }
 
