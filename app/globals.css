@@ -508,6 +508,15 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 :root[data-theme="dark"] .sidebar { border-right-color: #2b3a47; background: #17212b; color: #d7e1e9; }
 :root[data-theme="dark"] .sidebar .brand { color: #f5f8fa; }
 :root[data-theme="dark"] .brand-mark { background: #2b4050; color: #e5f2f2; }
+/* .company-brand-mark carries the .brand-mark class too (for its icon-square
+   sizing baseline), so the dark-mode rule above -- meant only for the small
+   placeholder icon square -- was winning a same-specificity tie by source
+   order and painting a navy box behind a real uploaded logo image, which
+   the light-mode rule (app/globals.css, "background: transparent") never
+   intended. Reported live: looked like a quality drop, but the logo pixels
+   were untouched -- it was a solid-color box showing behind its transparent
+   PNG edges. */
+:root[data-theme="dark"] .brand.company-brand .company-brand-mark { background: transparent; }
 :root[data-theme="dark"] .nav-item { color: #aebdca; }
 :root[data-theme="dark"] .nav-item:hover { color: white; background: #20303d; }
 :root[data-theme="dark"] .nav-item.active { color: white; background: #2b4050; }
