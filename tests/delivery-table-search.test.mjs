@@ -49,7 +49,8 @@ test("mobile card layout hides the actions column via a stable class, not a posi
   // correct regardless of how many conditional columns exist per role.
   assert.doesNotMatch(css, /td:nth-child\(7\) \{ display: none; \}/);
   assert.match(css, /\.col-actions \{ display: none; \}/);
-  assert.match(page, /<th className="col-actions"><span className="sr-only">/);
+  assert.match(page, /<th className="col-actions">\{t\.tableActions\}<\/th>/);
   assert.match(page, /<td className="col-actions">\{company\?\.role === "dispatcher"/);
   assert.match(page, /<button className="more-button" title=\{t\.copyTrackingFor\(delivery\.id\)\}/);
+  assert.match(css, /th\.col-actions, td\.col-actions \{ width: 126px; min-width: 126px; text-align: right; white-space: nowrap; \}/);
 });
