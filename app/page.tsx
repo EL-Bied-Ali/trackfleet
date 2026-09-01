@@ -194,6 +194,73 @@ function Icon({ children }: { children: React.ReactNode }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
 }
 
+async function cropLogoDataUrl(dataUrl: string) {
+  const image = new Image();
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("logo_decode_failed"));
+    image.src = dataUrl;
+  });
+  const source = document.createElement("canvas");
+  source.width = image.naturalWidth || image.width;
+  source.height = image.naturalHeight || image.height;
+  const sourceContext = source.getContext("2d", { willReadFrequently: true });
+  if (!sourceContext || source.width < 1 || source.height < 1) return dataUrl;
+  sourceContext.drawImage(image, 0, 0, source.width, source.height);
+
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
+  let left = source.width;
+  let top = source.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < source.height; y += 1) {
+    for (let x = 0; x < source.width; x += 1) {
+      const offset = (y * source.width + x) * 4;
+      const alpha = pixels[offset + 3];
+      const isNearWhite = pixels[offset] > 245 && pixels[offset + 1] > 245 && pixels[offset + 2] > 245;
+      if (alpha < 16 || isNearWhite) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) return dataUrl;
+
+  const padding = Math.max(2, Math.round(Math.max(right - left + 1, bottom - top + 1) * 0.04));
+  left = Math.max(0, left - padding);
+  top = Math.max(0, top - padding);
+  right = Math.min(source.width - 1, right + padding);
+  bottom = Math.min(source.height - 1, bottom + padding);
+  const cropWidth = right - left + 1;
+  const cropHeight = bottom - top + 1;
+  const maxDimension = 320;
+  const scale = Math.min(1, maxDimension / Math.max(cropWidth, cropHeight));
+  const output = document.createElement("canvas");
+  output.width = Math.max(1, Math.round(cropWidth * scale));
+  output.height = Math.max(1, Math.round(cropHeight * scale));
+  const outputContext = output.getContext("2d");
+  if (!outputContext) return dataUrl;
+  outputContext.imageSmoothingEnabled = true;
+  outputContext.imageSmoothingQuality = "high";
+  outputContext.drawImage(source, left, top, cropWidth, cropHeight, 0, 0, output.width, output.height);
+  return output.toDataURL("image/png");
+}
+
+function CompanyLogo({ logoDataUrl, className }: { logoDataUrl: string | null; className: string }) {
+  const [displayLogo, setDisplayLogo] = useState(logoDataUrl);
+  useEffect(() => {
+    let active = true;
+    setDisplayLogo(logoDataUrl);
+    if (!logoDataUrl) return () => { active = false; };
+    void cropLogoDataUrl(logoDataUrl).then((croppedLogo) => {
+      if (active) setDisplayLogo(croppedLogo);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [logoDataUrl]);
+  return <span className={className}>{displayLogo ? <img src={displayLogo} alt="" /> /* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */ : <span>↗</span>}</span>;
+}
+
 function LanguageSwitcher({ locale, label, onChange }: { locale: Locale; label: string; onChange: (locale: Locale) => void }) {
   return (
     <label className="language-switcher">
@@ -1945,27 +2012,17 @@ export default function Home() {
   // data URL well under the server's own size cap regardless of what the
   // dispatcher's original file looked like.
   async function handleLogoFileChange(file: File) {
-    const maxDimension = 200;
     const dataUrl = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(new Error("logo_read_failed"));
       reader.readAsDataURL(file);
     });
-    const image = new Image();
-    await new Promise<void>((resolve, reject) => {
-      image.onload = () => resolve();
-      image.onerror = () => reject(new Error("logo_decode_failed"));
-      image.src = dataUrl;
-    });
-    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(image.width * scale));
-    canvas.height = Math.max(1, Math.round(image.height * scale));
-    const context = canvas.getContext("2d");
-    if (!context) { setToast(locale === "fr" ? "Impossible de traiter cette image." : locale === "nl" ? "Kon deze afbeelding niet verwerken." : "Could not process this image."); return; }
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    setCompanySettingsLogoDataUrl(canvas.toDataURL("image/png"));
+    try {
+      setCompanySettingsLogoDataUrl(await cropLogoDataUrl(dataUrl));
+    } catch {
+      setToast(locale === "fr" ? "Impossible de traiter cette image." : locale === "nl" ? "Kon deze afbeelding niet verwerken." : "Could not process this image.");
+    }
   }
 
   async function saveCompanySettings(event: React.FormEvent<HTMLFormElement>) {
@@ -2171,7 +2228,7 @@ export default function Home() {
       <main className="customer-page">
         <header className="customer-header">
           <button type="button" className="brand brand-dark" onClick={openDispatchView}>
-            <span className="brand-mark">{companyBranding.logoDataUrl ? <img src={companyBranding.logoDataUrl} alt="" /> /* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */ : <span>↗</span>}</span>
+            <CompanyLogo className="brand-mark" logoDataUrl={companyBranding.logoDataUrl} />
             <span>{companyBranding.name || "TrackFleet"}</span>
           </button>
           <div className="customer-header-actions"><LanguageSwitcher locale={locale} label={t.language} onChange={changeLocale} /><div className="secure-pill"><span>●</span> {t.secureLink}</div></div>
@@ -2286,7 +2343,7 @@ export default function Home() {
       <aside className="sidebar">
         <div className="brand company-brand">
           <span className="company-brand-name">{companyBranding.name || "TrackFleet"}</span>
-          <span className="brand-mark company-brand-mark">{companyBranding.logoDataUrl ? <img src={companyBranding.logoDataUrl} alt="" /> /* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */ : <span>↗</span>}</span>
+          <CompanyLogo className="brand-mark company-brand-mark" logoDataUrl={companyBranding.logoDataUrl} />
         </div>
         <nav aria-label="Main navigation">
           <button className="nav-item active"><Icon>▦</Icon>{t.overview}</button>

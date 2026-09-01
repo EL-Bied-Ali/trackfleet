@@ -29,7 +29,7 @@ test("an empty name, color, or logo clears that field (stored as null) rather th
 });
 
 test("the customer tracking header shows the company's own name/logo, falling back to TrackFleet when unset", () => {
-  assert.match(page, /<span className="brand-mark">\{companyBranding\.logoDataUrl \? <img src=\{companyBranding\.logoDataUrl\} alt="" \/>.*: <span>↗<\/span>\}<\/span>/);
+  assert.match(page, /<CompanyLogo className="brand-mark" logoDataUrl=\{companyBranding\.logoDataUrl\} \/>/);
   assert.match(page, /<span>\{companyBranding\.name \|\| "TrackFleet"\}<\/span>/);
 });
 
@@ -37,7 +37,7 @@ test("the dispatcher sidebar shows the same company branding as the customer pag
   const sidebarBrand = page.indexOf('<div className="brand company-brand">');
   assert.ok(sidebarBrand >= 0, "expected the sidebar brand mark to use companyBranding, not a hardcoded TrackFleet span");
   assert.match(page, /<span className="company-brand-name">\{companyBranding\.name \|\| "TrackFleet"\}<\/span>/);
-  assert.match(page, /<span className="brand-mark company-brand-mark">\{companyBranding\.logoDataUrl \?/);
+  assert.match(page, /<CompanyLogo className="brand-mark company-brand-mark" logoDataUrl=\{companyBranding\.logoDataUrl\} \/>/);
 });
 
 test("the settings nav item opens company settings for a dispatcher, but stays disabled for an agency", () => {
@@ -50,9 +50,12 @@ test("the public tracking API response carries the delivering company's branding
   assert.match(deliveriesRoute, /companyBranding: companyBranding \?\? \{ name: null, logoDataUrl: null, color: null \},/);
 });
 
-test("the logo upload is resized/compressed client-side before it's ever sent to the server", () => {
-  assert.match(page, /const maxDimension = 200;/);
-  assert.match(page, /canvas\.toDataURL\("image\/png"\)/);
+test("logos are cropped client-side before storage and re-cropped on display for existing uploads", () => {
+  assert.match(page, /async function cropLogoDataUrl\(dataUrl: string\)/);
+  assert.match(page, /const maxDimension = 320;/);
+  assert.match(page, /const isNearWhite = pixels\[offset\] > 245/);
+  assert.match(page, /setCompanySettingsLogoDataUrl\(await cropLogoDataUrl\(dataUrl\)\);/);
+  assert.match(page, /void cropLogoDataUrl\(logoDataUrl\)\.then/);
 });
 
 test("company branding columns are provisioned in both the Postgres schema contract and the D1 standby's self-healing schema script", async () => {
@@ -71,10 +74,10 @@ test("company branding writes are suppressed (not silently lost) during an activ
   assert.match(failover, /export async function getCompanyBranding\(companyId: string\): Promise<CompanyBranding \| null> \{\s*return withD1ReadFailover\(/s);
 });
 
-test("branding css gives the sidebar logo a clean, enlarged slot without an added background", () => {
+test("branding css gives the sidebar logo a clean slot without blurry CSS zoom", () => {
   assert.match(css, /\.brand-mark \{ display: grid; place-items: center; width: 29px; height: 29px;.*overflow: hidden; \}/);
   assert.match(css, /\.company-brand-name \{ max-width: 100%;.*font-size: 22px;/);
   assert.match(css, /\.brand\.company-brand \.company-brand-mark \{ width: 56px; height: 56px;.*background: transparent;/);
   assert.match(css, /\.brand-mark img \{ width: 100%; height: 100%; object-fit: contain; transform: none;/);
-  assert.match(css, /\.brand\.company-brand \.company-brand-mark img \{ transform: scale\(1\.7\); \}/);
+  assert.match(css, /\.brand\.company-brand \.company-brand-mark img \{ transform: none; \}/);
 });
