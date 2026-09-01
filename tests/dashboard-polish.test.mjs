@@ -105,3 +105,10 @@ test("the customer-facing sidebar tools are never hidden alongside placeholder n
   assert.match(page, /href="\/guide"/);
   assert.match(page, /href="\/scan\/connect"/);
 });
+
+test("top actions have deliberate secondary-button styling, including in dark mode", () => {
+  assert.match(page, /<button className="secondary-button" type="button" onClick=\{\(\) => setDemoModalOpen\(true\)\}/);
+  assert.match(page, /<button className="secondary-button" type="button" onClick=\{\(\) => void deleteDemoDeliveries\(\)\}/);
+  assert.match(polish, /:root\[data-theme="dark"\] \.top-actions \{\s*\n\s*border-color: #31424f;/);
+  assert.match(polish, /:root\[data-theme="dark"\] \.secondary-button,/);
+});

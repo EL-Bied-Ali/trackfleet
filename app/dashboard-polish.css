@@ -57,6 +57,23 @@
   outline-offset: 1px;
 }
 
+:root[data-theme="dark"] .top-actions {
+  border-color: #31424f;
+  background: #17212b;
+}
+
+:root[data-theme="dark"] .secondary-button,
+:root[data-theme="dark"] .top-actions > .language-switcher {
+  border-color: #405361;
+  color: #dbe6ed;
+  background: #20303b;
+}
+
+:root[data-theme="dark"] .secondary-button:hover {
+  border-color: #58707f;
+  background: #293d4a;
+}
+
 /* Fleet/Deliveries/Customers/Settings/Help are still disabled placeholders
    with no destination -- keep those specific buttons and the dividers out
    of sight until they're implemented. This must NOT hide the "Outils
