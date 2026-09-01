@@ -110,6 +110,21 @@ export default function LabelsPage() {
 
   const pages = chunk(deliveries, LABELS_PER_PAGE);
 
+  async function handlePrint() {
+    const deliveryIds = deliveries.map((delivery) => delivery.id);
+    try {
+      // We only mark the action once the dispatcher chooses the real print
+      // action, not merely when they open this preview tab.
+      if (deliveryIds.length) await fetch("/api/deliveries/label-print", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryIds }),
+      });
+    } finally {
+      window.print();
+    }
+  }
+
   return (
     <main style={{ fontFamily: "system-ui", color: "#111827", background: "#e5e7eb", minHeight: "100vh" }}>
       <style>{`
@@ -131,7 +146,7 @@ export default function LabelsPage() {
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <Link href="/?lang=fr" style={{ color: "#fff", fontWeight: 700, fontSize: 13, alignSelf: "center" }}>← Tableau</Link>
-          <button type="button" onClick={() => window.print()} disabled={!deliveries.length} style={{ padding: "10px 18px", borderRadius: 10, border: 0, background: "#22c55e", color: "#052e12", fontWeight: 700, cursor: deliveries.length ? "pointer" : "default" }}>
+          <button type="button" onClick={() => void handlePrint()} disabled={!deliveries.length} style={{ padding: "10px 18px", borderRadius: 10, border: 0, background: "#22c55e", color: "#052e12", fontWeight: 700, cursor: deliveries.length ? "pointer" : "default" }}>
             Imprimer
           </button>
         </div>

@@ -57,11 +57,13 @@ test("the labels page requires an authenticated session and loads only the reque
   assert.match(labelsPage, /const ids = new Set\(new URLSearchParams\(window\.location\.search\)\.get\("ids"\)\?\.split\(","\)\.filter\(Boolean\) \?\? \[\]\);/);
 });
 
-test("the labels page renders A4-print CSS with break-inside protection per label, a page break between sheets, and a print button", () => {
+test("the labels page renders A4-print CSS with break-inside protection per label, a page break between sheets, and records the honest print-dialog action", () => {
   assert.match(labelsPage, /@page \{ size: A4; margin: 0; \}/);
   assert.match(labelsPage, /\.label \{ break-inside: avoid; \}/);
   assert.match(labelsPage, /\.label-page:not\(:last-child\) \{ break-after: page; \}/);
-  assert.match(labelsPage, /onClick=\{\(\) => window\.print\(\)\}/);
+  assert.match(labelsPage, /async function handlePrint\(\)/);
+  assert.match(labelsPage, /fetch\("\/api\/deliveries\/label-print", \{/);
+  assert.match(labelsPage, /finally \{\s*window\.print\(\);\s*\}/);
 });
 
 test("labels are laid out 8 per A4 sheet (2x4) at ~105x74mm each, paginating into multiple sheets when there are more deliveries", () => {
@@ -110,9 +112,10 @@ test("a dispatcher can print one delivery's label directly from its table row", 
   assert.match(dashboard, /window\.open\(`\/labels\?ids=\$\{delivery\.id\}`, "_blank"\)/);
 });
 
-test("bulk label selection: a checkbox per row (dispatcher only) feeds a toolbar button that opens /labels with every selected id, then clears the selection", () => {
+test("bulk label selection lives beside the delivery table filters, opens /labels with every selected id, then clears the selection", () => {
   assert.match(dashboard, /const \[selectedForLabels, setSelectedForLabels\] = useState<Set<string>>\(new Set\(\)\);/);
   assert.match(dashboard, /className="label-select-checkbox"/);
+  assert.match(dashboard, /className="label-print-button"/);
   assert.match(dashboard, /window\.open\(`\/labels\?ids=\$\{Array\.from\(selectedForLabels\)\.join\(","\)\}`, "_blank"\); setSelectedForLabels\(new Set\(\)\);/);
 });
 
@@ -122,4 +125,11 @@ test("the delivery table shows both handoff proofs without claiming that the hub
   assert.match(dashboard, /scanSummary\?\.hubArrivedAt/);
   assert.match(dashboard, /scanSummary\?\.hubLabel/);
   assert.match(dashboard, /scan-control-cell/);
+});
+
+test("the parcel-control column distinguishes labels awaiting print from a print dialog that was actually launched", () => {
+  assert.match(dashboard, /labelPrintRequestedAt\?: string \| null/);
+  assert.match(dashboard, /Impression lancée/);
+  assert.match(dashboard, /À imprimer/);
+  assert.match(dashboard, /label-print-status/);
 });

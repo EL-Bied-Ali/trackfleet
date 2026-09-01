@@ -453,9 +453,13 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .eta-explanation strong { font-size: 11px; }
 .eta-explanation span { margin-top: 3px; color: #968a90; font-size: 10px; }
 .label-select-checkbox { display: block; margin-bottom: 4px; width: 15px; height: 15px; cursor: pointer; }
+.label-print-button { height: 32px; padding: 0 11px; border: 1px solid #ddd3d8; border-radius: 8px; color: #55384a; background: #fff; font-size: 9px; font-weight: 750; cursor: pointer; white-space: nowrap; }
+.label-print-button:disabled { color: #a99ca3; background: #f7f8f7; cursor: not-allowed; }
 .scan-control-cell { min-width: 145px; }
 .scan-proof { display: grid; gap: 2px; margin: 2px 0; color: #9a8f94; font-size: 9px; line-height: 1.25; }
 .scan-proof b { font-size: 10px; color: #72666d; }
 .scan-proof small { font-size: 8.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
 .scan-proof.is-confirmed b { color: #18744f; }
 .scan-proof.is-confirmed b::before { content: "✓"; display: inline-grid; place-items: center; width: 13px; height: 13px; margin-right: 4px; border-radius: 50%; color: white; background: #1d9a69; font-size: 8px; }
+.label-print-status { display: inline-flex; align-items: center; margin-top: 5px; padding: 3px 6px; border-radius: 999px; color: #8a7d83; background: #f1f3f2; font-size: 8px; font-weight: 750; }
+.label-print-status.is-requested { color: #176747; background: #e3f5eb; }

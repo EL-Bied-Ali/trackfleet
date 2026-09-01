@@ -34,7 +34,11 @@ export type DeliveryEventType =
   // deliberately stay outside the GPS/status machine and automatic-message
   // policy: a hub is not necessarily the customer's final agency.
   | "SCAN_LOADED"
-  | "SCAN_HUB_ARRIVED";
+  | "SCAN_HUB_ARRIVED"
+  // The browser cannot attest that paper physically left a printer. This is
+  // therefore deliberately named for the action we can prove: a dispatcher
+  // opened the print dialog for this parcel's label.
+  | "LABEL_PRINT_REQUESTED";
 
 export type DeliveryEventInput = {
   previousStatus: "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -93,7 +97,8 @@ export function customerFacingEvent(event: DeliveryEventType) {
     && event !== "MANUAL_DELIVERED"
     && event !== "WHATSAPP_ARRIVAL_NOTIFIED"
     && event !== "MANUAL_DEPARTURE_CONFIRMED"
-    && event !== "WHATSAPP_DEPARTURE_NOTIFIED";
+    && event !== "WHATSAPP_DEPARTURE_NOTIFIED"
+    && event !== "LABEL_PRINT_REQUESTED";
 }
 
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {
