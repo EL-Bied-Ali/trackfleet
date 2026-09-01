@@ -95,7 +95,7 @@ export default function BulkImportPage() {
   }
 
   return (
-    <AppShellLayout activePage="overview" locale="fr">
+    <AppShellLayout activePage="import" locale="fr">
       <div className="topbar">
         <div>
           <p className="eyebrow">TRACKFLEET · IMPORT</p>
