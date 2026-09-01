@@ -114,6 +114,28 @@ test("the Code128 barcode is gone -- no jsbarcode import, no JsBarcode call, no 
   assert.doesNotMatch(packageJson, /"@types\/jsbarcode"/);
 });
 
+// Reported live via a screenshot: a big empty gap sat next to the logo,
+// above the QR -- the label was a header row (logo+name) stacked on top of
+// a content row (text+QR), so the QR only ever occupied the lower row
+// while the header row's right side had nothing in it. Restructured into
+// two real columns spanning the label's FULL height instead, so the
+// QR/code column fills that space rather than leaving it blank.
+test("the label is two columns spanning its full height (logo+text on the left, QR+code on the right), not a header row stacked on a content row", () => {
+  assert.match(labelsPage, /className="label" style=\{\{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", gap: "3mm", overflow: "hidden" \}\}/);
+  assert.doesNotMatch(labelsPage, /flexDirection: "column", gap: "1\.5mm", overflow: "hidden" \}\}>\s*\n\s*<div style=\{\{ display: "flex", alignItems: "center", gap: "3mm" \}\}>/);
+});
+
+// Reported live: presets should fully use the A4 sheet, not leave a
+// leftover margin strip -- each divides 210/297mm exactly (cols/rows
+// chosen so the division comes out even), rather than approximating a
+// specific commercial label product (there's no single standard size).
+test("label size presets divide the A4 sheet exactly, with no leftover margin, computed rather than hardcoded to one specific product", () => {
+  assert.match(labelsPage, /const LABEL_PRESETS: Array<\{ cols: number; rows: number \}> = \[/);
+  assert.match(labelsPage, /const presetWidth = Math\.floor\(\(PAGE_WIDTH_MM \/ preset\.cols\) \* 100\) \/ 100;/);
+  assert.match(labelsPage, /const presetHeight = Math\.floor\(\(PAGE_HEIGHT_MM \/ preset\.rows\) \* 100\) \/ 100;/);
+  assert.match(labelsPage, /onClick=\{\(\) => updateLabelSize\(\{ width: presetWidth, height: presetHeight \}\)\}/);
+});
+
 test("a delivery with no parcel code (created before this feature existed) shows a placeholder instead of a broken QR", () => {
   assert.match(labelsPage, /Code non disponible/);
   assert.match(labelsPage, /delivery\.parcelCode \? \(/);
