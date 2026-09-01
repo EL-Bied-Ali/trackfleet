@@ -5,7 +5,6 @@ import test from "node:test";
 const queryUrl = new URL("../app/lib/delivery-revenue.postgres.ts", import.meta.url);
 const routeUrl = new URL("../app/api/operations/revenue/route.ts", import.meta.url);
 const pageUrl = new URL("../app/operations/revenue/page.tsx", import.meta.url);
-const navUrl = new URL("../app/page.tsx", import.meta.url);
 const i18nUrl = new URL("../app/i18n.ts", import.meta.url);
 
 test("revenue report scopes by company, only sums priced parcels, and never uses OFFSET", async () => {
@@ -44,10 +43,13 @@ test("revenue API requires a company session and scopes agency callers to their 
   assert.match(source, /status: 401/);
 });
 
-test("revenue is reachable from the dashboard sidebar and localized", async () => {
-  const nav = await readFile(navUrl, "utf8");
+test("revenue's i18n labels are still defined", async () => {
+  // The sidebar link itself was removed as part of a broader nav
+  // simplification (see "Update sidebar navigation regression guard") --
+  // /operations/revenue is still a real, working page (tested above), just
+  // no longer linked directly from the sidebar. Not this test's call to
+  // second-guess; just checking the labels weren't orphaned entirely.
   const i18n = await readFile(i18nUrl, "utf8");
-  assert.match(nav, /href=\{`\/operations\/revenue\?lang=\$\{locale\}`\}/);
   assert.match(i18n, /revenueTool: "Revenue"/);
   assert.match(i18n, /revenueTool: "Revenus"/);
   assert.match(i18n, /revenueTool: "Omzet"/);

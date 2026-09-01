@@ -26,7 +26,7 @@ test("the journey editor popover CSS (position/anchoring) is still used by the g
 
 test("status, progress and ETA are consolidated into a single Journey column instead of three separate ones", () => {
   assert.match(page, /<th>\{t\.tableJourney\}<\/th><th className="col-actions">/);
-  assert.match(page, /<td className="col-journey">\{!group\.uniformDestination && <span className="journey-destination">.*?\}<\/span>\}\{!group\.uniformDestination && <span className=\{statusClass\[delivery\.status\]\}/);
+  assert.match(page, /<td className="col-journey"><div className="col-journey-inner">\{!group\.uniformDestination && <span className="journey-destination">.*?\}<\/span>\}\{!group\.uniformDestination && <span className=\{statusClass\[delivery\.status\]\}/);
   assert.doesNotMatch(page, /<th>\{t\.tableStatus\}<\/th>/);
-  assert.match(css, /\.col-journey \{ display: flex; align-items: center;/);
+  assert.match(css, /\.col-journey-inner \{ display: flex; align-items: center;/);
 });

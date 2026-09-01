@@ -26,10 +26,11 @@ test("customer tracking never exposes an internal unassigned vehicle label or in
 });
 
 test("quick tools live in the dispatcher sidebar and are localized", () => {
+  // The Opérations/Historique/Stockage sidebar links were removed as part
+  // of a broader nav simplification (see "Update sidebar navigation
+  // regression guard") -- those pages are still real and working, just no
+  // longer linked directly from the sidebar. Export is still there.
   assert.match(i18n, /operationsTool: "Opérations"/);
-  assert.match(page, /a className="nav-item" href=\{`\/operations\?lang=\$\{locale\}`\}/);
-  assert.match(page, /a className="nav-item" href=\{`\/operations\/history\?lang=\$\{locale\}`\}/);
-  assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href=\{`\/operations\/storage\?lang=\$\{locale\}`\}/);
   assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href="\/api\/operations\/export"/);
 });
 
