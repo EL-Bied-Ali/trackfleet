@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const [route, page, css, d1Schema] = await Promise.all([
+const [route, page, appSidebar, companyLogo, css, d1Schema] = await Promise.all([
   readFile(new URL("../app/api/company/branding/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  readFile(new URL("../app/AppSidebar.tsx", import.meta.url), "utf8"),
+  readFile(new URL("../app/CompanyLogo.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   readFile(new URL("../scripts/prepare-d1-schema.mjs", import.meta.url), "utf8"),
 ]);
@@ -34,14 +36,23 @@ test("the customer tracking header shows the company's own name/logo, falling ba
 });
 
 test("the dispatcher sidebar shows the same company branding as the customer page", () => {
-  const sidebarBrand = page.indexOf('<div className="brand company-brand">');
+  // The sidebar now lives in AppSidebar.tsx, shared between the dashboard
+  // (app/page.tsx) and every standalone page (Revenue, History, Guide,
+  // Import, the operations hub, Storage) -- see the 2026-09-02 "sidebar
+  // everywhere" request.
+  const sidebarBrand = appSidebar.indexOf('<Link className="brand company-brand" href="/">');
   assert.ok(sidebarBrand >= 0, "expected the sidebar brand mark to use companyBranding, not a hardcoded TrackFleet span");
-  assert.match(page, /<span className="company-brand-name">\{companyBranding\.name \|\| "TrackFleet"\}<\/span>/);
-  assert.match(page, /<CompanyLogo className="brand-mark company-brand-mark" logoDataUrl=\{companyBranding\.logoDataUrl\} \/>/);
+  assert.match(appSidebar, /<span className="company-brand-name">\{companyBranding\.name \|\| "TrackFleet"\}<\/span>/);
+  assert.match(appSidebar, /<CompanyLogo className="brand-mark company-brand-mark" logoDataUrl=\{companyBranding\.logoDataUrl\} \/>/);
 });
 
 test("the settings nav item opens company settings for a dispatcher, but stays disabled for an agency", () => {
-  assert.match(page, /company\?\.role === "dispatcher" \? <button className="nav-item" onClick=\{openCompanySettings\}><Icon>⚙<\/Icon>\{t\.settings\}<\/button> : <button className="nav-item" disabled><Icon>⚙<\/Icon>\{t\.settings\}<\/button>/);
+  // On the dashboard itself, onOpenSettings opens the settings modal
+  // in-place; on every other page it falls back to a plain link (there's no
+  // modal to open there) -- both branches still gate on role === "dispatcher"
+  // the same way, an agency always gets the disabled button.
+  assert.match(appSidebar, /company\?\.role === "dispatcher"\s*\n\s*\? \(onOpenSettings \? <button className="nav-item" onClick=\{onOpenSettings\}><Icon>⚙<\/Icon>\{t\.settings\}<\/button> : <a className="nav-item" href=\{settingsHref \?\? "\/"\}><Icon>⚙<\/Icon>\{t\.settings\}<\/a>\)\s*\n\s*: <button className="nav-item" disabled><Icon>⚙<\/Icon>\{t\.settings\}<\/button>/);
+  assert.match(page, /onOpenSettings=\{openCompanySettings\}/);
 });
 
 test("the public tracking API response carries the delivering company's branding as its own top-level field, not per-delivery", async () => {
@@ -51,11 +62,13 @@ test("the public tracking API response carries the delivering company's branding
 });
 
 test("logos are cropped client-side before storage and re-cropped on display for existing uploads", () => {
-  assert.match(page, /async function cropLogoDataUrl\(dataUrl: string\)/);
-  assert.match(page, /const maxDimension = 320;/);
-  assert.match(page, /const isNearWhite = pixels\[offset\] > 245/);
+  // cropLogoDataUrl/CompanyLogo now live in their own module (app/CompanyLogo.tsx),
+  // shared by app/page.tsx and app/AppSidebar.tsx -- see the sidebar extraction.
+  assert.match(companyLogo, /export async function cropLogoDataUrl\(dataUrl: string\)/);
+  assert.match(companyLogo, /const maxDimension = 320;/);
+  assert.match(companyLogo, /const isNearWhite = pixels\[offset\] > 245/);
   assert.match(page, /setCompanySettingsLogoDataUrl\(await cropLogoDataUrl\(dataUrl\)\);/);
-  assert.match(page, /void cropLogoDataUrl\(logoDataUrl\)\.then/);
+  assert.match(companyLogo, /void cropLogoDataUrl\(logoDataUrl\)\.then/);
 });
 
 test("company branding columns are provisioned in both the Postgres schema contract and the D1 standby's self-healing schema script", async () => {
