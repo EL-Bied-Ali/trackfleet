@@ -77,7 +77,7 @@ async function ensurePaddleReady(handleEvent: (event: { name: string }) => void)
 }
 
 type DeliveryStatus = "In transit" | "Delayed" | "Loading" | "Delivered";
-type DeliveryEventType = "REGISTERED" | "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "ARRIVED_AT_SITE" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE";
+type DeliveryEventType = "REGISTERED" | "DEPARTED" | "PROGRESS_25" | "PROGRESS_50" | "PROGRESS_75" | "NEAR_DESTINATION" | "ARRIVED_AT_SITE" | "DELAY_DETECTED" | "ARRIVED" | "GPS_STALE" | "SCAN_LOADED" | "SCAN_HUB_ARRIVED";
 
 type Delivery = {
   id: string;
@@ -2038,6 +2038,8 @@ export default function Home() {
           PROGRESS_25: "25% du trajet effectué",
           PROGRESS_50: "Mi-parcours atteint",
           PROGRESS_75: "75% du trajet effectué",
+          SCAN_LOADED: "Colis chargé dans le camion",
+          SCAN_HUB_ARRIVED: "Colis arrivé au centre logistique",
           NEAR_DESTINATION: "Le camion approche",
           ARRIVED_AT_SITE: "Camion arrivé à l’agence",
           DELAY_DETECTED: "Retard détecté",
@@ -2062,6 +2064,8 @@ export default function Home() {
           PROGRESS_25: "25% of the trip completed",
           PROGRESS_50: "Halfway point reached",
           PROGRESS_75: "75% of the trip completed",
+          SCAN_LOADED: "Parcel loaded onto the truck",
+          SCAN_HUB_ARRIVED: "Parcel arrived at the logistics hub",
           NEAR_DESTINATION: "Truck is approaching",
           ARRIVED_AT_SITE: "Truck arrived at the agency",
           DELAY_DETECTED: "Delay detected",
@@ -2086,6 +2090,8 @@ export default function Home() {
           PROGRESS_25: "25% van het traject voltooid",
           PROGRESS_50: "Halverwege bereikt",
           PROGRESS_75: "75% van het traject voltooid",
+          SCAN_LOADED: "Pakket in de vrachtwagen geladen",
+          SCAN_HUB_ARRIVED: "Pakket aangekomen in het logistiek centrum",
           NEAR_DESTINATION: "Vrachtwagen nadert",
           ARRIVED_AT_SITE: "Vrachtwagen aangekomen bij het agentschap",
           DELAY_DETECTED: "Vertraging gedetecteerd",

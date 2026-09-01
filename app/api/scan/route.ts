@@ -58,7 +58,11 @@ export async function POST(request: Request) {
       // having the audit row make that retry look like a successful duplicate.
       // Both completion and timeline events are idempotent, so a later audit
       // failure is also safe to retry.
-      if (checkpoint === "loaded") await store.recordEvent(delivery.id, "SCAN_LOADED", delivery.progress);
+      await store.recordEvent(
+        delivery.id,
+        checkpoint === "loaded" ? "SCAN_LOADED" : "SCAN_HUB_ARRIVED",
+        delivery.progress,
+      );
 
       await store.recordScan({
         companyId: session.companyId,

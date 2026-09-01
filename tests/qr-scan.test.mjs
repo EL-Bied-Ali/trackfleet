@@ -4,6 +4,7 @@ import test from "node:test";
 import { memoryStore } from "../app/lib/delivery-store.memory.ts";
 import { createParcelCode, isValidParcelCode, parcelScanUrl } from "../app/lib/parcel-code.ts";
 import { customerFacingEvent } from "../app/lib/delivery-events.ts";
+import { isAutomaticWhatsAppEvent } from "../app/lib/notification-policy.ts";
 
 const route = await readFile(new URL("../app/api/scan/route.ts", import.meta.url), "utf8");
 const typesFile = await readFile(new URL("../app/lib/delivery-store.types.ts", import.meta.url), "utf8");
@@ -85,8 +86,11 @@ test("the dashboard scan summary exposes only the latest load and hub-unload pro
   assert.deepEqual(await memoryStore.listScanSummaries(`${companyId}-other`, [delivery.id]), []);
 });
 
-test("SCAN_LOADED is internal bookkeeping, excluded from the customer-facing timeline", () => {
-  assert.equal(customerFacingEvent("SCAN_LOADED"), false);
+test("scan milestones appear in customer tracking but never become WhatsApp notifications", () => {
+  assert.equal(customerFacingEvent("SCAN_LOADED"), true);
+  assert.equal(customerFacingEvent("SCAN_HUB_ARRIVED"), true);
+  assert.equal(isAutomaticWhatsAppEvent("SCAN_LOADED"), false);
+  assert.equal(isAutomaticWhatsAppEvent("SCAN_HUB_ARRIVED"), false);
 });
 
 test("the DeliveryStore interface declares the scan methods and every backend implements them", async () => {
@@ -128,11 +132,11 @@ test("the scan route offers only loaded/arrived, is authenticated, same-origin p
 test("the hub-unload checkpoint is audit-only: it does not confirm final arrival, change delivery state, or notify the customer", () => {
   assert.doesNotMatch(route, /confirmArrivalManually/);
   assert.doesNotMatch(route, /completeDeliveryManually/);
-  assert.match(route, /await store\.recordEvent\(delivery\.id, "SCAN_LOADED", delivery\.progress\);/);
+  assert.match(route, /checkpoint === "loaded" \? "SCAN_LOADED" : "SCAN_HUB_ARRIVED"/);
 });
 
 test("a checkpoint effect is applied before its audit row, so an effect failure cannot turn the retry into a no-op duplicate", () => {
-  const event = route.indexOf('await store.recordEvent(delivery.id, "SCAN_LOADED", delivery.progress)');
+  const event = route.indexOf('checkpoint === "loaded" ? "SCAN_LOADED" : "SCAN_HUB_ARRIVED"');
   const audit = route.indexOf("await store.recordScan({");
   assert.ok(event >= 0 && event < audit, "the load event must happen before the scan audit insert");
 });
