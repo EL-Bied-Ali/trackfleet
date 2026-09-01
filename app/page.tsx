@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { localeOptions, translations, type Locale } from "./i18n";
+import { Icon, CompanyLogo, cropLogoDataUrl } from "./CompanyLogo";
+import { AppSidebar } from "./AppSidebar";
 import InteractiveFleetMap from "./InteractiveFleetMap";
 import AgencyLocationSetup from "./AgencyLocationSetup";
 import SiteManager from "./SiteManager";
@@ -191,76 +193,6 @@ function truckBadgeColor(number: number | null) {
 }
 
 
-function Icon({ children }: { children: React.ReactNode }) {
-  return <span className="icon" aria-hidden="true">{children}</span>;
-}
-
-async function cropLogoDataUrl(dataUrl: string) {
-  const image = new Image();
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error("logo_decode_failed"));
-    image.src = dataUrl;
-  });
-  const source = document.createElement("canvas");
-  source.width = image.naturalWidth || image.width;
-  source.height = image.naturalHeight || image.height;
-  const sourceContext = source.getContext("2d", { willReadFrequently: true });
-  if (!sourceContext || source.width < 1 || source.height < 1) return dataUrl;
-  sourceContext.drawImage(image, 0, 0, source.width, source.height);
-
-  const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
-  let left = source.width;
-  let top = source.height;
-  let right = -1;
-  let bottom = -1;
-  for (let y = 0; y < source.height; y += 1) {
-    for (let x = 0; x < source.width; x += 1) {
-      const offset = (y * source.width + x) * 4;
-      const alpha = pixels[offset + 3];
-      const isNearWhite = pixels[offset] > 245 && pixels[offset + 1] > 245 && pixels[offset + 2] > 245;
-      if (alpha < 16 || isNearWhite) continue;
-      left = Math.min(left, x);
-      top = Math.min(top, y);
-      right = Math.max(right, x);
-      bottom = Math.max(bottom, y);
-    }
-  }
-  if (right < left || bottom < top) return dataUrl;
-
-  const padding = Math.max(2, Math.round(Math.max(right - left + 1, bottom - top + 1) * 0.04));
-  left = Math.max(0, left - padding);
-  top = Math.max(0, top - padding);
-  right = Math.min(source.width - 1, right + padding);
-  bottom = Math.min(source.height - 1, bottom + padding);
-  const cropWidth = right - left + 1;
-  const cropHeight = bottom - top + 1;
-  const maxDimension = 320;
-  const scale = Math.min(1, maxDimension / Math.max(cropWidth, cropHeight));
-  const output = document.createElement("canvas");
-  output.width = Math.max(1, Math.round(cropWidth * scale));
-  output.height = Math.max(1, Math.round(cropHeight * scale));
-  const outputContext = output.getContext("2d");
-  if (!outputContext) return dataUrl;
-  outputContext.imageSmoothingEnabled = true;
-  outputContext.imageSmoothingQuality = "high";
-  outputContext.drawImage(source, left, top, cropWidth, cropHeight, 0, 0, output.width, output.height);
-  return output.toDataURL("image/png");
-}
-
-function CompanyLogo({ logoDataUrl, className }: { logoDataUrl: string | null; className: string }) {
-  const [displayLogo, setDisplayLogo] = useState(logoDataUrl);
-  useEffect(() => {
-    let active = true;
-    setDisplayLogo(logoDataUrl);
-    if (!logoDataUrl) return () => { active = false; };
-    void cropLogoDataUrl(logoDataUrl).then((croppedLogo) => {
-      if (active) setDisplayLogo(croppedLogo);
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [logoDataUrl]);
-  return <span className={className}>{displayLogo ? <img src={displayLogo} alt="" /> /* eslint-disable-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize */ : <span>↗</span>}</span>;
-}
 
 function LanguageSwitcher({ locale, label, onChange }: { locale: Locale; label: string; onChange: (locale: Locale) => void }) {
   return (
@@ -2395,44 +2327,17 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand company-brand">
-          <span className="company-brand-name">{companyBranding.name || "TrackFleet"}</span>
-          <CompanyLogo className="brand-mark company-brand-mark" logoDataUrl={companyBranding.logoDataUrl} />
-        </div>
-        <nav aria-label="Main navigation">
-          <button className="nav-item active"><Icon>▦</Icon>{t.overview}</button>
-          <button className="nav-item" disabled><Icon>▰</Icon>{t.fleet} <span className="nav-count">{integration.connected ? integration.vehicleCount : "—"}</span></button>
-          <button className="nav-item" disabled><Icon>◇</Icon>{t.deliveries} <span className="nav-count">{deliveries.length}</span></button>
-          <button className="nav-item" disabled><Icon>◉</Icon>{t.customers}</button>
-        </nav>
-        <div className="sidebar-divider" />
-        <nav aria-label={locale === "fr" ? "Outils TrackFleet" : locale === "nl" ? "TrackFleet-tools" : "TrackFleet tools"}>
-          <a className="nav-item" href="/scan/connect"><Icon>▦</Icon>{t.scanTool}</a>
-          <a className="nav-item" href={`/operations/revenue?lang=${locale}`}><Icon>€</Icon>{t.revenueTool}</a>
-          <a className="nav-item" href={`/operations/history?lang=${locale}`}><Icon>◷</Icon>{t.historyTool}</a>
-          <a className="nav-item" href="/guide"><Icon>◈</Icon>{t.guideTool}</a>
-        </nav>
-        <div className="sidebar-divider" />
-        <nav>
-          <button className="nav-item theme-toggle" type="button" aria-pressed={darkMode} onClick={() => setDarkMode((current) => !current)}><Icon>{darkMode ? "☀" : "☾"}</Icon>{darkMode ? (locale === "fr" ? "Mode clair" : locale === "nl" ? "Lichte modus" : "Light mode") : (locale === "fr" ? "Mode sombre" : locale === "nl" ? "Donkere modus" : "Dark mode")}</button>
-          {company?.role === "dispatcher" ? <button className="nav-item" onClick={openCompanySettings}><Icon>⚙</Icon>{t.settings}</button> : <button className="nav-item" disabled><Icon>⚙</Icon>{t.settings}</button>}
-          <button className="nav-item" disabled><Icon>?</Icon>{t.helpCentre}</button>
-        </nav>
-        <div className="sidebar-divider" />
-        <nav>
-          {company?.role === "dispatcher" && <a className="nav-item" href="/api/operations/export"><Icon>⇩</Icon>{t.exportTool}</a>}
-          <a className="nav-item" href={`/import?lang=${locale}`}><Icon>＋</Icon>{t.importTool}</a>
-        </nav>
-        <div className="sidebar-spacer" />
-        <div className="gps-card">
-          <div className="gps-icon">⌖</div>
-          <strong>{integration.connected ? t.gpsConnected : integration.configured ? t.gpsIssue : t.gpsPending}</strong>
-          <p>{integration.connected ? t.gpsConnectedBody(integration.vehicleCount) : integration.configured ? t.gpsIssueBody : t.gpsPendingBody}</p>
-          <span className={`gps-coming ${integration.connected ? "is-live" : ""}`}>{integration.connected ? t.gpsAutomatic : t.gpsFallback}</span>
-        </div>
-        <div className="profile"><div className="avatar">{(company?.user || "TF").slice(0, 2).toUpperCase()}</div><div><strong>{company?.user || "TrackFleet"}</strong><span>{company?.account || t.dispatcher}</span></div><button aria-label="Déconnexion" onClick={() => void logout()}>↪</button></div>
-      </aside>
+      <AppSidebar
+        activePage="overview"
+        locale={locale}
+        company={company}
+        companyBranding={companyBranding}
+        integration={{ connected: integration.connected, configured: integration.configured, vehicleCount: integration.vehicleCount }}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode((current) => !current)}
+        onOpenSettings={openCompanySettings}
+        onLogout={logout}
+      />
 
       <section className="workspace">
         <header className="topbar">

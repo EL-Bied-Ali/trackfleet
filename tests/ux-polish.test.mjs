@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const page = fs.readFileSync("app/page.tsx", "utf8");
+const appSidebar = fs.readFileSync("app/AppSidebar.tsx", "utf8");
 const map = fs.readFileSync("app/InteractiveFleetMap.tsx", "utf8");
 const siteManager = fs.readFileSync("app/SiteManager.tsx", "utf8");
 const operations = fs.readFileSync("app/operations/page.tsx", "utf8");
@@ -26,12 +27,13 @@ test("customer tracking never exposes an internal unassigned vehicle label or in
 });
 
 test("quick tools live in the dispatcher sidebar and are localized", () => {
-  // The Opérations/Historique/Stockage sidebar links were removed as part
-  // of a broader nav simplification (see "Update sidebar navigation
-  // regression guard") -- those pages are still real and working, just no
-  // longer linked directly from the sidebar. Export is still there.
+  // Revenue/History were re-added to the sidebar on 2026-09-02 (see
+  // tests/quick-tools-navigation.test.mjs) after an earlier nav
+  // simplification had removed them -- the sidebar itself now lives in
+  // AppSidebar.tsx, shared with every standalone page. Export stays
+  // dispatcher-only there.
   assert.match(i18n, /operationsTool: "Opérations"/);
-  assert.match(page, /company\?\.role === "dispatcher" && <a className="nav-item" href="\/api\/operations\/export"/);
+  assert.match(appSidebar, /company\?\.role === "dispatcher" && <a className="nav-item" href="\/api\/operations\/export"/);
 });
 
 test("arrival completion hides unsafe actions until a real arrival is confirmed", () => {

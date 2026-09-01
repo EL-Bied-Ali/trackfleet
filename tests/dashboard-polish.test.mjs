@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 
-const [mapSource, polish, layout, i18n, page] = await Promise.all([
+const [mapSource, polish, layout, i18n, page, appSidebar] = await Promise.all([
   readFile(new URL("../app/InteractiveFleetMap.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/dashboard-polish.css", import.meta.url), "utf8"),
   readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/i18n.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  readFile(new URL("../app/AppSidebar.tsx", import.meta.url), "utf8"),
 ]);
 
 test("live map markers use one compact vehicle label instead of a GPS badge stack", () => {
@@ -100,10 +101,13 @@ test("the customer-facing sidebar tools are never hidden alongside placeholder n
   // must not hide the real customer tools that follow the overview navigation.
   assert.doesNotMatch(polish, /nav \+ \.sidebar-divider \+ nav/);
   assert.match(polish, /\.sidebar \.nav-item:disabled,\s+\.sidebar \.sidebar-divider \{/);
-  assert.match(page, /aria-label=\{locale === "fr" \? "Outils TrackFleet"/);
-  assert.match(page, /href=\{`\/import\?lang=\$\{locale\}`\}/);
-  assert.match(page, /href="\/guide"/);
-  assert.match(page, /href="\/scan\/connect"/);
+  // These now live in AppSidebar.tsx, shared between the dashboard and every
+  // standalone page (see the 2026-09-02 "sidebar everywhere" request).
+  assert.match(appSidebar, /const navLabel = locale === "fr" \? "Outils TrackFleet" : locale === "nl" \? "TrackFleet-tools" : "TrackFleet tools";/);
+  assert.match(appSidebar, /aria-label=\{navLabel\}/);
+  assert.match(appSidebar, /href=\{`\/import\?lang=\$\{locale\}`\}/);
+  assert.match(appSidebar, /href="\/guide"/);
+  assert.match(appSidebar, /href="\/scan\/connect"/);
 });
 
 test("top actions have deliberate secondary-button styling, including in dark mode", () => {

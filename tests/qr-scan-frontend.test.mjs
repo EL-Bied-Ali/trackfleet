@@ -5,6 +5,7 @@ import test from "node:test";
 const scanPage = await readFile(new URL("../app/scan/page.tsx", import.meta.url), "utf8");
 const labelsPage = await readFile(new URL("../app/labels/page.tsx", import.meta.url), "utf8");
 const dashboard = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+const appSidebar = await readFile(new URL("../app/AppSidebar.tsx", import.meta.url), "utf8");
 const i18n = await readFile(new URL("../app/i18n.ts", import.meta.url), "utf8");
 const packageJson = await readFile(new URL("../package.json", import.meta.url), "utf8");
 
@@ -149,7 +150,9 @@ test("the label prints TrackFleet id, client, destination and truck, per the pro
 });
 
 test("the dashboard sidebar opens the phone-pairing QR for both dispatcher and agency roles", () => {
-  assert.match(dashboard, /<a className="nav-item" href="\/scan\/connect"><Icon>▦<\/Icon>\{t\.scanTool\}<\/a>/);
+  // Now in AppSidebar.tsx, shared between the dashboard and every standalone
+  // page (see the 2026-09-02 "sidebar everywhere" request).
+  assert.match(appSidebar, /<a className="nav-item" href="\/scan\/connect"><Icon>▦<\/Icon>\{t\.scanTool\}<\/a>/);
   assert.match(i18n, /scanTool: "Scan",/);
   assert.match(i18n, /scanTool: "Scanner",/);
   assert.match(i18n, /scanTool: "Scannen",/);
