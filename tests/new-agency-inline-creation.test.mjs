@@ -61,7 +61,7 @@ test("the D1 schema script creates/backfills sites.whatsapp for both fresh and p
 test("POST /api/sites accepts, validates and returns a whatsapp number", async () => {
   const route = await readFile(new URL("../app/api/sites/route.ts", import.meta.url), "utf8");
   assert.match(route, /const whatsappRaw = String\(payload\.whatsapp \?\? ""\)\.trim\(\);/);
-  assert.match(route, /whatsapp,\s*\n\s*color,\s*\n\s*\}\);/);
+  assert.match(route, /whatsapp,\s*\n\s*color,\s*\n\s*shortCodePrefix,\s*\n\s*\}\);/);
   assert.match(route, /whatsapp: site\.whatsapp \?\? null,/);
 });
 

@@ -3,6 +3,7 @@ export const REQUIRED_POSTGRES_TABLES = [
   "automation_runtime_state",
   "companies",
   "deliveries",
+  "delivery_code_counters",
   "delivery_eta_observations",
   "delivery_events",
   "delivery_notifications",
@@ -44,6 +45,7 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "deliveries", column: "item_description" },
   { table: "deliveries", column: "customer_email" },
   { table: "deliveries", column: "parcel_code" },
+  { table: "deliveries", column: "short_code" },
   { table: "delivery_scans", column: "checkpoint" },
   { table: "delivery_eta_observations", column: "route_template_id" },
   { table: "delivery_eta_observations", column: "trip_instance_id" },
@@ -55,6 +57,7 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "sites", column: "arrival_radius_km" },
   { table: "sites", column: "whatsapp" },
   { table: "sites", column: "color" },
+  { table: "sites", column: "short_code_prefix" },
   { table: "trip_position_observations", column: "route_template_id" },
   { table: "trips", column: "stops_json" },
 ] as const;

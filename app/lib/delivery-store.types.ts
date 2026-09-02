@@ -66,6 +66,14 @@ export type DeliveryRow = {
   // parcel-code.ts) -- generated at creation, null only for deliveries
   // created before this feature existed.
   parcelCode?: string | null;
+  // Human-friendly per-destination sequence for the printed label (e.g.
+  // "CAS 00"), separate from and additional to `id` -- never replaces it
+  // anywhere (URLs, DB lookups, tracking links are all still keyed on
+  // `id`). Assigned once at creation via assignShortCode, only when the
+  // destination site has a shortCodePrefix configured (see
+  // known-sites.ts); null for every delivery created before this existed
+  // and for any destination without a prefix set yet.
+  shortCode?: string | null;
 };
 
 export type DeliveryEventRow = {
@@ -277,6 +285,12 @@ export interface DeliveryStore {
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
   releaseNotification(deliveryId: string, type: DeliveryEventType): Promise<void>;
+  // Hands out the next number in this company's lifetime, never-reset
+  // sequence for the given destination prefix (e.g. "CAS"), formatted as
+  // "CAS 00", "CAS 01", ... -- atomic under concurrent callers. Called
+  // once at creation time by app/api/deliveries/route.ts, before create(),
+  // only when the destination site has a shortCodePrefix configured.
+  assignShortCode(companyId: string, prefix: string): Promise<string>;
   create(input: CreateDeliveryInput): Promise<DeliveryRow>;
   // Bulk-deletes every delivery for this company whose customer name starts
   // with DEMO_DELIVERY_CUSTOMER_PREFIX (see demo-delivery.ts), along with

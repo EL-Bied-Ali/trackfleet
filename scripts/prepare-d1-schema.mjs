@@ -113,7 +113,8 @@ await runStatements([
     trip_id text,
     shipment_id text,
     created_at integer NOT NULL,
-    parcel_code text
+    parcel_code text,
+    short_code text
   )`,
   `CREATE TABLE IF NOT EXISTS delivery_scans (
     id text PRIMARY KEY NOT NULL,
@@ -209,9 +210,18 @@ await runStatements([
     roles text NOT NULL,
     whatsapp text,
     color text,
+    short_code_prefix text,
     created_at integer NOT NULL,
     updated_at integer NOT NULL,
     PRIMARY KEY (company_id, id)
+  )`,
+  // Backs assignShortCode in delivery-store.cloudflare.ts -- one lifetime,
+  // never-reset counter per (company, destination prefix) pair.
+  `CREATE TABLE IF NOT EXISTS delivery_code_counters (
+    company_id text NOT NULL,
+    prefix text NOT NULL,
+    next_number integer NOT NULL,
+    PRIMARY KEY (company_id, prefix)
   )`,
   `CREATE TABLE IF NOT EXISTS companies (
     id text PRIMARY KEY NOT NULL,
@@ -308,6 +318,7 @@ for (const [name, definition] of [
   ["company_id", "text DEFAULT 'demo' NOT NULL"],
   ["tracking_token", "text"],
   ["parcel_code", "text"],
+  ["short_code", "text"],
 ]) addMissingColumn(alterations, "deliveries", deliveryColumns, name, definition);
 
 for (const [name, definition] of [
@@ -337,6 +348,7 @@ for (const [name, definition] of [
 
 addMissingColumn(alterations, "sites", siteColumns, "whatsapp", "text");
 addMissingColumn(alterations, "sites", siteColumns, "color", "text");
+addMissingColumn(alterations, "sites", siteColumns, "short_code_prefix", "text");
 await runStatements(alterations);
 
 await runStatements([

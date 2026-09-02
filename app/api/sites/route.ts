@@ -6,6 +6,10 @@ import { agencyBrowserLocationIsAcceptable } from "../../lib/agency-access";
 import { defaultSiteColor } from "../../lib/known-sites";
 
 const hexColorPattern = /^#[0-9a-fA-F]{6}$/;
+// Uppercase letters/underscores only, matching the client's own confirmed
+// examples ("CAS", "TAN", "PORT_TAN" for Tanger Med -- kept distinct from
+// Tanger Ville's "TAN" despite sharing a bin color).
+const shortCodePrefixPattern = /^[A-Z_]{2,12}$/;
 
 type SiteRole = "origin" | "dropoff" | "replenishment" | "destination";
 
@@ -33,6 +37,10 @@ function siteJson(site: Awaited<ReturnType<typeof siteStore.listForCompany>>[num
     // assigned a specific color to yet, rather than leaving it unset and
     // pushing that decision onto every single caller.
     color: site.color ?? defaultSiteColor,
+    // No shared fallback here (unlike color) -- see the shortCodePrefix
+    // comment on KnownSite for why an unset prefix must stay unset rather
+    // than defaulting to something fabricated.
+    shortCodePrefix: site.shortCodePrefix ?? null,
     geofenceReady: typeof site.latitude === "number" && typeof site.longitude === "number",
   };
 }
@@ -85,6 +93,8 @@ export async function POST(request: Request) {
   const whatsapp = whatsappRaw || null;
   const colorRaw = String(payload.color ?? "").trim();
   const color = colorRaw || null;
+  const shortCodePrefixRaw = String(payload.shortCodePrefix ?? "").trim().toUpperCase();
+  const shortCodePrefix = shortCodePrefixRaw || null;
 
   if (!id || !label || !city || !address || (country !== "BE" && country !== "MA") || roles.length === 0) {
     return Response.json({ error: "id, label, city, address, country BE/MA and at least one role are required" }, { status: 400 });
@@ -97,6 +107,9 @@ export async function POST(request: Request) {
   }
   if (color && !hexColorPattern.test(color)) {
     return Response.json({ error: "color must be a 6-digit hex value like #a855f7" }, { status: 400 });
+  }
+  if (shortCodePrefix && !shortCodePrefixPattern.test(shortCodePrefix)) {
+    return Response.json({ error: "shortCodePrefix must be 2-12 uppercase letters/underscores, like CAS or PORT_TAN" }, { status: 400 });
   }
   if ((latitude === null) !== (longitude === null)) return Response.json({ error: "latitude and longitude must be provided together" }, { status: 400 });
   if (latitude !== null && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude! < -180 || longitude! > 180)) {
@@ -117,6 +130,7 @@ export async function POST(request: Request) {
     roles,
     whatsapp,
     color,
+    shortCodePrefix,
   });
   return Response.json({ site: siteJson(site) }, { status: 201, headers: { "cache-control": "no-store" } });
 }

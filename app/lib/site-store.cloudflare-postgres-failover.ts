@@ -32,6 +32,7 @@ function hydrate(row: Record<string, unknown>): CompanySite {
     roles: JSON.parse(String(row.roles)) as CompanySite["roles"],
     whatsapp: row.whatsapp === null || row.whatsapp === undefined ? null : String(row.whatsapp),
     color: row.color === null || row.color === undefined ? null : String(row.color),
+    shortCodePrefix: row.short_code_prefix === null || row.short_code_prefix === undefined ? null : String(row.short_code_prefix),
     createdAt: new Date(Number(row.created_at)),
     updatedAt: new Date(Number(row.updated_at)),
   };

@@ -20,6 +20,7 @@ test("schema contract covers every persistent production subsystem", async () =>
     "automation_runtime_state",
     "companies",
     "deliveries",
+    "delivery_code_counters",
     "delivery_eta_observations",
     "delivery_events",
     "delivery_notifications",
