@@ -45,19 +45,19 @@ const LABEL_PRESETS: Array<{ cols: number; rows: number }> = [
   { cols: 2, rows: 4 },
   { cols: 2, rows: 5 },
   { cols: 3, rows: 4 },
-  // A 3x6 (18/feuille, 70x49.5mm) preset was tried and reverted the same
-  // session: the QR's fixed 28mm size was never actually the bottleneck --
-  // a real destination address (e.g. "12 Boulevard Essaouira, Douar el
-  // Asker, Derb el Makina, Marrakech, Maroc", 74 characters) wraps across
-  // several lines in the narrow ~31mm text column, and at 49.5mm total
-  // label height that wrapped text overflowed the label and got silently
-  // clipped by the container's overflow:hidden -- confirmed live,
-  // scrollHeight 403px against a 155px available box, destination and
-  // truck lines invisible on the printed label. 3x4 (12/feuille) is the
-  // real, address-length-independent ceiling with the current fixed-size
-  // text layout; going denser safely would need the destination shown as
-  // just the short site label instead of the full address, not just a
-  // smaller font.
+  // 2x8 (16/feuille, 105x37.125mm) was requested after 3x4 (12/feuille)
+  // shipped -- roughly half that preset's height. The earlier 3x6
+  // (18/feuille, 49.5mm) attempt was reverted because the label's text
+  // lines wrapped and overflowed at that height; that specific failure
+  // mode is gone now (destination is city-only and every text line
+  // truncates instead of wrapping -- see the label cell below), so what's
+  // left to fit is just the fixed-size chrome: padding, the QR code, and
+  // the optional logo. Those now scale down with the label's own height
+  // (labelPadding/qrSizeMm/logoMaxHeightMm below) instead of staying fixed,
+  // specifically so this preset doesn't clip. Verified live against a full
+  // sheet of real deliveries (scrollHeight vs clientHeight, 0px overflow)
+  // before shipping -- see project_label_16_per_sheet memory.
+  { cols: 2, rows: 8 },
 ];
 
 function clampLabelMm(value: number, fallback: number) {
@@ -225,6 +225,14 @@ export default function LabelsPage() {
   const labelsPerRow = Math.max(1, Math.floor(PAGE_WIDTH_MM / labelSize.width));
   const labelsPerColumn = Math.max(1, Math.floor(PAGE_HEIGHT_MM / labelSize.height));
   const labelsPerPage = labelsPerRow * labelsPerColumn;
+  // Fixed at 4mm/28mm/19mm, these fit every preset up to 12/feuille
+  // (74.25mm tall) fine, but at 16/feuille (37.125mm) they alone would
+  // already eat most of the label's height before a single line of text is
+  // drawn. Scaling them down with the label's own height keeps every
+  // preset's chrome proportional instead of clipping the shortest ones.
+  const labelPaddingMm = Math.min(4, Math.max(1.5, labelSize.height * 0.05));
+  const qrSizeMm = Math.min(28, Math.max(14, labelSize.height - 2 * labelPaddingMm - 5.5));
+  const logoMaxHeightMm = Math.min(19, labelSize.height * 0.22);
   const pages = layoutLabelPages(deliveries, labelsPerPage, blockedCells);
   const toggleBlockedCell = (index: number) => setBlockedCells((current) => {
     const next = new Set(current);
@@ -381,12 +389,12 @@ export default function LabelsPage() {
             // nothing on its right side. The QR/code column now runs the
             // full height, growing with whatever space the logo+text
             // column doesn't need.
-            <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", gap: "3mm", overflow: "hidden" }}>
+            <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: `${labelPaddingMm}mm`, display: "flex", gap: "3mm", overflow: "hidden" }}>
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "1.5mm" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
                   {branding.logoDataUrl && (
                     // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
-                    <img src={branding.logoDataUrl} alt="" style={{ maxHeight: "19mm", maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
+                    <img src={branding.logoDataUrl} alt="" style={{ maxHeight: `${logoMaxHeightMm}mm`, maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
                   )}
                   <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
                 </div>
@@ -403,7 +411,7 @@ export default function LabelsPage() {
               </div>
               {delivery.parcelCode ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5mm", flex: "0 0 auto" }}>
-                  <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: "28mm", height: "28mm" }} />
+                  <canvas ref={(element) => { if (element) qrCanvases.current.set(delivery.id, element); }} style={{ width: `${qrSizeMm}mm`, height: `${qrSizeMm}mm` }} />
                   {/* Plain-text fallback for manual entry on /scan when no
                       camera/scanner is available -- see the barcode
                       removal note above for why this replaced the
@@ -411,7 +419,7 @@ export default function LabelsPage() {
                   <div style={{ fontSize: 9, fontFamily: "monospace", letterSpacing: ".05em", color: "#333" }}>{delivery.parcelCode}</div>
                 </div>
               ) : (
-                <div style={{ width: "28mm", height: "28mm", flex: "0 0 auto", alignSelf: "center", border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", textAlign: "center", padding: "2mm" }}>
+                <div style={{ width: `${qrSizeMm}mm`, height: `${qrSizeMm}mm`, flex: "0 0 auto", alignSelf: "center", border: "1px dashed #999", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "#999", textAlign: "center", padding: "2mm" }}>
                   Code non disponible
                 </div>
               )}
