@@ -1,0 +1,72 @@
+name: One-off Postgres data migration (Neon -> Supabase)
+
+# Manually triggered only -- this is a one-time data copy for the Neon-to-
+# Supabase migration, not a recurring job. Requires two temporary repo
+# secrets, NEON_DIRECT_URL and SUPABASE_DIRECT_URL (each a full Postgres
+# connection string -- Supabase's must be the "Direct connection" one,
+# db.<project-ref>.supabase.co:5432, not the pooled Supavisor one), added
+# by hand before running this, and removed again once the copy is verified.
+# Delete/disable this workflow file entirely once the migration is done --
+# it should not remain as a standing, re-runnable destructive-capable job.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+
+      - name: Confirm both connection strings are configured
+        env:
+          NEON_DIRECT_URL: ${{ secrets.NEON_DIRECT_URL }}
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NEON_DIRECT_URL" ]; then
+            echo "NEON_DIRECT_URL repository secret is not set." >&2
+            exit 1
+          fi
+          if [ -z "$SUPABASE_DIRECT_URL" ]; then
+            echo "SUPABASE_DIRECT_URL repository secret is not set." >&2
+            exit 1
+          fi
+
+      - name: Reachability check
+        env:
+          NEON_DIRECT_URL: ${{ secrets.NEON_DIRECT_URL }}
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          pg_isready -d "$NEON_DIRECT_URL"
+          pg_isready -d "$SUPABASE_DIRECT_URL"
+
+      - name: Dump Neon database
+        env:
+          NEON_DIRECT_URL: ${{ secrets.NEON_DIRECT_URL }}
+        run: pg_dump --format=custom --no-owner --no-privileges "$NEON_DIRECT_URL" -f trackfleet.dump
+
+      - name: Restore into Supabase database
+        env:
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: pg_restore --no-owner --no-privileges --clean --if-exists -d "$SUPABASE_DIRECT_URL" trackfleet.dump
+
+      - name: Row-count sanity check (Neon vs Supabase)
+        env:
+          NEON_DIRECT_URL: ${{ secrets.NEON_DIRECT_URL }}
+          SUPABASE_DIRECT_URL: ${{ secrets.SUPABASE_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          tables="admin_audit_log automation_runtime_state companies deliveries delivery_code_counters delivery_eta_observations delivery_events delivery_notifications delivery_scans fleet_position_observations google_links login_rate_limits sessions sites subscriptions trip_position_observations trips"
+          echo "table,neon_count,supabase_count"
+          for table in $tables; do
+            neon_count="$(psql "$NEON_DIRECT_URL" -Atqc "SELECT count(*) FROM $table" 2>/dev/null || echo "n/a")"
+            supabase_count="$(psql "$SUPABASE_DIRECT_URL" -Atqc "SELECT count(*) FROM $table" 2>/dev/null || echo "n/a")"
+            echo "$table,$neon_count,$supabase_count"
+            if [ "$neon_count" != "$supabase_count" ]; then
+              echo "::warning::Row count mismatch on $table: Neon=$neon_count Supabase=$supabase_count"
+            fi
+          done
