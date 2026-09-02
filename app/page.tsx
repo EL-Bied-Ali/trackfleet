@@ -131,6 +131,11 @@ type Delivery = {
   destinationLatitude?: number | null;
   destinationLongitude?: number | null;
   arrivalRadiusKm?: number;
+  // Only ever populated by the server once the delivery is genuinely
+  // Delivered (see publicDeliveryView) -- the destination agency's own
+  // WhatsApp number, so a customer can reach them directly once the parcel
+  // is actually there. Never set before arrival, on purpose.
+  destinationWhatsapp?: string | null;
   manualArrivalEstimateHours?: number | null;
   manualArrivalEstimateSampleCount?: number;
   createdAt?: string;
@@ -2310,6 +2315,10 @@ export default function Home() {
                 {selected.status !== "Delivered" && <div className="timeline-step active"><i>●</i><div><strong>{relayInEffect ? copy.relayCurrent : copy.current}</strong><span>{relayInEffect ? copy.relayCurrentDetail : copy.currentDetail(selected.progress)}</span></div></div>}
                 <div className={selected.status === "Delivered" ? "timeline-step done" : "timeline-step"}><i>{selected.status === "Delivered" ? "✓" : "◆"}</i><div><strong>{copy.destination}</strong><span>{selected.destination}{selected.distanceToDestinationKm == null ? "" : ` · ${Math.round(selected.distanceToDestinationKm)} km`}</span></div></div>
               </div>
+              {selected.status === "Delivered" && selected.destinationWhatsapp && <a className="agency-contact-card" href={`https://wa.me/${selected.destinationWhatsapp.replace(/[^\d]/g, "")}`} target="_blank" rel="noopener noreferrer">
+                <Icon>◔</Icon>
+                <div><strong>{locale === "fr" ? "Contacter l'agence" : locale === "nl" ? "Contact opnemen met het agentschap" : "Contact the agency"}</strong><span>{selected.destinationWhatsapp}</span></div>
+              </a>}
               <div className="privacy-note"><Icon>⌁</Icon><p><strong>{t.privacyTitle}</strong><span>{t.privacyBody}</span></p></div>
             </aside>
           </div>

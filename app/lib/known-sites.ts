@@ -59,6 +59,7 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    whatsapp: "+212 7 00 06 18 40",
   },
   {
     id: "tanger-ville-said-kotb-19a",
@@ -72,6 +73,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "tanger-med-ksar-al-majaz",
+    whatsapp: "+212 6 62 12 02 59",
   },
   {
     id: "tetouan-cortoba-146",
@@ -85,6 +87,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "tanger-med-ksar-al-majaz",
+    whatsapp: "+212 6 68 37 77 51",
   },
   {
     id: "sale-hay-nasser-12bis",
@@ -98,6 +101,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
+    whatsapp: "+212 6 66 73 82 20",
   },
   {
     id: "marrakech-essaouira-12",
@@ -111,6 +115,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
+    whatsapp: "+212 6 62 12 14 48",
   },
   {
     id: "agadir-zaitoune-tikiouine-103a",
@@ -124,6 +129,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
+    whatsapp: "+212 6 66 57 22 66",
   },
   {
     id: "khouribga-mohamed-vi-30",
@@ -137,6 +143,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
+    whatsapp: "+212 6 62 12 50 03",
   },
   {
     id: "fquih-ben-salah-allal-ben-abdellah-197",
@@ -150,6 +157,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
+    whatsapp: "+212 6 62 12 52 09",
   },
   {
     id: "casablanca-mohammed-vi-959",
@@ -161,6 +169,7 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
+    whatsapp: "+212 6 62 72 53 29",
   },
 ];
 

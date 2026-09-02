@@ -165,5 +165,5 @@ export function buildArrivalNotificationMessage(delivery: DeliveryRow, trackingU
 // this value is shown.
 export function buildDepartureNotificationMessage(delivery: DeliveryRow, trackingUrl: string, greetingName: string, companyName: string | null = null) {
   const estimate = delivery.plannedArrivalAt ? ` Arrivée estimée : ${formatEstimatedDate(delivery.plannedArrivalAt)}.` : "";
-  return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} vient de démarrer son trajet vers ${delivery.destination}.${estimate} Suivi : ${trackingUrl}`, companyName);
+  return signMessage(`Bonjour ${greetingName}, votre colis ${delivery.id} vient de démarrer son trajet vers ${delivery.destination}.${estimate} Vous recevrez le numéro de l'agence dès que votre colis sera arrivé. Suivi : ${trackingUrl}`, companyName);
 }
