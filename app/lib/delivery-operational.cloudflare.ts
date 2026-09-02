@@ -56,6 +56,7 @@ type RawDelivery = {
   shipmentId: string | null;
   createdAt: number;
   parcelCode: string | null;
+  shortCode: string | null;
 };
 
 function db() {
@@ -100,7 +101,7 @@ const selectColumns = `id, customer, origin_site_id AS originSiteId, origin_lati
   recipient_whatsapp_opt_in AS recipientWhatsappOptIn, recipient_whatsapp_opt_in_at AS recipientWhatsappOptInAt,
   sendatrack_vehicle_id AS sendatrackVehicleId, latitude, longitude, speed,
   last_position_at AS lastPositionAt, gps_source AS gpsSource, company_id AS companyId,
-  tracking_token AS trackingToken, trip_id AS tripId, shipment_id AS shipmentId, created_at AS createdAt, parcel_code AS parcelCode`;
+  tracking_token AS trackingToken, trip_id AS tripId, shipment_id AS shipmentId, created_at AS createdAt, parcel_code AS parcelCode, short_code AS shortCode`;
 
 export async function loadOperationalDeliveriesFromD1(companyId: string): Promise<DeliveryRow[]> {
   const cutoff = Date.now() - OPERATIONAL_RECENT_DAYS * 24 * 60 * 60 * 1000;
