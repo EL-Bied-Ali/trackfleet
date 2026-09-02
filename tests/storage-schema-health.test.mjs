@@ -76,8 +76,8 @@ test("schema probe normalization never treats an absent row as healthy", async (
 
 test("storage health uses one read-only catalog probe and exposes schema incompatibility", async () => {
   const source = await readFile(new URL("../app/lib/storage-health.ts", import.meta.url), "utf8");
-  assert.match(source, /jsonb_array_elements_text\(\$\{requiredTables\}::jsonb\)/);
-  assert.match(source, /jsonb_array_elements\(\$\{requiredColumns\}::jsonb\)/);
+  assert.match(source, /jsonb_array_elements_text\(\$\{sql\.json\(REQUIRED_POSTGRES_TABLES\)\}::jsonb\)/);
+  assert.match(source, /jsonb_array_elements\(\$\{sql\.json\(REQUIRED_POSTGRES_COLUMNS\)\}::jsonb\)/);
   assert.match(source, /postgres_schema_incompatible/);
   assert.doesNotMatch(source, /CREATE\s+TABLE|ALTER\s+TABLE|CREATE\s+INDEX/i);
 });

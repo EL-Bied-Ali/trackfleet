@@ -26,6 +26,7 @@ console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", before: summary[
 
 if (!apply) {
   console.log("Dry run only. Re-run with --apply after the compatible TrackFleet release is deployed.");
+  await sql.end();
   process.exit(0);
 }
 
@@ -53,3 +54,4 @@ const after = await sql`
   FROM fleet_position_observations
 `;
 console.log(JSON.stringify({ after: after[0] }, null, 2));
+await sql.end();

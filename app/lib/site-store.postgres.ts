@@ -26,7 +26,7 @@ async function seed(companyId: string) {
   // Production schema is provisioned separately. Seed all known sites in a
   // single request instead of one Cloudflare subrequest per site.
   const sql = getSql();
-  const payload = JSON.stringify(knownSites.map((site) => ({
+  const seedRows = knownSites.map((site) => ({
     id: site.id,
     label: site.label,
     city: site.city,
@@ -39,12 +39,12 @@ async function seed(companyId: string) {
     whatsapp: site.whatsapp ?? null,
     color: site.color ?? null,
     short_code_prefix: site.shortCodePrefix ?? null,
-  })));
+  }));
 
   await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,whatsapp,color,short_code_prefix)
     SELECT ${companyId}, seed.id, seed.label, seed.city, seed.country, seed.address,
       seed.latitude, seed.longitude, seed.arrival_radius_km, seed.roles, seed.whatsapp, seed.color, seed.short_code_prefix
-    FROM json_to_recordset(${payload}::json) AS seed(
+    FROM json_to_recordset(${sql.json(seedRows)}::json) AS seed(
       id text,
       label text,
       city text,
