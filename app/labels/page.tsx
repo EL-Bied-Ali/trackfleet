@@ -27,7 +27,12 @@ const emptyBranding: LabelBranding = { name: null, logoDataUrl: null };
 const DEFAULT_LABEL_WIDTH_MM = 100;
 const DEFAULT_LABEL_HEIGHT_MM = 65;
 const LABEL_SIZE_STORAGE_KEY = "trackfleet-label-size-mm";
-const MIN_LABEL_MM = 40;
+// Caught live: this used to be 40mm, which is ABOVE the 16/feuille
+// preset's own 37.125mm height -- clicking that preset silently clamped
+// it back up to 40mm (via clampLabelMm below), landing on 14/feuille
+// instead. Lowered just enough to clear the shortest preset with a little
+// headroom, not down to some arbitrary small number.
+const MIN_LABEL_MM = 35;
 const MAX_LABEL_MM = 200;
 const PAGE_WIDTH_MM = 210;
 const PAGE_HEIGHT_MM = 297;
