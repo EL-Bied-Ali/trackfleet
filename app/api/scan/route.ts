@@ -1,4 +1,5 @@
 import { store } from "trackfleet-delivery-store";
+import { siteStore } from "trackfleet-site-store";
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { getCompanySession } from "../../lib/company-auth";
 import { getScannerSession } from "../../lib/scanner-pairing";
@@ -7,6 +8,30 @@ import { knownSite } from "../../lib/known-sites";
 import { isValidParcelCode } from "../../lib/parcel-code";
 import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
+import { distanceKm } from "../../lib/route-progress";
+
+// A hub scan is usually done from a dispatcher-paired phone (no fixed
+// siteId to name), unlike an agency's own scan which already knows its
+// site. Reported live: the hub scan proof showed only a date, never a
+// place. Since only the GPS-tracked hubs themselves (Casablanca, Tanger
+// Med) carry real coordinates -- see known-sites.ts's finalLegTrackingUnavailable
+// split -- the truck's own live position at scan time is enough to name
+// which hub this is, without asking the scanning phone to pick one. Capped
+// to a tight radius so a stale or off-grid position never mislabels the
+// scan with a confident-looking but wrong hub name.
+const HUB_MATCH_RADIUS_KM = 5;
+
+async function nearestGeocodedSiteLabel(companyId: string, position: { latitude: number | null; longitude: number | null } | null) {
+  if (!position || position.latitude === null || position.longitude === null) return null;
+  const sites = await siteStore.listForCompany(companyId);
+  let closest: { label: string; distanceKm: number } | null = null;
+  for (const site of sites) {
+    if (typeof site.latitude !== "number" || typeof site.longitude !== "number") continue;
+    const distance = distanceKm([position.longitude, position.latitude], [site.longitude, site.latitude]);
+    if (!closest || distance < closest.distanceKm) closest = { label: site.label, distanceKm: distance };
+  }
+  return closest && closest.distanceKm <= HUB_MATCH_RADIUS_KM ? closest.label : null;
+}
 
 // Just the two checkpoints that a per-parcel scan can actually add
 // information the GPS automation can't already infer on its own: whether
@@ -64,13 +89,17 @@ export async function POST(request: Request) {
         delivery.progress,
       );
 
+      const locationLabel = session.role === "agency"
+        ? knownSite(session.siteId)?.label ?? null
+        : await nearestGeocodedSiteLabel(session.companyId, { latitude: delivery.latitude, longitude: delivery.longitude });
+
       await store.recordScan({
         companyId: session.companyId,
         deliveryId: delivery.id,
         checkpoint,
         scannedBy: session.userLabel,
         truck: delivery.truck || null,
-        locationLabel: session.role === "agency" ? knownSite(session.siteId)?.label ?? null : null,
+        locationLabel,
       });
     }
 
