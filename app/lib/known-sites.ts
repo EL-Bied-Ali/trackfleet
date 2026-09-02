@@ -20,6 +20,14 @@ export type KnownSite = {
   // default (matching the physical bin's own catch-all "villes transfert"
   // color) rather than inventing a per-site color from scratch.
   color?: string | null;
+  // Prefix for this site's printed-label short code when it's the
+  // destination (e.g. "CAS" -> "CAS 00", "CAS 01", ...), editable per site
+  // in SiteManager. Unlike color, there's no shared fallback -- a
+  // deliberately fabricated prefix for a site the client never gave one
+  // (e.g. "FQU" for Fquih Ben Salah) risks conflicting with a prefix they
+  // pick later, so a delivery to a site with no prefix set simply gets no
+  // short code at all (assignShortCode is only called when one exists).
+  shortCodePrefix?: string | null;
   // True for regional destinations reached by a local/relay leg beyond one of
   // the two confirmed hub stops (Casablanca or the Tanger Med ferry
   // crossing -- see relayHubSiteId) that our GPS-tracked trucks never
@@ -68,6 +76,7 @@ export const knownSites: KnownSite[] = [
     roles: ["origin", "dropoff", "replenishment", "destination"],
     whatsapp: "+212 7 00 06 18 40",
     color: "#2563eb",
+    shortCodePrefix: "PORT_TAN",
   },
   {
     id: "tanger-ville-said-kotb-19a",
@@ -83,6 +92,7 @@ export const knownSites: KnownSite[] = [
     relayHubSiteId: "tanger-med-ksar-al-majaz",
     whatsapp: "+212 6 62 12 02 59",
     color: "#2563eb",
+    shortCodePrefix: "TAN",
   },
   {
     id: "tetouan-cortoba-146",
@@ -187,6 +197,7 @@ export const knownSites: KnownSite[] = [
     // gray with a visible border stands in for it (see the color picker's
     // own border, which every swatch gets regardless of its own color).
     color: "#e2e8f0",
+    shortCodePrefix: "CAS",
   },
 ];
 

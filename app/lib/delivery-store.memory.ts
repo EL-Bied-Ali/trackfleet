@@ -20,6 +20,7 @@ const trips: TripRecord[] = [];
 const deliveryTripAssignments = new Map<string, string>();
 const notificationClaims = new NotificationClaimState();
 const deliveryScans: DeliveryScanRow[] = [];
+const shortCodeCounters = new Map<string, number>();
 
 function notificationKey(deliveryId: string, type: DeliveryEventType) { return `${deliveryId}:${type}:whatsapp`; }
 function baselineProgress(deliveryId: string) {
@@ -314,6 +315,12 @@ export const memoryStore: DeliveryStore = {
   },
   async releaseNotification(deliveryId, type) {
     notificationClaims.release(notificationKey(deliveryId, type));
+  },
+  async assignShortCode(companyId, prefix) {
+    const key = `${companyId}:${prefix}`;
+    const number = shortCodeCounters.get(key) ?? 0;
+    shortCodeCounters.set(key, number + 1);
+    return `${prefix} ${String(number).padStart(2, "0")}`;
   },
   async create(input: CreateDeliveryInput) {
     const delivery: DeliveryRow = { ...input, id: createDeliveryId(), createdAt: new Date() };

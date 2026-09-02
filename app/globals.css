@@ -340,6 +340,7 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .journey-eta { display: inline-flex; align-items: baseline; gap: 4px; }.journey-eta strong { font-size: 10px; }.journey-eta span { color: #96a09b; font-size: 8px; }
 .journey-destination { display: inline-flex; align-items: center; gap: 4px; color: #63525b; font-size: 9px; font-weight: 650; }
 .relay-badge { display: inline-block; margin-left: 5px; padding: 2px 6px; border-radius: 5px; color: #92400e; background: #fef3c7; font-size: 7px; font-weight: 650; }
+.site-short-code-badge { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: 5px; color: #4338ca; background: #eef2ff; font-size: 9px; font-weight: 650; letter-spacing: .04em; vertical-align: middle; }
 .recipient-line { margin-top: 3px; }.recipient-line .contact-trigger span { color: #96a09b; font-size: 8px; }
 .more-button { border: 0; background: transparent; color: #978c91; cursor: pointer; font-size: 15px; line-height: 1; padding: 5px; border-radius: 6px; }
 .more-button:hover:not(:disabled) { background: #eef2f0; color: #63525b; }

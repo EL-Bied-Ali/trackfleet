@@ -690,6 +690,12 @@ export async function POST(request: Request) {
     const originLatitude = originSite?.latitude ?? null;
     const originLongitude = originSite?.longitude ?? null;
 
+    // Only when the resolved destination site has a shortCodePrefix
+    // configured -- see the comment on KnownSite.shortCodePrefix for why a
+    // site with none set gets no short code at all, rather than a
+    // fabricated one.
+    const shortCode = site?.shortCodePrefix ? await store.assignShortCode(session.companyId, site.shortCodePrefix) : null;
+
     let delivery: DeliveryRow;
     try {
       delivery = await store.create({
@@ -723,6 +729,7 @@ export async function POST(request: Request) {
         trackingToken: idempotencyTrackingToken ?? createTrackingToken(),
         shipmentId: shipmentIdInput || null,
         parcelCode: createParcelCode(),
+        shortCode,
         driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
         latitude: originLatitude, longitude: originLongitude,
         speed: null, lastPositionAt: null,

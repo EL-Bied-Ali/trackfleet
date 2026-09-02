@@ -11,6 +11,12 @@ type LabelDelivery = {
   destinationSiteId: string | null;
   truck: string;
   parcelCode: string | null;
+  // Human-friendly per-destination sequence (e.g. "CAS 00"), additional to
+  // and never replacing `id` -- null for a destination with no
+  // shortCodePrefix configured yet, or for a delivery created before this
+  // existed. Shown modestly here; a larger, more prominent placement is a
+  // separate task.
+  shortCode: string | null;
 };
 
 type LabelBranding = { name: string | null; logoDataUrl: string | null };
@@ -416,7 +422,11 @@ export default function LabelsPage() {
                   )}
                   <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 700, wordBreak: "break-word" }}>{delivery.id}</div>
+                {/* shortCode rides on the SAME line as the id (not its own
+                    row) -- every other row here is already sized to exactly
+                    fit the shortest preset (16/feuille, 0px overflow
+                    verified live); a 6th row would reopen that. */}
+                <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.id}{delivery.shortCode ? ` · ${delivery.shortCode}` : ""}</div>
                 {/* Truncated, not wrapped -- a long customer name (or,
                     before the city-only fix above, a long destination)
                     wrapping to a second line was found live to push the

@@ -60,6 +60,7 @@ type RawDelivery = {
   shipment_id: string | null;
   created_at: string | Date;
   parcel_code: string | null;
+  short_code: string | null;
 };
 
 type RawEvent = {
@@ -125,6 +126,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     shipmentId: row.shipment_id ?? null,
     createdAt: new Date(row.created_at),
     parcelCode: row.parcel_code ?? null,
+    shortCode: row.short_code ?? null,
   };
 }
 function hydrateEvent(row: RawEvent): DeliveryEventRow {
@@ -226,6 +228,11 @@ async function ensureSchema() {
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS next_truck_departure_at timestamptz`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS shipment_id text`;
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS parcel_code text UNIQUE`;
+    // Deliberately not UNIQUE: unlike parcel_code (a random string, global
+    // uniqueness is just cheap extra safety), short_code is a deterministic
+    // per-(company, prefix) sequence -- two different companies will
+    // legitimately both hand out "CAS 00".
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS short_code text`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_shipment ON deliveries(company_id, shipment_id)`;
@@ -328,6 +335,16 @@ async function ensureSchema() {
       PRIMARY KEY (company_id, id)
     )`;
     await sql`CREATE INDEX IF NOT EXISTS idx_trips_company_updated ON trips(company_id, updated_at DESC)`;
+    // Backs assignShortCode below -- one lifetime, never-reset counter per
+    // (company, destination prefix) pair, e.g. company X's "CAS" counter
+    // hands out CAS 00, CAS 01, CAS 02... independent of every other
+    // company's own CAS counter and every other prefix.
+    await sql`CREATE TABLE IF NOT EXISTS delivery_code_counters (
+      company_id text NOT NULL,
+      prefix text NOT NULL,
+      next_number integer NOT NULL,
+      PRIMARY KEY (company_id, prefix)
+    )`;
 
     for (const delivery of seedDeliveries) {
       await sql`INSERT INTO deliveries (
@@ -833,6 +850,23 @@ export const postgresStore: DeliveryStore = {
   // nothing left to compare against once the row is gone.
   async releaseNotification(_deliveryId, _type) {},
 
+  // Client asked for a short, human-friendly parcel identifier for the
+  // printed label (e.g. "CAS 00", "CAS 01"), separate from and additional
+  // to the internal TF-xxxx id -- never resets, one lifetime sequence per
+  // (company, prefix). The upsert+RETURNING is a single atomic round trip:
+  // concurrent dispatchers creating deliveries to the same city at once
+  // can never be handed the same number.
+  async assignShortCode(companyId, prefix) {
+    await ensureSchema();
+    const rows = await sql`
+      INSERT INTO delivery_code_counters (company_id, prefix, next_number)
+      VALUES (${companyId}, ${prefix}, 0)
+      ON CONFLICT (company_id, prefix) DO UPDATE SET next_number = delivery_code_counters.next_number + 1
+      RETURNING next_number
+    ` as Array<{ next_number: number }>;
+    return `${prefix} ${String(rows[0].next_number).padStart(2, "0")}`;
+  },
+
   async create(input: CreateDeliveryInput) {
     await ensureSchema();
     const delivery: DeliveryRow = {
@@ -847,11 +881,11 @@ export const postgresStore: DeliveryStore = {
     await sql`INSERT INTO deliveries (
       id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
       truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
-      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at, parcel_code
+      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at, parcel_code, short_code
     ) VALUES (
       ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
       ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.customerEmail ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
-      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}, ${delivery.parcelCode ?? null}
+      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}, ${delivery.parcelCode ?? null}, ${delivery.shortCode ?? null}
     )`;
     return delivery;
   },
