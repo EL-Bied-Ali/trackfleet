@@ -37,11 +37,11 @@ const sql = postgres(databaseUrl, { max: 1 });
 const rows = await sql`
   WITH required_tables AS (
     SELECT value AS table_name
-    FROM jsonb_array_elements_text(${JSON.stringify(REQUIRED_POSTGRES_TABLES)}::jsonb)
+    FROM jsonb_array_elements_text(${sql.json(REQUIRED_POSTGRES_TABLES)}::jsonb)
   ),
   required_columns AS (
     SELECT item->>'table' AS table_name, item->>'column' AS column_name
-    FROM jsonb_array_elements(${JSON.stringify(REQUIRED_POSTGRES_COLUMNS)}::jsonb) item
+    FROM jsonb_array_elements(${sql.json(REQUIRED_POSTGRES_COLUMNS)}::jsonb) item
   ),
   missing_tables AS (
     SELECT required.table_name FROM required_tables required
@@ -70,7 +70,9 @@ if (missingTables.length || missingColumns.length) {
   if (missingTables.length) console.error(`  missing tables: ${missingTables.join(", ")}`);
   if (missingColumns.length) console.error(`  missing columns: ${missingColumns.join(", ")}`);
   console.error("[postgres-schema] apply the matching ALTER TABLE / CREATE TABLE statement(s) from ensureSchema() in app/lib/delivery-store.postgres.ts against DATABASE_URL, then re-run this deploy.");
+  await sql.end();
   process.exit(1);
 }
 
 console.log("[postgres-schema] production Postgres schema is compatible with the current contract.");
+await sql.end();

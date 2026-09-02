@@ -44,12 +44,14 @@ console.log(JSON.stringify({ mode: applyHighConfidence ? "apply-high-confidence"
 
 if (!applyHighConfidence) {
   console.log("Dry run only. Medium/low suggestions are never written automatically.");
+  await sql.end();
   process.exit(0);
 }
 
 const applicable = report.filter((suggestion) => suggestion.autoApplicable);
 if (!applicable.length) {
   console.log("No high-confidence missing site coordinates to apply.");
+  await sql.end();
   process.exit(0);
 }
 
@@ -65,3 +67,4 @@ await sql.begin(async (sql) => {
   }
 });
 console.log(`Applied ${applicable.length} high-confidence site coordinate suggestion(s).`);
+await sql.end();

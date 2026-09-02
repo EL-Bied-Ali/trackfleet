@@ -32,3 +32,4 @@ await sql`CREATE INDEX IF NOT EXISTS idx_eta_observations_company_route_destinat
 console.log("[migrate] idx_eta_observations_company_route_destination present");
 
 console.log("[migrate] done");
+await sql.end();

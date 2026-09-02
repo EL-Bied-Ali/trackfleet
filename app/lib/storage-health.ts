@@ -111,16 +111,14 @@ export async function getStorageHealth(): Promise<StorageHealth> {
   if (sql) {
     const failover = await probeD1Standby();
     try {
-      const requiredTables = JSON.stringify(REQUIRED_POSTGRES_TABLES);
-      const requiredColumns = JSON.stringify(REQUIRED_POSTGRES_COLUMNS);
       const rows = await sql`
         WITH required_tables AS (
           SELECT value AS table_name
-          FROM jsonb_array_elements_text(${requiredTables}::jsonb)
+          FROM jsonb_array_elements_text(${sql.json(REQUIRED_POSTGRES_TABLES)}::jsonb)
         ),
         required_columns AS (
           SELECT item->>'table' AS table_name, item->>'column' AS column_name
-          FROM jsonb_array_elements(${requiredColumns}::jsonb) item
+          FROM jsonb_array_elements(${sql.json(REQUIRED_POSTGRES_COLUMNS)}::jsonb) item
         ),
         missing_tables AS (
           SELECT required.table_name
