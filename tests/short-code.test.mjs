@@ -19,6 +19,7 @@ const [
   deliveryStoreTypes, deliveryStorePostgres, deliveryStoreCloudflare, deliveryStoreSharedPostgres,
   knownSitesSource, siteStorePostgres, siteStoreCloudflare, sitesRoute, siteManager,
   deliveriesRoute, labelsPage, prepareD1Schema, schemaContract,
+  deliveryOperationalPostgres, deliveryOperationalCloudflare, d1StandbyReadStore, d1Reconciliation, d1HistoryBackfill,
 ] = await Promise.all([
   readFile(new URL("../app/lib/delivery-store.types.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8"),
@@ -33,6 +34,11 @@ const [
   readFile(new URL("../app/labels/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../scripts/prepare-d1-schema.mjs", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/storage-schema-contract.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/delivery-operational.postgres.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/delivery-operational.cloudflare.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/d1-standby-read-store.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/d1-reconciliation.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/d1-history-backfill.ts", import.meta.url), "utf8"),
 ]);
 
 test("the 3 confirmed sites carry their real shortCodePrefix, and Tanger Med's is kept distinct from Tanger Ville's despite sharing a bin color", () => {
@@ -133,4 +139,32 @@ test("the production Postgres schema contract requires delivery_code_counters, d
   assert.match(schemaContract, /"delivery_code_counters"/);
   assert.match(schemaContract, /\{ table: "deliveries", column: "short_code" \}/);
   assert.match(schemaContract, /\{ table: "sites", column: "short_code_prefix" \}/);
+});
+
+// Live-caught right after this feature's first version deployed: the POST
+// /api/deliveries response DID carry the freshly-assigned shortCode, but
+// the very next GET /api/deliveries (what the dashboard and /labels
+// actually read from) never showed it. Root cause: the operational read
+// path used for GET /api/deliveries is a SEPARATE, hand-optimized query
+// (delivery-operational.postgres.ts's loadOperationalDeliveries, `SELECT
+// delivery.*`) with its own RawDelivery type and hydrate() function,
+// entirely independent of delivery-store.postgres.ts's own hydrate() that
+// the main write path (and this test file's earlier assertions) already
+// covered -- the SQL already fetched short_code (SELECT *), hydrate()
+// just silently dropped it since neither the type nor the return object
+// mentioned it. The same gap existed in 4 more parallel read/mirror paths:
+// the D1 equivalent of this same optimized read, the D1 failover
+// standby-read store, and the two D1 reconciliation/backfill mirrors.
+test("every parallel delivery read/mirror path (not just the main store files) also carries short_code -- the operational dashboard/labels read path, its D1 equivalent, the D1 failover standby-read store, and both D1 reconciliation/backfill mirrors", () => {
+  assert.match(deliveryOperationalPostgres, /short_code: string \| null;/);
+  assert.match(deliveryOperationalPostgres, /shortCode: row\.short_code \?\? null,/);
+  assert.match(deliveryOperationalCloudflare, /shortCode: string \| null;/);
+  assert.match(deliveryOperationalCloudflare, /short_code AS shortCode`;/);
+  assert.match(d1StandbyReadStore, /shortCode: string \| null;/);
+  assert.match(d1StandbyReadStore, /short_code AS shortCode`;/);
+  assert.match(d1Reconciliation, /short_code = excluded\.short_code`\)/);
+  assert.match(d1Reconciliation, /delivery\.shortCode \?\? null\);/);
+  assert.match(d1HistoryBackfill, /short_code: string \| null;/);
+  assert.match(d1HistoryBackfill, /shortCode: row\.short_code \?\? null,/);
+  assert.match(d1HistoryBackfill, /short_code = excluded\.short_code`\)/);
 });

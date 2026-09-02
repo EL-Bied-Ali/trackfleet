@@ -52,6 +52,7 @@ type RawDelivery = {
   shipment_id: string | null;
   created_at: string | Date;
   parcel_code: string | null;
+  short_code: string | null;
 };
 
 function numberOrNull(value: number | string | null) {
@@ -104,6 +105,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
     shipmentId: row.shipment_id ?? null,
     createdAt: new Date(row.created_at),
     parcelCode: row.parcel_code ?? null,
+    shortCode: row.short_code ?? null,
   };
 }
 
