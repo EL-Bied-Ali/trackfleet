@@ -1,12 +1,8 @@
 import "./postgres-runtime-bootstrap";
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 
 export const DELIVERY_HISTORY_DEFAULT_PAGE_SIZE = 50;
 export const DELIVERY_HISTORY_MAX_PAGE_SIZE = 100;
-
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) throw new Error("DATABASE_URL is required for delivery history reads");
-const sql = neon(databaseUrl);
 
 export type DeliveryHistoryItem = {
   id: string;
@@ -82,6 +78,7 @@ export async function listDeliveredHistory(
   companyId: string,
   options: { limit?: number; cursor?: DeliveryHistoryCursor | null; siteId?: string | null } = {},
 ) {
+  const sql = getSql();
   const limit = normalizePageSize(options.limit);
   const queryLimit = limit + 1;
   const cursor = options.cursor ?? null;

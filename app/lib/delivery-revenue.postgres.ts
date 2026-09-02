@@ -1,5 +1,4 @@
-import { neon } from "@neondatabase/serverless";
-import { runtimeEnv } from "trackfleet-runtime-env";
+import { getSqlOrNull } from "./pg-client.ts";
 
 export type DeliveryRevenueCurrencyTotal = {
   currency: "EUR" | "MAD";
@@ -88,10 +87,9 @@ export async function getDeliveryRevenueReport(
   companyId: string,
   options: { siteId?: string | null } = {},
 ): Promise<DeliveryRevenueReport> {
-  const databaseUrl = runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) return { available: false, generatedAt: new Date().toISOString(), windows: emptyWindows(), bySite: [], recentParcels: [] };
+  const sql = getSqlOrNull();
+  if (!sql) return { available: false, generatedAt: new Date().toISOString(), windows: emptyWindows(), bySite: [], recentParcels: [] };
 
-  const sql = neon(databaseUrl);
   const siteId = options.siteId ?? null;
 
   const [totalRows, unpricedRows, parcelRows] = await Promise.all([
@@ -140,7 +138,7 @@ export async function getDeliveryRevenueReport(
       ORDER BY created_at DESC
       LIMIT ${RECENT_PARCELS_LIMIT}
     `,
-  ]) as [RawWindowTotalRow[], RawWindowUnpricedRow[], RawParcelRow[]];
+  ]) as unknown as [RawWindowTotalRow[], RawWindowUnpricedRow[], RawParcelRow[]];
 
   const recentParcels: DeliveryRevenueParcel[] = parcelRows.map((row) => ({
     id: row.id,
@@ -175,7 +173,7 @@ export async function getDeliveryRevenueReport(
         WHERE company_id = ${companyId} AND (price_amount IS NULL OR price_currency IS NULL)
         GROUP BY origin_site_id
       `,
-    ]) as [RawSiteTotalRow[], RawSiteUnpricedRow[]];
+    ]) as unknown as [RawSiteTotalRow[], RawSiteUnpricedRow[]];
 
     const siteIds = new Set<string | null>([
       ...siteTotalRows.map((row) => row.origin_site_id),

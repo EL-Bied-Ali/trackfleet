@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSqlOrNull } from "./pg-client.ts";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { reconcileD1Standby, type D1ReconciliationResult } from "./d1-reconciliation";
 import { withoutD1ReadFailover } from "./d1-read-failover";
@@ -27,10 +27,6 @@ function d1() {
   return (runtimeEnv as unknown as { DB?: D1Binding }).DB ?? null;
 }
 
-function databaseUrl() {
-  return runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim() || "";
-}
-
 async function recordCoverageFailure(db: D1Binding, attemptedAt: number) {
   await db.prepare(`INSERT INTO automation_runtime_state (id, last_attempt_at, last_failure_at)
     VALUES ('d1_reconciliation', ?, ?)
@@ -43,10 +39,9 @@ async function recordCoverageFailure(db: D1Binding, attemptedAt: number) {
 
 export async function reconcileD1StandbySafely(): Promise<D1ReconciliationResult> {
   const db = d1();
-  const url = databaseUrl();
-  if (!db || !url) return withoutD1ReadFailover(() => reconcileD1Standby());
+  const sql = getSqlOrNull();
+  if (!db || !sql) return withoutD1ReadFailover(() => reconcileD1Standby());
 
-  const sql = neon(url);
   const rows = await sql`SELECT
       (SELECT COUNT(DISTINCT company_id) FROM deliveries
         WHERE company_id IS NOT NULL AND company_id <> '') AS company_count,

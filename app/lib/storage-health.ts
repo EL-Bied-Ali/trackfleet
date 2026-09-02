@@ -1,3 +1,4 @@
+import { getSqlOrNull } from "./pg-client.ts";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import {
   REQUIRED_POSTGRES_COLUMNS,
@@ -106,12 +107,10 @@ async function probeD1Standby(): Promise<StorageFailoverHealth> {
 }
 
 export async function getStorageHealth(): Promise<StorageHealth> {
-  const databaseUrl = runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
-  if (databaseUrl) {
+  const sql = getSqlOrNull();
+  if (sql) {
     const failover = await probeD1Standby();
     try {
-      const { neon } = await import("@neondatabase/serverless");
-      const sql = neon(databaseUrl);
       const requiredTables = JSON.stringify(REQUIRED_POSTGRES_TABLES);
       const requiredColumns = JSON.stringify(REQUIRED_POSTGRES_COLUMNS);
       const rows = await sql`

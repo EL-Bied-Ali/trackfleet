@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSqlOrNull } from "./pg-client.ts";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { loginRateLimitKey } from "./login-rate-limit-key";
 
@@ -6,13 +6,8 @@ const windowMs = 10 * 60_000;
 const maxAttempts = 8;
 let schemaPromise: Promise<void> | null = null;
 
-function sqlClient() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  return databaseUrl ? neon(databaseUrl) : null;
-}
-
 async function ensureSchema() {
-  const sql = sqlClient();
+  const sql = getSqlOrNull();
   if (!sql) return null;
   if (!schemaPromise) {
     schemaPromise = (async () => {

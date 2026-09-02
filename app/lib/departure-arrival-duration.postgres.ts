@@ -1,5 +1,4 @@
-import { neon } from "@neondatabase/serverless";
-import { runtimeEnv } from "trackfleet-runtime-env";
+import { getSqlOrNull } from "./pg-client.ts";
 import { knownSites } from "./known-sites.ts";
 import {
   computeManualArrivalDurationEstimates,
@@ -27,10 +26,9 @@ const relaySiteIds = knownSites
 // already plain delivery/event timestamps.
 export async function getDepartureArrivalDurationEstimates(companyId: string): Promise<Map<string, ManualArrivalDurationEstimate>> {
   if (!relaySiteIds.length) return new Map();
-  const databaseUrl = runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) return new Map();
+  const sql = getSqlOrNull();
+  if (!sql) return new Map();
 
-  const sql = neon(databaseUrl);
   const rows = await sql`
     WITH ranked AS (
       SELECT

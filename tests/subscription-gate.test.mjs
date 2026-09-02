@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { subscriptionGrantsAccess } from "../app/lib/subscription-store.ts";
+import { subscriptionGrantsAccess } from "../app/lib/subscription-rules.ts";
 import { REQUIRED_POSTGRES_TABLES } from "../app/lib/storage-schema-contract.ts";
 
 test("only grandfathered/trialing/active subscriptions grant dashboard access", () => {

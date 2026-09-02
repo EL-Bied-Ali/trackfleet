@@ -1,5 +1,4 @@
-import { neon } from "@neondatabase/serverless";
-import { runtimeEnv } from "trackfleet-runtime-env";
+import { getSqlOrNull } from "./pg-client.ts";
 import { project30dRows } from "./telemetry-growth-projection";
 
 export type TelemetryGrowthMetric = {
@@ -34,10 +33,9 @@ function iso(value: Date | string | null) {
 }
 
 export async function getTelemetryGrowthReport(companyId: string): Promise<TelemetryGrowthReport> {
-  const databaseUrl = runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) return { available: false, generatedAt: new Date().toISOString(), metrics: [] };
+  const sql = getSqlOrNull();
+  if (!sql) return { available: false, generatedAt: new Date().toISOString(), metrics: [] };
 
-  const sql = neon(databaseUrl);
   const rows = await sql`
     WITH metrics AS (
       SELECT

@@ -1,13 +1,9 @@
 import "./postgres-runtime-bootstrap";
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 import type { DeliveryRow, DeliveryStatus } from "./delivery-store.types";
 
 export const OPERATIONAL_RECENT_DAYS = 7;
 export const OPERATIONAL_RECENT_COMPLETED_LIMIT = 200;
-
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) throw new Error("DATABASE_URL is required for operational Postgres delivery reads");
-const sql = neon(databaseUrl);
 
 type RawDelivery = {
   id: string;
@@ -114,6 +110,7 @@ function hydrate(row: RawDelivery): DeliveryRow {
 }
 
 export async function loadOperationalDeliveries(companyId: string): Promise<DeliveryRow[]> {
+  const sql = getSql();
   const recentDays = OPERATIONAL_RECENT_DAYS;
   const recentCompletedLimit = OPERATIONAL_RECENT_COMPLETED_LIMIT;
   const rows = await sql`

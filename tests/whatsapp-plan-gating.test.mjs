@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { whatsappIncludedInPlan } from "../app/lib/subscription-store.ts";
+import { whatsappIncludedInPlan } from "../app/lib/subscription-rules.ts";
 
 // notification-runner.ts imports trackfleet-runtime-env, whose bare
 // specifier only resolves under Vite/vinext's aliasing -- unresolvable from
 // plain Node (matching this repo's established pattern, see
 // notification-runner-bounded.test.mjs), so its wiring is exercised via
 // source-text assertions. whatsappIncludedInPlan itself lives in
-// subscription-store.ts (no runtimeEnv dependency, like every other export
-// there) specifically so it -- and anything else that needs to know
-// whether WhatsApp is available, like the dispatcher-facing features
-// payload -- can be imported and exercised directly instead.
+// subscription-rules.ts (a pure, DB-free module split out of
+// subscription-store.ts specifically so rules like this one -- and anything
+// else that needs to know whether WhatsApp is available, like the
+// dispatcher-facing features payload -- can be imported and exercised
+// directly instead.
 const runnerSource = await readFile(new URL("../app/lib/notification-runner.ts", import.meta.url), "utf8");
 const deliveriesRoute = await readFile(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8");
 const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");

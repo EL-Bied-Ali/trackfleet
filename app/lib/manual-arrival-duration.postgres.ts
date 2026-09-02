@@ -1,5 +1,4 @@
-import { neon } from "@neondatabase/serverless";
-import { runtimeEnv } from "trackfleet-runtime-env";
+import { getSqlOrNull } from "./pg-client.ts";
 import { knownSites, type KnownSite } from "./known-sites.ts";
 import {
   computeManualArrivalDurationEstimates,
@@ -43,10 +42,9 @@ const relaySites = knownSites.filter((site): site is KnownSite & { relayHubSiteI
 // what a customer already at/past the relay actually wants to know.
 export async function getManualArrivalDurationEstimates(companyId: string): Promise<Map<string, ManualArrivalDurationEstimate>> {
   if (!relaySites.length) return new Map();
-  const databaseUrl = runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) return new Map();
+  const sql = getSqlOrNull();
+  if (!sql) return new Map();
 
-  const sql = neon(databaseUrl);
   const relaySiteIds = relaySites.map((site) => site.id);
   const hubIds = [...new Set(relaySites.map((site) => site.relayHubSiteId))];
 
@@ -110,7 +108,7 @@ export async function getManualArrivalDurationEstimates(companyId: string): Prom
       FROM targets t
       LEFT JOIN positions p ON p.delivery_id = t.delivery_id AND p.position_rank <= ${POSITION_ROWS_PER_DELIVERY}
     `,
-  ]) as [Array<{ id: string; latitude: number | string | null; longitude: number | string | null }>, RawRow[]];
+  ]) as unknown as [Array<{ id: string; latitude: number | string | null; longitude: number | string | null }>, RawRow[]];
 
   const hubCoordsById = new Map(
     hubRows

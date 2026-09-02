@@ -11,8 +11,8 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const { neon } = await import("@neondatabase/serverless");
-const sql = neon(databaseUrl);
+const { default: postgres } = await import("postgres");
+const sql = postgres(databaseUrl, { max: 1 });
 
 await sql`ALTER TABLE delivery_eta_observations ADD COLUMN IF NOT EXISTS company_id text`;
 console.log("[migrate] company_id column present");

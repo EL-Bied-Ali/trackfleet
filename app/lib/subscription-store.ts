@@ -1,58 +1,12 @@
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
+import { isSubscriptionStatus, subscriptionGrantsAccess, whatsappIncludedInPlan } from "./subscription-rules.ts";
+import type { Subscription, SubscriptionStatus } from "./subscription-rules.ts";
 
-// "grandfathered" exists solely for companies that were already using
-// TrackFleet before subscriptions were enforced -- assigned once, directly
-// in production, for every row in `companies` at the time this shipped (see
-// the PR that introduced this file). Never assigned by any code path here.
-// A genuinely new company gets a "trialing" row instead, granted once on
-// first login (see grantTrialIfNewCompany below) -- a company only has no
-// row at all in the brief window before that first login completes.
-export type SubscriptionStatus = "grandfathered" | "trialing" | "active" | "past_due" | "canceled";
-
-export type Subscription = {
-  companyId: string;
-  status: SubscriptionStatus;
-  plan: string | null;
-  paddleCustomerId: string | null;
-  paddleSubscriptionId: string | null;
-  currentPeriodEnd: Date | null;
-};
-
-function sqlClient() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for subscriptions");
-  return neon(databaseUrl);
-}
-
-function isSubscriptionStatus(value: unknown): value is SubscriptionStatus {
-  return value === "grandfathered" || value === "trialing" || value === "active" || value === "past_due" || value === "canceled";
-}
-
-// Only these statuses grant access to the dashboard -- past_due/canceled
-// (and no row at all) do not. Kept as its own function rather than inlined
-// at each call site so the actual access rule lives in exactly one place.
-export function subscriptionGrantsAccess(status: SubscriptionStatus | null) {
-  return status === "grandfathered" || status === "trialing" || status === "active";
-}
-
-// WhatsApp is a Pro-tier feature (see app/lib/paddle-checkout.ts) --
-// Standard-tier companies still get tracking and email notifications, just
-// not WhatsApp pushes. "grandfathered" companies predate the Paddle
-// paywall entirely and never had a plan assigned, so they keep the
-// WhatsApp access they already had rather than losing it because `plan`
-// happens to be null. Exported (not just used inside notification-runner.ts)
-// so the dispatcher-facing UI (app/api/deliveries/route.ts's features
-// payload) can tell an authenticated company whether to even show WhatsApp
-// opt-in at all, instead of collecting consent for something that will
-// silently never send.
-export function whatsappIncludedInPlan(subscription: Subscription | null) {
-  if (!subscription) return false;
-  if (subscription.status === "grandfathered") return true;
-  return subscriptionGrantsAccess(subscription.status) && subscription.plan === "pro";
-}
+export type { Subscription, SubscriptionStatus } from "./subscription-rules.ts";
+export { subscriptionGrantsAccess, whatsappIncludedInPlan } from "./subscription-rules.ts";
 
 export async function getSubscription(companyId: string): Promise<Subscription | null> {
-  const sql = sqlClient();
+  const sql = getSql();
   const rows = await sql`
     SELECT company_id, status, plan, paddle_customer_id, paddle_subscription_id, current_period_end
     FROM subscriptions
@@ -97,7 +51,7 @@ export type CompanyWithSubscription = {
 // referred_by_company_id to a human-readable account label so the admin
 // panel doesn't have to cross-reference the same list twice.
 export async function listCompaniesWithSubscriptions(): Promise<CompanyWithSubscription[]> {
-  const sql = sqlClient();
+  const sql = getSql();
   const rows = await sql`
     SELECT c.id AS company_id, c.account_label, c.user_label, c.created_at,
            c.referred_by_company_id, ref.account_label AS referred_by_account_label,
@@ -139,12 +93,12 @@ export async function listCompaniesWithSubscriptions(): Promise<CompanyWithSubsc
 // referral-reward.ts's later lookup finds no Paddle subscription to reward
 // (logged, not thrown) rather than corrupting anything.
 export async function setReferredByCompanyId(companyId: string, referredByCompanyId: string | null): Promise<void> {
-  const sql = sqlClient();
+  const sql = getSql();
   await sql`UPDATE companies SET referred_by_company_id = ${referredByCompanyId}, updated_at = ${new Date().toISOString()} WHERE id = ${companyId}`;
 }
 
 export async function getReferredByCompanyId(companyId: string): Promise<string | null> {
-  const sql = sqlClient();
+  const sql = getSql();
   const rows = await sql`SELECT referred_by_company_id FROM companies WHERE id = ${companyId} LIMIT 1` as Array<{ referred_by_company_id: string | null }>;
   return rows[0]?.referred_by_company_id ?? null;
 }
@@ -156,7 +110,7 @@ export async function getReferredByCompanyId(companyId: string): Promise<string 
 // false both when a row exists but was already claimed AND when no
 // subscription row exists at all for this company (nothing to claim).
 export async function claimReferralReward(companyId: string): Promise<boolean> {
-  const sql = sqlClient();
+  const sql = getSql();
   const claimed = await sql`
     UPDATE subscriptions SET referral_reward_granted_at = ${new Date().toISOString()}
     WHERE company_id = ${companyId} AND referral_reward_granted_at IS NULL
@@ -171,7 +125,7 @@ export async function claimReferralReward(companyId: string): Promise<boolean> {
 // plaintext password themselves -- decryption happens inside
 // createCompanySession's own call chain, same as a normal login.
 export async function getCompanyCredentialsCiphertext(companyId: string): Promise<string | null> {
-  const sql = sqlClient();
+  const sql = getSql();
   const rows = await sql`SELECT credentials_ciphertext FROM companies WHERE id = ${companyId} LIMIT 1` as Array<{ credentials_ciphertext: string }>;
   return rows[0]?.credentials_ciphertext ?? null;
 }
@@ -187,7 +141,7 @@ export async function upsertSubscription(input: {
   paddleSubscriptionId?: string | null;
   currentPeriodEnd?: Date | null;
 }) {
-  const sql = sqlClient();
+  const sql = getSql();
   const now = new Date().toISOString();
   await sql`
     INSERT INTO subscriptions (
@@ -220,7 +174,7 @@ const trialDays = 14;
 // including WhatsApp, rather than undersell it before the customer picks a
 // tier.
 export async function grantTrialIfNewCompany(companyId: string): Promise<void> {
-  const sql = sqlClient();
+  const sql = getSql();
   const now = new Date();
   const periodEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
   await sql`

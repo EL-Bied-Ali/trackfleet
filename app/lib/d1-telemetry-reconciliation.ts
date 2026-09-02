@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSqlOrNull } from "./pg-client.ts";
 import { runtimeEnv } from "trackfleet-runtime-env";
 
 const maxCompanies = 5;
@@ -57,10 +57,6 @@ export type D1TelemetryReconciliationResult = {
 
 function db() {
   return (runtimeEnv as unknown as { DB?: D1Binding }).DB ?? null;
-}
-
-function databaseUrl() {
-  return runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim() || "";
 }
 
 function fleetStatement(d1: D1Binding, row: FleetPositionRow) {
@@ -135,8 +131,8 @@ async function recordState(d1: D1Binding, column: "last_attempt_at" | "last_succ
 export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationResult> {
   const d1 = db();
   if (!d1) return { ran: false, reason: "d1_not_bound", companies: 0, fleetPositions: 0, tripPositions: 0 };
-  const url = databaseUrl();
-  if (!url) return { ran: false, reason: "postgres_not_configured", companies: 0, fleetPositions: 0, tripPositions: 0 };
+  const sql = getSqlOrNull();
+  if (!sql) return { ran: false, reason: "postgres_not_configured", companies: 0, fleetPositions: 0, tripPositions: 0 };
 
   // Only rows newer than the last successful sync need re-writing -- D1's
   // ON CONFLICT upsert made every previously-synced position count as a
@@ -149,7 +145,6 @@ export async function reconcileD1Telemetry(): Promise<D1TelemetryReconciliationR
   const since = new Date(sinceMs);
 
   await recordState(d1, "last_attempt_at", Date.now());
-  const sql = neon(url);
   try {
     const companies = await sql`SELECT company_id AS id FROM deliveries
       WHERE company_id IS NOT NULL AND company_id <> ''

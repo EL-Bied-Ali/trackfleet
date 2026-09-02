@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 import {
   ETA_HISTORY_RETENTION_DAYS,
   HIGH_RESOLUTION_TELEMETRY_DAYS,
@@ -20,14 +20,8 @@ export type TelemetryPruneAllResult = TelemetryPruneResult & {
 const maintenanceIntervalMs = 24 * 60 * 60 * 1000;
 let schemaPromise: Promise<void> | null = null;
 
-function sqlClient() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for telemetry retention");
-  return neon(databaseUrl);
-}
-
 async function ensureSchema() {
-  const sql = sqlClient();
+  const sql = getSql();
   if (!schemaPromise) {
     schemaPromise = (async () => {
       await sql`CREATE TABLE IF NOT EXISTS telemetry_retention_state (

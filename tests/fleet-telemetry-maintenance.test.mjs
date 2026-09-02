@@ -8,7 +8,7 @@ const sites = fs.readFileSync(new URL("../scripts/suggest-site-coordinates.mjs",
 test("fleet identity cleanup is dry-run by default and atomic when explicitly applied", () => {
   assert.match(cleanup, /process\.argv\.includes\("--apply"\)/);
   assert.match(cleanup, /if \(!apply\)/);
-  assert.match(cleanup, /sql\.transaction\(\[/);
+  assert.match(cleanup, /sql\.begin\(async \(sql\) => \{/);
   assert.match(cleanup, /duplicate observations for the same normalized physical truck and exact/);
 });
 

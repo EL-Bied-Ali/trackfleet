@@ -30,5 +30,5 @@ test("reuses the same shared median math as the GPS-hub-based estimate, rather t
 test("skips the query entirely when no relay site is configured or no database is set up, returning an empty map instead of throwing", async () => {
   const source = await readFile(new URL("../app/lib/departure-arrival-duration.postgres.ts", import.meta.url), "utf8");
   assert.match(source, /if \(!relaySiteIds\.length\) return new Map\(\);/);
-  assert.match(source, /if \(!databaseUrl\) return new Map\(\);/);
+  assert.match(source, /if \(!sql\) return new Map\(\);/);
 });
