@@ -396,7 +396,16 @@ export async function GET(request: Request) {
         stops: tripStopsFromPlan(plan.stops),
         status: tripStatusFromDeliveryStatuses(deliveryIds.flatMap((id) => { const status = rowById.get(id)?.status; return status ? [status] : []; })),
       });
-      await Promise.all(deliveryIds.map((deliveryId) => store.assignDeliveryTrip(deliveryId, session.companyId, persistedTrip.id)));
+      // assignDeliveryTrip's own WHERE clause (trip_id IS NULL OR trip_id =
+      // tripId) already makes it a no-op once a delivery's trip_id matches --
+      // but calling it at all still costs one subrequest per delivery, on
+      // every single dashboard load, forever, regardless of whether anything
+      // actually needs writing. Only deliveries not yet assigned to this
+      // trip need the call; already-correct rows use rows fetched earlier in
+      // this same request instead of paying for a write that would change
+      // nothing.
+      const unassignedDeliveryIds = deliveryIds.filter((deliveryId) => rowById.get(deliveryId)?.tripId !== persistedTrip.id);
+      await Promise.all(unassignedDeliveryIds.map((deliveryId) => store.assignDeliveryTrip(deliveryId, session.companyId, persistedTrip.id)));
       return { ...plan, routeTemplateId: persistedTrip.routeTemplateId, tripInstanceId: persistedTrip.id, learning };
     }));
 
