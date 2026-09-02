@@ -69,6 +69,12 @@ function playBeep(ok: boolean) {
 export default function ScanPage() {
   const [auth, setAuth] = useState<"loading" | "ready" | "denied">("loading");
   const [company, setCompany] = useState<CompanyInfo | null>(null);
+  // A device paired purely for scanning (via /scan/connect's QR) only ever
+  // gets a scanner-scoped session (see /api/scan/session), never a full
+  // dispatcher login -- "← Tableau" linking to "/" on that device landed on
+  // the SENDATRACK login screen instead of a dashboard, since getCompanySession
+  // doesn't accept a scanner session. Reported live as the link "not working".
+  const [scannerOnly, setScannerOnly] = useState(false);
   const [mode, setMode] = useState<Checkpoint>("loaded");
   const [cameraState, setCameraState] = useState<"idle" | "starting" | "active" | "error">("idle");
   const [cameraError, setCameraError] = useState("");
@@ -105,11 +111,12 @@ export default function ScanPage() {
       }).then(() => window.history.replaceState({}, "", "/scan"))
       : Promise.resolve();
     void activate.then(() => fetch("/api/scan/session", { cache: "no-store" }))
-      .then((response) => response.json() as Promise<{ authenticated: boolean; company?: CompanyInfo }>)
+      .then((response) => response.json() as Promise<{ authenticated: boolean; scannerOnly?: boolean; company?: CompanyInfo }>)
       .then((data) => {
         if (!active) return;
         if (data.authenticated && data.company) {
           setCompany(data.company);
+          setScannerOnly(data.scannerOnly === true);
           setAuth("ready");
         } else {
           setAuth("denied");
@@ -267,7 +274,7 @@ export default function ScanPage() {
           <h1 style={{ margin: "4px 0", fontSize: 20 }}>Scanner un colis</h1>
           {company?.role === "agency" && <p style={{ margin: 0, fontSize: 13, color: "#9ca3af" }}>Agence : {company.siteId}</p>}
         </div>
-        <Link href="/?lang=fr" style={{ color: "#f9fafb", fontWeight: 700, fontSize: 13 }}>← Tableau</Link>
+        {!scannerOnly && <Link href="/?lang=fr" style={{ color: "#f9fafb", fontWeight: 700, fontSize: 13 }}>← Tableau</Link>}
       </header>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 14 }}>
