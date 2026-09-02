@@ -57,6 +57,7 @@ test("public delivery view exposes only the customer tracking allow-list", () =>
     "destinationLatitude",
     "destinationLongitude",
     "destinationSiteId",
+    "destinationWhatsapp",
     "distanceToDestinationKm",
     "effectiveSpeedKmh",
     "estimatedArrivalAt",
@@ -100,4 +101,17 @@ test("public delivery view exposes only the customer tracking allow-list", () =>
   ]) {
     assert.equal(Object.hasOwn(publicView, forbidden), false, `${forbidden} must stay private`);
   }
+});
+
+// The destination agency's own WhatsApp number: caller-supplied (the route
+// only passes it once the delivery is genuinely Delivered), never read off
+// the delivery row itself -- the row has no such field, only sites do.
+test("destinationWhatsapp defaults to null when the caller doesn't supply one", () => {
+  const publicView = publicDeliveryView(source);
+  assert.equal(publicView.destinationWhatsapp, null);
+});
+
+test("destinationWhatsapp passes through whatever the caller supplies", () => {
+  const publicView = publicDeliveryView(source, { destinationWhatsapp: "+212 6 62 72 53 29" });
+  assert.equal(publicView.destinationWhatsapp, "+212 6 62 72 53 29");
 });

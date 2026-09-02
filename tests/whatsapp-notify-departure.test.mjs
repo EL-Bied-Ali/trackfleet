@@ -49,6 +49,14 @@ test("omits the estimate line entirely rather than inventing one when plannedArr
   assert.doesNotMatch(message, /Arrivée estimée/);
 });
 
+// Requested live: set the expectation early that the destination agency's
+// own number is coming, since it's only revealed once the parcel actually
+// arrives (see public-delivery-view.ts's destinationWhatsapp).
+test("tells the customer they'll receive the agency's number once the parcel arrives", () => {
+  const message = buildDepartureNotificationMessage(baseDelivery, "https://example.com/?tracking=xyz", "Jean Dupont");
+  assert.match(message, /Vous recevrez le numéro de l'agence dès que votre colis sera arrivé\./);
+});
+
 const [notifyRoute, deliveryEventsLib] = await Promise.all([
   readFile(new URL("../app/api/deliveries/notify-departure/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-events.ts", import.meta.url), "utf8"),

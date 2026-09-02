@@ -264,8 +264,15 @@ export async function GET(request: Request) {
         : null;
       const enriched = enrichDelivery(row, routeEvents, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount, manualArrivalEstimate);
       const companyBranding = await getCompanyBranding(row.companyId);
+      // Only looked up once the parcel is genuinely Delivered -- avoids an
+      // extra subrequest on every single (much more frequent) in-transit
+      // tracking page view, and matches publicDeliveryView's own contract:
+      // never reveal a number to call before there's actually someone there.
+      const destinationWhatsapp = enriched.status === "Delivered" && row.destinationSiteId
+        ? (await siteStore.listForCompany(row.companyId)).find((site) => site.id === row.destinationSiteId)?.whatsapp ?? null
+        : null;
       return Response.json({
-        deliveries: [publicDeliveryView(enriched)],
+        deliveries: [publicDeliveryView(enriched, { destinationWhatsapp })],
         events: routeEvents.filter((event) => customerFacingEvent(event.type)),
         publicTracking: true,
         // Per-company, not per-delivery, so it travels as its own top-level

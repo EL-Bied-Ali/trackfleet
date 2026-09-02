@@ -137,7 +137,7 @@ test("automatic customer links require a private tracking token and never fall b
 });
 
 test("public tracking uses an explicit allowlist and never returns internal consent/contact fields", () => {
-  assert.match(deliveryRoute, /publicDeliveryView\(enriched\)/);
+  assert.match(deliveryRoute, /publicDeliveryView\(enriched, \{ destinationWhatsapp \}\)/);
   for (const field of ["companyId", "contact", "recipientName", "recipientContact", "trackingToken", "whatsappOptIn", "whatsappOptInAt", "recipientWhatsappOptIn", "recipientWhatsappOptInAt"]) {
     assert.doesNotMatch(publicView, new RegExp(`\\b${field}\\s*:`), `${field} must not be projected publicly`);
   }

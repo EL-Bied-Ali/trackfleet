@@ -24,7 +24,7 @@ type PublicDeliverySource = DeliveryRow & {
  * experience. Operational/tenant/customer-contact fields are omitted by
  * construction instead of relying on a deny-list.
  */
-export function publicDeliveryView(delivery: PublicDeliverySource) {
+export function publicDeliveryView(delivery: PublicDeliverySource, options: { destinationWhatsapp?: string | null } = {}) {
   return {
     id: delivery.id,
     customer: delivery.customer,
@@ -35,6 +35,12 @@ export function publicDeliveryView(delivery: PublicDeliverySource) {
     // so the tracking page can show an explicit "not GPS-tracked" note
     // instead of implying live coverage that doesn't exist.
     destinationSiteId: delivery.destinationSiteId ?? null,
+    // Deliberately caller-supplied, not read off `delivery` -- the caller is
+    // responsible for only passing a value once the parcel has genuinely
+    // reached this destination (status === "Delivered"), never earlier, so a
+    // customer only sees a number to call once there's actually someone to
+    // call at the other end.
+    destinationWhatsapp: options.destinationWhatsapp ?? null,
     weightKg: delivery.weightKg ?? null,
     priceAmount: delivery.priceAmount ?? null,
     priceCurrency: delivery.priceCurrency ?? null,
