@@ -64,6 +64,22 @@ test("MIN_LABEL_MM is low enough that clicking the 16/feuille preset doesn't get
   assert.ok(35 <= presetHeightAt16PerSheet, "MIN_LABEL_MM must be at or below the 16/feuille preset's own height");
 });
 
+// Live-caught a second time, right after the MIN_LABEL_MM fix deployed:
+// with the correct 37.12mm height finally applying, EVERY real label still
+// overflowed by a fixed ~20px regardless of its content. Root cause: the
+// `qrcode` library's toCanvas() sets the canvas's own style.width/height to
+// match its raster size (160px) as part of drawing the QR, silently
+// overriding the mm-based CSS size the JSX sets -- so the QR column always
+// rendered at its old ~42mm size no matter what qrSizeMm computed. Caught
+// via getComputedStyle on the live canvas (160px, not the expected ~106px
+// for 27.9mm), not from the earlier synthetic DOM reproduction, which used
+// a plain placeholder div instead of a real QRCode.toCanvas() call and so
+// never exercised this codepath.
+test("the QR canvas's intended mm size is re-asserted after QRCode.toCanvas runs, since the library overwrites the canvas's own style.width/height to match its raster size", () => {
+  assert.match(labelsPage, /await QRCode\.toCanvas\(qrCanvas, parcelScanUrl\(origin, delivery\.parcelCode\), \{ width: 160, margin: 1 \}\);\s*\n(?:\s*\/\/[^\n]*\n)*\s*qrCanvas\.style\.width = `\$\{qrSizeMm\}mm`;\s*\n\s*qrCanvas\.style\.height = `\$\{qrSizeMm\}mm`;/);
+  assert.match(labelsPage, /\}, \[deliveries, qrSizeMm\]\);/);
+});
+
 test("the scaling formulas stay within sane bounds at both the shortest supported preset and the tallest", () => {
   const heightAt16PerSheet = Math.floor((297 / 8) * 100) / 100;
   const paddingAt16 = Math.min(4, Math.max(1.5, heightAt16PerSheet * 0.05));
