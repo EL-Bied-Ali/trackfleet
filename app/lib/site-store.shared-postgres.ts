@@ -21,8 +21,8 @@ async function mirrorSite(site: CompanySite) {
   if (!db) return;
   try {
     await db.prepare(`INSERT INTO sites (
-      company_id, id, label, city, country, address, latitude, longitude, arrival_radius_km, roles, whatsapp, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      company_id, id, label, city, country, address, latitude, longitude, arrival_radius_km, roles, whatsapp, color, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(company_id, id) DO UPDATE SET
       label = excluded.label,
       city = excluded.city,
@@ -33,6 +33,7 @@ async function mirrorSite(site: CompanySite) {
       arrival_radius_km = excluded.arrival_radius_km,
       roles = excluded.roles,
       whatsapp = excluded.whatsapp,
+      color = excluded.color,
       updated_at = excluded.updated_at`)
       .bind(
         site.companyId,
@@ -46,6 +47,7 @@ async function mirrorSite(site: CompanySite) {
         site.arrivalRadiusKm,
         JSON.stringify(site.roles),
         site.whatsapp ?? null,
+        site.color ?? null,
         site.createdAt.getTime(),
         site.updatedAt.getTime(),
       )

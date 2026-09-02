@@ -54,6 +54,7 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "sessions", column: "credentials_ciphertext" },
   { table: "sites", column: "arrival_radius_km" },
   { table: "sites", column: "whatsapp" },
+  { table: "sites", column: "color" },
   { table: "trip_position_observations", column: "route_template_id" },
   { table: "trips", column: "stops_json" },
 ] as const;

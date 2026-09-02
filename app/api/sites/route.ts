@@ -3,6 +3,9 @@ import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { siteStore } from "trackfleet-site-store";
 import { agencyBrowserLocationIsAcceptable } from "../../lib/agency-access";
+import { defaultSiteColor } from "../../lib/known-sites";
+
+const hexColorPattern = /^#[0-9a-fA-F]{6}$/;
 
 type SiteRole = "origin" | "dropoff" | "replenishment" | "destination";
 
@@ -25,6 +28,11 @@ function siteJson(site: Awaited<ReturnType<typeof siteStore.listForCompany>>[num
     longitude: site.longitude,
     arrivalRadiusKm: site.arrivalRadiusKm,
     whatsapp: site.whatsapp ?? null,
+    // Matches the physical color-coded ticket bins at the depot -- falls
+    // back to the shared "villes transfert" default for any site nobody's
+    // assigned a specific color to yet, rather than leaving it unset and
+    // pushing that decision onto every single caller.
+    color: site.color ?? defaultSiteColor,
     geofenceReady: typeof site.latitude === "number" && typeof site.longitude === "number",
   };
 }
@@ -75,6 +83,8 @@ export async function POST(request: Request) {
   const requestedRadius = Number(payload.arrivalRadiusKm ?? 0.5);
   const whatsappRaw = String(payload.whatsapp ?? "").trim();
   const whatsapp = whatsappRaw || null;
+  const colorRaw = String(payload.color ?? "").trim();
+  const color = colorRaw || null;
 
   if (!id || !label || !city || !address || (country !== "BE" && country !== "MA") || roles.length === 0) {
     return Response.json({ error: "id, label, city, address, country BE/MA and at least one role are required" }, { status: 400 });
@@ -84,6 +94,9 @@ export async function POST(request: Request) {
   }
   if (whatsapp && whatsapp.length > 40) {
     return Response.json({ error: "whatsapp number exceeds allowed length" }, { status: 400 });
+  }
+  if (color && !hexColorPattern.test(color)) {
+    return Response.json({ error: "color must be a 6-digit hex value like #a855f7" }, { status: 400 });
   }
   if ((latitude === null) !== (longitude === null)) return Response.json({ error: "latitude and longitude must be provided together" }, { status: 400 });
   if (latitude !== null && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude! < -180 || longitude! > 180)) {
@@ -103,6 +116,7 @@ export async function POST(request: Request) {
     arrivalRadiusKm: Math.max(0.05, Math.min(10, requestedRadius)),
     roles,
     whatsapp,
+    color,
   });
   return Response.json({ site: siteJson(site) }, { status: 201, headers: { "cache-control": "no-store" } });
 }
