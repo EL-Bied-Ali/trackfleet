@@ -24,6 +24,7 @@ function siteJson(site: Awaited<ReturnType<typeof siteStore.listForCompany>>[num
     latitude: site.latitude,
     longitude: site.longitude,
     arrivalRadiusKm: site.arrivalRadiusKm,
+    whatsapp: site.whatsapp ?? null,
     geofenceReady: typeof site.latitude === "number" && typeof site.longitude === "number",
   };
 }
@@ -72,12 +73,17 @@ export async function POST(request: Request) {
   const latitude = payload.latitude === null || payload.latitude === undefined || payload.latitude === "" ? null : Number(payload.latitude);
   const longitude = payload.longitude === null || payload.longitude === undefined || payload.longitude === "" ? null : Number(payload.longitude);
   const requestedRadius = Number(payload.arrivalRadiusKm ?? 0.5);
+  const whatsappRaw = String(payload.whatsapp ?? "").trim();
+  const whatsapp = whatsappRaw || null;
 
   if (!id || !label || !city || !address || (country !== "BE" && country !== "MA") || roles.length === 0) {
     return Response.json({ error: "id, label, city, address, country BE/MA and at least one role are required" }, { status: 400 });
   }
   if (id.length > 100 || label.length > 160 || city.length > 120 || address.length > 500) {
     return Response.json({ error: "site fields exceed allowed length" }, { status: 400 });
+  }
+  if (whatsapp && whatsapp.length > 40) {
+    return Response.json({ error: "whatsapp number exceeds allowed length" }, { status: 400 });
   }
   if ((latitude === null) !== (longitude === null)) return Response.json({ error: "latitude and longitude must be provided together" }, { status: 400 });
   if (latitude !== null && (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude! < -180 || longitude! > 180)) {
@@ -96,6 +102,7 @@ export async function POST(request: Request) {
     longitude,
     arrivalRadiusKm: Math.max(0.05, Math.min(10, requestedRadius)),
     roles,
+    whatsapp,
   });
   return Response.json({ site: siteJson(site) }, { status: 201, headers: { "cache-control": "no-store" } });
 }

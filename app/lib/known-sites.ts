@@ -8,6 +8,11 @@ export type KnownSite = {
   longitude: number | null;
   arrivalRadiusKm: number;
   roles: Array<"origin" | "dropoff" | "replenishment" | "destination">;
+  // The agency's own contact number, in the same free-text format a
+  // dispatcher would dial/message it (not necessarily E.164) -- unset for
+  // most existing entries until backfilled. Distinct from a delivery's own
+  // customer/recipient contact fields (see delivery-store.types.ts).
+  whatsapp?: string | null;
   // True for regional destinations reached by a local/relay leg beyond one of
   // the two confirmed hub stops (Casablanca or the Tanger Med ferry
   // crossing -- see relayHubSiteId) that our GPS-tracked trucks never

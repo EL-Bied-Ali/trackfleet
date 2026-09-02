@@ -18,6 +18,7 @@ function hydrate(row: Record<string, unknown>): CompanySite {
     longitude: row.longitude === null ? null : Number(row.longitude),
     arrivalRadiusKm: Number(row.arrival_radius_km),
     roles: JSON.parse(String(row.roles)) as CompanySite["roles"],
+    whatsapp: row.whatsapp === null || row.whatsapp === undefined ? null : String(row.whatsapp),
     createdAt: new Date(String(row.created_at)),
     updatedAt: new Date(String(row.updated_at)),
   };
@@ -36,11 +37,12 @@ async function seed(companyId: string) {
     longitude: site.longitude,
     arrival_radius_km: site.arrivalRadiusKm,
     roles: JSON.stringify(site.roles),
+    whatsapp: site.whatsapp ?? null,
   })));
 
-  await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles)
+  await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,whatsapp)
     SELECT ${companyId}, seed.id, seed.label, seed.city, seed.country, seed.address,
-      seed.latitude, seed.longitude, seed.arrival_radius_km, seed.roles
+      seed.latitude, seed.longitude, seed.arrival_radius_km, seed.roles, seed.whatsapp
     FROM json_to_recordset(${payload}::json) AS seed(
       id text,
       label text,
@@ -50,7 +52,8 @@ async function seed(companyId: string) {
       latitude double precision,
       longitude double precision,
       arrival_radius_km double precision,
-      roles text
+      roles text,
+      whatsapp text
     )
     ON CONFLICT (company_id,id) DO NOTHING`;
 }
@@ -62,9 +65,9 @@ export const postgresSiteStore: SiteStore = {
     return rows.map((row) => hydrate(row as Record<string, unknown>));
   },
   async upsert(input: CreateCompanySiteInput) {
-    const rows = await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,updated_at)
-      VALUES (${input.companyId},${input.id},${input.label},${input.city},${input.country},${input.address},${input.latitude},${input.longitude},${input.arrivalRadiusKm},${JSON.stringify(input.roles)},now())
-      ON CONFLICT (company_id,id) DO UPDATE SET label=excluded.label,city=excluded.city,country=excluded.country,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,arrival_radius_km=excluded.arrival_radius_km,roles=excluded.roles,updated_at=now()
+    const rows = await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,whatsapp,updated_at)
+      VALUES (${input.companyId},${input.id},${input.label},${input.city},${input.country},${input.address},${input.latitude},${input.longitude},${input.arrivalRadiusKm},${JSON.stringify(input.roles)},${input.whatsapp ?? null},now())
+      ON CONFLICT (company_id,id) DO UPDATE SET label=excluded.label,city=excluded.city,country=excluded.country,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,arrival_radius_km=excluded.arrival_radius_km,roles=excluded.roles,whatsapp=excluded.whatsapp,updated_at=now()
       RETURNING *`;
     return hydrate(rows[0] as Record<string, unknown>);
   },

@@ -207,6 +207,7 @@ await runStatements([
     longitude real,
     arrival_radius_km real NOT NULL DEFAULT 0.5,
     roles text NOT NULL,
+    whatsapp text,
     created_at integer NOT NULL,
     updated_at integer NOT NULL,
     PRIMARY KEY (company_id, id)
@@ -271,6 +272,7 @@ const etaColumns = await columnsFor("delivery_eta_observations");
 const sessionColumns = await columnsFor("sessions");
 const arrivalColumns = await columnsFor("delivery_arrival_state");
 const companyColumns = await columnsFor("companies");
+const siteColumns = await columnsFor("sites");
 const alterations = [];
 
 for (const [name, definition] of [
@@ -331,6 +333,8 @@ for (const [name, definition] of [
   ["ctm_relay_grace_minutes", "integer"],
   ["ctm_relay_auto_completion_enabled", "integer"],
 ]) addMissingColumn(alterations, "companies", companyColumns, name, definition);
+
+addMissingColumn(alterations, "sites", siteColumns, "whatsapp", "text");
 await runStatements(alterations);
 
 await runStatements([
