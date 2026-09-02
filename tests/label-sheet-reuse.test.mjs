@@ -91,3 +91,16 @@ test("prints the destination agency's city alone, not the full postal address or
   assert.match(labelsPage, /setSiteCities\(new Map\(\(data\.sites \?\? \[\]\)\.map\(\(site\) => \[site\.id, site\.city\]\)\)\)/);
   assert.match(labelsPage, /→ \{\(delivery\.destinationSiteId && siteCities\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\}/);
 });
+
+// Even with the city-only destination, live-checking a full sheet of real
+// deliveries found some customer names (e.g. "Ahmed Benjelloun") still
+// wrapped to a second line in the narrow text column and pushed the truck
+// line below the label's overflow:hidden -- confirmed via scrollHeight vs
+// clientHeight across all 12 labels on a real sheet, several off by up to
+// 28px. Truncating (not wrapping) the customer, destination and truck
+// lines guarantees the truck plate is never the casualty of a long name.
+test("truncates the customer, destination and truck lines instead of letting them wrap and push each other out of the label", () => {
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.customer\}<\/div>/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>→ /);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>Camion : \{delivery\.truck\}<\/div>/);
+});
