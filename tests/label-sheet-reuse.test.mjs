@@ -64,9 +64,28 @@ test("the cell picker only renders when there's more than one label per sheet, a
 // live-checking (not just the QR-size math) found a real destination
 // address wraps across several lines and gets silently clipped by
 // overflow:hidden at that height -- confirmed via scrollHeight vs
-// clientHeight on the actual rendered label. 12/feuille (3x4) stays the
-// real ceiling until the destination is shown as a short label instead of
-// the full address.
-test("does not offer the reverted 18-per-sheet (3x6) preset -- it silently clips real destination addresses", () => {
+// clientHeight on the actual rendered label. Turned out the SAME clipping
+// already affected the previously-shipped 12/feuille preset too (pre-dates
+// this session), so the real fix wasn't a denser preset -- it's printing
+// the short site label instead of the full postal address (see below).
+test("does not offer the reverted 18-per-sheet (3x6) preset", () => {
   assert.doesNotMatch(labelsPage, /\{ cols: 3, rows: 6 \}/);
+});
+
+// Live-checking 12/feuille against a real delivery found the SAME
+// overflow bug (403px of content vs. a 249px box) that broke 18/feuille --
+// a genuine, pre-existing issue independent of anything shipped this
+// session. Root cause: the label printed the delivery's full postal
+// address (e.g. "12 Boulevard Essaouira, Douar el Asker, Derb el Makina,
+// Marrakech, Maroc", 74 characters), which wraps across several lines in
+// the narrow ~31mm text column regardless of label height. Fixed by
+// printing the agency's own short site label instead (what a human
+// actually needs to route a physical parcel), falling back to the full
+// address only when no matching site is found.
+test("prints the destination agency's short site label, not the full postal address, falling back to the address when no site matches", () => {
+  assert.match(labelsPage, /destinationSiteId: string \| null;/);
+  assert.match(labelsPage, /const \[siteLabels, setSiteLabels\] = useState<Map<string, string>>\(new Map\(\)\);/);
+  assert.match(labelsPage, /fetch\("\/api\/sites", \{ cache: "no-store" \}\)/);
+  assert.match(labelsPage, /setSiteLabels\(new Map\(\(data\.sites \?\? \[\]\)\.map\(\(site\) => \[site\.id, site\.label\]\)\)\)/);
+  assert.match(labelsPage, /→ \{\(delivery\.destinationSiteId && siteLabels\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\}/);
 });

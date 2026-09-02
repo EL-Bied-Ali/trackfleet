@@ -8,6 +8,7 @@ type LabelDelivery = {
   id: string;
   customer: string;
   destination: string;
+  destinationSiteId: string | null;
   truck: string;
   parcelCode: string | null;
 };
@@ -108,6 +109,16 @@ export default function LabelsPage() {
   const [deliveries, setDeliveries] = useState<LabelDelivery[]>([]);
   const [loadError, setLoadError] = useState("");
   const [branding, setBranding] = useState<LabelBranding>(emptyBranding);
+  // Short agency name (e.g. "Marrakech · Boulevard Essaouira"), not the full
+  // postal address -- a real destination address here routinely runs 50-75
+  // characters, which wraps across several lines in the label's narrow text
+  // column and was found (live, on a real label) to silently overflow past
+  // the label's own overflow:hidden at every sheet density, even the
+  // previously "safe" 12/feuille. The short site label is what a human
+  // actually needs to route a physical parcel; the full address stays on
+  // the tracking page where there's room for it. Falls back to the full
+  // address when there's no matching site (id missing or not found).
+  const [siteLabels, setSiteLabels] = useState<Map<string, string>>(new Map());
   const [labelSize, setLabelSize] = useState(() => readStoredLabelSize());
   // Which grid positions on the physical sheet already in hand are already
   // used -- not persisted (a one-off adjustment right before printing, not
@@ -147,6 +158,16 @@ export default function LabelsPage() {
       .then((response) => response.json() as Promise<{ branding?: LabelBranding }>)
       .then((data) => { if (active) setBranding(data.branding ?? emptyBranding); })
       .catch(() => { if (active) setBranding(emptyBranding); });
+    return () => { active = false; };
+  }, [auth]);
+
+  useEffect(() => {
+    if (auth !== "ready") return;
+    let active = true;
+    void fetch("/api/sites", { cache: "no-store" })
+      .then((response) => response.json() as Promise<{ sites?: Array<{ id: string; label: string }> }>)
+      .then((data) => { if (active) setSiteLabels(new Map((data.sites ?? []).map((site) => [site.id, site.label]))); })
+      .catch(() => { if (active) setSiteLabels(new Map()); });
     return () => { active = false; };
   }, [auth]);
 
@@ -370,7 +391,7 @@ export default function LabelsPage() {
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, wordBreak: "break-word" }}>{delivery.id}</div>
                 <div style={{ fontSize: 12, wordBreak: "break-word" }}>{delivery.customer}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, wordBreak: "break-word" }}>→ {delivery.destination}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, wordBreak: "break-word" }}>→ {(delivery.destinationSiteId && siteLabels.get(delivery.destinationSiteId)) || delivery.destination}</div>
                 {delivery.truck && <div style={{ fontSize: 11, color: "#333" }}>Camion : {delivery.truck}</div>}
               </div>
               {delivery.parcelCode ? (
