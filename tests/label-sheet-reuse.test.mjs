@@ -78,14 +78,16 @@ test("does not offer the reverted 18-per-sheet (3x6) preset", () => {
 // session. Root cause: the label printed the delivery's full postal
 // address (e.g. "12 Boulevard Essaouira, Douar el Asker, Derb el Makina,
 // Marrakech, Maroc", 74 characters), which wraps across several lines in
-// the narrow ~31mm text column regardless of label height. Fixed by
-// printing the agency's own short site label instead (what a human
-// actually needs to route a physical parcel), falling back to the full
-// address only when no matching site is found.
-test("prints the destination agency's short site label, not the full postal address, falling back to the address when no site matches", () => {
+// the narrow ~31mm text column regardless of label height. Printing the
+// site's own longer label instead ("Marrakech · Boulevard Essaouira") was
+// tried first and STILL wrapped and clipped the truck line -- confirmed
+// live again. Settled on the city alone, which every known site today
+// still identifies uniquely, and falls back to the full address only when
+// no matching site is found.
+test("prints the destination agency's city alone, not the full postal address or the site's longer label, falling back to the address when no site matches", () => {
   assert.match(labelsPage, /destinationSiteId: string \| null;/);
-  assert.match(labelsPage, /const \[siteLabels, setSiteLabels\] = useState<Map<string, string>>\(new Map\(\)\);/);
+  assert.match(labelsPage, /const \[siteCities, setSiteCities\] = useState<Map<string, string>>\(new Map\(\)\);/);
   assert.match(labelsPage, /fetch\("\/api\/sites", \{ cache: "no-store" \}\)/);
-  assert.match(labelsPage, /setSiteLabels\(new Map\(\(data\.sites \?\? \[\]\)\.map\(\(site\) => \[site\.id, site\.label\]\)\)\)/);
-  assert.match(labelsPage, /→ \{\(delivery\.destinationSiteId && siteLabels\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\}/);
+  assert.match(labelsPage, /setSiteCities\(new Map\(\(data\.sites \?\? \[\]\)\.map\(\(site\) => \[site\.id, site\.city\]\)\)\)/);
+  assert.match(labelsPage, /→ \{\(delivery\.destinationSiteId && siteCities\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\}/);
 });
