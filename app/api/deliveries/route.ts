@@ -129,8 +129,12 @@ async function enrichAndDetectDelay<T extends {
   lastPositionAt: Date | null;
   plannedArrivalAt?: Date | null;
   status: string;
-}>(row: T, futureServiceMinutes = 0, historicalEffectiveSpeedKmh: number | null = null, historicalTripCount = 0, manualArrivalEstimate: ManualArrivalDurationEstimate | null = null) {
-  let events = await store.listEvents(row.id);
+}>(row: T, futureServiceMinutes = 0, historicalEffectiveSpeedKmh: number | null = null, historicalTripCount = 0, manualArrivalEstimate: ManualArrivalDurationEstimate | null = null, prefetchedEvents?: Awaited<ReturnType<typeof store.listEvents>>) {
+  // The dashboard's own loop (GET, below) already batch-fetches every
+  // delivery's events in one company-scoped query and passes them in here --
+  // falling back to a per-delivery fetch only for the single-delivery POST
+  // call site, where there's nothing to batch against.
+  let events = prefetchedEvents ?? await store.listEvents(row.id);
   let delivery = enrichDelivery(row, events, futureServiceMinutes, historicalEffectiveSpeedKmh, historicalTripCount, manualArrivalEstimate);
   const delayDetected = shouldDetectDelay({
     eta: {
@@ -296,7 +300,8 @@ export async function GET(request: Request) {
     const needsManualArrivalEstimates = rows.some((row) => row.status !== "Delivered"
       && row.destinationSiteId
       && knownSite(row.destinationSiteId)?.finalLegTrackingUnavailable === true);
-    const [companySites, manualArrivalEstimates, departureArrivalEstimates, scanSummaries] = await Promise.all([
+    const companyDeliveryIds = rows.map((row) => row.id);
+    const [companySites, manualArrivalEstimates, departureArrivalEstimates, scanSummaries, eventsByDeliveryId, etaHistoryByDeliveryId] = await Promise.all([
       siteStore.listForCompany(session.companyId),
       needsManualArrivalEstimates ? getManualArrivalDurationEstimates(session.companyId) : Promise.resolve(new Map<string, ManualArrivalDurationEstimate>()),
       // Unlike manualArrivalEstimates above, this isn't gated behind an
@@ -307,7 +312,14 @@ export async function GET(request: Request) {
       getDepartureArrivalDurationEstimates(session.companyId),
       // A single, company-scoped read powers every parcel-control indicator
       // in the table. Never fan this out into one scan query per delivery.
-      store.listScanSummaries(session.companyId, rows.map((row) => row.id)),
+      store.listScanSummaries(session.companyId, companyDeliveryIds),
+      // Same reasoning, for the two per-delivery queries the enrichment loop
+      // below used to run in a loop (store.listEvents / listEtaObservations
+      // once each per delivery) -- at real trip/delivery volume that alone
+      // was enough to exceed the Worker's per-invocation subrequest budget
+      // and 500 this entire route for every dispatcher (2026-09-02).
+      store.listEventsForDeliveries(session.companyId, companyDeliveryIds),
+      store.listEtaObservationsForDeliveries(session.companyId, companyDeliveryIds, 2000),
     ]);
     const scanSummaryByDeliveryId = new Map(scanSummaries.map((summary) => [summary.deliveryId, summary]));
     const siteById = new Map(companySites.map((site) => [site.id, site]));
@@ -336,8 +348,8 @@ export async function GET(request: Request) {
     };
     const stableContexts = new Map<string, ReturnType<typeof stableEtaRouteContext>>();
     const enrichedRows = await Promise.all(rows.map(async (row) => {
-      const routeEvents = await store.listEvents(row.id);
-      const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
+      const routeEvents = eventsByDeliveryId.get(row.id) ?? [];
+      const ownEtaHistory = etaHistoryByDeliveryId.get(row.id) ?? [];
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
       stableContexts.set(row.id, routeContext);
       const historyRows = routeContext ? await cachedEtaHistory(routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
@@ -345,7 +357,7 @@ export async function GET(request: Request) {
       const learnedDwell = await cachedLearnedDwell(routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, rows, learnedDwell);
       const manualArrivalEstimate = row.destinationSiteId ? manualArrivalEstimates.get(row.destinationSiteId) ?? null : null;
-      return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount, manualArrivalEstimate)).delivery;
+      return (await enrichAndDetectDelay(row, serviceMinutes, history.usableEffectiveSpeedKmh, history.tripCount, manualArrivalEstimate, routeEvents)).delivery;
     }));
     const enrichedRowsWithScans = enrichedRows.map((delivery) => ({
       ...delivery,

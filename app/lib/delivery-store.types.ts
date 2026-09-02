@@ -238,8 +238,19 @@ export interface DeliveryStore {
   listScanSummaries(companyId: string, deliveryIds: string[]): Promise<DeliveryScanSummary[]>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
+  // One bounded, company-scoped query for every delivery id given, instead
+  // of one listEvents call per delivery -- see listScanSummaries above for
+  // the same reasoning. GET /api/deliveries used to call listEvents once per
+  // delivery on every dashboard load; at real trip/delivery volume that was
+  // enough on its own to exceed the Worker's per-invocation subrequest
+  // budget and 500 the whole dashboard for every dispatcher (2026-09-02).
+  listEventsForDeliveries(companyId: string, deliveryIds: string[]): Promise<Map<string, DeliveryEventRow[]>>;
   recordEtaObservation(input: EtaObservationInput): Promise<boolean>;
   listEtaObservations(deliveryId: string, limit?: number): Promise<EtaObservationRow[]>;
+  // Same batching as listEventsForDeliveries, for the other per-delivery
+  // query GET /api/deliveries used to run in a loop. limitPerDelivery caps
+  // how many of each delivery's own most-recent observations are kept.
+  listEtaObservationsForDeliveries(companyId: string, deliveryIds: string[], limitPerDelivery?: number): Promise<Map<string, EtaObservationRow[]>>;
   listEtaObservationsForRoute(companyId: string, routeTemplateId: string, destinationSiteId: string, limit?: number): Promise<EtaObservationRow[]>;
   recordTripPosition(input: TripPositionInput): Promise<boolean>;
   listTripPositionsForRoute(companyId: string, routeTemplateId: string, limit?: number): Promise<TripPositionRow[]>;

@@ -269,6 +269,19 @@ export const store: DeliveryStore = {
     const result = await db().prepare(`SELECT delivery_id AS deliveryId, type, progress, created_at AS createdAt FROM delivery_events WHERE delivery_id = ? ORDER BY created_at ASC`).bind(deliveryId).all<RawDeliveryEvent>();
     return (result.results ?? []).map(hydrateEvent);
   },
+  async listEventsForDeliveries(companyId, deliveryIds) {
+    const byDeliveryId = new Map<string, DeliveryEventRow[]>();
+    if (!deliveryIds.length) return byDeliveryId;
+    const placeholders = deliveryIds.map(() => "?").join(",");
+    const result = await db().prepare(`SELECT delivery_id AS deliveryId, type, progress, created_at AS createdAt FROM delivery_events
+      WHERE delivery_id IN (${placeholders}) ORDER BY delivery_id ASC, created_at ASC`).bind(...deliveryIds).all<RawDeliveryEvent>();
+    for (const row of result.results ?? []) {
+      const event = hydrateEvent(row);
+      const existing = byDeliveryId.get(event.deliveryId);
+      if (existing) existing.push(event); else byDeliveryId.set(event.deliveryId, [event]);
+    }
+    return byDeliveryId;
+  },
   async recordEtaObservation(input) {
     const result = await db().prepare(`INSERT OR IGNORE INTO delivery_eta_observations
       (delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at)
@@ -285,6 +298,33 @@ export const store: DeliveryStore = {
       effectiveSpeedKmh: row.effectiveSpeedKmh == null ? null : Number(row.effectiveSpeedKmh), remainingDistanceKm: Number(row.remainingDistanceKm), progress: Number(row.progress),
       confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(Number(row.createdAt)),
     }));
+  },
+  async listEtaObservationsForDeliveries(companyId, deliveryIds, limitPerDelivery = 2000) {
+    const byDeliveryId = new Map<string, EtaObservationRow[]>();
+    if (!deliveryIds.length) return byDeliveryId;
+    const capped = Math.max(1, Math.min(2000, Math.round(limitPerDelivery)));
+    const placeholders = deliveryIds.map(() => "?").join(",");
+    // D1 (SQLite) supports window functions -- same row_number() PARTITION BY
+    // trick as the Postgres backend, to cap each delivery to its own
+    // most-recent `capped` observations in one query instead of one per delivery.
+    const result = await db().prepare(`SELECT deliveryId, companyId, routeTemplateId, tripInstanceId, destinationSiteId, positionAt, estimatedArrivalAt, plannedArrivalAt, delayMinutes, effectiveSpeedKmh, remainingDistanceKm, progress, confidence, source, createdAt FROM (
+        SELECT delivery_id AS deliveryId, company_id AS companyId, route_template_id AS routeTemplateId, trip_instance_id AS tripInstanceId, destination_site_id AS destinationSiteId, position_at AS positionAt, estimated_arrival_at AS estimatedArrivalAt, planned_arrival_at AS plannedArrivalAt, delay_minutes AS delayMinutes, effective_speed_kmh AS effectiveSpeedKmh, remaining_distance_km AS remainingDistanceKm, progress, confidence, source, created_at AS createdAt,
+          row_number() OVER (PARTITION BY delivery_id ORDER BY position_at DESC) AS rn
+        FROM delivery_eta_observations
+        WHERE company_id = ? AND delivery_id IN (${placeholders})
+      ) ranked WHERE rn <= ?
+      ORDER BY deliveryId ASC, positionAt DESC`).bind(companyId, ...deliveryIds, capped).all<Record<string, unknown>>();
+    for (const row of result.results ?? []) {
+      const observation: EtaObservationRow = {
+        deliveryId: String(row.deliveryId), companyId: row.companyId == null ? "" : String(row.companyId), routeTemplateId: row.routeTemplateId == null ? null : String(row.routeTemplateId), tripInstanceId: row.tripInstanceId == null ? null : String(row.tripInstanceId), destinationSiteId: row.destinationSiteId == null ? null : String(row.destinationSiteId), positionAt: new Date(Number(row.positionAt)), estimatedArrivalAt: new Date(Number(row.estimatedArrivalAt)),
+        plannedArrivalAt: row.plannedArrivalAt == null ? null : new Date(Number(row.plannedArrivalAt)), delayMinutes: row.delayMinutes == null ? null : Number(row.delayMinutes),
+        effectiveSpeedKmh: row.effectiveSpeedKmh == null ? null : Number(row.effectiveSpeedKmh), remainingDistanceKm: Number(row.remainingDistanceKm), progress: Number(row.progress),
+        confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(Number(row.createdAt)),
+      };
+      const existing = byDeliveryId.get(observation.deliveryId);
+      if (existing) existing.push(observation); else byDeliveryId.set(observation.deliveryId, [observation]);
+    }
+    return byDeliveryId;
   },
   async listEtaObservationsForRoute(companyId, routeTemplateId, destinationSiteId, limit = 5000) {
     const capped = Math.max(1, Math.min(10000, Math.round(limit)));

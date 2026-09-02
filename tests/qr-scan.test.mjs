@@ -116,7 +116,8 @@ test("the DeliveryStore interface declares the scan methods and every backend im
 });
 
 test("the dashboard obtains all parcel scan proofs through one bulk store call, not one query per delivery", () => {
-  assert.match(creationRoute, /store\.listScanSummaries\(session\.companyId, rows\.map\(\(row\) => row\.id\)\)/);
+  assert.match(creationRoute, /const companyDeliveryIds = rows\.map\(\(row\) => row\.id\);/);
+  assert.match(creationRoute, /store\.listScanSummaries\(session\.companyId, companyDeliveryIds\)/);
   assert.match(creationRoute, /scanSummary: scanSummaryByDeliveryId\.get\(delivery\.id\) \?\? null/);
 });
 

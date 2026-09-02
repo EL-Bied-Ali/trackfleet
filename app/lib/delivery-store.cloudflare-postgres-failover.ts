@@ -53,6 +53,34 @@ export const store: DeliveryStore = {
     );
   },
 
+  listEventsForDeliveries(companyId, deliveryIds) {
+    return withD1ReadFailover(
+      "delivery.listEventsForDeliveries",
+      () => primaryStore.listEventsForDeliveries(companyId, deliveryIds),
+      // D1 failover is rare (Postgres itself has to be down) and this whole
+      // route already isn't optimized for that path elsewhere -- one D1 read
+      // per delivery here is an acceptable fallback, not the everyday case
+      // the batched primary path exists to keep off the subrequest budget.
+      async () => {
+        const byDeliveryId = new Map<string, Awaited<ReturnType<typeof listDeliveryEventsFromD1>>>();
+        for (const deliveryId of deliveryIds) byDeliveryId.set(deliveryId, await listDeliveryEventsFromD1(deliveryId));
+        return byDeliveryId;
+      },
+    );
+  },
+
+  listEtaObservationsForDeliveries(companyId, deliveryIds, limitPerDelivery) {
+    return withD1ReadFailover(
+      "delivery.listEtaObservationsForDeliveries",
+      () => primaryStore.listEtaObservationsForDeliveries(companyId, deliveryIds, limitPerDelivery),
+      async () => {
+        const byDeliveryId = new Map<string, Awaited<ReturnType<typeof listEtaObservationsFromD1>>>();
+        for (const deliveryId of deliveryIds) byDeliveryId.set(deliveryId, await listEtaObservationsFromD1(deliveryId, limitPerDelivery));
+        return byDeliveryId;
+      },
+    );
+  },
+
   listEtaObservationsForRoute(companyId, routeTemplateId, destinationSiteId, limit) {
     return withD1ReadFailover(
       "delivery.listEtaObservationsForRoute",
