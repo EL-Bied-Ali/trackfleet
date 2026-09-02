@@ -59,11 +59,14 @@ test("the cell picker only renders when there's more than one label per sheet, a
   assert.match(labelsPage, /blockedCells\.size > 0 \? ` \(\$\{blockedCells\.size\} sautée/);
 });
 
-// User asked for more labels per sheet without breaking legibility --
-// checked the actual constraint (the QR canvas has a fixed 28mm render
-// size regardless of label size, and phone cameras need roughly 20mm+ to
-// scan reliably) and landed on 18/feuille (3x6) as the densest preset that
-// still leaves real margin above that floor.
-test("offers an 18-per-sheet preset (3x6) as the densest option, denser than the previous 12-per-sheet ceiling", () => {
-  assert.match(labelsPage, /\{ cols: 3, rows: 6 \}/);
+// User asked for more labels per sheet without breaking legibility. A
+// denser 18/feuille (3x6) preset was tried and reverted the same session:
+// live-checking (not just the QR-size math) found a real destination
+// address wraps across several lines and gets silently clipped by
+// overflow:hidden at that height -- confirmed via scrollHeight vs
+// clientHeight on the actual rendered label. 12/feuille (3x4) stays the
+// real ceiling until the destination is shown as a short label instead of
+// the full address.
+test("does not offer the reverted 18-per-sheet (3x6) preset -- it silently clips real destination addresses", () => {
+  assert.doesNotMatch(labelsPage, /\{ cols: 3, rows: 6 \}/);
 });

@@ -44,13 +44,19 @@ const LABEL_PRESETS: Array<{ cols: number; rows: number }> = [
   { cols: 2, rows: 4 },
   { cols: 2, rows: 5 },
   { cols: 3, rows: 4 },
-  // Densest preset that still leaves real margin around the QR's own fixed
-  // 28mm render size (see the canvas style below) -- 70x49.5mm leaves ~21mm
-  // of padding/text headroom above the ~28mm the QR needs, vs. the ~40mm
-  // floor where it starts getting genuinely tight. Going denser than this
-  // would need the QR itself to shrink with the label, which has its own
-  // hard floor around 20mm before phone cameras stop scanning it reliably.
-  { cols: 3, rows: 6 },
+  // A 3x6 (18/feuille, 70x49.5mm) preset was tried and reverted the same
+  // session: the QR's fixed 28mm size was never actually the bottleneck --
+  // a real destination address (e.g. "12 Boulevard Essaouira, Douar el
+  // Asker, Derb el Makina, Marrakech, Maroc", 74 characters) wraps across
+  // several lines in the narrow ~31mm text column, and at 49.5mm total
+  // label height that wrapped text overflowed the label and got silently
+  // clipped by the container's overflow:hidden -- confirmed live,
+  // scrollHeight 403px against a 155px available box, destination and
+  // truck lines invisible on the printed label. 3x4 (12/feuille) is the
+  // real, address-length-independent ceiling with the current fixed-size
+  // text layout; going denser safely would need the destination shown as
+  // just the short site label instead of the full address, not just a
+  // smaller font.
 ];
 
 function clampLabelMm(value: number, fallback: number) {
