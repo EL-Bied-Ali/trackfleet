@@ -44,6 +44,13 @@ const LABEL_PRESETS: Array<{ cols: number; rows: number }> = [
   { cols: 2, rows: 4 },
   { cols: 2, rows: 5 },
   { cols: 3, rows: 4 },
+  // Densest preset that still leaves real margin around the QR's own fixed
+  // 28mm render size (see the canvas style below) -- 70x49.5mm leaves ~21mm
+  // of padding/text headroom above the ~28mm the QR needs, vs. the ~40mm
+  // floor where it starts getting genuinely tight. Going denser than this
+  // would need the QR itself to shrink with the label, which has its own
+  // hard floor around 20mm before phone cameras stop scanning it reliably.
+  { cols: 3, rows: 6 },
 ];
 
 function clampLabelMm(value: number, fallback: number) {
