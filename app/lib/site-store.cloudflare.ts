@@ -19,6 +19,7 @@ function hydrate(row: Record<string, unknown>): CompanySite {
     longitude: row.longitude === null ? null : Number(row.longitude),
     arrivalRadiusKm: Number(row.arrival_radius_km),
     roles: JSON.parse(String(row.roles)) as CompanySite["roles"],
+    whatsapp: row.whatsapp === null || row.whatsapp === undefined ? null : String(row.whatsapp),
     createdAt: new Date(Number(row.created_at)),
     updatedAt: new Date(Number(row.updated_at)),
   };
@@ -27,8 +28,8 @@ function hydrate(row: Record<string, unknown>): CompanySite {
 async function seed(companyId: string) {
   const now = Date.now();
   for (const site of knownSites) {
-    await db().prepare(`INSERT OR IGNORE INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(companyId, site.id, site.label, site.city, site.country, site.address, site.latitude, site.longitude, site.arrivalRadiusKm, JSON.stringify(site.roles), now, now).run();
+    await db().prepare(`INSERT OR IGNORE INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,whatsapp,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(companyId, site.id, site.label, site.city, site.country, site.address, site.latitude, site.longitude, site.arrivalRadiusKm, JSON.stringify(site.roles), site.whatsapp ?? null, now, now).run();
   }
 }
 
@@ -40,10 +41,10 @@ export const siteStore: SiteStore = {
   },
   async upsert(input: CreateCompanySiteInput) {
     const now = Date.now();
-    await db().prepare(`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT(company_id,id) DO UPDATE SET label=excluded.label,city=excluded.city,country=excluded.country,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,arrival_radius_km=excluded.arrival_radius_km,roles=excluded.roles,updated_at=excluded.updated_at`)
-      .bind(input.companyId,input.id,input.label,input.city,input.country,input.address,input.latitude,input.longitude,input.arrivalRadiusKm,JSON.stringify(input.roles),now,now).run();
+    await db().prepare(`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,whatsapp,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(company_id,id) DO UPDATE SET label=excluded.label,city=excluded.city,country=excluded.country,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,arrival_radius_km=excluded.arrival_radius_km,roles=excluded.roles,whatsapp=excluded.whatsapp,updated_at=excluded.updated_at`)
+      .bind(input.companyId,input.id,input.label,input.city,input.country,input.address,input.latitude,input.longitude,input.arrivalRadiusKm,JSON.stringify(input.roles),input.whatsapp ?? null,now,now).run();
     const row = await db().prepare("SELECT * FROM sites WHERE company_id=? AND id=?").bind(input.companyId,input.id).first();
     if (!row) throw new Error("site_write_failed");
     return hydrate(row as Record<string, unknown>);
