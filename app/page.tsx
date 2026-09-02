@@ -1221,12 +1221,32 @@ export default function Home() {
     if (!window.confirm(confirmation)) return;
     setGroupArrivalPending(label);
     try {
-      const results = await Promise.all(deliveryIds.map((deliveryId) => fetch("/api/deliveries/manual-completion", {
+      const responses = await Promise.all(deliveryIds.map((deliveryId) => fetch("/api/deliveries/manual-completion", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ deliveryId, confirmArrival: true }),
-      }).then((response) => response.json() as Promise<{ delivery?: Delivery; error?: string }>)));
-      const updated = results.map((result) => result.delivery).filter((delivery): delivery is Delivery => Boolean(delivery));
+      }).then(async (response) => ({
+        deliveryId,
+        ...(await response.json().catch(() => ({})) as { delivery?: Delivery; error?: string; missingLoadedScan?: boolean; missingHubScan?: boolean }),
+      }))));
+      const updated = responses.map((result) => result.delivery).filter((delivery): delivery is Delivery => Boolean(delivery));
+      // Client asked: arrival must only go through once a parcel was
+      // scanned at both the depot and the hub -- see the same gate server-side
+      // in manual-completion/route.ts. Surface exactly which parcel(s) and
+      // which checkpoint(s) blocked it, instead of a generic failure.
+      const blocked = responses.filter((result) => result.error === "arrival_blocked_missing_scans");
+      if (blocked.length) {
+        const detail = blocked.map((result) => {
+          const missing = result.missingLoadedScan && result.missingHubScan
+            ? (locale === "fr" ? "dépôt + hub" : "depot + hub")
+            : result.missingLoadedScan
+              ? (locale === "fr" ? "dépôt" : "depot")
+              : "hub";
+          return `${result.deliveryId} (${missing})`;
+        }).join(", ");
+        setToast(locale === "fr" ? `Arrivée bloquée pour ${blocked.length > 1 ? "certains colis" : "un colis"} non scanné(s) : ${detail}` : locale === "nl" ? `Aankomst geblokkeerd voor niet-gescand(e) pakket(ten): ${detail}` : `Arrival blocked for unscanned parcel(s): ${detail}`);
+        if (!updated.length) return;
+      }
       if (!updated.length) {
         setToast(locale === "fr" ? "Impossible de confirmer l'arrivée" : locale === "nl" ? "Aankomst kon niet worden bevestigd" : "Couldn't confirm arrival");
         return;
@@ -1238,9 +1258,11 @@ export default function Home() {
         body: JSON.stringify({ deliveryId: delivery.id }),
       }).then((response) => response.json() as Promise<{ ok?: boolean }>).catch(() => ({ ok: false }))));
       const anyNotified = notifyResults.some((result) => result.ok);
-      setToast(anyNotified
-        ? (locale === "fr" ? "Arrivée confirmée, client(s) notifié(s) par WhatsApp" : locale === "nl" ? "Aankomst bevestigd, klant(en) via WhatsApp op de hoogte gebracht" : "Arrival confirmed, customer(s) notified via WhatsApp")
-        : (locale === "fr" ? "Arrivée confirmée (WhatsApp non envoyé : fenêtre 24h fermée ou consentement retiré)" : locale === "nl" ? "Aankomst bevestigd (WhatsApp niet verzonden: 24u-venster gesloten of toestemming ingetrokken)" : "Arrival confirmed (WhatsApp not sent: 24h window closed or consent withdrawn)"));
+      if (!blocked.length) {
+        setToast(anyNotified
+          ? (locale === "fr" ? "Arrivée confirmée, client(s) notifié(s) par WhatsApp" : locale === "nl" ? "Aankomst bevestigd, klant(en) via WhatsApp op de hoogte gebracht" : "Arrival confirmed, customer(s) notified via WhatsApp")
+          : (locale === "fr" ? "Arrivée confirmée (WhatsApp non envoyé : fenêtre 24h fermée ou consentement retiré)" : locale === "nl" ? "Aankomst bevestigd (WhatsApp niet verzonden: 24u-venster gesloten of toestemming ingetrokken)" : "Arrival confirmed (WhatsApp not sent: 24h window closed or consent withdrawn)"));
+      }
     } catch {
       setToast(locale === "fr" ? "Impossible de confirmer l'arrivée" : locale === "nl" ? "Aankomst kon niet worden bevestigd" : "Couldn't confirm arrival");
     } finally {
@@ -1853,7 +1875,19 @@ export default function Home() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ deliveryId, confirmArrival: true }),
       });
-      if (!response.ok) throw new Error("arrival_confirmation_failed");
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string; missingLoadedScan?: boolean; missingHubScan?: boolean } | null;
+        if (response.status === 409 && data?.error === "arrival_blocked_missing_scans") {
+          const missing = data.missingLoadedScan && data.missingHubScan
+            ? (locale === "fr" ? "au dépôt et au hub" : locale === "nl" ? "bij het depot en de hub" : "at the depot and the hub")
+            : data.missingLoadedScan
+              ? (locale === "fr" ? "au dépôt" : locale === "nl" ? "bij het depot" : "at the depot")
+              : (locale === "fr" ? "au hub" : locale === "nl" ? "bij de hub" : "at the hub");
+          setToast(locale === "fr" ? `Arrivée bloquée : colis non scanné ${missing}.` : locale === "nl" ? `Aankomst geblokkeerd: pakket niet gescand ${missing}.` : `Arrival blocked: parcel not scanned ${missing}.`);
+          return;
+        }
+        throw new Error("arrival_confirmation_failed");
+      }
       setToast(locale === "fr" ? "Arrivée confirmée. La clôture suivra après le déchargement." : locale === "nl" ? "Aankomst bevestigd. Afsluiting volgt na het lossen." : "Arrival confirmed. Completion will follow after unloading.");
     } catch {
       setToast(locale === "fr" ? "Impossible de confirmer cette arrivée." : locale === "nl" ? "Aankomst kon niet worden bevestigd." : "Could not confirm this arrival.");
