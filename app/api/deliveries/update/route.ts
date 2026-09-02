@@ -51,6 +51,8 @@ export async function POST(request: Request) {
     const manualPriceProvided = payload.manualPriceAmount !== null && payload.manualPriceAmount !== undefined && String(payload.manualPriceAmount).trim() !== "";
     const manualPriceInput = optionalNumber(payload.manualPriceAmount);
     const itemDescriptionInput = String(payload.itemDescription ?? "").trim();
+    const paymentStatusInput = String(payload.paymentStatus ?? "unpaid").trim();
+    const amountPaidInput = optionalNumber(payload.amountPaid);
 
     if (
       customer.length > 160 || destinationInput.length > 500 || destinationSiteId.length > 100
@@ -64,6 +66,12 @@ export async function POST(request: Request) {
     }
     if (manualPriceProvided && (manualPriceInput === null || manualPriceInput <= 0 || manualPriceInput > 1000000)) {
       return noStore({ error: "manualPriceAmount must be greater than 0 and at most 1000000" }, 400);
+    }
+    if (!["unpaid", "partial", "paid"].includes(paymentStatusInput)) {
+      return noStore({ error: "paymentStatus must be one of unpaid, partial, paid" }, 400);
+    }
+    if (paymentStatusInput === "partial" && (amountPaidInput === null || amountPaidInput <= 0)) {
+      return noStore({ error: "amountPaid must be greater than 0 when paymentStatus is partial" }, 400);
     }
     if (!weightProvided && !itemDescriptionInput) {
       return noStore({ error: "itemDescription is required when weightKg is not provided" }, 400);
@@ -97,11 +105,18 @@ export async function POST(request: Request) {
     // price-per-kg currency, same as the creation route does with the
     // freshly-chosen origin.
     const originSite = existing.originSiteId ? companySites.find((candidate) => candidate.id === existing.originSiteId) ?? null : null;
-    const { priceAmount, priceCurrency } = weightKg !== null
-      ? computeDeliveryPrice(weightKg, originSite?.country ?? null)
-      : manualPriceInput !== null && manualPriceInput > 0
-        ? { priceAmount: Math.round(manualPriceInput * 100) / 100, priceCurrency: deliveryPriceCurrencyForOriginCountry(originSite?.country ?? null) }
+    // Same override precedence as creation (route.ts) -- price is fully
+    // editable, a dispatcher-entered manualPriceAmount wins over the
+    // weight-derived figure whenever it's explicitly present.
+    const { priceAmount, priceCurrency } = manualPriceInput !== null && manualPriceInput > 0
+      ? { priceAmount: Math.round(manualPriceInput * 100) / 100, priceCurrency: deliveryPriceCurrencyForOriginCountry(originSite?.country ?? null) }
+      : weightKg !== null
+        ? computeDeliveryPrice(weightKg, originSite?.country ?? null)
         : { priceAmount: null, priceCurrency: null };
+    if (paymentStatusInput === "partial" && priceAmount !== null && amountPaidInput !== null && amountPaidInput >= priceAmount) {
+      return noStore({ error: "amountPaid must be less than the delivery's price for a partial payment -- use paymentStatus 'paid' instead" }, 400);
+    }
+    const amountPaid = paymentStatusInput === "partial" ? amountPaidInput : null;
 
     const requestedDestinationLatitude = optionalNumber(payload.destinationLatitude);
     const requestedDestinationLongitude = optionalNumber(payload.destinationLongitude);
@@ -129,7 +144,7 @@ export async function POST(request: Request) {
 
     const updated = await store.updateDetails(deliveryId, session.companyId, {
       customer, contact, customerEmail: customerEmail || null, recipientName, recipientContact,
-      weightKg, priceAmount, priceCurrency, itemDescription: itemDescriptionInput || null,
+      weightKg, priceAmount, priceCurrency, paymentStatus: paymentStatusInput as "unpaid" | "partial" | "paid", amountPaid, itemDescription: itemDescriptionInput || null,
       destinationSiteId: resolvedDestinationSiteId, destination, destinationLatitude, destinationLongitude, arrivalRadiusKm,
       plannedArrivalAt,
     });

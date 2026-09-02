@@ -9,6 +9,7 @@ import {
 
 const files = Object.fromEntries(await Promise.all([
   "app/api/deliveries/route.ts",
+  "app/api/deliveries/update/route.ts",
   "app/lib/delivery-store.postgres.ts",
   "app/lib/delivery-store.shared-postgres.ts",
   "app/lib/delivery-store.cloudflare.ts",
@@ -98,20 +99,39 @@ test("weight is entered by the dispatcher; price is shown as a computed preview,
   assert.match(publicView, /priceCurrency: delivery\.priceCurrency/);
 });
 
-test("bulky items without a declared weight let the dispatcher enter a manual price, but weight always wins when both are present", () => {
-  // Per-kg pricing makes no sense for a washing machine or a TV, so when
-  // weight is left blank the form exposes a manual price input instead of
-  // the read-only computed preview -- but the server must never let a
-  // manual price override a real weight-derived price.
+test("bulky items without a declared weight let the dispatcher enter a manual price, same as any other parcel", () => {
+  // Per-kg pricing makes no sense for a washing machine or a TV, so the
+  // price field always accepts a manual entry -- for a bulky item it's the
+  // ONLY way to get a price at all (see the override test below for the
+  // weighed case).
   const route = files["app/api/deliveries/route.ts"];
   const page = files["app/page.tsx"];
   assert.match(route, /manualPriceProvided = payload\.manualPriceAmount/);
   assert.match(route, /manualPriceAmount must be greater than 0/);
-  assert.match(route, /weightKg !== null\s*\n\s*\? computeDeliveryPrice\(weightKg, originSite\?\.country \?\? null\)\s*\n\s*: manualPriceInput !== null && manualPriceInput > 0/);
   assert.doesNotMatch(route, /payload\.priceAmount/);
   assert.doesNotMatch(route, /payload\.priceCurrency/);
   assert.match(page, /value=\{parcel\.manualPriceAmount\}/);
-  assert.match(page, /parcel\.weightKg \? \(locale === "fr" \? "Prix calculé"/);
+});
+
+// Client asked: price stays driven by weight by default, but must be fully
+// editable -- a dispatcher-entered manualPriceAmount now overrides the
+// weight-derived figure whenever it's explicitly present, extending the
+// SAME trusted manualPriceAmount mechanism bulky items already used rather
+// than trusting a raw client-submitted priceAmount (still never accepted,
+// see doesNotMatch above). This flipped the old "weight always wins"
+// precedence in both the creation and edit routes.
+test("price is fully editable even when a weight is declared -- a dispatcher-entered manual price overrides the weight-derived figure, in both creation and edit", () => {
+  const route = files["app/api/deliveries/route.ts"];
+  const updateRoute = files["app/api/deliveries/update/route.ts"];
+  const page = files["app/page.tsx"];
+  const overridePrecedence = /const \{ priceAmount, priceCurrency \} = manualPriceInput !== null && manualPriceInput > 0\s*\n\s*\? \{ priceAmount: Math\.round\(manualPriceInput \* 100\) \/ 100, priceCurrency: deliveryPriceCurrencyForOriginCountry\(originSite\?\.country \?\? null\) \}\s*\n\s*: weightKg !== null\s*\n\s*\? computeDeliveryPrice\(weightKg, originSite\?\.country \?\? null\)\s*\n\s*: \{ priceAmount: null, priceCurrency: null \};/;
+  assert.match(route, overridePrecedence);
+  assert.match(updateRoute, overridePrecedence);
+  // The price input is always rendered (not swapped for a read-only
+  // preview when weight is present) -- blank means "use the computed
+  // default", typing a value overrides it.
+  assert.match(page, /<input type="number" min="0\.01" max="1000000" step="0\.01" inputMode="decimal" placeholder=\{parcel\.weightKg \?/);
+  assert.doesNotMatch(page, /"Prix calculé" : locale === "nl" \? "Berekende prijs"/);
 });
 
 test("an unweighed bulky item requires a description, both in the form and at the API", () => {

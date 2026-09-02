@@ -53,6 +53,8 @@ type RawDelivery = {
   created_at: string | Date;
   parcel_code: string | null;
   short_code: string | null;
+  payment_status: "unpaid" | "partial" | "paid" | null;
+  amount_paid: number | string | null;
 };
 
 function numberOrNull(value: number | string | null) {
@@ -106,6 +108,8 @@ function hydrate(row: RawDelivery): DeliveryRow {
     createdAt: new Date(row.created_at),
     parcelCode: row.parcel_code ?? null,
     shortCode: row.short_code ?? null,
+    paymentStatus: row.payment_status ?? null,
+    amountPaid: numberOrNull(row.amount_paid),
   };
 }
 

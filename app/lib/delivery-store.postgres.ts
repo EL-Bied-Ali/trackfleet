@@ -61,6 +61,8 @@ type RawDelivery = {
   created_at: string | Date;
   parcel_code: string | null;
   short_code: string | null;
+  payment_status: "unpaid" | "partial" | "paid" | null;
+  amount_paid: number | string | null;
 };
 
 type RawEvent = {
@@ -127,6 +129,8 @@ function hydrate(row: RawDelivery): DeliveryRow {
     createdAt: new Date(row.created_at),
     parcelCode: row.parcel_code ?? null,
     shortCode: row.short_code ?? null,
+    paymentStatus: row.payment_status ?? null,
+    amountPaid: numberOrNull(row.amount_paid),
   };
 }
 function hydrateEvent(row: RawEvent): DeliveryEventRow {
@@ -233,6 +237,14 @@ async function ensureSchema() {
     // per-(company, prefix) sequence -- two different companies will
     // legitimately both hand out "CAS 00".
     await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS short_code text`;
+    // Client asked: price stays fully editable, but whether it's actually
+    // been collected is tracked separately. No column DEFAULT here on
+    // purpose -- historical deliveries predate payment tracking entirely
+    // and defaulting them all to "unpaid" would misrepresent parcels that
+    // were, in reality, already paid. Every NEW delivery going forward
+    // gets an explicit "unpaid" from create() below instead.
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS payment_status text`;
+    await sql`ALTER TABLE deliveries ADD COLUMN IF NOT EXISTS amount_paid numeric(12,2)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_id ON deliveries(company_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_trip ON deliveries(company_id, trip_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_deliveries_company_shipment ON deliveries(company_id, shipment_id)`;
@@ -605,6 +617,7 @@ export const postgresStore: DeliveryStore = {
       customer = ${input.customer}, contact = ${input.contact}, customer_email = ${input.customerEmail},
       recipient_name = ${input.recipientName}, recipient_contact = ${input.recipientContact},
       weight_kg = ${input.weightKg}, price_amount = ${input.priceAmount}, price_currency = ${input.priceCurrency},
+      payment_status = ${input.paymentStatus}, amount_paid = ${input.amountPaid},
       item_description = ${input.itemDescription}, destination_site_id = ${input.destinationSiteId}, destination = ${input.destination},
       destination_latitude = ${input.destinationLatitude}, destination_longitude = ${input.destinationLongitude},
       arrival_radius_km = ${input.arrivalRadiusKm}, planned_arrival_at = ${input.plannedArrivalAt?.toISOString() ?? null}
@@ -875,17 +888,18 @@ export const postgresStore: DeliveryStore = {
       whatsappOptInAt: input.whatsappOptIn === true ? (input.whatsappOptInAt ?? new Date()) : null,
       recipientWhatsappOptIn: input.recipientWhatsappOptIn === true,
       recipientWhatsappOptInAt: input.recipientWhatsappOptIn === true ? (input.recipientWhatsappOptInAt ?? new Date()) : null,
+      paymentStatus: input.paymentStatus ?? "unpaid",
       id: createDeliveryId(),
       createdAt: new Date(),
     };
     await sql`INSERT INTO deliveries (
       id, customer, origin_site_id, origin_latitude, origin_longitude, destination_site_id, destination, destination_latitude, destination_longitude, arrival_radius_km,
       truck, driver, status, eta, planned_arrival_at, next_truck_departure_at, progress, color, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, whatsapp_opt_in, whatsapp_opt_in_at, recipient_whatsapp_opt_in, recipient_whatsapp_opt_in_at, sendatrack_vehicle_id,
-      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at, parcel_code, short_code
+      latitude, longitude, speed, last_position_at, gps_source, company_id, tracking_token, shipment_id, created_at, parcel_code, short_code, payment_status, amount_paid
     ) VALUES (
       ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
       ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.customerEmail ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
-      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}, ${delivery.parcelCode ?? null}, ${delivery.shortCode ?? null}
+      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}, ${delivery.parcelCode ?? null}, ${delivery.shortCode ?? null}, ${delivery.paymentStatus}, ${delivery.amountPaid ?? null}
     )`;
     return delivery;
   },
