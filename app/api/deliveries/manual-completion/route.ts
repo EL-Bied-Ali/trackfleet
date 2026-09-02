@@ -19,8 +19,14 @@ export async function GET(request: Request) {
   const visible = session.role === "agency"
     ? active.filter((delivery) => delivery.destinationSiteId === session.siteId)
     : active;
-  const deliveries = await Promise.all(visible.map(async (delivery) => {
-    const events = await store.listEvents(delivery.id);
+  // One company-scoped query instead of one store.listEvents call per
+  // delivery -- the same "Too many subrequests" shape that took down
+  // GET /api/deliveries at real trip/delivery volume (2026-09-02), found
+  // here during the follow-up audit before it did the same thing to this
+  // screen.
+  const eventsByDeliveryId = await store.listEventsForDeliveries(session.companyId, visible.map((delivery) => delivery.id));
+  const deliveries = visible.map((delivery) => {
+    const events = eventsByDeliveryId.get(delivery.id) ?? [];
     const recommendation = arrivalConfirmationRecommendation({
       ...delivery,
       events,
@@ -36,7 +42,7 @@ export async function GET(request: Request) {
       arrivalState: recommendation.state,
       arrivalReason: recommendation.reason,
     };
-  }));
+  });
   return noStore({ deliveries });
 }
 
