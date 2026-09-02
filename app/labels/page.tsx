@@ -133,6 +133,11 @@ export default function LabelsPage() {
   // grid dimensions it was picked against.
   const [blockedCells, setBlockedCells] = useState<Set<number>>(new Set());
   const qrCanvases = useRef(new Map<string, HTMLCanvasElement>());
+  // Needed by the QR-drawing effect below (hooks run before the early
+  // auth returns, so these have to live up here rather than beside the
+  // rest of the labelSize-derived layout math further down).
+  const labelPaddingMm = Math.min(4, Math.max(1.5, labelSize.height * 0.05));
+  const qrSizeMm = Math.min(28, Math.max(14, labelSize.height - 2 * labelPaddingMm - 5.5));
 
   function updateLabelSize(next: { width?: number; height?: number }) {
     setLabelSize((current) => {
@@ -212,11 +217,21 @@ export default function LabelsPage() {
         const qrCanvas = qrCanvases.current.get(delivery.id);
         if (qrCanvas) {
           await QRCode.toCanvas(qrCanvas, parcelScanUrl(origin, delivery.parcelCode), { width: 160, margin: 1 });
+          // Caught live: the qrcode library sets the canvas's own
+          // style.width/height to match its raster size (160px) as part of
+          // toCanvas, silently overriding the mm-based CSS size the JSX
+          // below sets -- every printed label's QR column was rendering at
+          // ~42mm regardless of preset, overflowing the label by a fixed
+          // ~20px no matter what content it held. Re-asserted here, after
+          // the library has had its say, so the intended print size always
+          // wins.
+          qrCanvas.style.width = `${qrSizeMm}mm`;
+          qrCanvas.style.height = `${qrSizeMm}mm`;
         }
       }
     })();
     return () => { cancelled = true; };
-  }, [deliveries]);
+  }, [deliveries, qrSizeMm]);
 
   if (auth === "loading") return <main style={{ padding: 40, fontFamily: "system-ui" }}>Chargement…</main>;
   if (auth === "denied") return (
@@ -230,13 +245,11 @@ export default function LabelsPage() {
   const labelsPerRow = Math.max(1, Math.floor(PAGE_WIDTH_MM / labelSize.width));
   const labelsPerColumn = Math.max(1, Math.floor(PAGE_HEIGHT_MM / labelSize.height));
   const labelsPerPage = labelsPerRow * labelsPerColumn;
-  // Fixed at 4mm/28mm/19mm, these fit every preset up to 12/feuille
-  // (74.25mm tall) fine, but at 16/feuille (37.125mm) they alone would
-  // already eat most of the label's height before a single line of text is
-  // drawn. Scaling them down with the label's own height keeps every
-  // preset's chrome proportional instead of clipping the shortest ones.
-  const labelPaddingMm = Math.min(4, Math.max(1.5, labelSize.height * 0.05));
-  const qrSizeMm = Math.min(28, Math.max(14, labelSize.height - 2 * labelPaddingMm - 5.5));
+  // logoMaxHeightMm scales the same way as labelPaddingMm/qrSizeMm above
+  // (declared earlier in the component so the QR-drawing effect can use
+  // them) -- fixed at 19mm, it fit every preset up to 12/feuille (74.25mm)
+  // fine, but at 16/feuille (37.125mm) it alone would eat most of the
+  // label's height before a single line of text is drawn.
   const logoMaxHeightMm = Math.min(19, labelSize.height * 0.22);
   const pages = layoutLabelPages(deliveries, labelsPerPage, blockedCells);
   const toggleBlockedCell = (index: number) => setBlockedCells((current) => {
