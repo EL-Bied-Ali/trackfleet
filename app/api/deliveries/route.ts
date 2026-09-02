@@ -28,6 +28,7 @@ import { createParcelCode } from "../../lib/parcel-code";
 import { findCompanySiteByText, resolveExplicitCompanySite } from "../../lib/delivery-site-resolution";
 import { matchDeliveryVehicle } from "../../lib/vehicle-linking";
 import { buildEtaRouteContexts, stableEtaRouteContext, summarizeRouteHistory } from "../../lib/route-history";
+import { cachedRouteQuery } from "../../lib/route-history-cache";
 import { groupPositionsByTrip, summarizeStopDwellFromGroupedTrips } from "../../lib/stop-dwell";
 import { routeLearningState, stablePlanRouteTemplateId } from "../../lib/route-learning";
 import { tripStatusFromDeliveryStatuses, tripStopsFromPlan } from "../../lib/trip-record";
@@ -212,8 +213,21 @@ async function idempotentReplayResponse(delivery: DeliveryRow, companyId: string
 async function learnedStopMinutes(companyId: string, routeTemplateId: string | null, currentTripInstanceId: string | null, prefetchedSites?: Awaited<ReturnType<typeof siteStore.listForCompany>>) {
   const learned = new Map<string, number>();
   if (!routeTemplateId) return learned;
+  // Neon's own network-transfer allowance was maxed out (5/5 GB) while
+  // compute/storage stayed nearly empty -- confirmed live via Neon's query
+  // dashboard this was one of the two worst offenders (up to 20,000 rows,
+  // ~9 columns each), recomputed from scratch on every call including the
+  // public customer tracking page's own 30s poll. Route dwell time is a
+  // slow-changing historical stat -- a few minutes of staleness here has
+  // no meaningful effect on the estimate, so this is cached across
+  // requests within the same warm Worker isolate instead of refetched
+  // every time.
   const [positions, sites] = await Promise.all([
-    store.listTripPositionsForRoute(companyId, routeTemplateId, 20000),
+    cachedRouteQuery(
+      "trip-positions-for-route",
+      `${companyId}|${routeTemplateId}`,
+      () => store.listTripPositionsForRoute(companyId, routeTemplateId, 20000),
+    ),
     prefetchedSites ? Promise.resolve(prefetchedSites) : siteStore.listForCompany(companyId),
   ]);
   // Grouping/sorting the position history is identical regardless of which
@@ -253,7 +267,13 @@ export async function GET(request: Request) {
       const routeContexts = buildEtaRouteContexts(companyRows);
       const ownEtaHistory = await store.listEtaObservations(row.id, 2000);
       const routeContext = stableEtaRouteContext(routeContexts.get(row.id) ?? null, ownEtaHistory, routeEvents);
-      const historyRows = routeContext ? await store.listEtaObservationsForRoute(row.companyId, routeContext.routeTemplateId, routeContext.destinationSiteId) : [];
+      const historyRows = routeContext
+        ? await cachedRouteQuery(
+          "eta-observations-for-route",
+          `${row.companyId}|${routeContext.routeTemplateId}|${routeContext.destinationSiteId}`,
+          () => store.listEtaObservationsForRoute(row.companyId, routeContext.routeTemplateId, routeContext.destinationSiteId),
+        )
+        : [];
       const history = summarizeRouteHistory(historyRows, 5, routeContext?.tripInstanceId ?? null);
       const learnedDwell = await learnedStopMinutes(row.companyId, routeContext?.routeTemplateId ?? null, routeContext?.tripInstanceId ?? null);
       const serviceMinutes = pendingServiceMinutesBeforeWithHistory(row, companyRows, learnedDwell);
@@ -333,17 +353,17 @@ export async function GET(request: Request) {
     const rowById = new Map(rows.map((row) => [row.id, row]));
     const stopPlans = buildTruckStopPlans(rows);
     const routeContexts = buildEtaRouteContexts(rows, stopPlans);
-    const etaHistoryCache = new Map<string, Promise<Awaited<ReturnType<typeof store.listEtaObservationsForRoute>>>>();
     const dwellCache = new Map<string, Promise<Map<string, number>>>();
-    const cachedEtaHistory = (routeTemplateId: string, destinationSiteId: string) => {
-      const key = `${routeTemplateId}|${destinationSiteId}`;
-      let pending = etaHistoryCache.get(key);
-      if (!pending) {
-        pending = store.listEtaObservationsForRoute(session.companyId, routeTemplateId, destinationSiteId);
-        etaHistoryCache.set(key, pending);
-      }
-      return pending;
-    };
+    // Routed through the same cross-request cache learnedStopMinutes uses
+    // below (see route-history-cache.ts) rather than a plain per-request
+    // Map -- this was one of the two queries maxing out Neon's network
+    // transfer allowance (5/5 GB) while compute/storage stayed nearly
+    // empty, confirmed live via Neon's own query dashboard.
+    const cachedEtaHistory = (routeTemplateId: string, destinationSiteId: string) => cachedRouteQuery(
+      "eta-observations-for-route",
+      `${session.companyId}|${routeTemplateId}|${destinationSiteId}`,
+      () => store.listEtaObservationsForRoute(session.companyId, routeTemplateId, destinationSiteId),
+    );
     const cachedLearnedDwell = (routeTemplateId: string | null, tripInstanceId: string | null) => {
       const key = `${routeTemplateId ?? "none"}|${tripInstanceId ?? "none"}`;
       let pending = dwellCache.get(key);
