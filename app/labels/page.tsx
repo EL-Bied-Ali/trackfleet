@@ -65,9 +65,28 @@ function readStoredLabelSize(): { width: number; height: number } {
   }
 }
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const pages: T[][] = [];
-  for (let i = 0; i < items.length; i += size) pages.push(items.slice(i, i + size));
+// A physical A4 label sheet is frequently only partly used -- the previous
+// print run took the first few positions, and the rest are still blank
+// adhesive labels worth reusing rather than wasting. `blockedCells` holds
+// the 0-based, row-major grid positions the dispatcher has marked as
+// already peeled off on the sheet currently in the printer; only the FIRST
+// page (the physical sheet actually in hand) respects it -- any further
+// pages are assumed to print on fresh sheets, so they always fill from
+// position 0. Blocked positions stay in the output as an empty slot (no
+// delivery placed there) so every real delivery still lands on the
+// physical position it visually corresponds to in the on-screen grid.
+function layoutLabelPages<T>(items: T[], labelsPerPage: number, blockedCells: Set<number>): Array<Array<T | null>> {
+  if (!items.length) return [];
+  const pages: Array<Array<T | null>> = [];
+  const queue = [...items];
+  let pageIndex = 0;
+  while (queue.length > 0) {
+    const blocked = pageIndex === 0 ? blockedCells : new Set<number>();
+    const slots: Array<T | null> = [];
+    for (let i = 0; i < labelsPerPage; i += 1) slots.push(blocked.has(i) ? null : (queue.shift() ?? null));
+    pages.push(slots);
+    pageIndex += 1;
+  }
   return pages;
 }
 
@@ -77,6 +96,12 @@ export default function LabelsPage() {
   const [loadError, setLoadError] = useState("");
   const [branding, setBranding] = useState<LabelBranding>(emptyBranding);
   const [labelSize, setLabelSize] = useState(() => readStoredLabelSize());
+  // Which grid positions on the physical sheet already in hand are already
+  // used -- not persisted (a one-off adjustment right before printing, not
+  // a lasting setting like labelSize), and reset whenever the grid's own
+  // shape changes below, since a cell index only means anything for the
+  // grid dimensions it was picked against.
+  const [blockedCells, setBlockedCells] = useState<Set<number>>(new Set());
   const qrCanvases = useRef(new Map<string, HTMLCanvasElement>());
 
   function updateLabelSize(next: { width?: number; height?: number }) {
@@ -88,6 +113,10 @@ export default function LabelsPage() {
       try { window.localStorage.setItem(LABEL_SIZE_STORAGE_KEY, JSON.stringify(updated)); } catch { /* per-viewer convenience only */ }
       return updated;
     });
+    // A blocked cell index only means anything for the grid shape it was
+    // picked against -- changing the label size changes the grid, so any
+    // existing selection would silently point at the wrong physical spot.
+    setBlockedCells(new Set());
   }
 
   useEffect(() => {
@@ -161,7 +190,12 @@ export default function LabelsPage() {
   const labelsPerRow = Math.max(1, Math.floor(PAGE_WIDTH_MM / labelSize.width));
   const labelsPerColumn = Math.max(1, Math.floor(PAGE_HEIGHT_MM / labelSize.height));
   const labelsPerPage = labelsPerRow * labelsPerColumn;
-  const pages = chunk(deliveries, labelsPerPage);
+  const pages = layoutLabelPages(deliveries, labelsPerPage, blockedCells);
+  const toggleBlockedCell = (index: number) => setBlockedCells((current) => {
+    const next = new Set(current);
+    if (next.has(index)) next.delete(index); else next.add(index);
+    return next;
+  });
 
   async function handlePrint() {
     const deliveryIds = deliveries.map((delivery) => delivery.id);
@@ -242,6 +276,43 @@ export default function LabelsPage() {
             );
           })}
         </div>
+        {labelsPerPage > 1 && (
+          <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginTop: 14, paddingTop: 14, borderTop: "1px solid #374151" }}>
+            <div>
+              <span style={{ display: "block", fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+                Feuille déjà entamée ? Cliquez les étiquettes déjà utilisées pour les sauter{blockedCells.size > 0 ? ` (${blockedCells.size} sautée${blockedCells.size > 1 ? "s" : ""})` : ""} :
+              </span>
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${labelsPerRow}, 20px)`, gridTemplateRows: `repeat(${labelsPerColumn}, 20px)`, gap: 3 }}>
+                {Array.from({ length: labelsPerPage }, (_, index) => {
+                  const blocked = blockedCells.has(index);
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => toggleBlockedCell(index)}
+                      aria-pressed={blocked}
+                      aria-label={`Étiquette ${index + 1}${blocked ? ", déjà utilisée, sautée à l'impression" : ", disponible"}`}
+                      style={{
+                        width: 20,
+                        height: 20,
+                        padding: 0,
+                        borderRadius: 4,
+                        border: blocked ? "1px solid #6b7280" : "1px solid #22c55e",
+                        background: blocked ? "#374151" : "#052e12",
+                        cursor: "pointer",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+            {blockedCells.size > 0 && (
+              <button type="button" onClick={() => setBlockedCells(new Set())} style={{ alignSelf: "center", padding: "6px 12px", borderRadius: 8, border: "1px solid #374151", background: "#1f2937", color: "#c9cdd3", fontSize: 11, fontWeight: 650, cursor: "pointer" }}>
+                Réinitialiser
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {loadError && <p className="no-print" style={{ padding: 24, color: "#b91c1c" }}>{loadError}</p>}
@@ -261,7 +332,13 @@ export default function LabelsPage() {
             justifyContent: "center",
           }}
         >
-          {pageDeliveries.map((delivery) => (
+          {pageDeliveries.map((delivery, slotIndex) => delivery === null ? (
+            // An already-used position on the physical sheet -- nothing
+            // printed here (no border, no content), so it stays genuinely
+            // blank rather than overprinting a real label that's already
+            // been peeled off and used.
+            <div key={`empty-${pageIndex}-${slotIndex}`} />
+          ) : (
             // Two real columns spanning the label's full height (not a
             // header row above a content row) -- reported live as a big
             // empty gap next to the logo, since the QR only ever sat in
