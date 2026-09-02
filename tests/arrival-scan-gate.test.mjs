@@ -32,7 +32,7 @@ test("the dispatcher's per-destination group arrival button surfaces exactly whi
   assert.match(page, /const blocked = responses\.filter\(\(result\) => result\.error === "arrival_blocked_missing_scans"\);/);
   assert.match(page, /if \(blocked\.length\) \{/);
   assert.match(page, /result\.missingLoadedScan && result\.missingHubScan/);
-  assert.match(page, /Arrivée bloquée pour \$\{blocked\.length > 1 \? "certains colis" : "un colis"\} non scanné\(s\) : \$\{detail\}/);
+  assert.match(page, /Arrivée bloquée : \$\{blocked\.length > 1 \? "colis non scannés" : "colis non scanné"\} : \$\{detail\}/);
 });
 
 test("a partial success (some parcels blocked, others confirmed) still merges the confirmed ones and notifies for them, rather than discarding everything", () => {

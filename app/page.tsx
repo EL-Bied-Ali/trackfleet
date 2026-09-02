@@ -1244,7 +1244,7 @@ export default function Home() {
               : "hub";
           return `${result.deliveryId} (${missing})`;
         }).join(", ");
-        setToast(locale === "fr" ? `Arrivée bloquée pour ${blocked.length > 1 ? "certains colis" : "un colis"} non scanné(s) : ${detail}` : locale === "nl" ? `Aankomst geblokkeerd voor niet-gescand(e) pakket(ten): ${detail}` : `Arrival blocked for unscanned parcel(s): ${detail}`);
+        setToast(locale === "fr" ? `Arrivée bloquée : ${blocked.length > 1 ? "colis non scannés" : "colis non scanné"} : ${detail}` : locale === "nl" ? `Aankomst geblokkeerd: ${blocked.length > 1 ? "niet-gescande pakketten" : "niet-gescand pakket"}: ${detail}` : `Arrival blocked: unscanned ${blocked.length > 1 ? "parcels" : "parcel"}: ${detail}`);
         if (!updated.length) return;
       }
       if (!updated.length) {
