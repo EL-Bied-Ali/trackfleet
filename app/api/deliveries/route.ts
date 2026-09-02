@@ -390,18 +390,37 @@ export async function GET(request: Request) {
 
     const activeTripIds = new Set(stopPlansWithLearning.map((plan) => plan.tripInstanceId).filter((id): id is string => Boolean(id)));
     const persistedTrips = await store.listTrips(session.companyId, 500);
+    // Every delivery's tripId is already sitting in `rows` (fetched once,
+    // above) -- re-querying store.listDeliveryIdsForTrip per trip here was a
+    // redundant DB round trip for data this same request already has, and at
+    // real trip-history volume (dozens of trips) it was enough on its own to
+    // blow the Worker's per-invocation subrequest budget, 500ing this whole
+    // route with "Too many subrequests" for every dispatcher.
+    const deliveryIdsByTripId = new Map<string, string[]>();
+    for (const row of rows) {
+      if (!row.tripId) continue;
+      const existing = deliveryIdsByTripId.get(row.tripId);
+      if (existing) existing.push(row.id); else deliveryIdsByTripId.set(row.tripId, [row.id]);
+    }
+    const justCompletedTripIds = new Set<string>();
     for (const trip of persistedTrips) {
       if (trip.status === "completed" || activeTripIds.has(trip.id)) continue;
-      const deliveryIds = await store.listDeliveryIdsForTrip(session.companyId, trip.id);
+      const deliveryIds = deliveryIdsByTripId.get(trip.id) ?? [];
       const statuses = deliveryIds.flatMap((id) => { const status = rowById.get(id)?.status; return status ? [status] : []; });
       if (tripStatusFromDeliveryStatuses(statuses) !== "completed") continue;
       await store.upsertTrip({
         id: trip.id, companyId: trip.companyId, routeTemplateId: trip.routeTemplateId, vehicleKey: trip.vehicleKey,
         truck: trip.truck, sendatrackVehicleId: trip.sendatrackVehicleId, originSiteId: trip.originSiteId, stops: trip.stops, status: "completed",
       });
+      justCompletedTripIds.add(trip.id);
     }
 
-    const allTripsForHistory = await store.listTrips(session.companyId, 500);
+    // Re-querying store.listTrips here (identical params to persistedTrips
+    // above) was another pure-waste subrequest on every dashboard load --
+    // patch in the completions this same request just wrote instead of
+    // re-fetching the whole list a second time.
+    const allTripsForHistory = justCompletedTripIds.size === 0 ? persistedTrips
+      : persistedTrips.map((trip) => justCompletedTripIds.has(trip.id) ? { ...trip, status: "completed" as const } : trip);
     const routeHistory = summarizeCompletedTripRoutes(allTripsForHistory).map((route) => ({
       routeTemplateId: route.routeTemplateId,
       originSiteId: route.originSiteId,
