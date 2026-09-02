@@ -44,8 +44,12 @@ test("price is 1.5 EUR/kg by default, and 15 MAD/kg when the parcel ships from M
   assert.deepEqual(computeDeliveryPrice(10, "MA"), { priceAmount: 150, priceCurrency: "MAD" });
   assert.deepEqual(computeDeliveryPrice(null, "MA"), { priceAmount: null, priceCurrency: null });
   assert.deepEqual(computeDeliveryPrice(0, "MA"), { priceAmount: null, priceCurrency: null });
-  // Rounds to cents, e.g. 12.345 kg * 1.5 = 18.5175 -> 18.52
-  assert.deepEqual(computeDeliveryPrice(12.345, "BE"), { priceAmount: 18.52, priceCurrency: "EUR" });
+  // Floors to a whole currency unit rather than rounding to cents -- client
+  // asked that 26.3 and 26.9 (before rounding) both land on 26, not 26 vs
+  // 27. 12.345 kg * 1.5 = 18.5175 -> 18, not 18.52.
+  assert.deepEqual(computeDeliveryPrice(12.345, "BE"), { priceAmount: 18, priceCurrency: "EUR" });
+  assert.deepEqual(computeDeliveryPrice(17.53, "BE"), { priceAmount: 26, priceCurrency: "EUR" });
+  assert.deepEqual(computeDeliveryPrice(17.93, "BE"), { priceAmount: 26, priceCurrency: "EUR" });
 });
 
 test("origin site is required, so pricing never silently defaults to EUR for an unresolved origin", () => {

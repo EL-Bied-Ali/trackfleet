@@ -24,6 +24,10 @@ export function computeDeliveryPrice(
 ): { priceAmount: number | null; priceCurrency: DeliveryPriceCurrency | null } {
   if (weightKg === null || weightKg === undefined || !(weightKg > 0)) return { priceAmount: null, priceCurrency: null };
   const priceCurrency = deliveryPriceCurrencyForOriginCountry(originCountry);
-  const priceAmount = Math.round(weightKg * deliveryPriceRatePerKg(priceCurrency) * 100) / 100;
+  // Client asked: drop the decimals rather than round them -- 26.3kg and
+  // 26.9kg at 1.5/kg should both land on 26, not 26 vs 27. Still fully
+  // editable afterward (see route.ts/update/route.ts's manualPriceAmount
+  // handling), this is just the starting point.
+  const priceAmount = Math.floor(weightKg * deliveryPriceRatePerKg(priceCurrency));
   return { priceAmount, priceCurrency };
 }
