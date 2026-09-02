@@ -81,6 +81,21 @@ export async function POST(request: Request) {
         return noStore({ error: "agency_destination_mismatch" }, 403);
       }
 
+      // Client asked (from a photo of the depot's own paper process): a
+      // parcel can only be confirmed arrived -- moving it toward "Delivered"
+      // and out of the active table -- once it was physically scanned at
+      // both the depot (loaded) and the hub. Without this, a dispatcher
+      // could click arrival on a parcel that was never actually scanned
+      // through either real checkpoint, silently losing the paper trail.
+      const [scanSummary] = await store.listScanSummaries(session.companyId, [deliveryId]);
+      if (!scanSummary?.loadedAt || !scanSummary?.hubArrivedAt) {
+        return noStore({
+          error: "arrival_blocked_missing_scans",
+          missingLoadedScan: !scanSummary?.loadedAt,
+          missingHubScan: !scanSummary?.hubArrivedAt,
+        }, 409);
+      }
+
       const { unloadGraceMinutes } = await confirmArrivalManually(session.companyId, deliveryId, delivery.progress, new URL(request.url).origin);
       const updated = (await store.listForCompany(session.companyId)).find((candidate) => candidate.id === deliveryId);
       return noStore({ ok: true, deliveryId, arrivalConfirmed: true, automaticCompletionAfterMinutes: unloadGraceMinutes, delivery: updated });
