@@ -56,6 +56,17 @@
       "database_id": "47058ea5-8699-4c70-baa6-95ff52b425e8"
     }
   ],
+  // Points at Supabase's own Postgres (the new primary, migrating off Neon
+  // -- see app/lib/pg-client.ts). Provisioned via `wrangler hyperdrive
+  // create`; update in place with `wrangler hyperdrive update` for any
+  // future connection-string change (e.g. rotating the DB password),
+  // rather than deleting/recreating this binding.
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "85e863a096284ceeaa742038a65a6135"
+    }
+  ],
   "kv_namespaces": [
     {
       "binding": "SENDATRACK_TOKEN_CACHE",
