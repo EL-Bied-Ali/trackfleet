@@ -391,9 +391,15 @@ export default function LabelsPage() {
                   <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 700, wordBreak: "break-word" }}>{delivery.id}</div>
-                <div style={{ fontSize: 12, wordBreak: "break-word" }}>{delivery.customer}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, wordBreak: "break-word" }}>→ {(delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination}</div>
-                {delivery.truck && <div style={{ fontSize: 11, color: "#333" }}>Camion : {delivery.truck}</div>}
+                {/* Truncated, not wrapped -- a long customer name (or,
+                    before the city-only fix above, a long destination)
+                    wrapping to a second line was found live to push the
+                    truck line below the label's own overflow:hidden,
+                    silently losing it. A shortened name is still useful;
+                    a missing truck plate isn't. */}
+                <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>→ {(delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination}</div>
+                {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
               </div>
               {delivery.parcelCode ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5mm", flex: "0 0 auto" }}>
