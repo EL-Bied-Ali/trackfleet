@@ -46,6 +46,8 @@ export const REQUIRED_POSTGRES_COLUMNS = [
   { table: "deliveries", column: "customer_email" },
   { table: "deliveries", column: "parcel_code" },
   { table: "deliveries", column: "short_code" },
+  { table: "deliveries", column: "payment_status" },
+  { table: "deliveries", column: "amount_paid" },
   { table: "delivery_scans", column: "checkpoint" },
   { table: "delivery_eta_observations", column: "route_template_id" },
   { table: "delivery_eta_observations", column: "trip_instance_id" },

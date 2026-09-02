@@ -7,15 +7,22 @@ import { parcelScanUrl } from "../lib/parcel-code";
 type LabelDelivery = {
   id: string;
   customer: string;
+  contact: string;
   destination: string;
   destinationSiteId: string | null;
+  originSiteId: string | null;
   truck: string;
+  weightKg: number | null;
+  priceAmount: number | null;
+  priceCurrency: "EUR" | "MAD" | null;
+  paymentStatus: "unpaid" | "partial" | "paid" | null;
+  amountPaid: number | null;
   parcelCode: string | null;
   // Human-friendly per-destination sequence (e.g. "CAS 00"), additional to
   // and never replacing `id` -- null for a destination with no
   // shortCodePrefix configured yet, or for a delivery created before this
-  // existed. Shown modestly here; a larger, more prominent placement is a
-  // separate task.
+  // existed. Shown here in large type -- the label's main identifier for a
+  // human routing the parcel by hand, per the client's own request.
   shortCode: string | null;
 };
 
@@ -70,6 +77,24 @@ const LABEL_PRESETS: Array<{ cols: number; rows: number }> = [
   // before shipping -- see project_label_16_per_sheet memory.
   { cols: 2, rows: 8 },
 ];
+
+// Compact payment summary for the label's weight/price/payment line, e.g.
+// "12.3kg · 18€ · Payé" or "12.3kg · 18€ · Reste 5€". Currency symbol kept
+// terse (€ / MAD) to fit the same line as weight and status.
+function paymentSummary(delivery: LabelDelivery): string | null {
+  const currencySuffix = delivery.priceCurrency === "MAD" ? " MAD" : "€";
+  const parts: string[] = [];
+  if (delivery.weightKg != null) parts.push(`${delivery.weightKg}kg`);
+  if (delivery.priceAmount != null) parts.push(`${delivery.priceAmount}${currencySuffix}`);
+  if (delivery.paymentStatus === "paid") parts.push("Payé");
+  else if (delivery.paymentStatus === "unpaid") parts.push("Impayé");
+  else if (delivery.paymentStatus === "partial") {
+    parts.push(delivery.priceAmount != null && delivery.amountPaid != null
+      ? `Reste ${Math.round((delivery.priceAmount - delivery.amountPaid) * 100) / 100}${currencySuffix}`
+      : "Partiel");
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
 
 function clampLabelMm(value: number, fallback: number) {
   return Number.isFinite(value) ? Math.min(MAX_LABEL_MM, Math.max(MIN_LABEL_MM, value)) : fallback;
@@ -257,6 +282,14 @@ export default function LabelsPage() {
   // fine, but at 16/feuille (37.125mm) it alone would eat most of the
   // label's height before a single line of text is drawn.
   const logoMaxHeightMm = Math.min(19, labelSize.height * 0.22);
+  // Client asked for a genuinely richer label (origin, phone, weight,
+  // price/payment) on top of the big short code -- real content, not just
+  // a size bump, so it doesn't fit in the same 5 rows the shortest preset
+  // (16/feuille) was carefully tuned to exactly fill with 0px overflow.
+  // Rather than risk reopening that, the extra rows only render at 55mm+
+  // (every preset except 16/feuille itself); 16/feuille keeps the exact
+  // proven-safe 5-row layout from before this feature.
+  const showExtendedDetails = labelSize.height >= 55;
   const pages = layoutLabelPages(deliveries, labelsPerPage, blockedCells);
   const toggleBlockedCell = (index: number) => setBlockedCells((current) => {
     const next = new Set(current);
@@ -422,20 +455,26 @@ export default function LabelsPage() {
                   )}
                   <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
                 </div>
-                {/* shortCode rides on the SAME line as the id (not its own
-                    row) -- every other row here is already sized to exactly
-                    fit the shortest preset (16/feuille, 0px overflow
-                    verified live); a 6th row would reopen that. */}
-                <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.id}{delivery.shortCode ? ` · ${delivery.shortCode}` : ""}</div>
-                {/* Truncated, not wrapped -- a long customer name (or,
-                    before the city-only fix above, a long destination)
-                    wrapping to a second line was found live to push the
-                    truck line below the label's own overflow:hidden,
-                    silently losing it. A shortened name is still useful;
-                    a missing truck plate isn't. */}
-                <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
-                <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>→ {(delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination}</div>
-                {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
+                {showExtendedDetails ? (<>
+                  {/* The client's own big, primary identifier for routing
+                      by hand -- "en très gros". Falls back to the plain id
+                      at a smaller (but still bold) size when this
+                      destination has no shortCodePrefix configured yet. */}
+                  <div style={{ fontSize: delivery.shortCode ? 20 : 15, fontWeight: 800, lineHeight: 1.05, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}</div>
+                  {delivery.shortCode && <div style={{ fontSize: 8, fontFamily: "monospace", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.id}</div>}
+                  <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{((delivery.originSiteId && siteCities.get(delivery.originSiteId)) || "") + " → " + ((delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination)}</div>
+                  {delivery.contact && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Tél : {delivery.contact}</div>}
+                  {paymentSummary(delivery) && <div style={{ fontSize: 11, fontWeight: 700, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{paymentSummary(delivery)}</div>}
+                  {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
+                </>) : (<>
+                  {/* Shortest preset (16/feuille): the exact 5-row layout
+                      already verified live at 0px overflow, unchanged. */}
+                  <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.id}{delivery.shortCode ? ` · ${delivery.shortCode}` : ""}</div>
+                  <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>→ {(delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination}</div>
+                  {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
+                </>)}
               </div>
               {delivery.parcelCode ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5mm", flex: "0 0 auto" }}>

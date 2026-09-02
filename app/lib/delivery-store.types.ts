@@ -74,6 +74,18 @@ export type DeliveryRow = {
   // known-sites.ts); null for every delivery created before this existed
   // and for any destination without a prefix set yet.
   shortCode?: string | null;
+  // Whether the price shown on the delivery has actually been collected --
+  // separate from priceAmount/priceCurrency itself, which stays the trusted
+  // billing figure regardless of what's been paid. Defaults to "unpaid" for
+  // every delivery going forward; absent (not just "unpaid") for a
+  // delivery created before this feature existed, so a caller can tell the
+  // two apart if it ever matters.
+  paymentStatus?: "unpaid" | "partial" | "paid" | null;
+  // Amount paid so far, in the delivery's own priceCurrency -- only
+  // meaningful when paymentStatus is "partial" (the remaining balance is
+  // priceAmount - amountPaid, computed by callers rather than stored
+  // separately). Null for "unpaid"/"paid"/unset.
+  amountPaid?: number | null;
 };
 
 export type DeliveryEventRow = {
@@ -196,6 +208,8 @@ export type DeliveryDetailsUpdateInput = {
   weightKg: number | null;
   priceAmount: number | null;
   priceCurrency: DeliveryPriceCurrency | null;
+  paymentStatus: "unpaid" | "partial" | "paid";
+  amountPaid: number | null;
   itemDescription: string | null;
   destinationSiteId: string | null;
   destination: string;

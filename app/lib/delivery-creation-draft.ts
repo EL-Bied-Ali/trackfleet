@@ -3,6 +3,8 @@ export type DeliveryCreationDraftParcel = {
   weightKg: string;
   manualPriceAmount: string;
   itemDescription: string;
+  paymentStatus: "unpaid" | "partial" | "paid";
+  amountPaid: string;
 };
 
 export type DeliveryCreationDraft = {

@@ -65,7 +65,7 @@ test("the origin/destination row is the first thing in the creation form, before
 test("creation form resets the destination/departure selection after a successful submit, and closeCreateModal (× / Cancel / Escape) does the same after saving a draft", () => {
   const resetOccurrences = page.match(/setCreationDestinationSiteId\(""\);\s*setCreationDepartureAt\(""\);/g) ?? [];
   assert.ok(resetOccurrences.length >= 2, "expected the post-creation success reset and the closeCreateModal reset");
-  assert.match(page, /setModalOpen\(false\);\s*setParcelDrafts\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "" \}\]\);\s*setCreationDestinationSiteId\(""\);\s*setCreationDepartureAt\(""\);\s*setCreationDraftSeed\(null\);/);
+  assert.match(page, /setModalOpen\(false\);\s*setParcelDrafts\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "", paymentStatus: "unpaid", amountPaid: "" \}\]\);\s*setCreationDestinationSiteId\(""\);\s*setCreationDepartureAt\(""\);\s*setCreationDraftSeed\(null\);/);
   // Both the × button and the footer Cancel button close via the same
   // draft-saving function, rather than each duplicating the reset inline.
   assert.match(page, /<button onClick=\{closeCreateModal\} aria-label=\{t\.close\}>×<\/button>/);

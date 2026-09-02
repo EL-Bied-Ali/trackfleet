@@ -114,7 +114,9 @@ await runStatements([
     shipment_id text,
     created_at integer NOT NULL,
     parcel_code text,
-    short_code text
+    short_code text,
+    payment_status text,
+    amount_paid real
   )`,
   `CREATE TABLE IF NOT EXISTS delivery_scans (
     id text PRIMARY KEY NOT NULL,
@@ -319,6 +321,8 @@ for (const [name, definition] of [
   ["tracking_token", "text"],
   ["parcel_code", "text"],
   ["short_code", "text"],
+  ["payment_status", "text"],
+  ["amount_paid", "real"],
 ]) addMissingColumn(alterations, "deliveries", deliveryColumns, name, definition);
 
 for (const [name, definition] of [

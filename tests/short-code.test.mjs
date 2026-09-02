@@ -119,7 +119,7 @@ test("SiteManager exposes an editable, uppercased shortCodePrefix field in the a
 
 test("delivery creation assigns a short code only when the resolved destination site has a shortCodePrefix configured, via the atomic counter -- never fabricated for a site without one", () => {
   assert.match(deliveriesRoute, /const shortCode = site\?\.shortCodePrefix \? await store\.assignShortCode\(session\.companyId, site\.shortCodePrefix\) : null;/);
-  assert.match(deliveriesRoute, /shortCode,\s*\n\s*driver: "To be assigned"/);
+  assert.match(deliveriesRoute, /shortCode,\s*\n\s*paymentStatus: paymentStatusInput as "unpaid" \| "partial" \| "paid",\s*\n\s*amountPaid,\s*\n\s*driver: "To be assigned"/);
 });
 
 test("the printed label shows the short code inline on the same line as the id (not a new row), so it can never reopen the 16/feuille overflow that every other row was carefully sized to avoid", () => {
@@ -159,12 +159,12 @@ test("every parallel delivery read/mirror path (not just the main store files) a
   assert.match(deliveryOperationalPostgres, /short_code: string \| null;/);
   assert.match(deliveryOperationalPostgres, /shortCode: row\.short_code \?\? null,/);
   assert.match(deliveryOperationalCloudflare, /shortCode: string \| null;/);
-  assert.match(deliveryOperationalCloudflare, /short_code AS shortCode`;/);
+  assert.match(deliveryOperationalCloudflare, /short_code AS shortCode,/);
   assert.match(d1StandbyReadStore, /shortCode: string \| null;/);
-  assert.match(d1StandbyReadStore, /short_code AS shortCode`;/);
-  assert.match(d1Reconciliation, /short_code = excluded\.short_code`\)/);
-  assert.match(d1Reconciliation, /delivery\.shortCode \?\? null\);/);
+  assert.match(d1StandbyReadStore, /short_code AS shortCode,/);
+  assert.match(d1Reconciliation, /short_code = excluded\.short_code,/);
+  assert.match(d1Reconciliation, /delivery\.shortCode \?\? null,/);
   assert.match(d1HistoryBackfill, /short_code: string \| null;/);
   assert.match(d1HistoryBackfill, /shortCode: row\.short_code \?\? null,/);
-  assert.match(d1HistoryBackfill, /short_code = excluded\.short_code`\)/);
+  assert.match(d1HistoryBackfill, /short_code = excluded\.short_code,/);
 });

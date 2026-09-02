@@ -536,6 +536,12 @@ export async function POST(request: Request) {
     const manualPriceProvided = payload.manualPriceAmount !== null && payload.manualPriceAmount !== undefined && String(payload.manualPriceAmount).trim() !== "";
     const manualPriceInput = optionalNumber(payload.manualPriceAmount);
     const itemDescriptionInput = String(payload.itemDescription ?? "").trim();
+    // Client asked: payment tracking (paid/partial/unpaid) is editable at
+    // creation just like weight/price, defaulting to "unpaid" -- separate
+    // from priceAmount/priceCurrency itself, which stays the trusted
+    // billing figure regardless of what's actually been collected.
+    const paymentStatusInput = String(payload.paymentStatus ?? "unpaid").trim();
+    const amountPaidInput = optionalNumber(payload.amountPaid);
     // Client-generated (not server-assigned) so a dispatcher entering several
     // parcels for one customer in one sitting can link them by generating one
     // id up front and sending it with each parcel's create call -- each
@@ -570,6 +576,12 @@ export async function POST(request: Request) {
     if (manualPriceProvided && (manualPriceInput === null || manualPriceInput <= 0 || manualPriceInput > 1000000)) {
       return Response.json({ error: "manualPriceAmount must be greater than 0 and at most 1000000" }, { status: 400 });
     }
+    if (!["unpaid", "partial", "paid"].includes(paymentStatusInput)) {
+      return Response.json({ error: "paymentStatus must be one of unpaid, partial, paid" }, { status: 400 });
+    }
+    if (paymentStatusInput === "partial" && (amountPaidInput === null || amountPaidInput <= 0)) {
+      return Response.json({ error: "amountPaid must be greater than 0 when paymentStatus is partial" }, { status: 400 });
+    }
     // A parcel with no declared weight (a bulky item priced manually -- a TV,
     // a washing machine) has nothing else in the table distinguishing it from
     // any other unweighed parcel, so a description of what it actually is
@@ -584,17 +596,21 @@ export async function POST(request: Request) {
     const destinationSelection = resolveExplicitCompanySite(companySites, destinationSiteId);
     if (destinationSelection.invalid) return Response.json({ error: "destination site is not available for this company" }, { status: 400 });
     const originSite = originSelection.site;
-    // Price is derived from the declared weight (1.5 EUR/kg, or 15 MAD/kg
-    // from Morocco) whenever a weight is given -- that's the trusted,
-    // never-client-supplied billing figure. Bulky items (washing machines,
-    // TVs, etc.) don't have a meaningful per-kg price, so when weight is
-    // left blank a dispatcher may enter a manual price instead; weight
-    // always wins over a manual price if both are somehow present.
-    const { priceAmount, priceCurrency } = weightKg !== null
-      ? computeDeliveryPrice(weightKg, originSite?.country ?? null)
-      : manualPriceInput !== null && manualPriceInput > 0
-        ? { priceAmount: Math.round(manualPriceInput * 100) / 100, priceCurrency: deliveryPriceCurrencyForOriginCountry(originSite?.country ?? null) }
+    // Price defaults to the declared weight (1.5 EUR/kg, or 15 MAD/kg from
+    // Morocco), but the client asked for it to be fully editable -- a
+    // dispatcher-entered manualPriceAmount now overrides the weight-derived
+    // figure whenever it's explicitly present, same trusted mechanism
+    // bulky items (washing machines, TVs -- no declared weight) already
+    // used, just no longer restricted to only the no-weight case.
+    const { priceAmount, priceCurrency } = manualPriceInput !== null && manualPriceInput > 0
+      ? { priceAmount: Math.round(manualPriceInput * 100) / 100, priceCurrency: deliveryPriceCurrencyForOriginCountry(originSite?.country ?? null) }
+      : weightKg !== null
+        ? computeDeliveryPrice(weightKg, originSite?.country ?? null)
         : { priceAmount: null, priceCurrency: null };
+    if (paymentStatusInput === "partial" && priceAmount !== null && amountPaidInput !== null && amountPaidInput >= priceAmount) {
+      return Response.json({ error: "amountPaid must be less than the delivery's price for a partial payment -- use paymentStatus 'paid' instead" }, { status: 400 });
+    }
+    const amountPaid = paymentStatusInput === "partial" ? amountPaidInput : null;
     const site = destinationSelection.site ?? findCompanySiteByText(companySites, destinationInput) ?? resolveKnownSite(destinationInput);
     const destination = site?.address ?? destinationInput;
     const parsedPlannedArrival = plannedArrivalRaw ? new Date(plannedArrivalRaw) : null;
@@ -730,6 +746,8 @@ export async function POST(request: Request) {
         shipmentId: shipmentIdInput || null,
         parcelCode: createParcelCode(),
         shortCode,
+        paymentStatus: paymentStatusInput as "unpaid" | "partial" | "paid",
+        amountPaid,
         driver: "To be assigned", status: "Loading", progress: 0, color: "#916ed7",
         latitude: originLatitude, longitude: originLongitude,
         speed: null, lastPositionAt: null,
