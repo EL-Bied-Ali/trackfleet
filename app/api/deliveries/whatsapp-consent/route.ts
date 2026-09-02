@@ -8,8 +8,14 @@ export async function GET(request: Request) {
   if (!session) return Response.json({ error: "authentication_required" }, { status: 401 });
 
   const deliveries = await store.listForCompany(session.companyId);
-  const rows = await Promise.all(deliveries.map(async (delivery) => {
-    const events = await store.listEvents(delivery.id);
+  // One company-scoped query instead of one store.listEvents call per
+  // delivery -- the same "Too many subrequests" shape that took down
+  // GET /api/deliveries at real trip/delivery volume (2026-09-02), found
+  // here during the follow-up audit before it did the same thing to this
+  // screen.
+  const eventsByDeliveryId = await store.listEventsForDeliveries(session.companyId, deliveries.map((delivery) => delivery.id));
+  const rows = deliveries.map((delivery) => {
+    const events = eventsByDeliveryId.get(delivery.id) ?? [];
     const withdrawn = whatsappConsentWithdrawn(events);
     return {
       deliveryId: delivery.id,
@@ -20,7 +26,7 @@ export async function GET(request: Request) {
       withdrawn,
       status: delivery.status,
     };
-  }));
+  });
 
   return Response.json({ deliveries: rows }, { headers: { "cache-control": "no-store" } });
 }
