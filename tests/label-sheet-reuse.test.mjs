@@ -58,3 +58,12 @@ test("the cell picker only renders when there's more than one label per sheet, a
   assert.match(labelsPage, /toggleBlockedCell/);
   assert.match(labelsPage, /blockedCells\.size > 0 \? ` \(\$\{blockedCells\.size\} sautée/);
 });
+
+// User asked for more labels per sheet without breaking legibility --
+// checked the actual constraint (the QR canvas has a fixed 28mm render
+// size regardless of label size, and phone cameras need roughly 20mm+ to
+// scan reliably) and landed on 18/feuille (3x6) as the densest preset that
+// still leaves real margin above that floor.
+test("offers an 18-per-sheet preset (3x6) as the densest option, denser than the previous 12-per-sheet ceiling", () => {
+  assert.match(labelsPage, /\{ cols: 3, rows: 6 \}/);
+});
