@@ -122,7 +122,7 @@ test("the Code128 barcode is gone -- no jsbarcode import, no JsBarcode call, no 
 // two real columns spanning the label's FULL height instead, so the
 // QR/code column fills that space rather than leaving it blank.
 test("the label is two columns spanning its full height (logo+text on the left, QR+code on the right), not a header row stacked on a content row", () => {
-  assert.match(labelsPage, /className="label" style=\{\{ boxSizing: "border-box", border: "1px solid #000", padding: "4mm", display: "flex", gap: "3mm", overflow: "hidden" \}\}/);
+  assert.match(labelsPage, /className="label" style=\{\{ boxSizing: "border-box", border: "1px solid #000", padding: `\$\{labelPaddingMm\}mm`, display: "flex", gap: "3mm", overflow: "hidden" \}\}/);
   assert.doesNotMatch(labelsPage, /flexDirection: "column", gap: "1\.5mm", overflow: "hidden" \}\}>\s*\n\s*<div style=\{\{ display: "flex", alignItems: "center", gap: "3mm" \}\}>/);
 });
 
