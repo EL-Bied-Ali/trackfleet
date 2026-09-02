@@ -187,6 +187,16 @@ export const memoryStore: DeliveryStore = {
   async listEvents(deliveryId) {
     return deliveryEvents.filter((event) => event.deliveryId === deliveryId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
+  async listEventsForDeliveries(companyId, deliveryIds) {
+    const ids = new Set(deliveryIds);
+    const byDeliveryId = new Map<string, DeliveryEventRow[]>();
+    for (const event of [...deliveryEvents].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
+      if (!ids.has(event.deliveryId)) continue;
+      const existing = byDeliveryId.get(event.deliveryId);
+      if (existing) existing.push(event); else byDeliveryId.set(event.deliveryId, [event]);
+    }
+    return byDeliveryId;
+  },
   async recordEtaObservation(input) {
     if (etaObservations.some((item) => item.deliveryId === input.deliveryId && item.positionAt.getTime() === input.positionAt.getTime())) return false;
     etaObservations.push({ ...input, createdAt: new Date() });
@@ -194,6 +204,19 @@ export const memoryStore: DeliveryStore = {
   },
   async listEtaObservations(deliveryId, limit = 200) {
     return etaObservations.filter((item) => item.deliveryId === deliveryId).sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime()).slice(0, Math.max(1, Math.min(2000, limit)));
+  },
+  async listEtaObservationsForDeliveries(companyId, deliveryIds, limitPerDelivery = 2000) {
+    const ids = new Set(deliveryIds);
+    const capped = Math.max(1, Math.min(2000, limitPerDelivery));
+    const byDeliveryId = new Map<string, EtaObservationRow[]>();
+    for (const deliveryId of ids) {
+      const own = etaObservations
+        .filter((item) => item.companyId === companyId && item.deliveryId === deliveryId)
+        .sort((a, b) => b.positionAt.getTime() - a.positionAt.getTime())
+        .slice(0, capped);
+      if (own.length) byDeliveryId.set(deliveryId, own);
+    }
+    return byDeliveryId;
   },
   async listEtaObservationsForRoute(companyId, routeTemplateId, destinationSiteId, limit = 5000) {
     return etaObservations

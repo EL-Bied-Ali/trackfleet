@@ -610,6 +610,20 @@ export const postgresStore: DeliveryStore = {
     return rows.map(hydrateEvent);
   },
 
+  async listEventsForDeliveries(companyId, deliveryIds) {
+    const byDeliveryId = new Map<string, DeliveryEventRow[]>();
+    if (!deliveryIds.length) return byDeliveryId;
+    await ensureSchema();
+    const rows = await sql`SELECT delivery_id, type, progress, created_at FROM delivery_events
+      WHERE delivery_id = ANY(${deliveryIds}::text[]) ORDER BY delivery_id ASC, created_at ASC` as RawEvent[];
+    for (const row of rows) {
+      const event = hydrateEvent(row);
+      const existing = byDeliveryId.get(event.deliveryId);
+      if (existing) existing.push(event); else byDeliveryId.set(event.deliveryId, [event]);
+    }
+    return byDeliveryId;
+  },
+
   async recordEtaObservation(input) {
     await ensureSchema();
     const rows = await sql`INSERT INTO delivery_eta_observations (
@@ -632,6 +646,35 @@ export const postgresStore: DeliveryStore = {
       effectiveSpeedKmh: row.effective_speed_kmh === null ? null : Number(row.effective_speed_kmh), remainingDistanceKm: Number(row.remaining_distance_km), progress: Number(row.progress),
       confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(String(row.created_at)),
     }));
+  },
+  async listEtaObservationsForDeliveries(companyId, deliveryIds, limitPerDelivery = 2000) {
+    const byDeliveryId = new Map<string, EtaObservationRow[]>();
+    if (!deliveryIds.length) return byDeliveryId;
+    await ensureSchema();
+    const capped = Math.max(1, Math.min(2000, Math.round(limitPerDelivery)));
+    // DISTINCT ON + ORDER BY position_at DESC caps each delivery to its own
+    // most-recent `capped` observations in one query, instead of one query
+    // per delivery -- same shape as the per-delivery listEtaObservations
+    // above, just for every delivery id at once.
+    const rows = await sql`SELECT delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
+      FROM (
+        SELECT *, row_number() OVER (PARTITION BY delivery_id ORDER BY position_at DESC) AS rn
+        FROM delivery_eta_observations
+        WHERE company_id = ${companyId} AND delivery_id = ANY(${deliveryIds}::text[])
+      ) ranked WHERE rn <= ${capped}
+      ORDER BY delivery_id ASC, position_at DESC` as Array<Record<string, unknown>>;
+    for (const row of rows) {
+      const observation: EtaObservationRow = {
+        deliveryId: String(row.delivery_id), companyId: String(row.company_id ?? ""), routeTemplateId: row.route_template_id ? String(row.route_template_id) : null, tripInstanceId: row.trip_instance_id ? String(row.trip_instance_id) : null, destinationSiteId: row.destination_site_id ? String(row.destination_site_id) : null,
+        positionAt: new Date(String(row.position_at)), estimatedArrivalAt: new Date(String(row.estimated_arrival_at)),
+        plannedArrivalAt: row.planned_arrival_at ? new Date(String(row.planned_arrival_at)) : null, delayMinutes: row.delay_minutes === null ? null : Number(row.delay_minutes),
+        effectiveSpeedKmh: row.effective_speed_kmh === null ? null : Number(row.effective_speed_kmh), remainingDistanceKm: Number(row.remaining_distance_km), progress: Number(row.progress),
+        confidence: String(row.confidence) as EtaObservationRow["confidence"], source: String(row.source) as EtaObservationRow["source"], createdAt: new Date(String(row.created_at)),
+      };
+      const existing = byDeliveryId.get(observation.deliveryId);
+      if (existing) existing.push(observation); else byDeliveryId.set(observation.deliveryId, [observation]);
+    }
+    return byDeliveryId;
   },
   async listEtaObservationsForRoute(companyId, routeTemplateId, destinationSiteId, limit = 5000) {
     await ensureSchema();
