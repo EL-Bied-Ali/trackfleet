@@ -31,6 +31,7 @@ function hydrate(row: Record<string, unknown>): CompanySite {
     arrivalRadiusKm: Number(row.arrival_radius_km),
     roles: JSON.parse(String(row.roles)) as CompanySite["roles"],
     whatsapp: row.whatsapp === null || row.whatsapp === undefined ? null : String(row.whatsapp),
+    color: row.color === null || row.color === undefined ? null : String(row.color),
     createdAt: new Date(Number(row.created_at)),
     updatedAt: new Date(Number(row.updated_at)),
   };

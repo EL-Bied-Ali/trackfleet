@@ -208,6 +208,7 @@ await runStatements([
     arrival_radius_km real NOT NULL DEFAULT 0.5,
     roles text NOT NULL,
     whatsapp text,
+    color text,
     created_at integer NOT NULL,
     updated_at integer NOT NULL,
     PRIMARY KEY (company_id, id)
@@ -335,6 +336,7 @@ for (const [name, definition] of [
 ]) addMissingColumn(alterations, "companies", companyColumns, name, definition);
 
 addMissingColumn(alterations, "sites", siteColumns, "whatsapp", "text");
+addMissingColumn(alterations, "sites", siteColumns, "color", "text");
 await runStatements(alterations);
 
 await runStatements([

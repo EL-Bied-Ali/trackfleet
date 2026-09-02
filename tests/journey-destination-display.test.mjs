@@ -24,17 +24,18 @@ test("each city's arrival checkmark and its own destination cells share the exac
   assert.match(page, /className="more-button destination-arrival-button"/);
 });
 
-test("destination colors are assigned by index over every distinct destination on screen, not hashed independently per string", () => {
-  // Regression: an independent per-string hash into a 10-color palette
-  // collides far more often than it looks like it should -- with only 5
-  // destinations visible at once, there's already a ~70% chance two of them
-  // land on the same color by pure chance (birthday-paradox math). Reported
-  // live: Khouribga and Tanger Med rendered as the same shade of pink.
-  // Indexing over the sorted set of distinct destinations currently on
-  // screen guarantees every one gets its own color as long as there are no
-  // more distinct destinations on screen than palette colors (10).
+test("destination colors prefer the agency's own assigned color, matching the client's physical color-coded ticket bins, and fall back to an index-assigned palette color otherwise", () => {
+  // Regression (pre-dates the site color field): an independent per-string
+  // hash into a 10-color palette collides far more often than it looks like
+  // it should -- with only 5 destinations visible at once, there's already
+  // a ~70% chance two of them land on the same color by pure chance
+  // (birthday-paradox math). Reported live: Khouribga and Tanger Med
+  // rendered as the same shade of pink. The fallback path still indexes
+  // over distinct destinations lacking a site color, not hashing per string.
   assert.match(page, /const destinationColors = useMemo\(\(\) => \{/);
+  assert.match(page, /const siteColorById = new Map\(knownSites\.map\(\(site\) => \[site\.id, site\.color\]\)\);/);
   assert.match(page, /const distinct = Array\.from\(new Set\(visibleDeliveries\.map\(\(delivery\) => delivery\.destination\)\)\)\.sort\(\);/);
-  assert.match(page, /return new Map\(distinct\.map\(\(destination, index\) => \[destination, truckBadgeColors\[index % truckBadgeColors\.length\]\]\)\);/);
-  assert.doesNotMatch(page, /function destinationColor\(destination: string\)/, "the old per-string hash function must be fully removed, not left dead alongside the new index-based map");
+  assert.match(page, /const needsFallback = resolved\.filter\(\(item\) => !item\.siteColor\);/);
+  assert.match(page, /const fallbackColorFor = new Map\(needsFallback\.map\(\(item, index\) => \[item\.destination, truckBadgeColors\[index % truckBadgeColors\.length\]\]\)\);/);
+  assert.doesNotMatch(page, /function destinationColor\(destination: string\)/, "the old per-string hash function must be fully removed, not left dead alongside the new logic");
 });

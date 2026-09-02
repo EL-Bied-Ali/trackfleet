@@ -171,7 +171,7 @@ type MessageEvent = {
 };
 
 type CompanyIdentity = { account: string; user: string; role: "dispatcher" | "agency"; siteId: string | null };
-type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; whatsapp: string | null; geofenceReady: boolean };
+type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; whatsapp: string | null; color: string; geofenceReady: boolean };
 
 const emptyDelivery: Delivery = {
   id: "",
@@ -978,10 +978,24 @@ export default function Home() {
   // already ~70% likely to repeat a color at least once). Indexing instead
   // of hashing guarantees every destination gets its own color as long as
   // there are no more distinct destinations on screen than palette colors.
+  // Prefers the destination agency's own color (set in "Agences", matching
+  // the client's real physical color-coded ticket bins) over the
+  // auto-assigned palette below -- the auto-assignment only exists as a
+  // fallback for a destination that somehow has no resolvable site (a
+  // free-text address with no matching id), which the color-coded bins
+  // don't cover anyway.
   const destinationColors = useMemo(() => {
+    const siteColorById = new Map(knownSites.map((site) => [site.id, site.color]));
     const distinct = Array.from(new Set(visibleDeliveries.map((delivery) => delivery.destination))).sort();
-    return new Map(distinct.map((destination, index) => [destination, truckBadgeColors[index % truckBadgeColors.length]]));
-  }, [visibleDeliveries]);
+    const resolved = distinct.map((destination) => {
+      const withSiteId = visibleDeliveries.find((delivery) => delivery.destination === destination && delivery.destinationSiteId);
+      const siteColor = withSiteId?.destinationSiteId ? siteColorById.get(withSiteId.destinationSiteId) : null;
+      return { destination, siteColor: siteColor ?? null };
+    });
+    const needsFallback = resolved.filter((item) => !item.siteColor);
+    const fallbackColorFor = new Map(needsFallback.map((item, index) => [item.destination, truckBadgeColors[index % truckBadgeColors.length]]));
+    return new Map(resolved.map(({ destination, siteColor }) => [destination, siteColor ?? fallbackColorFor.get(destination)!] as const));
+  }, [visibleDeliveries, knownSites]);
   // A shipment's parcels can end up split across different trucks (each is
   // independently trackable/assignable), so this doesn't nest inside the
   // truck grouping above -- it's a lightweight "N linked parcels" hint on

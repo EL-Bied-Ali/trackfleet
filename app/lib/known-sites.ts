@@ -13,6 +13,13 @@ export type KnownSite = {
   // most existing entries until backfilled. Distinct from a delivery's own
   // customer/recipient contact fields (see delivery-store.types.ts).
   whatsapp?: string | null;
+  // Matches the physical color-coded paper ticket bins the client already
+  // uses at the depot (a photo of the shelf was the source for the initial
+  // values below) -- a hex string, editable per site in SiteManager. Unset
+  // for a site means "no assigned color yet"; callers fall back to a shared
+  // default (matching the physical bin's own catch-all "villes transfert"
+  // color) rather than inventing a per-site color from scratch.
+  color?: string | null;
   // True for regional destinations reached by a local/relay leg beyond one of
   // the two confirmed hub stops (Casablanca or the Tanger Med ferry
   // crossing -- see relayHubSiteId) that our GPS-tracked trucks never
@@ -60,6 +67,7 @@ export const knownSites: KnownSite[] = [
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
     whatsapp: "+212 7 00 06 18 40",
+    color: "#2563eb",
   },
   {
     id: "tanger-ville-said-kotb-19a",
@@ -74,6 +82,7 @@ export const knownSites: KnownSite[] = [
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "tanger-med-ksar-al-majaz",
     whatsapp: "+212 6 62 12 02 59",
+    color: "#2563eb",
   },
   {
     id: "tetouan-cortoba-146",
@@ -102,6 +111,7 @@ export const knownSites: KnownSite[] = [
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 66 73 82 20",
+    color: "#f97316",
   },
   {
     id: "marrakech-essaouira-12",
@@ -116,6 +126,7 @@ export const knownSites: KnownSite[] = [
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 62 12 14 48",
+    color: "#dc2626",
   },
   {
     id: "agadir-zaitoune-tikiouine-103a",
@@ -130,6 +141,7 @@ export const knownSites: KnownSite[] = [
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 66 57 22 66",
+    color: "#166534",
   },
   {
     id: "khouribga-mohamed-vi-30",
@@ -170,8 +182,19 @@ export const knownSites: KnownSite[] = [
     arrivalRadiusKm: 0.5,
     roles: ["origin", "dropoff", "replenishment", "destination"],
     whatsapp: "+212 6 62 72 53 29",
+    // The physical bin is labeled "blanc" (white) -- a literal white swatch
+    // would be invisible against this app's light UI, so a light neutral
+    // gray with a visible border stands in for it (see the color picker's
+    // own border, which every swatch gets regardless of its own color).
+    color: "#e2e8f0",
   },
 ];
+
+// No explicit color assigned yet (e.g. a newly-added "Autre" agency, or
+// Kenitra/Rabat before their real details are on file) -- matches the
+// physical bin's own catch-all "villes transfert" (mauve) color rather
+// than inventing a per-site color from scratch.
+export const defaultSiteColor = "#a855f7";
 
 function normalizeSiteText(value: string) {
   return value
