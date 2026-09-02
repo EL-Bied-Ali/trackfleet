@@ -145,7 +145,7 @@ test("a delivery with no parcel code (created before this feature existed) shows
 test("the label prints TrackFleet id, client, destination and truck, per the product spec's minimum label contents", () => {
   assert.match(labelsPage, /\{delivery\.id\}/);
   assert.match(labelsPage, /\{delivery\.customer\}/);
-  assert.match(labelsPage, /→ \{\(delivery\.destinationSiteId && siteLabels\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\}/);
+  assert.match(labelsPage, /→ \{\(delivery\.destinationSiteId && siteCities\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\}/);
   assert.match(labelsPage, /delivery\.truck && <div[^>]*>Camion : \{delivery\.truck\}<\/div>/);
 });
 
