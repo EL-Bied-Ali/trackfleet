@@ -51,6 +51,19 @@ test("the label cell actually uses the computed padding/QR/logo sizes, not the o
 // scaling formulas above should never collapse the QR below a still-
 // scannable size, and padding should never grow past the original 4mm
 // default even for very tall/manual presets.
+// Live-caught after the first version of this feature deployed: MIN_LABEL_MM
+// was 40, which is ABOVE the 16/feuille preset's own 37.125mm height.
+// clampLabelMm silently pushed the preset's height back up to 40mm the
+// moment the button was clicked, landing on 14/feuille (105x40mm, floor(297/40)=7
+// rows) instead of the promised 16. Caught via the deployed page itself,
+// not local math -- the preset button's own click handler goes through the
+// same clamp as the manual mm inputs.
+test("MIN_LABEL_MM is low enough that clicking the 16/feuille preset doesn't get silently clamped back up to a shorter height", () => {
+  assert.match(labelsPage, /const MIN_LABEL_MM = 35;/);
+  const presetHeightAt16PerSheet = Math.floor((297 / 8) * 100) / 100;
+  assert.ok(35 <= presetHeightAt16PerSheet, "MIN_LABEL_MM must be at or below the 16/feuille preset's own height");
+});
+
 test("the scaling formulas stay within sane bounds at both the shortest supported preset and the tallest", () => {
   const heightAt16PerSheet = Math.floor((297 / 8) * 100) / 100;
   const paddingAt16 = Math.min(4, Math.max(1.5, heightAt16PerSheet * 0.05));
