@@ -84,8 +84,8 @@ test("label width/height are editable on the page (not fixed constants), remembe
   assert.match(labelsPage, /const labelsPerColumn = Math\.max\(1, Math\.floor\(PAGE_HEIGHT_MM \/ labelSize\.height\)\);/);
   assert.match(labelsPage, /input type="number" min=\{MIN_LABEL_MM\} max=\{MAX_LABEL_MM\} step=\{1\} value=\{labelSize\.width\}/);
   assert.match(labelsPage, /input type="number" min=\{MIN_LABEL_MM\} max=\{MAX_LABEL_MM\} step=\{1\} value=\{labelSize\.height\}/);
-  assert.match(labelsPage, /function chunk<T>\(items: T\[\], size: number\): T\[\]\[\] \{/);
-  assert.match(labelsPage, /const pages = chunk\(deliveries, labelsPerPage\);/);
+  assert.match(labelsPage, /function layoutLabelPages<T>\(items: T\[\], labelsPerPage: number, blockedCells: Set<number>\): Array<Array<T \| null>> \{/);
+  assert.match(labelsPage, /const pages = layoutLabelPages\(deliveries, labelsPerPage, blockedCells\);/);
 });
 
 test("each label shows the company's own logo and name from /api/company/branding, falling back to the TrackFleet wordmark when no logo is set", () => {
