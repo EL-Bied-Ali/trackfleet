@@ -1,5 +1,5 @@
 import { getSql } from "./pg-client.ts";
-import { isSubscriptionStatus, subscriptionGrantsAccess, whatsappIncludedInPlan } from "./subscription-rules.ts";
+import { isSubscriptionStatus } from "./subscription-rules.ts";
 import type { Subscription, SubscriptionStatus } from "./subscription-rules.ts";
 
 export type { Subscription, SubscriptionStatus } from "./subscription-rules.ts";
