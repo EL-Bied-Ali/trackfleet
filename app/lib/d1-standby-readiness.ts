@@ -70,9 +70,21 @@ export async function getD1StandbyReadiness(db: D1ReadinessBinding, now = Date.n
   const completedCompanies = Number(row?.completed_company_count ?? 0);
   const historyComplete = Number(row?.incomplete_company_count ?? 0) === 0;
 
+  // Only the operational stream (deliveries/trips/events/ETA/fleet
+  // positions -- everything d1-standby-read-store.ts actually serves
+  // during a real failover) gates readiness. Telemetry reconciliation
+  // (retention/growth analytics, not live delivery data) used to gate it
+  // too, which meant a stale telemetry cron alone -- unrelated to whether
+  // D1 can correctly serve a dispatcher's dashboard -- could leave the
+  // whole app with no working failover during an actual Postgres outage.
+  // Reported live: telemetryFresh was false (operationalFresh true) while
+  // discussing what happens if Neon's monthly compute/transfer quota runs
+  // out; d1ReadFailoverReady() would have refused to activate. telemetryFresh
+  // is still computed and returned for observability, just no longer part
+  // of the ready/reason decision below.
   let reason: D1StandbyReadiness["reason"] = "ready";
-  if (!operationalLastSuccessAt || !telemetryLastSuccessAt) reason = "replication_not_started";
-  else if (!operationalFresh || !telemetryFresh) reason = "replication_stale";
+  if (!operationalLastSuccessAt) reason = "replication_not_started";
+  else if (!operationalFresh) reason = "replication_stale";
   else if (!historyComplete) reason = "history_backfill_incomplete";
 
   return {
