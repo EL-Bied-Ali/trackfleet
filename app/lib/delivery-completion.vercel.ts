@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 
 export type ArrivalCompletionObservation = {
   companyId: string;
@@ -17,14 +17,8 @@ export type ArrivalCompletionResult = {
 const maxContinuousObservationGapMs = 30 * 60_000;
 let schemaPromise: Promise<void> | null = null;
 
-function sqlClient() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for delivery completion");
-  return neon(databaseUrl);
-}
-
 async function ensureSchema() {
-  const sql = sqlClient();
+  const sql = getSql();
   if (!schemaPromise) {
     schemaPromise = (async () => {
       await sql`CREATE TABLE IF NOT EXISTS delivery_arrival_state (
@@ -47,7 +41,7 @@ async function ensureSchema() {
   return sql;
 }
 
-async function clearArrivalState(sql: ReturnType<typeof sqlClient>, companyId: string, deliveryId: string) {
+async function clearArrivalState(sql: ReturnType<typeof getSql>, companyId: string, deliveryId: string) {
   await sql`WITH cleared_arrival_state AS (
       DELETE FROM delivery_arrival_state WHERE company_id = ${companyId} AND delivery_id = ${deliveryId}
       RETURNING delivery_id

@@ -4,6 +4,7 @@ import { normalizeEnvValue } from "./env-value";
 export type TrackFleetRuntimeEnv = {
   DB?: D1Database;
   SENDATRACK_TOKEN_CACHE?: KVNamespace;
+  HYPERDRIVE?: Hyperdrive;
   DATABASE_URL?: string;
   SENDATRACK_ACCOUNT_ID?: string;
   SENDATRACK_USER?: string;

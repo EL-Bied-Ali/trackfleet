@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSqlOrNull } from "./pg-client.ts";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import type { DeliveryEventRow, DeliveryRow, DeliveryStatus, EtaObservationRow } from "./delivery-store.types";
 import type { DeliveryEventType } from "./delivery-events";
@@ -95,10 +95,6 @@ export type D1HistoryBackfillResult = {
 
 function d1() {
   return (runtimeEnv as unknown as { DB?: D1Binding }).DB ?? null;
-}
-
-function databaseUrl() {
-  return runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim() || "";
 }
 
 function numberOrNull(value: number | string | null) {
@@ -319,10 +315,9 @@ async function saveProgress(db: D1Binding, companyId: string, cursor: { createdA
 export async function backfillD1DeliveryHistory(): Promise<D1HistoryBackfillResult> {
   const db = d1();
   if (!db) return { ran: false, reason: "d1_not_bound", companies: 0, completedCompanies: 0, deliveries: 0, events: 0, etaObservations: 0 };
-  const url = databaseUrl();
-  if (!url) return { ran: false, reason: "postgres_not_configured", companies: 0, completedCompanies: 0, deliveries: 0, events: 0, etaObservations: 0 };
+  const sql = getSqlOrNull();
+  if (!sql) return { ran: false, reason: "postgres_not_configured", companies: 0, completedCompanies: 0, deliveries: 0, events: 0, etaObservations: 0 };
 
-  const sql = neon(url);
   const companies = await sql`SELECT company_id AS id
     FROM deliveries WHERE company_id IS NOT NULL AND company_id <> ''
     GROUP BY company_id ORDER BY MAX(created_at) DESC LIMIT ${maxCompaniesPerPass}` as Array<{ id: string }>;

@@ -1,11 +1,7 @@
 import "./postgres-runtime-bootstrap";
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 import type { DeliveryEventRow, EtaObservationRow } from "./delivery-store.types";
 import type { DeliveryEventType } from "./delivery-events";
-
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) throw new Error("DATABASE_URL is required for batched Postgres reads");
-const sql = neon(databaseUrl);
 
 type RawEvent = {
   delivery_id: string;
@@ -43,6 +39,7 @@ function hydrateEta(row: RawEta): EtaObservationRow {
 export async function loadEventBatch(keys: string[]): Promise<Record<string, DeliveryEventRow[]>> {
   const deliveryIds = uniqueKeys(keys);
   if (!deliveryIds.length) return {};
+  const sql = getSql();
   const rows = await sql`
     SELECT delivery_id, type, progress, created_at
     FROM delivery_events
@@ -65,6 +62,7 @@ export async function loadEventBatch(keys: string[]): Promise<Record<string, Del
 export async function loadEtaBatch(keys: string[], maxLimit: number): Promise<Record<string, EtaObservationRow[]>> {
   const deliveryIds = uniqueKeys(keys);
   if (!deliveryIds.length) return {};
+  const sql = getSql();
   const capped = Math.max(1, Math.min(2000, Math.round(maxLimit)));
   const rows = await sql`
     SELECT delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id,

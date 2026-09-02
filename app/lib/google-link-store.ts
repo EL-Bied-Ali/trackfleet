@@ -1,22 +1,16 @@
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 
 export type GoogleLinkedCompany = {
   companyId: string;
   credentialsCiphertext: string;
 };
 
-function sqlClient() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for Google account links");
-  return neon(databaseUrl);
-}
-
 // Joined with `companies` in one query -- a Google login always immediately
 // needs the linked company's stored SENDATRACK credentials to actually
 // establish a session, so there's no case where the caller wants the link
 // row without them.
 export async function getGoogleLinkedCompany(googleSub: string): Promise<GoogleLinkedCompany | null> {
-  const sql = sqlClient();
+  const sql = getSql();
   const rows = await sql`
     SELECT c.id AS company_id, c.credentials_ciphertext
     FROM google_links g
@@ -30,7 +24,7 @@ export async function getGoogleLinkedCompany(googleSub: string): Promise<GoogleL
 }
 
 export async function createGoogleLink(input: { googleSub: string; email: string; companyId: string }) {
-  const sql = sqlClient();
+  const sql = getSql();
   await sql`
     INSERT INTO google_links (google_sub, email, company_id, created_at)
     VALUES (${input.googleSub}, ${input.email}, ${input.companyId}, ${new Date().toISOString()})

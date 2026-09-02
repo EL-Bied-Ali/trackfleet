@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 import { progressRouteDestination } from "./delivery-progress-destination";
 import { seedDeliveries } from "./delivery-seed";
 import { customerFacingEvent, detectDeliveryEvents, type DeliveryEventType } from "./delivery-events";
@@ -11,9 +11,6 @@ import { UNASSIGNED_TRUCK } from "./delivery-vehicle-choice.ts";
 import type { TripRecord } from "./trip-record";
 import { DEMO_DELIVERY_CUSTOMER_PREFIX } from "./demo-delivery";
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) throw new Error("DATABASE_URL is required for the Postgres delivery store");
-const sql = neon(databaseUrl);
 let schemaPromise: Promise<void> | null = null;
 const runtimeSchemaBootstrapEnabled = process.env.TRACKFLEET_RUNTIME_SCHEMA_BOOTSTRAP === "true";
 
@@ -169,6 +166,7 @@ async function ensureSchema() {
   // an explicit one-time escape hatch for controlled development databases.
   if (!runtimeSchemaBootstrapEnabled) return;
   if (schemaPromise) return schemaPromise;
+  const sql = getSql();
   schemaPromise = (async () => {
     await sql`CREATE TABLE IF NOT EXISTS deliveries (
       id text PRIMARY KEY,
@@ -379,18 +377,21 @@ async function ensureSchema() {
 export const postgresStore: DeliveryStore = {
   async getPublic(tracking) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM deliveries WHERE tracking_token = ${tracking} LIMIT 1` as RawDelivery[];
     return rows[0] ? hydrate(rows[0]) : null;
   },
 
   async listForCompany(companyId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} ORDER BY created_at DESC` as RawDelivery[];
     return rows.map(hydrate);
   },
 
   async findMostRecentActiveDeliveryByContact(phone) {
     await ensureSchema();
+    const sql = getSql();
     // Either party texting in gets matched -- the sender tracking what they
     // shipped and the recipient tracking what's coming to them are both
     // legitimate, per the user's explicit call.
@@ -400,6 +401,7 @@ export const postgresStore: DeliveryStore = {
 
   async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
     await ensureSchema();
+    const sql = getSql();
     const trimmed = query.trim();
     if (!trimmed) return null;
     const rows = await sql`SELECT * FROM deliveries WHERE status != 'Delivered' AND customer ILIKE ${`%${trimmed}%`} ORDER BY created_at DESC LIMIT 1` as RawDelivery[];
@@ -410,6 +412,7 @@ export const postgresStore: DeliveryStore = {
     const transitions: DeliveryTransition[] = [];
     if (!snapshot.connected || !snapshot.vehicles.length) return transitions;
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} AND status <> 'Delivered'` as RawDelivery[];
 
     // Every non-Delivered delivery gets its GPS_BASELINE progress looked up
@@ -503,6 +506,7 @@ export const postgresStore: DeliveryStore = {
 
   async linkVehicle(deliveryId, companyId, vehicle) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];
     const delivery = rows[0] ? hydrate(rows[0]) : null;
     if (!delivery) return null;
@@ -512,7 +516,7 @@ export const postgresStore: DeliveryStore = {
     // it. A delivery already tracking (gpsSource === "sendatrack") is never
     // retroactively frozen by this.
     const alreadyTracking = delivery.gpsSource === "sendatrack";
-    const scanned = alreadyTracking || Boolean((await sql`SELECT 1 FROM delivery_events WHERE delivery_id = ${delivery.id} AND type = 'SCAN_LOADED' LIMIT 1` as unknown[])[0]);
+    const scanned = alreadyTracking || Boolean((await sql`SELECT 1 FROM delivery_events WHERE delivery_id = ${delivery.id} AND type = 'SCAN_LOADED' LIMIT 1` as unknown as unknown[])[0]);
     if (scanned) {
       const progressDestination = progressRouteDestination({ destination: delivery.destination, destinationSiteId: delivery.destinationSiteId, explicitDestination: explicitDestination(delivery) });
       const metrics = calculateRouteMetrics(vehicle.latitude, vehicle.longitude, progressDestination.destination, progressDestination.explicitDestination, explicitOrigin(delivery));
@@ -554,6 +558,7 @@ export const postgresStore: DeliveryStore = {
 
   async linkVehicleToGroup(deliveryIds, companyId, vehicle) {
     await ensureSchema();
+    const sql = getSql();
     if (!deliveryIds.length) return [];
     const rows = await sql`SELECT * FROM deliveries WHERE id = ANY(${deliveryIds}::text[]) AND company_id = ${companyId} AND status <> 'Delivered'` as RawDelivery[];
     if (!rows.length) return [];
@@ -601,6 +606,7 @@ export const postgresStore: DeliveryStore = {
 
   async updateSchedule(deliveryId, companyId, input) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];
     if (!rows[0]) return null;
     await sql`UPDATE deliveries SET
@@ -611,6 +617,7 @@ export const postgresStore: DeliveryStore = {
   },
   async updateDetails(deliveryId, companyId, input) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' LIMIT 1` as RawDelivery[];
     if (!rows[0]) return null;
     await sql`UPDATE deliveries SET
@@ -627,6 +634,7 @@ export const postgresStore: DeliveryStore = {
   },
   async recordEvent(deliveryId, type, progress) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`INSERT INTO delivery_events (delivery_id, type, progress, created_at)
       VALUES (${deliveryId}, ${type}, ${progress}, ${new Date().toISOString()})
       ON CONFLICT (delivery_id, type) DO NOTHING
@@ -636,6 +644,7 @@ export const postgresStore: DeliveryStore = {
 
   async listEvents(deliveryId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT delivery_id, type, progress, created_at FROM delivery_events WHERE delivery_id = ${deliveryId} ORDER BY created_at ASC` as RawEvent[];
     return rows.map(hydrateEvent);
   },
@@ -644,6 +653,7 @@ export const postgresStore: DeliveryStore = {
     const byDeliveryId = new Map<string, DeliveryEventRow[]>();
     if (!deliveryIds.length) return byDeliveryId;
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT delivery_id, type, progress, created_at FROM delivery_events
       WHERE delivery_id = ANY(${deliveryIds}::text[]) ORDER BY delivery_id ASC, created_at ASC` as RawEvent[];
     for (const row of rows) {
@@ -656,6 +666,7 @@ export const postgresStore: DeliveryStore = {
 
   async recordEtaObservation(input) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`INSERT INTO delivery_eta_observations (
       delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
     ) VALUES (
@@ -666,6 +677,7 @@ export const postgresStore: DeliveryStore = {
 
   async listEtaObservations(deliveryId, limit = 200) {
     await ensureSchema();
+    const sql = getSql();
     const capped = Math.max(1, Math.min(2000, Math.round(limit)));
     const rows = await sql`SELECT delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
       FROM delivery_eta_observations WHERE delivery_id = ${deliveryId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
@@ -681,6 +693,7 @@ export const postgresStore: DeliveryStore = {
     const byDeliveryId = new Map<string, EtaObservationRow[]>();
     if (!deliveryIds.length) return byDeliveryId;
     await ensureSchema();
+    const sql = getSql();
     const capped = Math.max(1, Math.min(2000, Math.round(limitPerDelivery)));
     // DISTINCT ON + ORDER BY position_at DESC caps each delivery to its own
     // most-recent `capped` observations in one query, instead of one query
@@ -708,6 +721,7 @@ export const postgresStore: DeliveryStore = {
   },
   async listEtaObservationsForRoute(companyId, routeTemplateId, destinationSiteId, limit = 5000) {
     await ensureSchema();
+    const sql = getSql();
     const capped = Math.max(1, Math.min(10000, Math.round(limit)));
     const rows = await sql`SELECT delivery_id, company_id, route_template_id, trip_instance_id, destination_site_id, position_at, estimated_arrival_at, planned_arrival_at, delay_minutes, effective_speed_kmh, remaining_distance_km, progress, confidence, source, created_at
       FROM delivery_eta_observations WHERE company_id = ${companyId} AND route_template_id = ${routeTemplateId} AND destination_site_id = ${destinationSiteId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
@@ -722,6 +736,7 @@ export const postgresStore: DeliveryStore = {
 
   async recordTripPosition(input) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`INSERT INTO trip_position_observations (company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at)
       VALUES (${input.companyId}, ${input.routeTemplateId}, ${input.tripInstanceId}, ${input.vehicleId}, ${input.positionAt.toISOString()}, ${input.latitude}, ${input.longitude}, ${input.speed}, ${new Date().toISOString()})
       ON CONFLICT (company_id, trip_instance_id, position_at) DO NOTHING RETURNING trip_instance_id` as Array<{ trip_instance_id: string }>;
@@ -729,6 +744,7 @@ export const postgresStore: DeliveryStore = {
   },
   async listTripPositionsForRoute(companyId, routeTemplateId, limit = 10000) {
     await ensureSchema();
+    const sql = getSql();
     const capped = Math.max(1, Math.min(20000, Math.round(limit)));
     const rows = await sql`SELECT company_id, route_template_id, trip_instance_id, vehicle_id, position_at, latitude, longitude, speed, created_at
       FROM trip_position_observations WHERE company_id = ${companyId} AND route_template_id = ${routeTemplateId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
@@ -740,6 +756,7 @@ export const postgresStore: DeliveryStore = {
 
   async recordFleetPosition(input) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`INSERT INTO fleet_position_observations (company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at)
       VALUES (${input.companyId}, ${input.vehicleId}, ${input.vehicleName}, ${input.positionAt.toISOString()}, ${input.latitude}, ${input.longitude}, ${input.speed}, ${input.heading}, ${input.address}, ${new Date().toISOString()})
       ON CONFLICT (company_id, vehicle_id, position_at) DO NOTHING RETURNING vehicle_id` as Array<{ vehicle_id: string }>;
@@ -747,6 +764,7 @@ export const postgresStore: DeliveryStore = {
   },
   async listFleetPositions(companyId, vehicleId, limit = 20000) {
     await ensureSchema();
+    const sql = getSql();
     const capped = Math.max(1, Math.min(50000, Math.round(limit)));
     const rows = await sql`SELECT company_id, vehicle_id, vehicle_name, position_at, latitude, longitude, speed, heading, address, created_at
       FROM fleet_position_observations WHERE company_id = ${companyId} AND vehicle_id = ${vehicleId} ORDER BY position_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
@@ -758,6 +776,7 @@ export const postgresStore: DeliveryStore = {
 
   async upsertTrip(input) {
     await ensureSchema();
+    const sql = getSql();
     const now = new Date().toISOString();
     const stopsJson = JSON.stringify(input.stops.map((stop) => ({ ...stop, plannedArrivalAt: stop.plannedArrivalAt?.toISOString() ?? null })));
     const rows = await sql`INSERT INTO trips (id, company_id, route_template_id, vehicle_key, truck, sendatrack_vehicle_id, origin_site_id, stops_json, status, created_at, updated_at)
@@ -776,11 +795,13 @@ export const postgresStore: DeliveryStore = {
   },
   async getTrip(companyId, tripId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM trips WHERE company_id = ${companyId} AND id = ${tripId} LIMIT 1` as Array<Record<string, unknown>>;
     return rows[0] ? hydrateTrip(rows[0]) : null;
   },
   async listTrips(companyId, limit = 100) {
     await ensureSchema();
+    const sql = getSql();
     const capped = Math.max(1, Math.min(1000, Math.round(limit)));
     const rows = await sql`SELECT * FROM trips WHERE company_id = ${companyId} ORDER BY updated_at DESC LIMIT ${capped}` as Array<Record<string, unknown>>;
     return rows.map(hydrateTrip);
@@ -788,6 +809,7 @@ export const postgresStore: DeliveryStore = {
 
   async assignDeliveryTrip(deliveryId, companyId, tripId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`UPDATE deliveries SET trip_id = ${tripId}
       WHERE id = ${deliveryId} AND company_id = ${companyId} AND (trip_id IS NULL OR trip_id = ${tripId})
       RETURNING id` as Array<{ id: string }>;
@@ -795,6 +817,7 @@ export const postgresStore: DeliveryStore = {
   },
   async assignDeliveryToPlannedTrip(deliveryId, companyId, tripId, truck, sendatrackVehicleId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`UPDATE deliveries SET trip_id = ${tripId}, truck = ${truck}, sendatrack_vehicle_id = ${sendatrackVehicleId}
       WHERE id = ${deliveryId} AND company_id = ${companyId} AND status <> 'Delivered' AND trip_id IS NULL
         AND truck = ${UNASSIGNED_TRUCK} AND (sendatrack_vehicle_id IS NULL OR sendatrack_vehicle_id = '')
@@ -803,12 +826,14 @@ export const postgresStore: DeliveryStore = {
   },
   async listDeliveryIdsForTrip(companyId, tripId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT id FROM deliveries WHERE company_id = ${companyId} AND trip_id = ${tripId} ORDER BY created_at ASC` as Array<{ id: string }>;
     return rows.map((row) => row.id);
   },
 
   async listPendingNotifications(companyId) {
     await ensureSchema();
+    const sql = getSql();
     const staleBefore = new Date(Date.now() - 5 * 60_000).toISOString();
     const rows = await sql`SELECT d.*,
         e.delivery_id AS event_delivery_id,
@@ -836,6 +861,7 @@ export const postgresStore: DeliveryStore = {
 
   async claimNotification(deliveryId, type) {
     await ensureSchema();
+    const sql = getSql();
     const now = new Date().toISOString();
     const staleBefore = new Date(Date.now() - 5 * 60_000).toISOString();
     const inserted = await sql`INSERT INTO delivery_notifications (delivery_id, event_type, channel, attempted_at, sent_at)
@@ -852,6 +878,7 @@ export const postgresStore: DeliveryStore = {
 
   async markNotificationSent(deliveryId, type) {
     await ensureSchema();
+    const sql = getSql();
     await sql`UPDATE delivery_notifications SET sent_at = ${new Date().toISOString()}
       WHERE delivery_id = ${deliveryId} AND event_type = ${type} AND channel = 'whatsapp'`;
   },
@@ -871,6 +898,7 @@ export const postgresStore: DeliveryStore = {
   // can never be handed the same number.
   async assignShortCode(companyId, prefix) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`
       INSERT INTO delivery_code_counters (company_id, prefix, next_number)
       VALUES (${companyId}, ${prefix}, 0)
@@ -882,6 +910,7 @@ export const postgresStore: DeliveryStore = {
 
   async create(input: CreateDeliveryInput) {
     await ensureSchema();
+    const sql = getSql();
     const delivery: DeliveryRow = {
       ...input,
       whatsappOptIn: input.whatsappOptIn === true,
@@ -899,19 +928,21 @@ export const postgresStore: DeliveryStore = {
     ) VALUES (
       ${delivery.id}, ${delivery.customer}, ${delivery.originSiteId}, ${delivery.originLatitude}, ${delivery.originLongitude}, ${delivery.destinationSiteId}, ${delivery.destination}, ${delivery.destinationLatitude}, ${delivery.destinationLongitude}, ${delivery.arrivalRadiusKm},
       ${delivery.truck}, ${delivery.driver}, ${delivery.status}, ${delivery.eta}, ${delivery.plannedArrivalAt?.toISOString() ?? null}, ${delivery.nextTruckDepartureAt?.toISOString() ?? null}, ${delivery.progress}, ${delivery.color}, ${delivery.contact}, ${delivery.recipientName ?? ""}, ${delivery.recipientContact ?? ""}, ${delivery.weightKg ?? null}, ${delivery.priceAmount ?? null}, ${delivery.priceCurrency ?? null}, ${delivery.itemDescription ?? null}, ${delivery.customerEmail ?? null}, ${delivery.whatsappOptIn === true}, ${delivery.whatsappOptInAt?.toISOString() ?? null}, ${delivery.recipientWhatsappOptIn === true}, ${delivery.recipientWhatsappOptInAt?.toISOString() ?? null}, ${delivery.sendatrackVehicleId},
-      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}, ${delivery.parcelCode ?? null}, ${delivery.shortCode ?? null}, ${delivery.paymentStatus}, ${delivery.amountPaid ?? null}
+      ${delivery.latitude}, ${delivery.longitude}, ${delivery.speed}, ${delivery.lastPositionAt?.toISOString() ?? null}, ${delivery.gpsSource}, ${delivery.companyId}, ${delivery.trackingToken}, ${delivery.shipmentId ?? null}, ${delivery.createdAt.toISOString()}, ${delivery.parcelCode ?? null}, ${delivery.shortCode ?? null}, ${delivery.paymentStatus ?? null}, ${delivery.amountPaid ?? null}
     )`;
     return delivery;
   },
 
   async findByParcelCode(companyId, parcelCode) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT * FROM deliveries WHERE company_id = ${companyId} AND parcel_code = ${parcelCode} LIMIT 1` as RawDelivery[];
     return rows[0] ? hydrate(rows[0]) : null;
   },
 
   async recordScan(input) {
     await ensureSchema();
+    const sql = getSql();
     const scan: DeliveryScanRow = { ...input, id: createDeliveryId(), scannedAt: new Date() };
     await sql`INSERT INTO delivery_scans (id, company_id, delivery_id, checkpoint, scanned_by, truck, location_label, scanned_at)
       VALUES (${scan.id}, ${scan.companyId}, ${scan.deliveryId}, ${scan.checkpoint}, ${scan.scannedBy}, ${scan.truck}, ${scan.locationLabel}, ${scan.scannedAt.toISOString()})`;
@@ -920,6 +951,7 @@ export const postgresStore: DeliveryStore = {
 
   async listScansForDelivery(deliveryId, limit = 50) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT id, company_id, delivery_id, checkpoint, scanned_by, truck, location_label, scanned_at FROM delivery_scans
       WHERE delivery_id = ${deliveryId} ORDER BY scanned_at DESC LIMIT ${Math.max(1, Math.min(500, limit))}` as Array<{
         id: string; company_id: string; delivery_id: string; checkpoint: DeliveryScanCheckpoint;
@@ -934,6 +966,7 @@ export const postgresStore: DeliveryStore = {
   async listScanSummaries(companyId, deliveryIds) {
     if (!deliveryIds.length) return [];
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT delivery_id, checkpoint, truck, location_label, scanned_at FROM delivery_scans
       WHERE company_id = ${companyId} AND delivery_id = ANY(${deliveryIds}::text[])
         AND checkpoint IN ('loaded', 'arrived')
@@ -961,6 +994,7 @@ export const postgresStore: DeliveryStore = {
 
   async deleteDemoDeliveries(companyId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT id FROM deliveries WHERE company_id = ${companyId} AND customer LIKE ${`${DEMO_DELIVERY_CUSTOMER_PREFIX}%`}` as Array<{ id: string }>;
     const ids = rows.map((row) => row.id);
     if (!ids.length) return 0;
@@ -974,6 +1008,7 @@ export const postgresStore: DeliveryStore = {
 
   async deleteDelivery(deliveryId, companyId) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`SELECT id FROM deliveries WHERE id = ${deliveryId} AND company_id = ${companyId} LIMIT 1` as Array<{ id: string }>;
     if (!rows.length) return false;
     await sql`DELETE FROM delivery_events WHERE delivery_id = ${deliveryId}`;
@@ -985,6 +1020,7 @@ export const postgresStore: DeliveryStore = {
   },
   async advanceDemoDelivery(deliveryId, companyId, input) {
     await ensureSchema();
+    const sql = getSql();
     const rows = await sql`UPDATE deliveries SET
       status = ${input.status}, progress = ${input.progress}, latitude = ${input.latitude}, longitude = ${input.longitude},
       speed = ${input.speed}, last_position_at = ${new Date().toISOString()}, gps_source = 'simulation'

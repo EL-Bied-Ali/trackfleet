@@ -30,9 +30,9 @@ if (!databaseUrl) {
   process.exit(0);
 }
 
-const { neon } = await import("@neondatabase/serverless");
+const { default: postgres } = await import("postgres");
 const { REQUIRED_POSTGRES_TABLES, REQUIRED_POSTGRES_COLUMNS } = await import("../app/lib/storage-schema-contract.ts");
-const sql = neon(databaseUrl);
+const sql = postgres(databaseUrl, { max: 1 });
 
 const rows = await sql`
   WITH required_tables AS (

@@ -1,10 +1,6 @@
-import { neon } from "@neondatabase/serverless";
+import { getSql } from "./pg-client.ts";
 import { knownSites } from "./known-sites";
 import type { CompanySite, CreateCompanySiteInput, SiteStore } from "./site-store.types";
-
-const databaseUrl = process.env.DATABASE_URL?.trim();
-if (!databaseUrl) throw new Error("DATABASE_URL is required for the Postgres site store");
-const sql = neon(databaseUrl);
 
 function hydrate(row: Record<string, unknown>): CompanySite {
   return {
@@ -28,7 +24,8 @@ function hydrate(row: Record<string, unknown>): CompanySite {
 
 async function seed(companyId: string) {
   // Production schema is provisioned separately. Seed all known sites in a
-  // single Neon request instead of one Cloudflare subrequest per site.
+  // single request instead of one Cloudflare subrequest per site.
+  const sql = getSql();
   const payload = JSON.stringify(knownSites.map((site) => ({
     id: site.id,
     label: site.label,
@@ -67,10 +64,12 @@ async function seed(companyId: string) {
 export const postgresSiteStore: SiteStore = {
   async listForCompany(companyId) {
     await seed(companyId);
+    const sql = getSql();
     const rows = await sql`SELECT * FROM sites WHERE company_id=${companyId} ORDER BY label`;
     return rows.map((row) => hydrate(row as Record<string, unknown>));
   },
   async upsert(input: CreateCompanySiteInput) {
+    const sql = getSql();
     const rows = await sql`INSERT INTO sites (company_id,id,label,city,country,address,latitude,longitude,arrival_radius_km,roles,whatsapp,color,short_code_prefix,updated_at)
       VALUES (${input.companyId},${input.id},${input.label},${input.city},${input.country},${input.address},${input.latitude},${input.longitude},${input.arrivalRadiusKm},${JSON.stringify(input.roles)},${input.whatsapp ?? null},${input.color ?? null},${input.shortCodePrefix ?? null},now())
       ON CONFLICT (company_id,id) DO UPDATE SET label=excluded.label,city=excluded.city,country=excluded.country,address=excluded.address,latitude=excluded.latitude,longitude=excluded.longitude,arrival_radius_km=excluded.arrival_radius_km,roles=excluded.roles,whatsapp=excluded.whatsapp,color=excluded.color,short_code_prefix=excluded.short_code_prefix,updated_at=now()

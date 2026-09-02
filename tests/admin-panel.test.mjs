@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { listCompaniesWithSubscriptions, getCompanyCredentialsCiphertext } from "../app/lib/subscription-store.ts";
-import { logAdminAction } from "../app/lib/admin-audit-log.ts";
 import { REQUIRED_POSTGRES_TABLES } from "../app/lib/storage-schema-contract.ts";
 
-// admin-auth.ts imports trackfleet-runtime-env, whose bare specifier only
+// admin-auth.ts, subscription-store.ts and admin-audit-log.ts all import
+// trackfleet-runtime-env transitively (the latter two via pg-client.ts,
+// needed for Postgres/Hyperdrive access), whose bare specifier only
 // resolves under Vite/vinext's aliasing -- unresolvable from plain Node
 // (matching this repo's established pattern for every other runtimeEnv-
-// dependent module), so exercised via source-text assertions.
+// dependent module), so all are exercised via source-text assertions.
 const [
   adminAuth,
   startRoute,
@@ -18,6 +18,8 @@ const [
   subscriptionRoute,
   impersonateRoute,
   adminPage,
+  subscriptionStoreSource,
+  adminAuditLogSource,
 ] = await Promise.all([
   readFile(new URL("../app/lib/admin-auth.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/auth/admin/google/start/route.ts", import.meta.url), "utf8"),
@@ -27,16 +29,18 @@ const [
   readFile(new URL("../app/api/admin/companies/subscription/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/admin/companies/impersonate/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/admin/page.tsx", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/subscription-store.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/admin-audit-log.ts", import.meta.url), "utf8"),
 ]);
 
 test("admin_audit_log is part of the production schema contract, and logAdminAction writes to it", () => {
   assert.ok(REQUIRED_POSTGRES_TABLES.includes("admin_audit_log"));
-  assert.match(logAdminAction.toString(), /INSERT INTO admin_audit_log/);
+  assert.match(adminAuditLogSource, /INSERT INTO admin_audit_log/);
 });
 
-test("the company list and credentials lookup are real functions usable without a runtimeEnv dependency", () => {
-  assert.equal(typeof listCompaniesWithSubscriptions, "function");
-  assert.equal(typeof getCompanyCredentialsCiphertext, "function");
+test("the company list and credentials lookup are real, exported functions", () => {
+  assert.match(subscriptionStoreSource, /export async function listCompaniesWithSubscriptions/);
+  assert.match(subscriptionStoreSource, /export async function getCompanyCredentialsCiphertext/);
 });
 
 test("admin sessions are a completely separate trust boundary from company sessions: their own cookie name, their own domain-separated signing key, never layered onto CompanySession", () => {

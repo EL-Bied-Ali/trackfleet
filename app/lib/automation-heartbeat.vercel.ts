@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSqlOrNull } from "./pg-client.ts";
 
 export type AutomationHeartbeat = {
   lastAttemptAt: Date | null;
@@ -24,13 +24,8 @@ const automationFailureCodes: AutomationFailureCode[] = [
   "automation_failed",
 ];
 
-function sqlClient() {
-  const databaseUrl = process.env.DATABASE_URL?.trim();
-  return databaseUrl ? neon(databaseUrl) : null;
-}
-
 export async function recordRuntimeAttempt(jobId: RuntimeHeartbeatJob) {
-  const sql = sqlClient();
+  const sql = getSqlOrNull();
   if (!sql) return;
   const now = new Date().toISOString();
   await sql`INSERT INTO automation_runtime_state (id, last_attempt_at)
@@ -39,7 +34,7 @@ export async function recordRuntimeAttempt(jobId: RuntimeHeartbeatJob) {
 }
 
 export async function recordRuntimeSuccess(jobId: RuntimeHeartbeatJob) {
-  const sql = sqlClient();
+  const sql = getSqlOrNull();
   if (!sql) return;
   const now = new Date().toISOString();
   await sql`INSERT INTO automation_runtime_state (id, last_attempt_at, last_success_at)
@@ -48,7 +43,7 @@ export async function recordRuntimeSuccess(jobId: RuntimeHeartbeatJob) {
 }
 
 export async function recordRuntimeFailure(jobId: RuntimeHeartbeatJob) {
-  const sql = sqlClient();
+  const sql = getSqlOrNull();
   if (!sql) return;
   const now = new Date().toISOString();
   await sql`INSERT INTO automation_runtime_state (id, last_attempt_at, last_failure_at)
@@ -57,7 +52,7 @@ export async function recordRuntimeFailure(jobId: RuntimeHeartbeatJob) {
 }
 
 export async function getRuntimeHeartbeat(jobId: RuntimeHeartbeatJob): Promise<AutomationHeartbeat> {
-  const sql = sqlClient();
+  const sql = getSqlOrNull();
   if (!sql) return { lastAttemptAt: null, lastSuccessAt: null, lastFailureAt: null };
   const rows = await sql`SELECT last_attempt_at, last_success_at, last_failure_at
     FROM automation_runtime_state WHERE id = ${jobId} LIMIT 1` as Array<{
@@ -83,7 +78,7 @@ export function recordAutomationSuccess() {
 
 export async function recordAutomationFailure(code: AutomationFailureCode = "automation_failed") {
   await recordRuntimeFailure("fleet_tick");
-  const sql = sqlClient();
+  const sql = getSqlOrNull();
   if (!sql) return;
   const now = new Date().toISOString();
   const diagnosticId = `fleet_tick_failure:${code}`;
@@ -93,7 +88,7 @@ export async function recordAutomationFailure(code: AutomationFailureCode = "aut
 }
 
 export async function getAutomationFailureCode(): Promise<AutomationFailureCode | null> {
-  const sql = sqlClient();
+  const sql = getSqlOrNull();
   if (!sql) return null;
   const rows = await sql`SELECT id, last_failure_at
     FROM automation_runtime_state

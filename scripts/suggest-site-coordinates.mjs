@@ -1,10 +1,10 @@
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 import { inferSiteCoordinateSuggestions } from "../app/lib/site-coordinate-inference.ts";
 
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 const applyHighConfidence = process.argv.includes("--apply-high-confidence");
-const sql = neon(databaseUrl);
+const sql = postgres(databaseUrl, { max: 1 });
 
 const siteRows = await sql`SELECT id, label, city, address, country, latitude, longitude
   FROM sites ORDER BY label ASC`;
@@ -53,11 +53,15 @@ if (!applicable.length) {
   process.exit(0);
 }
 
-await sql.transaction(applicable.map((suggestion) => sql`
-  UPDATE sites
-  SET latitude = ${suggestion.latitude}, longitude = ${suggestion.longitude}
-  WHERE id = ${suggestion.siteId}
-    AND latitude IS NULL
-    AND longitude IS NULL
-`));
+await sql.begin(async (sql) => {
+  for (const suggestion of applicable) {
+    await sql`
+      UPDATE sites
+      SET latitude = ${suggestion.latitude}, longitude = ${suggestion.longitude}
+      WHERE id = ${suggestion.siteId}
+        AND latitude IS NULL
+        AND longitude IS NULL
+    `;
+  }
+});
 console.log(`Applied ${applicable.length} high-confidence site coordinate suggestion(s).`);

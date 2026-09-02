@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getSqlOrNull } from "./pg-client.ts";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { store } from "trackfleet-delivery-store";
 import { siteStore } from "trackfleet-site-store";
@@ -30,7 +30,6 @@ type D1Binding = { prepare(query: string): D1Statement; batch(statements: D1Stat
 type SessionRow = { token_hash: string; company_id: string; account_label: string | null; user_label: string | null; credentials_ciphertext: string | null; expires_at: string | Date; created_at: string | Date };
 
 function d1() { return (runtimeEnv as unknown as { DB?: D1Binding }).DB ?? null; }
-function databaseUrl() { return runtimeEnv.DATABASE_URL?.trim() || process.env.DATABASE_URL?.trim() || ""; }
 
 function deliveryStatement(db: D1Binding, delivery: DeliveryRow) {
   return db.prepare(`INSERT INTO deliveries (
@@ -123,14 +122,13 @@ async function runBatches(db: D1Binding, statements: D1Statement[]) {
 export async function reconcileD1Standby(): Promise<D1ReconciliationResult> {
   const db = d1();
   if (!db) return { ran: false, reason: "d1_not_bound", companies: 0, deliveries: 0, events: 0, etaObservations: 0, sites: 0, trips: 0, sessions: 0 };
-  const url = databaseUrl();
-  if (!url) return { ran: false, reason: "postgres_not_configured", companies: 0, deliveries: 0, events: 0, etaObservations: 0, sites: 0, trips: 0, sessions: 0 };
+  const sql = getSqlOrNull();
+  if (!sql) return { ran: false, reason: "postgres_not_configured", companies: 0, deliveries: 0, events: 0, etaObservations: 0, sites: 0, trips: 0, sessions: 0 };
 
   const now = Date.now();
   await db.prepare(`INSERT INTO automation_runtime_state (id, last_attempt_at) VALUES ('d1_reconciliation', ?)
     ON CONFLICT(id) DO UPDATE SET last_attempt_at = excluded.last_attempt_at`).bind(now).run();
 
-  const sql = neon(url);
   try {
     const companyRows = await sql`SELECT company_id AS id FROM deliveries WHERE company_id IS NOT NULL AND company_id <> ''
       GROUP BY company_id ORDER BY MAX(created_at) DESC LIMIT ${maxCompanies}` as Array<{ id: string }>;
