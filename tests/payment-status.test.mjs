@@ -95,9 +95,11 @@ test("editing a delivery pre-fills the current paymentStatus/amountPaid (default
 test("the label's extended-details rows (origin, phone, weight/price/payment) only render at 55mm+ label height, leaving the already-proven-safe 16/feuille 5-row layout completely untouched", () => {
   assert.match(labelsPage, /const showExtendedDetails = labelSize\.height >= 55;/);
   assert.match(labelsPage, /\{showExtendedDetails \? \(<>/);
-  // The 16/feuille branch must still be byte-for-byte the pre-existing,
-  // live-verified-at-0px-overflow layout.
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.shortCode\}` : ""\}<\/div>/);
+  // The 16/feuille branch must still be the pre-existing,
+  // live-verified-at-0px-overflow row count -- shortCode/id now lead with
+  // the same shortCode-first priority as the extended layout (per a later
+  // request), but still on that one single line, never a new row.
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.shortCode \?\? delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.id\}` : ""\}<\/div>/);
 });
 
 test("the extended label shows the short code in large type (falling back to the plain id when this destination has no shortCodePrefix), origin -> destination, phone, and a compact weight/price/payment line", () => {
