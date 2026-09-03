@@ -100,7 +100,7 @@ test("prints the destination agency's city alone, not the full postal address or
 // 28px. Truncating (not wrapping) the customer, destination and truck
 // lines guarantees the truck plate is never the casualty of a long name.
 test("truncates the customer/contact, destination and truck lines instead of letting them wrap and push each other out of the label", () => {
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{\[delivery\.customer, delivery\.contact\]\.filter\(Boolean\)\.join\(" · "\)\}<\/div>/);
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 10, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{\(\(delivery\.originSiteId/);
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 9\.5, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>Camion : \{delivery\.truck\}<\/div>/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 11, lineHeight: 1\.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{\[delivery\.customer, delivery\.contact\]\.filter\(Boolean\)\.join\(" · "\)\}<\/div>/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 11, fontWeight: 700, lineHeight: 1\.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{\(\(delivery\.originSiteId/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 10\.5, lineHeight: 1\.1, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>Camion : \{delivery\.truck\}<\/div>/);
 });
