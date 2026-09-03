@@ -579,7 +579,16 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
    in dark mode, instead of trying to darken every badge individually. */
 :root[data-theme="dark"] .gps-coming.is-live { color: #126f50; background: #dff3e9; }
 :root[data-theme="dark"] .stat-card, :root[data-theme="dark"] .map-panel, :root[data-theme="dark"] .deliveries-panel, :root[data-theme="dark"] .tours-panel, :root[data-theme="dark"] .modal, :root[data-theme="dark"] .customer-grid, :root[data-theme="dark"] .agency-location-card, :root[data-theme="dark"] .plan-card { border-color: #2b3a47; background: #17212b; box-shadow: none; }
-:root[data-theme="dark"] .language-switcher, :root[data-theme="dark"] .icon-button, :root[data-theme="dark"] .panel-actions button, :root[data-theme="dark"] .panel-actions select, :root[data-theme="dark"] .panel-actions .table-search, :root[data-theme="dark"] .modal input, :root[data-theme="dark"] .modal select, :root[data-theme="dark"] .company-logo-preview img, :root[data-theme="dark"] .contact-popover, :root[data-theme="dark"] .truck-editor-popover { border-color: #334553; color: var(--ink); background: #1d2a35; }
+:root[data-theme="dark"] .language-switcher, :root[data-theme="dark"] .icon-button, :root[data-theme="dark"] .panel-actions button, :root[data-theme="dark"] .panel-actions select, :root[data-theme="dark"] .panel-actions .table-search, :root[data-theme="dark"] .modal input, :root[data-theme="dark"] .modal select, :root[data-theme="dark"] .company-logo-preview img, :root[data-theme="dark"] .contact-popover, :root[data-theme="dark"] .truck-editor-popover, :root[data-theme="dark"] .truck-popover { border-color: #334553; color: var(--ink); background: #1d2a35; }
+/* .truck-popover predates dark mode and was missed entirely -- its own
+   background stayed hardcoded white while child text with no explicit
+   color (strong, dd) inherited the page's --ink, which flips to a light
+   color in dark mode. Result: near-invisible pale text on a white card,
+   reported live ("l'ui est terrible specialement en dark mode"). The rule
+   above fixes the card itself; its speech-bubble pointer needs its own
+   override since it's a separate white square rotated 45deg, not inside
+   the card's own background. */
+:root[data-theme="dark"] .truck-popover::before { border-color: #334553; background: #1d2a35; }
 :root[data-theme="dark"] th, :root[data-theme="dark"] .group-header-row td, :root[data-theme="dark"] .row-selected td, :root[data-theme="dark"] tbody tr { border-color: #2b3a47; background: #17212b; }
 :root[data-theme="dark"] .form-section, :root[data-theme="dark"] .site-manager-card, :root[data-theme="dark"] .expected-parcel-card, :root[data-theme="dark"] .tour-card, :root[data-theme="dark"] .tour-stop, :root[data-theme="dark"] .price-preview, :root[data-theme="dark"] .parcel-row { border-color: #31424f; color: var(--ink); background: #1d2a35; }
 :root[data-theme="dark"] .remove-parcel-row { border-color: #334553; color: #8a97a3; background: #17212b; }
