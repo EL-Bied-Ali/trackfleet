@@ -75,6 +75,7 @@ export default function ScanPage() {
   // the SENDATRACK login screen instead of a dashboard, since getCompanySession
   // doesn't accept a scanner session. Reported live as the link "not working".
   const [scannerOnly, setScannerOnly] = useState(false);
+  const [deviceLabel, setDeviceLabel] = useState<string | null>(null);
   const [mode, setMode] = useState<Checkpoint>("loaded");
   const [cameraState, setCameraState] = useState<"idle" | "starting" | "active" | "error">("idle");
   const [cameraError, setCameraError] = useState("");
@@ -120,12 +121,13 @@ export default function ScanPage() {
       }).then(() => window.history.replaceState({}, "", "/scan"))
       : Promise.resolve();
     void activate.then(() => fetch("/api/scan/session", { cache: "no-store" }))
-      .then((response) => response.json() as Promise<{ authenticated: boolean; scannerOnly?: boolean; company?: CompanyInfo }>)
+      .then((response) => response.json() as Promise<{ authenticated: boolean; scannerOnly?: boolean; deviceLabel?: string | null; company?: CompanyInfo }>)
       .then((data) => {
         if (!active) return;
         if (data.authenticated && data.company) {
           setCompany(data.company);
           setScannerOnly(data.scannerOnly === true);
+          setDeviceLabel(data.deviceLabel ?? null);
           setAuth("ready");
         } else {
           setAuth("denied");
@@ -297,6 +299,7 @@ export default function ScanPage() {
           <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: ".12em", color: "#9ca3af" }}>TRACKFLEET · SCAN</p>
           <h1 style={{ margin: "4px 0", fontSize: 20 }}>Scanner un colis</h1>
           {company?.role === "agency" && <p style={{ margin: 0, fontSize: 13, color: "#9ca3af" }}>Agence : {company.siteId}</p>}
+          {deviceLabel && <p style={{ margin: 0, fontSize: 13, color: "#9ca3af" }}>Appareil : {deviceLabel}</p>}
         </div>
         {!scannerOnly && <Link href="/?lang=fr" style={{ color: "#f9fafb", fontWeight: 700, fontSize: 13 }}>← Tableau</Link>}
       </header>
