@@ -14,17 +14,22 @@ import test from "node:test";
 // Follow-up request the same day: "le scan au chargé et au hub [devrait]
 // donne[r] aussi la localisation... le scanner devra demander la loca aussi
 // sur le tel" -- the scanning phone's own position (best-effort, silent if
-// denied) is now tried FIRST, since it's a more direct proof of where the
-// scan itself happened than the separately-tracked truck. Falls back to the
-// truck-GPS-based label above if the phone didn't grant location or isn't
-// near a known site -- see qr-scan-frontend.test.mjs for the client-side
-// capture.
+// denied) was first added as tried-first-with-truck-fallback, then
+// corrected minutes later per live feedback: "faut pas le scanner dise
+// qu'il a scanné dans une position dont le tel ne confirme pas". The
+// truck's GPS and the scanning phone are two different devices -- falling
+// back to the truck's position when the phone stayed silent would print a
+// confident-looking location the phone itself never actually confirmed.
+// The phone position now fully REPLACES the truck-GPS-based label; no
+// phone position means no location shown, not a silent substitution --
+// see qr-scan-frontend.test.mjs for the client-side capture.
 const route = await readFile(new URL("../app/api/scan/route.ts", import.meta.url), "utf8");
 
-test("derives the hub scan's location from the scanning phone's own position when available, falling back to the delivery's own GPS position, when the scanning session has no fixed site", () => {
+test("derives the hub scan's location from the scanning phone's own position ONLY -- never a substituted truck position it didn't confirm -- when the scanning session has no fixed site", () => {
   assert.match(route, /const HUB_MATCH_RADIUS_KM = 5;/);
   assert.match(route, /async function nearestGeocodedSiteLabel\(companyId: string, position:/);
-  assert.match(route, /const locationLabel = session\.role === "agency"\s*\n\s*\? knownSite\(session\.siteId\)\?\.label \?\? null\s*\n\s*: \(phonePosition && await nearestGeocodedSiteLabel\(session\.companyId, phonePosition\)\)\s*\n\s*\?\? await nearestGeocodedSiteLabel\(session\.companyId, \{ latitude: delivery\.latitude, longitude: delivery\.longitude \}\);/);
+  assert.match(route, /const locationLabel = session\.role === "agency"\s*\n\s*\? knownSite\(session\.siteId\)\?\.label \?\? null\s*\n\s*: await nearestGeocodedSiteLabel\(session\.companyId, phonePosition\);/);
+  assert.doesNotMatch(route, /delivery\.latitude, longitude: delivery\.longitude/);
 });
 
 test("the phone position is parsed defensively -- non-finite or out-of-range coordinates are treated as absent, never passed through to the site-distance lookup", () => {
