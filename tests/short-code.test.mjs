@@ -124,7 +124,7 @@ test("delivery creation assigns a short code only when the resolved destination 
 
 test("the printed label shows the short code inline on the same line as the id (not a new row), so it can never reopen the 16/feuille overflow that every other row was carefully sized to avoid", () => {
   assert.match(labelsPage, /shortCode: string \| null;/);
-  assert.match(labelsPage, /\{delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.shortCode\}` : ""\}/);
+  assert.match(labelsPage, /\{delivery\.shortCode \?\? delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.id\}` : ""\}/);
 });
 
 test("the D1 schema script creates delivery_code_counters, sites.short_code_prefix and deliveries.short_code for both fresh and pre-existing databases", () => {

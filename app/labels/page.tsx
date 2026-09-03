@@ -8,6 +8,8 @@ type LabelDelivery = {
   id: string;
   customer: string;
   contact: string;
+  recipientName: string | null;
+  recipientContact: string | null;
   destination: string;
   destinationSiteId: string | null;
   originSiteId: string | null;
@@ -465,12 +467,29 @@ export default function LabelsPage() {
                   <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{((delivery.originSiteId && siteCities.get(delivery.originSiteId)) || "") + " → " + ((delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination)}</div>
                   {delivery.contact && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Tél : {delivery.contact}</div>}
+                  {/* The person the parcel is actually handed to at the
+                      destination -- distinct from `customer`/`contact`
+                      above (the sender), requested separately since a
+                      dispatcher at the destination needs to know who to
+                      call/ask for, not just who shipped it. */}
+                  {(delivery.recipientName || delivery.recipientContact) && (
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      Destinataire : {[delivery.recipientName, delivery.recipientContact].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
                   {paymentSummary(delivery) && <div style={{ fontSize: 11, fontWeight: 700, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{paymentSummary(delivery)}</div>}
                   {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
                 </>) : (<>
-                  {/* Shortest preset (16/feuille): the exact 5-row layout
-                      already verified live at 0px overflow, unchanged. */}
-                  <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.id}{delivery.shortCode ? ` · ${delivery.shortCode}` : ""}</div>
+                  {/* Shortest preset (16/feuille): still the exact same
+                      5-row layout verified live at 0px overflow -- row
+                      count is untouched, only the emphasis within this one
+                      line changed, to match the extended layout's own
+                      shortCode-first priority ("big and bold" primary
+                      identifier, per the client's request). The plain id
+                      moves after the shortCode on the same line instead of
+                      before it, rather than adding a row this preset has
+                      no spare height for. */}
+                  <div style={{ fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}{delivery.shortCode ? ` · ${delivery.id}` : ""}</div>
                   <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>→ {(delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination}</div>
                   {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
