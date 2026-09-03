@@ -77,7 +77,14 @@ const securityHeaders = {
 } as const;
 
 const defaultPermissionsPolicy = "camera=(), microphone=(), geolocation=()";
-const scannerPermissionsPolicy = "camera=(self), microphone=(), geolocation=()";
+// geolocation=() here silently blocked /scan's own watchPosition (see
+// app/scan/page.tsx) from ever getting a real position -- the browser fails
+// the request before its own permission prompt, and the error callback
+// swallows that as if the user had simply declined, so the loaded/hub scan
+// badges never showed a location no matter how many times a real phone
+// tried. Live-caught: "je vien de tester et sa a donner sa / Chargé / 03
+// sept., 20:39 · 11595-A-74" -- no location at all, on a real scan.
+const scannerPermissionsPolicy = "camera=(self), microphone=(), geolocation=(self)";
 
 function withSecurityHeaders(response: Response, pathname = "") {
   const secured = new Response(response.body, response);
