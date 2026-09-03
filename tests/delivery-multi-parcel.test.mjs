@@ -122,7 +122,12 @@ test("every row after the first offers a 'counted with the previous parcel' chec
 test("a grouped (non-anchor) row hides its own weight input behind a read-only note, and never independently prompts for an item description -- only the anchor can, and only when the group's total is still missing", () => {
   const page = files["app/page.tsx"];
   assert.match(page, /isAnchor \? <label><span className="field-label">\{groupSize > 1 \?/);
-  assert.match(page, /<div className="grouped-weight-note">\{locale === "fr" \? `Poids : \$\{effectiveWeightKg \|\| "…"\} kg \(inclus avec le colis précédent\)`/);
+  // Wrapped in the same <label><span className="field-label">...</span> ...
+  // structure the anchor's own weight input uses (not a bare <div>) -- a
+  // live screenshot caught the bare version rendering visibly higher than
+  // the "Prix" column beside it, since it skipped the label-text row every
+  // other field in this grid has.
+  assert.match(page, /<label><span className="field-label">\{locale === "fr" \? "Poids du colis"[^<]*<\/span><div className="grouped-weight-note">\{locale === "fr" \? `= \$\{effectiveWeightKg \|\| "…"\} kg \(inclus avec le colis précédent\)`/);
   assert.match(page, /\{isAnchor && !effectiveWeightKg && <label>/);
 });
 
