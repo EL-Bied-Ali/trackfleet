@@ -94,3 +94,31 @@ test("the delivery table shows a small 'N linked parcels' hint when a delivery h
   assert.match(page, /\{delivery\.shipmentId && \(shipmentSizes\.get\(delivery\.shipmentId\) \?\? 0\) > 1 && <span className="shipment-badge">/);
   assert.match(css, /td > span\.shipment-badge \{/);
 });
+
+// The depot scale weighs several parcels for the same client at once (a
+// real workflow the client won't change) -- rather than force the employee
+// to weigh each one separately, this splits one combined weight evenly
+// across the parcel rows already added via "+ Ajouter un colis". Only
+// touches weightKg on each row; price/payment/description are computed or
+// entered per row exactly as before.
+test("the create-delivery form offers a 'weigh together' tool for 2-5 parcel rows that splits one total weight evenly, leaving 0 or 1 row (nothing to split) and 6+ rows (past the client's stated max) alone", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /const \[sharedWeightTotal, setSharedWeightTotal\] = useState\(""\);/);
+  assert.match(page, /\{!editingDeliveryId && parcelDrafts\.length >= 2 && parcelDrafts\.length <= 5 && <div className="shared-weight-tool">/);
+});
+
+test("the 'weigh together' split divides the entered total by the current parcel row count, rounds to 3 decimals (matching the weight input's own step), and applies the same value to every row", () => {
+  const page = files["app/page.tsx"];
+  const toolStart = page.indexOf('<div className="shared-weight-tool">');
+  const toolBody = page.slice(toolStart, page.indexOf("</div>", toolStart) + "</div>".length);
+  assert.match(toolBody, /const total = Number\(sharedWeightTotal\); if \(!Number\.isFinite\(total\) \|\| total <= 0\) return;/);
+  assert.match(toolBody, /const each = Math\.round\(\(total \/ parcelDrafts\.length\) \* 1000\) \/ 1000;/);
+  assert.match(toolBody, /setParcelDrafts\(\(rows\) => rows\.map\(\(row\) => \(\{ \.\.\.row, weightKg: String\(each\) \}\)\)\);/);
+  assert.match(toolBody, /setSharedWeightTotal\(""\);/);
+});
+
+test("sharedWeightTotal is cleared on every close/submit path, same as parcelDrafts, so a stale total never survives into the next delivery", () => {
+  const page = files["app/page.tsx"];
+  const resetSites = [...page.matchAll(/setParcelDrafts\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "", paymentStatus: "unpaid", amountPaid: "" \}\]\);\n\s*setSharedWeightTotal\(""\);/g)];
+  assert.equal(resetSites.length, 3, "expected all 3 parcelDrafts reset sites (close, edit-save, create-success) to also clear sharedWeightTotal");
+});
