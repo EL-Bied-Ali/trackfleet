@@ -408,9 +408,14 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .toggle-switch input:checked + span::before { transform: translateX(16px); }
 .toggle-switch input:focus-visible + span { outline: 2px solid var(--green); outline-offset: 2px; }
 .parcel-list { display: grid; gap: 12px; }
-.parcel-row { position: relative; grid-template-columns: 1fr 1fr auto; }
+.parcel-row { position: relative; grid-template-columns: 1fr 1fr; padding: 14px 44px 14px 14px; border: 1px solid #e4e7ec; border-radius: 12px; background: #fbfbfa; }
 .parcel-row-head { grid-column: 1 / -1; color: #7d6f76; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
-.remove-parcel-row { align-self: center; margin-top: 20px; width: 28px; height: 28px; border: 1px solid #dce4df; border-radius: 8px; background: white; color: #a09399; font-size: 14px; cursor: pointer; }
+/* Taken out of the grid entirely (absolute, relative to .parcel-row's own
+   position: relative) so it always sits in the same corner no matter how
+   many fields a given row shows -- grouped rows skip the weight input and
+   description, which used to leave the button auto-placed into a
+   half-empty grid cell (reported live as a stray blank gap). */
+.remove-parcel-row { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border: 1px solid #dce4df; border-radius: 8px; background: white; color: #a09399; font-size: 13px; cursor: pointer; }
 .remove-parcel-row:hover { border-color: #e3b3ab; color: #c0392b; }
 .add-parcel-row { justify-self: start; padding: 8px 14px; border: 1px dashed #cdb9c2; border-radius: 8px; background: transparent; color: #6a2352; font-size: 10.5px; font-weight: 650; cursor: pointer; }
 .add-parcel-row:hover { background: #f2f8f5; }
