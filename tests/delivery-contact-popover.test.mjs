@@ -28,7 +28,7 @@ test("the popover closes on any outside click, but not a click inside the popove
   // rules for a non-interactive element) -- the outside-click handler
   // itself checks the click target instead.
   assert.match(page, /if \(!openContactPopover\) return;/);
-  assert.match(page, /if \(target\?\.closest\("\.contact-popover, \.contact-trigger"\)\) return;/);
+  assert.match(page, /if \(target\?\.closest\("\.contact-popover, \.contact-trigger, \.scan-location-trigger"\)\) return;/);
   assert.match(page, /document\.addEventListener\("click", close\);/);
   assert.doesNotMatch(page, /<div className="contact-popover" onClick=/);
 });

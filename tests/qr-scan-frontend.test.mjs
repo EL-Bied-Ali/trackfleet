@@ -198,10 +198,26 @@ test("the delivery table shows both handoff proofs without claiming that the hub
 // full site name) crammed alongside the date into the same 76px badge got
 // cut off hard, e.g. "03 sept., 17:59 - 115...". Widened the badge and
 // gave it a `title` carrying the untruncated text either way.
-test("the loaded/hub scan badges carry their full, untruncated text in a title attribute, so nothing is ever fully lost to the badge's own visual truncation", () => {
-  assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.loadedAt\)\}\$\{delivery\.scanSummary\?\.loadedTruck \? ` · \$\{delivery\.scanSummary\.loadedTruck\}` : ""\}\$\{delivery\.scanSummary\?\.loadedLabel \? ` · \$\{delivery\.scanSummary\.loadedLabel\}` : ""\}`\}>/);
-  assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.hubArrivedAt\)\}\$\{delivery\.scanSummary\?\.hubLabel \? ` · \$\{delivery\.scanSummary\.hubLabel\}` : ""\}`\}>/);
+test("the loaded/hub scan badges carry their full, untruncated date/truck text in a title attribute, so nothing is ever fully lost to the badge's own visual truncation", () => {
+  assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.loadedAt\)\}\$\{delivery\.scanSummary\?\.loadedTruck \? ` · \$\{delivery\.scanSummary\.loadedTruck\}` : ""\}`\}>/);
+  assert.match(dashboard, /<small title=\{scanAtLabel\(delivery\.scanSummary\?\.hubArrivedAt\)\}>/);
   assert.match(css, /\.scan-proof small \{ font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; \}/);
+});
+
+// Live follow-up: "non pas de coordonné brute, je voulais plutot le nom de
+// la ville et si possible un quartier aproximatif quand on clique" -- the
+// location (whether a known site label or a reverse-geocoded "City ·
+// detail" string) is no longer folded into the badge's own title/text; it
+// gets its own click-to-reveal trigger, reusing the same outside-click-close
+// popover mechanism as the customer/recipient phone number triggers.
+test("the scan location is a separate click-to-reveal trigger, showing the city compactly and the full City · detail string only in a popover on click", () => {
+  assert.match(dashboard, /const splitScanLocation = \(label\?: string \| null\) => \{/);
+  assert.match(dashboard, /const renderScanLocation = \(deliveryId: string, field: "loadedLocation" \| "hubLocation", label\?: string \| null\) => \{/);
+  assert.match(dashboard, /className="scan-location-trigger"/);
+  assert.match(dashboard, /renderScanLocation\(delivery\.id, "loadedLocation", delivery\.scanSummary\?\.loadedLabel\)/);
+  assert.match(dashboard, /renderScanLocation\(delivery\.id, "hubLocation", delivery\.scanSummary\?\.hubLabel\)/);
+  assert.match(dashboard, /\.closest\("\.contact-popover, \.contact-trigger, \.scan-location-trigger"\)/);
+  assert.match(css, /\.scan-location-trigger \{/);
 });
 
 test("the parcel-control column distinguishes labels awaiting print from a print dialog that was actually launched", () => {

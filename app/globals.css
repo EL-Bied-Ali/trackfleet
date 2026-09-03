@@ -517,8 +517,18 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .label-print-button:disabled { color: #a99ca3; background: #f7f8f7; cursor: not-allowed; }
 .scan-control-cell { min-width: 225px; }
 .scan-control-inner { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.scan-proof { display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 3px 6px; border-radius: 999px; color: #8a7d83; background: #f1f3f2; font-size: 8px; line-height: 1; }
+.scan-proof { position: relative; display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 3px 6px; border-radius: 999px; color: #8a7d83; background: #f1f3f2; font-size: 8px; line-height: 1; }
 .scan-proof b { font-size: 8px; color: #72666d; }
+/* Live feedback: "non pas de coordonné brute, je voulais plutot le nom de
+   la ville et si possible un quartier aproximatif quand on clique" -- the
+   city now sits inline with the date/truck badge (compact, always visible),
+   and the full "City · neighbourhood/road" string (same convention known
+   site labels use) only appears in a popover on an explicit click, reusing
+   the .contact-popover outside-click-close behaviour already wired up for
+   customer/recipient phone numbers. */
+.scan-location-trigger { display: inline; border: 0; background: transparent; padding: 0; margin: 0; font: inherit; font-size: 8px; color: inherit; text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
+.scan-location-trigger:hover { text-decoration-style: solid; }
+.scan-location-popover { left: 0; white-space: normal; max-width: 220px; }
 /* Live feedback: "l'adresse es trunquer" -- 76px fit a bare date fine, but
    now a hub scan's location label (a full site name, e.g. "Bruxelles ·
    Boulevard de l'Abattoir") gets crammed into the same badge alongside the
