@@ -25,4 +25,7 @@ export const memorySiteStore: SiteStore = {
     rows.set(key, row);
     return row;
   },
+  async remove(companyId, id) {
+    return rows.delete(`${companyId}:${id}`);
+  },
 };

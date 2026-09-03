@@ -56,4 +56,7 @@ export const siteStore: SiteStore = {
   upsert(input: CreateCompanySiteInput) {
     return primarySiteStore.upsert(input);
   },
+  remove(companyId: string, id: string) {
+    return primarySiteStore.remove(companyId, id);
+  },
 };
