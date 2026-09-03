@@ -111,15 +111,21 @@ test("both the extended (55mm+) and compact (16/feuille) label layouts render th
   // "fond gras" (solid badge background, not just bold text) per the
   // client's original wording -- only for a real shortCode, not the
   // plain-id fallback.
-  assert.match(labelsPage, /<span style=\{\{ display: "inline-block", maxWidth: "100%", fontSize: 13, fontWeight: 800, lineHeight: 1\.15, color: delivery\.shortCode \? "#fff" : "#000", background: delivery\.shortCode \? "#000" : "transparent", padding: delivery\.shortCode \? "0\.5px 6px" : 0, borderRadius: delivery\.shortCode \? 3 : 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.shortCode \?\? delivery\.id\}<\/span>/);
+  // Sizes bumped again (13 -> 16, 10 -> 11, 9.5 -> 10.5) once a live DOM
+  // measurement found under 1.5px of real spare room but the row-level
+  // line-height leading was mostly unused -- tightening it to 1.1
+  // (explicit, not the browser default) reclaimed enough to grow every
+  // font, re-verified via the same scrollHeight/clientHeight reproduction
+  // at 0px overflow.
+  assert.match(labelsPage, /<span style=\{\{ display: "inline-block", maxWidth: "100%", fontSize: 16, fontWeight: 800, lineHeight: 1\.1, color: delivery\.shortCode \? "#fff" : "#000", background: delivery\.shortCode \? "#000" : "transparent", padding: delivery\.shortCode \? "0\.5px 6px" : 0, borderRadius: delivery\.shortCode \? 3 : 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.shortCode \?\? delivery\.id\}<\/span>/);
   assert.match(labelsPage, /Dest : \{\[delivery\.recipientName, delivery\.recipientContact\]\.filter\(Boolean\)\.join\(" · "\)\}/);
-  assert.match(labelsPage, /paymentSummary\(delivery\) && <div style=\{\{ fontSize: 9\.5, fontWeight: 700, color: "#333"/);
+  assert.match(labelsPage, /paymentSummary\(delivery\) && <div style=\{\{ fontSize: 10\.5, fontWeight: 700, lineHeight: 1\.1, color: "#333"/);
 });
 
 test("the compact layout's outer row gap and header logo cap are tighter than the extended layout's, to make room for the extra fields", () => {
-  assert.match(labelsPage, /gap: showExtendedDetails \? "1\.5mm" : "0\.6mm"/);
+  assert.match(labelsPage, /gap: showExtendedDetails \? "1\.5mm" : "0\.65mm"/);
   assert.match(labelsPage, /const logoMaxHeightMm = showExtendedDetails \? Math\.min\(19, labelSize\.height \* 0\.22\) : Math\.min\(19, labelSize\.height \* 0\.13\);/);
-  assert.match(labelsPage, /fontSize: showExtendedDetails \? 12 : 9, fontWeight: 700, letterSpacing: "\.04em"/);
+  assert.match(labelsPage, /fontSize: showExtendedDetails \? 12 : 9\.5, fontWeight: 700, letterSpacing: "\.04em"/);
 });
 
 test("the extended label shows the short code in large type (falling back to the plain id when this destination has no shortCodePrefix), origin -> destination, phone, and a compact weight/price/payment line", () => {

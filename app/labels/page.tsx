@@ -453,13 +453,13 @@ export default function LabelsPage() {
             // full height, growing with whatever space the logo+text
             // column doesn't need.
             <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: `${labelPaddingMm}mm`, display: "flex", gap: "3mm", overflow: "hidden" }}>
-              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: showExtendedDetails ? "1.5mm" : "0.6mm" }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: showExtendedDetails ? "1.5mm" : "0.65mm" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
                   {branding.logoDataUrl && (
                     // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
                     <img src={branding.logoDataUrl} alt="" style={{ maxHeight: `${logoMaxHeightMm}mm`, maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
                   )}
-                  <div style={{ fontSize: showExtendedDetails ? 12 : 9, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
+                  <div style={{ fontSize: showExtendedDetails ? 12 : 9.5, fontWeight: 700, letterSpacing: ".04em", lineHeight: showExtendedDetails ? "normal" : 1.1, color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
                 </div>
                 {showExtendedDetails ? (<>
                   {/* The client's own big, primary identifier for routing
@@ -505,17 +505,17 @@ export default function LabelsPage() {
                       only when this destination has no shortCodePrefix
                       configured, so the label always has one identifier. */}
                   <div style={{ overflow: "hidden" }}>
-                    <span style={{ display: "inline-block", maxWidth: "100%", fontSize: 13, fontWeight: 800, lineHeight: 1.15, color: delivery.shortCode ? "#fff" : "#000", background: delivery.shortCode ? "#000" : "transparent", padding: delivery.shortCode ? "0.5px 6px" : 0, borderRadius: delivery.shortCode ? 3 : 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}</span>
+                    <span style={{ display: "inline-block", maxWidth: "100%", fontSize: 16, fontWeight: 800, lineHeight: 1.1, color: delivery.shortCode ? "#fff" : "#000", background: delivery.shortCode ? "#000" : "transparent", padding: delivery.shortCode ? "0.5px 6px" : 0, borderRadius: delivery.shortCode ? 3 : 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}</span>
                   </div>
-                  <div style={{ fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[delivery.customer, delivery.contact].filter(Boolean).join(" · ")}</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{((delivery.originSiteId && siteCities.get(delivery.originSiteId)) || "") + " → " + ((delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination)}</div>
+                  <div style={{ fontSize: 11, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[delivery.customer, delivery.contact].filter(Boolean).join(" · ")}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{((delivery.originSiteId && siteCities.get(delivery.originSiteId)) || "") + " → " + ((delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination)}</div>
                   {(delivery.recipientName || delivery.recipientContact) && (
-                    <div style={{ fontSize: 9.5, fontWeight: 700, color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, lineHeight: 1.1, color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       Dest : {[delivery.recipientName, delivery.recipientContact].filter(Boolean).join(" · ")}
                     </div>
                   )}
-                  {paymentSummary(delivery) && <div style={{ fontSize: 9.5, fontWeight: 700, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{paymentSummary(delivery)}</div>}
-                  {delivery.truck && <div style={{ fontSize: 9.5, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
+                  {paymentSummary(delivery) && <div style={{ fontSize: 10.5, fontWeight: 700, lineHeight: 1.1, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{paymentSummary(delivery)}</div>}
+                  {delivery.truck && <div style={{ fontSize: 10.5, lineHeight: 1.1, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
                 </>)}
               </div>
               {delivery.parcelCode ? (
