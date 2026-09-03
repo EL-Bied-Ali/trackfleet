@@ -71,19 +71,35 @@ test("recordScan and listScansForDelivery keep every scan, including repeats of 
   assert.deepEqual(new Set(scans.map((scan) => scan.scannedBy)), new Set(["dispatcher:alice", "dispatcher:bob"]));
 });
 
-test("the dashboard scan summary exposes only the latest load and hub-unload proof for its own company", async () => {
+// Reported live: the dashboard's "Chargé" badge never showed a location,
+// even after #316/#317 taught the scan route to compute one for a loaded
+// scan same as a hub scan. Root cause: listScanSummaries captured the
+// loaded checkpoint's own truck plate but silently dropped its
+// location_label -- only the "arrived" (hub) checkpoint's ever made it
+// into the summary. The route/DB write path was already correct (recordScan
+// stores locationLabel regardless of checkpoint); only this read path had
+// the asymmetry.
+test("the dashboard scan summary exposes both the loaded checkpoint's own location and the hub's, not just the hub's", async () => {
   const companyId = `scan-summary-test-${Date.now()}`;
   const delivery = await memoryStore.create(baseDeliveryInput(companyId));
-  await memoryStore.recordScan({ companyId, deliveryId: delivery.id, checkpoint: "loaded", scannedBy: "dispatcher:alice", truck: "TRUCK-scan", locationLabel: null });
+  await memoryStore.recordScan({ companyId, deliveryId: delivery.id, checkpoint: "loaded", scannedBy: "dispatcher:alice", truck: "TRUCK-scan", locationLabel: "Bruxelles · Boulevard de l'Abattoir" });
   await memoryStore.recordScan({ companyId, deliveryId: delivery.id, checkpoint: "arrived", scannedBy: "agency:casa", truck: "TRUCK-scan", locationLabel: "Hub Casablanca" });
 
   const [summary] = await memoryStore.listScanSummaries(companyId, [delivery.id]);
   assert.equal(summary?.deliveryId, delivery.id);
   assert.equal(summary?.loadedTruck, "TRUCK-scan");
+  assert.equal(summary?.loadedLabel, "Bruxelles · Boulevard de l'Abattoir");
   assert.ok(summary?.loadedAt instanceof Date);
   assert.ok(summary?.hubArrivedAt instanceof Date);
   assert.equal(summary?.hubLabel, "Hub Casablanca");
   assert.deepEqual(await memoryStore.listScanSummaries(`${companyId}-other`, [delivery.id]), []);
+});
+
+test("the Postgres and D1 backends both capture the loaded checkpoint's own location_label into loadedLabel, same as they already did for the hub checkpoint's hubLabel", async () => {
+  const postgresSource = await readFile(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8");
+  const cloudflareSource = await readFile(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8");
+  assert.match(postgresSource, /summary\.loadedTruck = row\.truck;\s*\n\s*summary\.loadedLabel = row\.location_label;/);
+  assert.match(cloudflareSource, /summary\.loadedTruck = row\.truck;\s*\n\s*summary\.loadedLabel = row\.locationLabel;/);
 });
 
 test("scan milestones appear in customer tracking but never become WhatsApp notifications", () => {

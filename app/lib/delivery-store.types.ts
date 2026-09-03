@@ -186,6 +186,12 @@ export type DeliveryScanSummary = {
   deliveryId: string;
   loadedAt: Date | null;
   loadedTruck: string | null;
+  // The "loaded" checkpoint's own scan location (see delivery-store.postgres.ts's
+  // recordScan) -- reported live as missing entirely: only the "arrived"
+  // (hub) checkpoint's location_label ever made it into this summary,
+  // loaded's was silently discarded even though the row itself already
+  // carried one, same asymmetry hubLabel already had before this existed.
+  loadedLabel: string | null;
   hubArrivedAt: Date | null;
   hubLabel: string | null;
 };

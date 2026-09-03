@@ -347,11 +347,12 @@ export const memoryStore: DeliveryStore = {
     for (const scan of [...deliveryScans].sort((a, b) => b.scannedAt.getTime() - a.scannedAt.getTime())) {
       if (scan.companyId !== companyId || !ids.has(scan.deliveryId) || (scan.checkpoint !== "loaded" && scan.checkpoint !== "arrived")) continue;
       const summary = summaries.get(scan.deliveryId) ?? {
-        deliveryId: scan.deliveryId, loadedAt: null, loadedTruck: null, hubArrivedAt: null, hubLabel: null,
+        deliveryId: scan.deliveryId, loadedAt: null, loadedTruck: null, loadedLabel: null, hubArrivedAt: null, hubLabel: null,
       };
       if (scan.checkpoint === "loaded" && !summary.loadedAt) {
         summary.loadedAt = scan.scannedAt;
         summary.loadedTruck = scan.truck;
+        summary.loadedLabel = scan.locationLabel;
       }
       if (scan.checkpoint === "arrived" && !summary.hubArrivedAt) {
         summary.hubArrivedAt = scan.scannedAt;
