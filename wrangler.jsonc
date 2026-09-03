@@ -61,6 +61,22 @@
   // create`; update in place with `wrangler hyperdrive update` for any
   // future connection-string change (e.g. rotating the DB password),
   // rather than deleting/recreating this binding.
+  //
+  // Caching MUST stay disabled (`wrangler hyperdrive update <id>
+  // --caching-disabled`, verify with `wrangler hyperdrive get <id>` ->
+  // caching.disabled === true). This isn't expressible in this file --
+  // Hyperdrive caching is server-side config on the binding itself, not
+  // read from wrangler.jsonc, so re-running `hyperdrive create` (rather
+  // than `update`) would silently default it back to enabled with a 60s
+  // max_age. That default previously caused writes (INSERT ... RETURNING,
+  // genuinely committed and echoed correctly) to be followed by GETs
+  // serving stale pre-write data for up to 60s, since Hyperdrive never
+  // invalidates cached reads on write. Root-caused and fixed live
+  // 2026-09-03 after a tight sequential loop of POST /api/sites calls hit
+  // exactly this window (see PR #303's description for the original
+  // report). Fixed by disabling caching on the existing binding, not a
+  // code change -- see app/lib/pg-client.ts for the read/write path this
+  // protects.
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
