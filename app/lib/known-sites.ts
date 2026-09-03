@@ -22,11 +22,13 @@ export type KnownSite = {
   color?: string | null;
   // Prefix for this site's printed-label short code when it's the
   // destination (e.g. "CAS" -> "CAS 00", "CAS 01", ...), editable per site
-  // in SiteManager. Unlike color, there's no shared fallback -- a
-  // deliberately fabricated prefix for a site the client never gave one
-  // (e.g. "FQU" for Fquih Ben Salah) risks conflicting with a prefix they
-  // pick later, so a delivery to a site with no prefix set simply gets no
-  // short code at all (assignShortCode is only called when one exists).
+  // in SiteManager. Unlike color, there's no shared fallback -- an
+  // unrequested, fabricated prefix for a site the client never gave one
+  // risks conflicting with a prefix they pick later, so a delivery to a
+  // site with no prefix set simply gets no short code at all
+  // (assignShortCode is only called when one exists). The prefixes below
+  // for every site except the newest ones were explicitly requested live
+  // ("tu peux les inventer c pg") rather than guessed silently.
   shortCodePrefix?: string | null;
   // True for regional destinations reached by a local/relay leg beyond one of
   // the two confirmed hub stops (Casablanca or the Tanger Med ferry
@@ -63,6 +65,7 @@ export const knownSites: KnownSite[] = [
     longitude: null,
     arrivalRadiusKm: 0.5,
     roles: ["origin", "destination"],
+    shortCodePrefix: "BXL",
   },
   {
     id: "tanger-med-ksar-al-majaz",
@@ -107,6 +110,7 @@ export const knownSites: KnownSite[] = [
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "tanger-med-ksar-al-majaz",
     whatsapp: "+212 6 68 37 77 51",
+    shortCodePrefix: "TET",
   },
   {
     id: "sale-hay-nasser-12bis",
@@ -122,6 +126,7 @@ export const knownSites: KnownSite[] = [
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 66 73 82 20",
     color: "#f97316",
+    shortCodePrefix: "SALE",
   },
   {
     id: "marrakech-essaouira-12",
@@ -137,6 +142,7 @@ export const knownSites: KnownSite[] = [
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 62 12 14 48",
     color: "#dc2626",
+    shortCodePrefix: "MARR",
   },
   {
     id: "agadir-zaitoune-tikiouine-103a",
@@ -152,6 +158,7 @@ export const knownSites: KnownSite[] = [
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 66 57 22 66",
     color: "#166534",
+    shortCodePrefix: "AGA",
   },
   {
     id: "khouribga-mohamed-vi-30",
@@ -166,6 +173,7 @@ export const knownSites: KnownSite[] = [
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 62 12 50 03",
+    shortCodePrefix: "KHO",
   },
   {
     id: "fquih-ben-salah-allal-ben-abdellah-197",
@@ -180,6 +188,7 @@ export const knownSites: KnownSite[] = [
     finalLegTrackingUnavailable: true,
     relayHubSiteId: "casablanca-mohammed-vi-959",
     whatsapp: "+212 6 62 12 52 09",
+    shortCodePrefix: "FBS",
   },
   {
     id: "casablanca-mohammed-vi-959",

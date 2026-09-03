@@ -10,10 +10,12 @@ import { memoryStore } from "../app/lib/delivery-store.memory.ts";
 // AskUserQuestion: prefixes CAS (Casablanca) / TAN (Tanger Ville) /
 // PORT_TAN (Tanger Med, kept distinct from Tanger Ville despite sharing a
 // bin color) -- counter is lifetime, per-company, per-prefix, never resets.
-// Kenitra/Rabat and every other known site get no prefix yet (user hasn't
-// given real addresses / hasn't specified a code for them) -- a delivery to
-// those destinations simply gets no short code, rather than one fabricated
-// here.
+// Kenitra/Rabat don't exist as known sites yet -- a delivery to a
+// not-yet-added destination simply gets no short code, rather than one
+// fabricated for a site that isn't even configured. Every currently known
+// site now has a prefix (explicitly requested live -- "tu peux les
+// inventer c pg" -- rather than guessed silently, unlike the original
+// caution this comment used to describe).
 
 const [
   deliveryStoreTypes, deliveryStorePostgres, deliveryStoreCloudflare, deliveryStoreSharedPostgres,
@@ -48,10 +50,19 @@ test("the 3 confirmed sites carry their real shortCodePrefix, and Tanger Med's i
   assert.equal(byId.get("tanger-med-ksar-al-majaz")?.shortCodePrefix, "PORT_TAN");
 });
 
-test("every other known site (Kenitra/Rabat don't exist yet, and every existing site the client didn't specify) has no prefix, rather than one fabricated here", () => {
+test("every currently known site now has an explicitly-requested shortCodePrefix (none fabricated silently)", () => {
   const byId = new Map(knownSites.map((site) => [site.id, site]));
-  for (const id of ["sale-hay-nasser-12bis", "marrakech-essaouira-12", "agadir-zaitoune-tikiouine-103a", "tetouan-cortoba-146"]) {
-    assert.equal(byId.get(id)?.shortCodePrefix, undefined, `${id} should have no fabricated prefix`);
+  const expected = {
+    "sale-hay-nasser-12bis": "SALE",
+    "marrakech-essaouira-12": "MARR",
+    "agadir-zaitoune-tikiouine-103a": "AGA",
+    "tetouan-cortoba-146": "TET",
+    "khouribga-mohamed-vi-30": "KHO",
+    "fquih-ben-salah-allal-ben-abdellah-197": "FBS",
+    "brussels-abattoir-45": "BXL",
+  };
+  for (const [id, prefix] of Object.entries(expected)) {
+    assert.equal(byId.get(id)?.shortCodePrefix, prefix, `${id} should carry its requested prefix`);
   }
 });
 
