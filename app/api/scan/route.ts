@@ -13,12 +13,16 @@ import { distanceKm } from "../../lib/route-progress";
 // A hub scan is usually done from a dispatcher-paired phone (no fixed
 // siteId to name), unlike an agency's own scan which already knows its
 // site. Reported live: the hub scan proof showed only a date, never a
-// place. Since only the GPS-tracked hubs themselves (Casablanca, Tanger
-// Med) carry real coordinates -- see known-sites.ts's finalLegTrackingUnavailable
-// split -- the truck's own live position at scan time is enough to name
-// which hub this is, without asking the scanning phone to pick one. Capped
-// to a tight radius so a stale or off-grid position never mislabels the
-// scan with a confident-looking but wrong hub name.
+// place. Originally named from the truck's own live SENDATRACK position
+// alone (only the GPS-tracked hubs -- Casablanca, Tanger Med -- carry real
+// coordinates; see known-sites.ts's finalLegTrackingUnavailable split); the
+// scanning phone's own position (best-effort, see /scan's watchPosition)
+// is tried first now, since it's a more direct proof of where the SCAN
+// itself happened than the truck's separately-tracked device -- falls back
+// to the truck position if the phone didn't grant location or isn't near a
+// known site. Capped to a tight radius either way so a stale or off-grid
+// position never mislabels the scan with a confident-looking but wrong hub
+// name.
 const HUB_MATCH_RADIUS_KM = 5;
 
 async function nearestGeocodedSiteLabel(companyId: string, position: { latitude: number | null; longitude: number | null } | null) {
@@ -66,6 +70,17 @@ export async function POST(request: Request) {
     if (!isValidParcelCode(parcelCode)) return noStore({ error: "invalid_parcel_code" }, 400);
     const checkpoint = String(payload.checkpoint ?? "") as DeliveryScanCheckpoint;
     if (!CHECKPOINTS.includes(checkpoint)) return noStore({ error: "invalid_checkpoint" }, 400);
+    // Best-effort: the scanning phone's own position at the moment of the
+    // scan, if it granted location permission (see /scan's watchPosition).
+    // Never required -- a scan with no coordinates, or coordinates that
+    // don't land near a known site, just falls through to the existing
+    // truck-GPS-based label below, same as before this existed.
+    const phoneLatitude = Number(payload.latitude);
+    const phoneLongitude = Number(payload.longitude);
+    const phonePosition = Number.isFinite(phoneLatitude) && Number.isFinite(phoneLongitude)
+      && phoneLatitude >= -90 && phoneLatitude <= 90 && phoneLongitude >= -180 && phoneLongitude <= 180
+      ? { latitude: phoneLatitude, longitude: phoneLongitude }
+      : null;
 
     const delivery = await store.findByParcelCode(session.companyId, parcelCode);
     if (!delivery) return noStore({ error: "parcel_not_found" }, 404);
@@ -91,7 +106,8 @@ export async function POST(request: Request) {
 
       const locationLabel = session.role === "agency"
         ? knownSite(session.siteId)?.label ?? null
-        : await nearestGeocodedSiteLabel(session.companyId, { latitude: delivery.latitude, longitude: delivery.longitude });
+        : (phonePosition && await nearestGeocodedSiteLabel(session.companyId, phonePosition))
+          ?? await nearestGeocodedSiteLabel(session.companyId, { latitude: delivery.latitude, longitude: delivery.longitude });
 
       await store.recordScan({
         companyId: session.companyId,
