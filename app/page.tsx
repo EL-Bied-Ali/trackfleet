@@ -445,7 +445,13 @@ export default function Home() {
   const [groupTruckEditorPending, setGroupTruckEditorPending] = useState(false);
   const [groupDeparturePending, setGroupDeparturePending] = useState<string | null>(null);
   const [groupArrivalPending, setGroupArrivalPending] = useState<string | null>(null);
-  const [showPopover, setShowPopover] = useState(true);
+  // Defaulting to true made the truck detail popover appear pre-opened on
+  // every dashboard load, over whichever delivery happened to be first in
+  // the list -- reported live ("le popup ... pre opened without anybody
+  // clikcing when opening the map"). It should only open once a marker (or
+  // the vehicle-select dropdown) is actually clicked, both of which already
+  // call setShowPopover(true) themselves.
+  const [showPopover, setShowPopover] = useState(false);
   const [creating, setCreating] = useState(false);
   const [whatsAppBusy, setWhatsAppBusy] = useState<"tracking" | "arrival" | null>(null);
   const [locale, setLocale] = useState<Locale>("fr");
