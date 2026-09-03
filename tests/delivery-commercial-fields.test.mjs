@@ -130,7 +130,7 @@ test("price is fully editable even when a weight is declared -- a dispatcher-ent
   // The price input is always rendered (not swapped for a read-only
   // preview when weight is present) -- blank means "use the computed
   // default", typing a value overrides it.
-  assert.match(page, /<input type="number" min="0\.01" max="1000000" step="0\.01" inputMode="decimal" placeholder=\{parcel\.weightKg \?/);
+  assert.match(page, /<input type="number" min="0\.01" max="1000000" step="0\.01" inputMode="decimal" placeholder=\{effectiveWeightKg \?/);
   assert.doesNotMatch(page, /"Prix calculé" : locale === "nl" \? "Berekende prijs"/);
 });
 
@@ -145,7 +145,7 @@ test("an unweighed bulky item requires a description, both in the form and at th
   assert.match(route, /if \(!weightProvided && !itemDescriptionInput\)/);
   assert.match(route, /itemDescription is required when weightKg is not provided/);
   assert.match(route, /itemDescription: itemDescriptionInput \|\| null,/);
-  assert.match(page, /!parcel\.weightKg && <label>/);
+  assert.match(page, /isAnchor && !effectiveWeightKg && <label>/);
   assert.match(page, /value=\{parcel\.itemDescription\}/);
   assert.match(page, /itemDescription: weightRaw \? "" : parcel\.itemDescription\.trim\(\)/);
 });
