@@ -27,11 +27,12 @@ test("Cloudflare applies security headers to both images and app responses", () 
   assert.match(cloudflareWorker, /const response = await handler\.fetch\(request, env, ctx\);/);
 });
 
-test("only the parcel scanner is allowed to request a camera, and only the parcel scanner is allowed to request geolocation -- a real live scan came back with no location at all until this was fixed, because geolocation=() blocks the browser's request before its own permission prompt, and /scan's watchPosition error handler silently swallows that the same way it swallows an actual user decline", () => {
-  assert.match(cloudflareWorker, /const defaultPermissionsPolicy = "camera=\(\), microphone=\(\), geolocation=\(\)";/);
+test("only the parcel scanner is allowed to request a camera, but geolocation=(self) is allowed everywhere -- a real live scan came back with no location at all when /scan's own policy blocked it, and an audit found the SAME shape had silently broken AgencyLocationSetup.tsx's GPS confirmation flow since the day after it shipped (it also renders on the default '/' route): geolocation=() blocks the browser's request before its own permission prompt ever appears, and both features' own error handling swallows that the same way it swallows an actual user decline", () => {
+  assert.match(cloudflareWorker, /const defaultPermissionsPolicy = "camera=\(\), microphone=\(\), geolocation=\(self\)";/);
   assert.match(cloudflareWorker, /const scannerPermissionsPolicy = "camera=\(self\), microphone=\(\), geolocation=\(self\)";/);
   assert.match(cloudflareWorker, /pathname === "\/scan" \? scannerPermissionsPolicy : defaultPermissionsPolicy/);
   assert.match(cloudflareWorker, /return withSecurityHeaders\(response, new URL\(request\.url\)\.pathname\);/);
+  assert.match(vercelConfig, /"source": "\/\(\.\*\)"[\s\S]*"value": "camera=\(\), microphone=\(\), geolocation=\(self\)"/);
   assert.match(vercelConfig, /"source": "\/scan"[\s\S]*"value": "camera=\(self\), microphone=\(\), geolocation=\(self\)"/);
 });
 
