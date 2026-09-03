@@ -24,10 +24,14 @@ import { distanceKm } from "../../lib/route-progress";
 // position dont le tel ne confirme pas". The truck's GPS and the scanning
 // phone are two different devices; falling back to the truck's position
 // when the phone stayed silent would print a confident-looking location
-// the phone itself never actually confirmed. No phone position -> no
-// location shown, same as before hub scans ever got one. Capped to a
-// tight radius so a stale or off-grid phone position never mislabels the
-// scan with a wrong hub name either.
+// the phone itself never actually confirmed. No phone position -> still no
+// location shown. A phone position that IS confirmed but too far from any
+// known site (or a known site with no GPS coordinates on file -- see
+// project_trackfleet_site_gps_status) falls through to plain coordinates
+// instead (see formatRawPosition below) -- still the phone's own honest
+// confirmation, just not resolved to a human place name. The radius only
+// protects the human-readable site NAME from a stale/off-grid mismatch,
+// never the raw-coordinate fallback itself.
 const HUB_MATCH_RADIUS_KM = 5;
 
 async function nearestGeocodedSiteLabel(companyId: string, position: { latitude: number | null; longitude: number | null } | null) {
@@ -40,6 +44,21 @@ async function nearestGeocodedSiteLabel(companyId: string, position: { latitude:
     if (!closest || distance < closest.distanceKm) closest = { label: site.label, distanceKm: distance };
   }
   return closest && closest.distanceKm <= HUB_MATCH_RADIUS_KM ? closest.label : null;
+}
+
+// Live follow-up: "si trop loin du site, je veut qu'il nous donne la loca
+// actuel du tel meme si c'est pas une agence" -- a phone position that
+// exists but isn't near any known site (e.g. mid-corridor, or a site with
+// no GPS coordinates on file yet -- see project_trackfleet_site_gps_status)
+// used to mean no location at all. The phone DID confirm a real position
+// though, so showing it as plain coordinates is still honest (unlike the
+// removed truck-GPS fallback, which showed a position from a different
+// device the phone never confirmed) -- just not resolved to a human place
+// name. ~111m precision (3 decimals) is plenty for "roughly where this was
+// scanned" and matches the deliberately low-accuracy fix the phone itself
+// requests (see /scan's watchPosition).
+function formatRawPosition(position: { latitude: number; longitude: number } | null) {
+  return position ? `${position.latitude.toFixed(3)}, ${position.longitude.toFixed(3)}` : null;
 }
 
 // Just the two checkpoints that a per-parcel scan can actually add
@@ -112,7 +131,7 @@ export async function POST(request: Request) {
 
       const locationLabel = session.role === "agency"
         ? knownSite(session.siteId)?.label ?? null
-        : await nearestGeocodedSiteLabel(session.companyId, phonePosition);
+        : (await nearestGeocodedSiteLabel(session.companyId, phonePosition)) ?? formatRawPosition(phonePosition);
 
       await store.recordScan({
         companyId: session.companyId,

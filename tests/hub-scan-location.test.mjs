@@ -25,11 +25,24 @@ import test from "node:test";
 // see qr-scan-frontend.test.mjs for the client-side capture.
 const route = await readFile(new URL("../app/api/scan/route.ts", import.meta.url), "utf8");
 
-test("derives the hub scan's location from the scanning phone's own position ONLY -- never a substituted truck position it didn't confirm -- when the scanning session has no fixed site", () => {
+test("derives the hub scan's location from the scanning phone's own position ONLY -- never a substituted truck position it didn't confirm -- when the scanning session has no fixed site, falling back to plain coordinates rather than nothing when the phone isn't near a known site", () => {
   assert.match(route, /const HUB_MATCH_RADIUS_KM = 5;/);
   assert.match(route, /async function nearestGeocodedSiteLabel\(companyId: string, position:/);
-  assert.match(route, /const locationLabel = session\.role === "agency"\s*\n\s*\? knownSite\(session\.siteId\)\?\.label \?\? null\s*\n\s*: await nearestGeocodedSiteLabel\(session\.companyId, phonePosition\);/);
+  assert.match(route, /const locationLabel = session\.role === "agency"\s*\n\s*\? knownSite\(session\.siteId\)\?\.label \?\? null\s*\n\s*: \(await nearestGeocodedSiteLabel\(session\.companyId, phonePosition\)\) \?\? formatRawPosition\(phonePosition\);/);
   assert.doesNotMatch(route, /delivery\.latitude, longitude: delivery\.longitude/);
+});
+
+// Live follow-up the same day: "si trop loin du site, je veut qu'il nous
+// donne la loca actuel du tel meme si c'est pas une agence". A phone
+// position too far from any known site (or a known site with no GPS
+// coordinates on file -- see project_trackfleet_site_gps_status) used to
+// mean no location at all, same dead end as no phone position. The phone
+// DID confirm a real position though, so plain coordinates are still
+// honest here -- not the removed truck-GPS fallback, which showed a
+// different device's position the phone never confirmed.
+test("formatRawPosition renders 3-decimal (~111m) coordinates for a confirmed phone position, and null only when there's genuinely no position to show", () => {
+  assert.match(route, /function formatRawPosition\(position: \{ latitude: number; longitude: number \} \| null\) \{/);
+  assert.match(route, /return position \? `\$\{position\.latitude\.toFixed\(3\)\}, \$\{position\.longitude\.toFixed\(3\)\}` : null;/);
 });
 
 test("the phone position is parsed defensively -- non-finite or out-of-range coordinates are treated as absent, never passed through to the site-distance lookup", () => {
