@@ -27,11 +27,11 @@ import { distanceKm } from "../../lib/route-progress";
 // the phone itself never actually confirmed. No phone position -> still no
 // location shown. A phone position that IS confirmed but too far from any
 // known site (or a known site with no GPS coordinates on file -- see
-// project_trackfleet_site_gps_status) falls through to plain coordinates
-// instead (see formatRawPosition below) -- still the phone's own honest
-// confirmation, just not resolved to a human place name. The radius only
-// protects the human-readable site NAME from a stale/off-grid mismatch,
-// never the raw-coordinate fallback itself.
+// project_trackfleet_site_gps_status) falls through to a reverse-geocoded
+// city label instead (see reverseGeocodedLabel below) -- still the phone's
+// own honest confirmation, just not resolved to a known-site name. The
+// radius only protects the human-readable site NAME from a stale/off-grid
+// mismatch, never the reverse-geocoded fallback itself.
 const HUB_MATCH_RADIUS_KM = 5;
 
 async function nearestGeocodedSiteLabel(companyId: string, position: { latitude: number | null; longitude: number | null } | null) {
@@ -51,14 +51,44 @@ async function nearestGeocodedSiteLabel(companyId: string, position: { latitude:
 // exists but isn't near any known site (e.g. mid-corridor, or a site with
 // no GPS coordinates on file yet -- see project_trackfleet_site_gps_status)
 // used to mean no location at all. The phone DID confirm a real position
-// though, so showing it as plain coordinates is still honest (unlike the
-// removed truck-GPS fallback, which showed a position from a different
-// device the phone never confirmed) -- just not resolved to a human place
-// name. ~111m precision (3 decimals) is plenty for "roughly where this was
-// scanned" and matches the deliberately low-accuracy fix the phone itself
-// requests (see /scan's watchPosition).
-function formatRawPosition(position: { latitude: number; longitude: number } | null) {
-  return position ? `${position.latitude.toFixed(3)}, ${position.longitude.toFixed(3)}` : null;
+// though, so it's still honest to show it -- unlike the removed truck-GPS
+// fallback, which showed a position from a different device the phone
+// never confirmed.
+//
+// First shipped as plain coordinates, then corrected the same day: "non pas
+// de coordonné brute, je voulais plutot le nom de la ville et si possible
+// un quartier aproximatif quand on clique". Reverse-geocodes through
+// OpenStreetMap's free Nominatim API (no key needed -- the same service
+// AgencyLocationSetup.tsx already embeds for its own map preview) into a
+// "City" or "City · neighbourhood/road" label, matching the exact " · "
+// convention known site labels already use (e.g. "Bruxelles · Boulevard de
+// l'Abattoir") so the client can treat both the same way: show the city
+// compactly, reveal the rest on click. Bounded to a short timeout so a
+// slow/down geocoder never meaningfully delays a scan; anything that fails
+// or can't resolve a city renders no location, same as having no phone
+// position at all -- never raw coordinates again.
+async function reverseGeocodedLabel(position: { latitude: number; longitude: number } | null) {
+  if (!position) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${position.latitude}&lon=${position.longitude}&zoom=14&addressdetails=1`;
+    const response = await fetch(url, {
+      headers: { "User-Agent": "TrackFleet/1.0 (scan location lookup)", "Accept-Language": "fr" },
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { address?: Record<string, string> };
+    const address = data.address ?? {};
+    const city = address.city ?? address.town ?? address.village ?? address.municipality ?? address.county ?? null;
+    if (!city) return null;
+    const detail = address.suburb ?? address.neighbourhood ?? address.road ?? null;
+    return detail && detail !== city ? `${city} · ${detail}` : city;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // Just the two checkpoints that a per-parcel scan can actually add
@@ -131,7 +161,7 @@ export async function POST(request: Request) {
 
       const locationLabel = session.role === "agency"
         ? knownSite(session.siteId)?.label ?? null
-        : (await nearestGeocodedSiteLabel(session.companyId, phonePosition)) ?? formatRawPosition(phonePosition);
+        : (await nearestGeocodedSiteLabel(session.companyId, phonePosition)) ?? (await reverseGeocodedLabel(phonePosition));
 
       await store.recordScan({
         companyId: session.companyId,
