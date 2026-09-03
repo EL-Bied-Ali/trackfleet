@@ -35,7 +35,9 @@ test("still does not offer the reverted 18-per-sheet (3x6) preset", () => {
 test("label padding, QR size and logo max-height scale down with the label's own height instead of staying fixed", () => {
   assert.match(labelsPage, /const labelPaddingMm = Math\.min\(4, Math\.max\(1\.5, labelSize\.height \* 0\.05\)\);/);
   assert.match(labelsPage, /const qrSizeMm = Math\.min\(28, Math\.max\(14, labelSize\.height - 2 \* labelPaddingMm - 5\.5\)\);/);
-  assert.match(labelsPage, /const logoMaxHeightMm = Math\.min\(19, labelSize\.height \* 0\.22\);/);
+  // Capped tighter below 55mm (0.13, not 0.22) now that 16/feuille also
+  // carries every extended-layout field -- see payment-status.test.mjs.
+  assert.match(labelsPage, /const logoMaxHeightMm = showExtendedDetails \? Math\.min\(19, labelSize\.height \* 0\.22\) : Math\.min\(19, labelSize\.height \* 0\.13\);/);
 });
 
 test("the label cell actually uses the computed padding/QR/logo sizes, not the old hardcoded 4mm/28mm/19mm", () => {

@@ -92,14 +92,28 @@ test("editing a delivery pre-fills the current paymentStatus/amountPaid (default
   assert.match(page, /amountPaid: delivery\.amountPaid != null \? String\(delivery\.amountPaid\) : "",/);
 });
 
-test("the label's extended-details rows (origin, phone, weight/price/payment) only render at 55mm+ label height, leaving the already-proven-safe 16/feuille 5-row layout completely untouched", () => {
+// The client later asked for the 16/feuille layout to carry every field the
+// extended (55mm+) one does, not just the shortCode/customer/destination/
+// truck subset it originally shipped with. Both branches now render the
+// same fields (shortCode/id, sender name+contact, origin->destination,
+// recipient, payment summary, truck); the compact branch just does it at
+// smaller font sizes, with sender name+contact merged onto one line and a
+// tighter row gap, and the logo capped shorter (0.13 not 0.22 of the
+// label's own height) to leave room. Live-verified via a scrollHeight/
+// clientHeight DOM reproduction against a real 16/feuille sheet, real
+// logo, and full payment/recipient data: 0px overflow, before shipping.
+test("both the extended (55mm+) and compact (16/feuille) label layouts render the same set of fields -- shortCode/id, sender, origin->destination, recipient, payment, truck -- just at different sizes", () => {
   assert.match(labelsPage, /const showExtendedDetails = labelSize\.height >= 55;/);
   assert.match(labelsPage, /\{showExtendedDetails \? \(<>/);
-  // The 16/feuille branch must still be the pre-existing,
-  // live-verified-at-0px-overflow row count -- shortCode/id now lead with
-  // the same shortCode-first priority as the extended layout (per a later
-  // request), but still on that one single line, never a new row.
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.shortCode \?\? delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.id\}` : ""\}<\/div>/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.shortCode \?\? delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.id\}` : ""\}<\/div>/);
+  assert.match(labelsPage, /Dest : \{\[delivery\.recipientName, delivery\.recipientContact\]\.filter\(Boolean\)\.join\(" · "\)\}/);
+  assert.match(labelsPage, /paymentSummary\(delivery\) && <div style=\{\{ fontSize: 9\.5, fontWeight: 700, color: "#333"/);
+});
+
+test("the compact layout's outer row gap and header logo cap are tighter than the extended layout's, to make room for the extra fields", () => {
+  assert.match(labelsPage, /gap: showExtendedDetails \? "1\.5mm" : "0\.6mm"/);
+  assert.match(labelsPage, /const logoMaxHeightMm = showExtendedDetails \? Math\.min\(19, labelSize\.height \* 0\.22\) : Math\.min\(19, labelSize\.height \* 0\.13\);/);
+  assert.match(labelsPage, /fontSize: showExtendedDetails \? 12 : 9, fontWeight: 700, letterSpacing: "\.04em"/);
 });
 
 test("the extended label shows the short code in large type (falling back to the plain id when this destination has no shortCodePrefix), origin -> destination, phone, and a compact weight/price/payment line", () => {
