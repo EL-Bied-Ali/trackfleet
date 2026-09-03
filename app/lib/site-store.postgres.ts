@@ -76,4 +76,9 @@ export const postgresSiteStore: SiteStore = {
       RETURNING *`;
     return hydrate(rows[0] as Record<string, unknown>);
   },
+  async remove(companyId, id) {
+    const sql = getSql();
+    const rows = await sql`DELETE FROM sites WHERE company_id=${companyId} AND id=${id} RETURNING id`;
+    return rows.length > 0;
+  },
 };

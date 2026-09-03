@@ -51,4 +51,8 @@ export const siteStore: SiteStore = {
     if (!row) throw new Error("site_write_failed");
     return hydrate(row as Record<string, unknown>);
   },
+  async remove(companyId, id) {
+    const result = await db().prepare("DELETE FROM sites WHERE company_id=? AND id=?").bind(companyId, id).run();
+    return Boolean(result.meta?.changes);
+  },
 };

@@ -11,4 +11,5 @@ export type CreateCompanySiteInput = Omit<CompanySite, "createdAt" | "updatedAt"
 export interface SiteStore {
   listForCompany(companyId: string): Promise<CompanySite[]>;
   upsert(input: CreateCompanySiteInput): Promise<CompanySite>;
+  remove(companyId: string, id: string): Promise<boolean>;
 }

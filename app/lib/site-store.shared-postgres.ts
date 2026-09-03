@@ -72,4 +72,14 @@ export const siteStore: SiteStore = {
     await mirrorSite(site);
     return site;
   },
+  // Same asymmetry as deleteDelivery in delivery-store.shared-postgres.ts --
+  // the D1 mirror row is left behind rather than deleted here. Unlike
+  // upsert, the reconciliation cron (d1-reconciliation.ts) only ever
+  // inserts/updates from Postgres, it never deletes a D1 row that Postgres
+  // no longer has, so this is a known, accepted orphan (a read-only
+  // failover copy, only ever consulted while Postgres itself is down) --
+  // same class of gap as the dormant-tenant D1 backfill issue.
+  remove(companyId: string, id: string) {
+    return primarySiteStore.remove(companyId, id);
+  },
 };

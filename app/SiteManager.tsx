@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { isUnassignedVehicle } from "./lib/delivery-vehicle-choice";
-import { defaultSiteColor } from "./lib/known-sites";
+import { defaultSiteColor, knownSites } from "./lib/known-sites";
+
+// The client's own real depots -- deleting one of these would just
+// reappear on the next fetch (see the DELETE /api/sites handler's own
+// comment), so the delete action never shows up for them.
+const knownSiteIds = new Set(knownSites.map((site) => site.id));
 
 type Site = {
   id: string;
@@ -67,6 +72,8 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
   const [accessBusy, setAccessBusy] = useState<string | null>(null);
   const [accessMessage, setAccessMessage] = useState("");
   const [error, setError] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [consentError, setConsentError] = useState("");
   const [completionError, setCompletionError] = useState("");
   const [arrivalBlockedScans, setArrivalBlockedScans] = useState<{ missingLoaded: boolean; missingHub: boolean } | null>(null);
@@ -146,6 +153,31 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       setError("save_failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function removeSite(site: Site) {
+    const confirmation = locale === "fr"
+      ? `Supprimer définitivement l'agence ${site.label} ? Cette action est irréversible.`
+      : locale === "nl"
+        ? `Locatie ${site.label} definitief verwijderen? Deze actie kan niet ongedaan worden gemaakt.`
+        : `Permanently delete the agency ${site.label}? This cannot be undone.`;
+    if (!window.confirm(confirmation)) return;
+    setDeleteBusy(site.id);
+    setDeleteError("");
+    try {
+      const response = await fetch("/api/sites", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: site.id }) });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error === "site_in_use" ? "site_in_use" : "delete_failed");
+      }
+      setSites((items) => items.filter((item) => item.id !== site.id));
+      if (editingSite?.id === site.id) { setEditingSite(null); setSiteFormOpen(false); }
+      window.dispatchEvent(new Event("trackfleet-sites-changed"));
+    } catch (err) {
+      setDeleteError(err instanceof Error && err.message === "site_in_use" ? "site_in_use" : "delete_failed");
+    } finally {
+      setDeleteBusy(null);
     }
   }
 
@@ -312,6 +344,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
     ? {
         button: "Agences", title: "Agences et dépôts", count: (value: number) => `${value} site${value > 1 ? "s" : ""}`,
         add: "Ajouter un site", editTitle: "Modifier le site", edit: "Modifier", agencyAccess: "Accès agence", creatingAccess: "Création…", accessCopied: (label: string) => `Lien temporaire copié pour ${label}. Il expire dans 30 minutes.`, accessCopyFallback: "Copiez ce lien d’activation agence", accessError: "Impossible de créer l’accès agence.", cancelEdit: "Annuler", update: "Mettre à jour", gpsReady: "GPS configuré", gpsMissing: "Coordonnées GPS manquantes", label: "Nom", city: "Ville", address: "Adresse", country: "Pays", lat: "Latitude (optionnel)", lon: "Longitude (optionnel)", radius: "Rayon d’arrivée (km)", whatsapp: "WhatsApp (optionnel)", color: "Couleur", shortCodePrefix: "Préfixe étiquette (optionnel, ex. CAS)", save: "Enregistrer", saving: "Enregistrement…", close: "Fermer", error: "Impossible d’enregistrer ce site.",
+        deleteSite: "Supprimer", deleting: "Suppression…", deleteInUseError: "Impossible de supprimer : cette agence est utilisée par au moins une livraison.", deleteFailedError: "Impossible de supprimer ce site.",
         consentButton: "WhatsApp", consentTitle: "Consentements WhatsApp", consentIntro: "Retirez ici l’autorisation d’un client. Après retrait, TrackFleet n’enverra plus aucune mise à jour automatique pour ce colis.", active: "Actif", withdrawn: "Retiré", withdraw: "Retirer le consentement", withdrawing: "Retrait…", noConsents: "Aucun consentement WhatsApp enregistré.", consentError: "Impossible de mettre à jour le consentement.",
         completionButton: "Arrivées", completionTitle: "Arrivées et clôture", completionIntro: "TrackFleet détecte l’arrivée automatiquement. Confirmez-la seulement quand le camion est bien sur place et que le GPS ne suffit pas; le délai de déchargement puis la clôture automatique continueront.", complete: "Marquer livré", completing: "Clôture…", confirmArrival: "Confirmer l’arrivée", confirmingArrival: "Confirmation…", confirmDeparture: "Confirmer le départ", confirmingDeparture: "Confirmation…", departurePending: "Camion pas encore parti", automaticPending: "Détection automatique active", manualRecommended: "Confirmation recommandée", automaticConfirmed: "Arrivée détectée automatiquement", manualConfirmed: "Arrivée confirmée par un employé", relayInProgress: "Relais CTM en cours · clôture automatique sous ~24 h", unassigned: "Camion à affecter", noActive: "Aucune livraison active.", completionError: "Impossible de mettre à jour cette livraison.",
         arrivalBlocked: (missingLoaded: boolean, missingHub: boolean) => `Arrivée bloquée : colis non scanné ${missingLoaded && missingHub ? "au dépôt et au hub" : missingLoaded ? "au dépôt" : "au hub"}.`,
@@ -321,6 +354,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       ? {
           button: "Locaties", title: "Agentschappen en depots", count: (value: number) => `${value} locatie${value === 1 ? "" : "s"}`,
           add: "Locatie toevoegen", editTitle: "Locatie bewerken", edit: "Bewerken", agencyAccess: "Agentschapstoegang", creatingAccess: "Aanmaken…", accessCopied: (label: string) => `Tijdelijke link gekopieerd voor ${label}. Deze verloopt over 30 minuten.`, accessCopyFallback: "Kopieer deze activeringslink", accessError: "Agentschapstoegang kon niet worden aangemaakt.", cancelEdit: "Annuleren", update: "Bijwerken", gpsReady: "GPS ingesteld", gpsMissing: "GPS-coördinaten ontbreken", label: "Naam", city: "Stad", address: "Adres", country: "Land", lat: "Breedtegraad (optioneel)", lon: "Lengtegraad (optioneel)", radius: "Aankomstradius (km)", whatsapp: "WhatsApp (optioneel)", color: "Kleur", shortCodePrefix: "Labelprefix (optioneel, bv. CAS)", save: "Opslaan", saving: "Opslaan…", close: "Sluiten", error: "Locatie kon niet worden opgeslagen.",
+          deleteSite: "Verwijderen", deleting: "Verwijderen…", deleteInUseError: "Kan niet verwijderen: dit agentschap wordt gebruikt door minstens één zending.", deleteFailedError: "Deze locatie kon niet worden verwijderd.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp-toestemmingen", consentIntro: "Trek hier de toestemming van een klant in. Daarna verstuurt TrackFleet geen automatische updates meer voor deze levering.", active: "Actief", withdrawn: "Ingetrokken", withdraw: "Toestemming intrekken", withdrawing: "Intrekken…", noConsents: "Geen WhatsApp-toestemmingen geregistreerd.", consentError: "Toestemming kon niet worden bijgewerkt.",
           completionButton: "Aankomsten", completionTitle: "Aankomsten en afsluiting", completionIntro: "TrackFleet detecteert aankomst automatisch. Bevestig alleen wanneer de vrachtwagen ter plaatse is en GPS onvoldoende is; de lostijd en automatische afsluiting gaan daarna door.", complete: "Markeer geleverd", completing: "Afsluiten…", confirmArrival: "Aankomst bevestigen", confirmingArrival: "Bevestigen…", confirmDeparture: "Vertrek bevestigen", confirmingDeparture: "Bevestigen…", departurePending: "Vrachtwagen nog niet vertrokken", automaticPending: "Automatische detectie actief", manualRecommended: "Bevestiging aanbevolen", automaticConfirmed: "Aankomst automatisch gedetecteerd", manualConfirmed: "Aankomst bevestigd door medewerker", relayInProgress: "CTM-relais bezig · automatische afsluiting binnen ~24 u", unassigned: "Voertuig nog toewijzen", noActive: "Geen actieve leveringen.", completionError: "Deze levering kon niet worden bijgewerkt.",
           arrivalBlocked: (missingLoaded: boolean, missingHub: boolean) => `Aankomst geblokkeerd: pakket niet gescand ${missingLoaded && missingHub ? "bij het depot en de hub" : missingLoaded ? "bij het depot" : "bij de hub"}.`,
@@ -329,6 +363,7 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
       : {
           button: "Sites", title: "Agencies and depots", count: (value: number) => `${value} site${value === 1 ? "" : "s"}`,
           add: "Add site", editTitle: "Edit site", edit: "Edit", agencyAccess: "Agency access", creatingAccess: "Creating…", accessCopied: (label: string) => `Temporary link copied for ${label}. It expires in 30 minutes.`, accessCopyFallback: "Copy this agency activation link", accessError: "Could not create agency access.", cancelEdit: "Cancel", update: "Update", gpsReady: "GPS configured", gpsMissing: "GPS coordinates missing", label: "Name", city: "City", address: "Address", country: "Country", lat: "Latitude (optional)", lon: "Longitude (optional)", radius: "Arrival radius (km)", whatsapp: "WhatsApp (optional)", color: "Color", shortCodePrefix: "Label prefix (optional, e.g. CAS)", save: "Save", saving: "Saving…", close: "Close", error: "Could not save this site.",
+          deleteSite: "Delete", deleting: "Deleting…", deleteInUseError: "Could not delete: this agency is used by at least one delivery.", deleteFailedError: "Could not delete this site.",
           consentButton: "WhatsApp", consentTitle: "WhatsApp consents", consentIntro: "Withdraw a customer’s permission here. TrackFleet will stop all automatic WhatsApp updates for that delivery.", active: "Active", withdrawn: "Withdrawn", withdraw: "Withdraw consent", withdrawing: "Withdrawing…", noConsents: "No WhatsApp consent recorded.", consentError: "Could not update consent.",
           completionButton: "Arrivals", completionTitle: "Arrivals and completion", completionIntro: "TrackFleet detects arrival automatically. Confirm only when the truck is physically present and GPS is insufficient; unloading grace and automatic completion will then continue.", complete: "Mark delivered", completing: "Completing…", confirmArrival: "Confirm arrival", confirmingArrival: "Confirming…", confirmDeparture: "Confirm departure", confirmingDeparture: "Confirming…", departurePending: "Truck not yet departed", automaticPending: "Automatic detection active", manualRecommended: "Confirmation recommended", automaticConfirmed: "Arrival detected automatically", manualConfirmed: "Arrival confirmed by employee", relayInProgress: "CTM relay in progress · automatic completion in ~24h", unassigned: "Truck awaiting assignment", noActive: "No active deliveries.", completionError: "Could not update this delivery.",
           arrivalBlocked: (missingLoaded: boolean, missingHub: boolean) => `Arrival blocked: parcel not scanned ${missingLoaded && missingHub ? "at the depot and the hub" : missingLoaded ? "at the depot" : "at the hub"}.`,
@@ -352,10 +387,11 @@ export default function SiteManager({ locale }: { locale: "fr" | "en" | "nl" }) 
             const gpsReady = typeof site.latitude === "number" && typeof site.longitude === "number";
             return <article key={site.id} className="site-manager-card">
               <div><span className={`site-gps-status ${gpsReady ? "ready" : "missing"}`}>{gpsReady ? copy.gpsReady : copy.gpsMissing}</span><strong><i aria-hidden="true" style={{ display: "inline-block", width: 10, height: 10, marginRight: 6, borderRadius: "50%", background: site.color, border: "1px solid rgba(0,0,0,.15)" }} />{site.label}{site.shortCodePrefix && <span className="site-short-code-badge">{site.shortCodePrefix}</span>}</strong><p>{site.address}</p>{site.whatsapp && <p>{site.whatsapp}</p>}</div>
-              <div className="site-manager-actions"><button type="button" disabled={accessBusy === site.id} onClick={() => void createAgencyAccess(site)}>{accessBusy === site.id ? copy.creatingAccess : copy.agencyAccess}</button><button type="button" onClick={() => { setError(""); setEditingSite(site); setSiteFormOpen(true); }}>{copy.edit}</button></div>
+              <div className="site-manager-actions"><button type="button" disabled={accessBusy === site.id} onClick={() => void createAgencyAccess(site)}>{accessBusy === site.id ? copy.creatingAccess : copy.agencyAccess}</button><button type="button" onClick={() => { setError(""); setEditingSite(site); setSiteFormOpen(true); }}>{copy.edit}</button>{!knownSiteIds.has(site.id) && <button type="button" className="danger-button" disabled={deleteBusy === site.id} onClick={() => void removeSite(site)}>{deleteBusy === site.id ? copy.deleting : copy.deleteSite}</button>}</div>
             </article>;
           })}
         </div>
+        {deleteError && <p className="login-error">{deleteError === "site_in_use" ? copy.deleteInUseError : copy.deleteFailedError}</p>}
         {accessMessage && <p className="agency-location-message" role="status">{accessMessage}</p>}
         {siteFormOpen && <form className="site-manager-form" key={editingSite?.id ?? "new-site"} onSubmit={save}>
           <h3 style={{ marginBottom: 12 }}>{editingSite ? copy.editTitle : copy.add}</h3>

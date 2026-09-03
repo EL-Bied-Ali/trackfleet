@@ -2,8 +2,9 @@ import { getCompanySession } from "../../lib/company-auth";
 import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
 import { siteStore } from "trackfleet-site-store";
+import { store as deliveryStore } from "trackfleet-delivery-store";
 import { agencyBrowserLocationIsAcceptable } from "../../lib/agency-access";
-import { defaultSiteColor } from "../../lib/known-sites";
+import { defaultSiteColor, knownSite } from "../../lib/known-sites";
 
 const hexColorPattern = /^#[0-9a-fA-F]{6}$/;
 // Uppercase letters/underscores only, matching the client's own confirmed
@@ -133,4 +134,31 @@ export async function POST(request: Request) {
     shortCodePrefix,
   });
   return Response.json({ site: siteJson(site) }, { status: 201, headers: { "cache-control": "no-store" } });
+}
+
+export async function DELETE(request: Request) {
+  if (!requestIsSameOrigin(request)) return originRejectedResponse();
+  const session = await getCompanySession(request);
+  if (!session) return Response.json({ error: "authentication_required" }, { status: 401, headers: { "cache-control": "no-store" } });
+  if (session.role !== "dispatcher") return Response.json({ error: "dispatcher_only" }, { status: 403 });
+
+  const payload = await readJsonObject(request);
+  if (!payload) return invalidJsonResponse();
+  const id = String(payload.id ?? "").trim();
+  if (!id) return Response.json({ error: "id is required" }, { status: 400 });
+
+  // The client's own real depots (seeded from known-sites.ts on every
+  // listForCompany call, ON CONFLICT DO NOTHING) would simply reappear on
+  // the very next page load if deleted here -- never actually "deleted",
+  // just confusingly absent until the next fetch. Refuse up front rather
+  // than let a dispatcher believe it worked.
+  if (knownSite(id)) return Response.json({ error: "cannot_delete_known_site" }, { status: 400 });
+
+  const deliveries = await deliveryStore.listForCompany(session.companyId);
+  const inUse = deliveries.some((delivery) => delivery.originSiteId === id || delivery.destinationSiteId === id);
+  if (inUse) return Response.json({ error: "site_in_use" }, { status: 409 });
+
+  const removed = await siteStore.remove(session.companyId, id);
+  if (!removed) return Response.json({ error: "site_not_found" }, { status: 404 });
+  return Response.json({ ok: true, id }, { headers: { "cache-control": "no-store" } });
 }
