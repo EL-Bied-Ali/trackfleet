@@ -241,3 +241,41 @@ export function resolveKnownSite(value: string | null | undefined) {
     || normalizeSiteText(site.city) === normalized
   ) ?? null;
 }
+
+const combiningDiacriticsPattern = new RegExp("[\\u0300-\\u036f]", "g");
+
+function alphaWords(value: string): string[] {
+  return value
+    .normalize("NFD")
+    .replace(combiningDiacriticsPattern, "")
+    .toUpperCase()
+    .split(/[^A-Z]+/)
+    .filter(Boolean);
+}
+
+// A best-effort, deterministic prefix guess for a brand-new agency (e.g. one
+// a dispatcher adds inline via "Autre" at delivery creation) -- derived from
+// the city's own name, not fabricated arbitrarily, and checked against every
+// prefix already in use so it can never silently collide with one the client
+// picks later. Multi-word cities (e.g. "Fquih Ben Salah") try initials
+// first, matching the pattern already used for the client's own real
+// entries; everything else tries increasingly long prefixes of the first
+// word. Returns null (no suggestion, dispatcher can set one manually later
+// via SiteManager) rather than looping forever if every candidate collides.
+export function suggestShortCodePrefix(city: string, existingPrefixes: Iterable<string | null | undefined>): string | null {
+  const words = alphaWords(city);
+  if (words.length === 0) return null;
+  const taken = new Set(
+    Array.from(existingPrefixes)
+      .filter((prefix): prefix is string => Boolean(prefix))
+      .map((prefix) => prefix.toUpperCase())
+  );
+  const candidates: string[] = [];
+  if (words.length > 1) candidates.push(words.map((word) => word[0]).join(""));
+  const base = words[0];
+  for (let length = 3; length <= Math.min(6, base.length); length++) candidates.push(base.slice(0, length));
+  for (const candidate of candidates) {
+    if (candidate.length >= 2 && !taken.has(candidate)) return candidate;
+  }
+  return null;
+}
