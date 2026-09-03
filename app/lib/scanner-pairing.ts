@@ -4,20 +4,23 @@ import type { CompanySession } from "./company-auth";
 const scannerCookieName = "__Host-trackfleet_scanner";
 const pairingLifetimeSeconds = 10 * 60;
 const scannerLifetimeSeconds = 30 * 24 * 60 * 60;
+const maxDeviceLabelLength = 60;
 
 type ScannerKv = {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string, options: { expirationTtl: number }): Promise<void>;
+  put(key: string, value: string, options?: { expirationTtl: number }): Promise<void>;
   delete(key: string): Promise<void>;
 };
 
 type ScannerRecord = {
-  version: 1;
+  version: 2;
   id: string;
   companyId: string;
   accountLabel: string;
   userLabel: string;
   siteId: string | null;
+  deviceLabel: string;
+  pairedAt: number;
   expiresAt: number;
 };
 
@@ -39,8 +42,18 @@ function cookieValue(request: Request) {
   return "";
 }
 
-function activeKey(record: Pick<ScannerRecord, "companyId" | "siteId">) {
-  return `scanner-active:${record.companyId}:${record.siteId ?? "dispatcher"}`;
+// Every driver pairs their own phone under this scope (a dispatcher's
+// central account, or one specific agency site) -- kept at the same
+// granularity the old single-slot "activeKey" used, so an agency still
+// only ever sees/manages its own drivers' devices, never another agency's
+// or the dispatcher's. Multiple truck conductors need to scan at the same
+// time, each from their own phone (live request: "je wanna make it as
+// easy as possible for the truck conductor... always valid for him"),
+// which the old model didn't support -- pairing a second device silently
+// kicked the first one out, since it only ever tracked ONE active id per
+// scope. This now tracks a list instead.
+function deviceListKey(companyId: string, siteId: string | null) {
+  return `scanner-devices:${companyId}:${siteId ?? "dispatcher"}`;
 }
 
 function pairingKey(code: string) { return `scanner-pair:${code}`; }
@@ -50,9 +63,10 @@ function parseRecord(value: string | null): ScannerRecord | null {
   if (!value) return null;
   try {
     const record = JSON.parse(value) as Partial<ScannerRecord>;
-    if (record.version !== 1 || typeof record.id !== "string" || typeof record.companyId !== "string"
+    if (record.version !== 2 || typeof record.id !== "string" || typeof record.companyId !== "string"
       || typeof record.accountLabel !== "string" || typeof record.userLabel !== "string"
       || (record.siteId !== null && typeof record.siteId !== "string")
+      || typeof record.deviceLabel !== "string" || typeof record.pairedAt !== "number"
       || typeof record.expiresAt !== "number" || record.expiresAt <= Date.now()) return null;
     return record as ScannerRecord;
   } catch {
@@ -60,7 +74,34 @@ function parseRecord(value: string | null): ScannerRecord | null {
   }
 }
 
-export type ScannerSession = Pick<ScannerRecord, "companyId" | "accountLabel" | "userLabel"> & ({
+type DeviceListEntry = { id: string; deviceLabel: string; pairedAt: number; expiresAt: number };
+
+async function readDeviceList(cache: ScannerKv, companyId: string, siteId: string | null): Promise<DeviceListEntry[]> {
+  try {
+    const raw = await cache.get(deviceListKey(companyId, siteId));
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    if (!Array.isArray(parsed)) return [];
+    // Self-pruning: an entry whose own session already expired (the
+    // device never reconnected to trigger an explicit revoke) is simply
+    // dropped from the list next time anyone reads it, rather than
+    // needing a separate cleanup job.
+    return parsed.filter((entry): entry is DeviceListEntry =>
+      entry && typeof entry.id === "string" && typeof entry.deviceLabel === "string"
+      && typeof entry.pairedAt === "number" && typeof entry.expiresAt === "number" && entry.expiresAt > Date.now());
+  } catch {
+    return [];
+  }
+}
+
+// Read-modify-write, not atomic -- acceptable here since pairing/revoking a
+// device is a rare, deliberate action a dispatcher/agency takes in person,
+// not a concurrent hot path (same tradeoff already made for the pairing
+// code's own delete-then-write above).
+async function writeDeviceList(cache: ScannerKv, companyId: string, siteId: string | null, entries: DeviceListEntry[]) {
+  await cache.put(deviceListKey(companyId, siteId), JSON.stringify(entries));
+}
+
+export type ScannerSession = Pick<ScannerRecord, "companyId" | "accountLabel" | "userLabel" | "deviceLabel"> & ({
   role: "dispatcher";
   siteId: null;
 } | {
@@ -68,21 +109,25 @@ export type ScannerSession = Pick<ScannerRecord, "companyId" | "accountLabel" | 
   siteId: string;
 }) & { scannerOnly: true };
 
-export async function createScannerPairing(session: CompanySession) {
+export async function createScannerPairing(session: CompanySession, deviceLabel: string) {
+  const trimmedLabel = deviceLabel.trim().slice(0, maxDeviceLabelLength);
+  if (!trimmedLabel) throw new Error("device_label_required");
   const cache = kv();
   if (!cache) throw new Error("scanner_pairing_unavailable");
   const code = token();
   const record: ScannerRecord = {
-    version: 1,
+    version: 2,
     id: token(),
     companyId: session.companyId,
     accountLabel: session.accountLabel,
     userLabel: session.userLabel,
     siteId: session.siteId,
+    deviceLabel: trimmedLabel,
+    pairedAt: Date.now(),
     expiresAt: Date.now() + pairingLifetimeSeconds * 1000,
   };
   await cache.put(pairingKey(code), JSON.stringify(record), { expirationTtl: pairingLifetimeSeconds });
-  return { code, expiresAt: record.expiresAt };
+  return { code, expiresAt: record.expiresAt, deviceLabel: trimmedLabel };
 }
 
 export async function consumeScannerPairing(code: string) {
@@ -94,16 +139,19 @@ export async function consumeScannerPairing(code: string) {
   // This is intentionally best-effort on KV: the random, short-lived code is
   // already unguessable, and deleting it immediately prevents normal reuse.
   await cache.delete(key);
-  await cache.put(sessionKey(record.id), JSON.stringify(record), { expirationTtl: scannerLifetimeSeconds });
-  await cache.put(activeKey(record), record.id, { expirationTtl: scannerLifetimeSeconds });
+  const sessionRecord: ScannerRecord = { ...record, expiresAt: Date.now() + scannerLifetimeSeconds * 1000 };
+  await cache.put(sessionKey(record.id), JSON.stringify(sessionRecord), { expirationTtl: scannerLifetimeSeconds });
+  const devices = await readDeviceList(cache, record.companyId, record.siteId);
+  devices.push({ id: record.id, deviceLabel: record.deviceLabel, pairedAt: sessionRecord.pairedAt, expiresAt: sessionRecord.expiresAt });
+  await writeDeviceList(cache, record.companyId, record.siteId, devices);
   return {
     cookie: `${scannerCookieName}=${record.id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${scannerLifetimeSeconds}`,
-    session: toScannerSession(record),
+    session: toScannerSession(sessionRecord),
   };
 }
 
 function toScannerSession(record: ScannerRecord): ScannerSession {
-  const shared = { companyId: record.companyId, accountLabel: record.accountLabel, userLabel: record.userLabel, scannerOnly: true as const };
+  const shared = { companyId: record.companyId, accountLabel: record.accountLabel, userLabel: record.userLabel, deviceLabel: record.deviceLabel, scannerOnly: true as const };
   return record.siteId ? { ...shared, role: "agency", siteId: record.siteId } : { ...shared, role: "dispatcher", siteId: null };
 }
 
@@ -114,11 +162,26 @@ export async function getScannerSession(request: Request): Promise<ScannerSessio
   if (!cache || !id || id.length > 128) return null;
   const record = parseRecord(await cache.get(sessionKey(id)));
   if (!record || record.id !== id) return null;
-  return (await cache.get(activeKey(record))) === id ? toScannerSession(record) : null;
+  return toScannerSession(record);
 }
 
-export async function revokeScannerFor(session: CompanySession) {
+// Lists every phone currently paired under this session's own scope
+// (dispatcher-central, or this exact agency site) so a dispatcher/agency
+// can see who's connected and revoke a specific device -- e.g. a driver who
+// left, or a lost phone -- without touching anyone else's.
+export async function listScannerDevices(session: CompanySession) {
   const cache = kv();
   if (!cache) throw new Error("scanner_pairing_unavailable");
-  await cache.delete(activeKey(session));
+  return readDeviceList(cache, session.companyId, session.siteId);
+}
+
+export async function revokeScannerDevice(session: CompanySession, deviceId: string) {
+  const cache = kv();
+  if (!cache) throw new Error("scanner_pairing_unavailable");
+  const devices = await readDeviceList(cache, session.companyId, session.siteId);
+  const target = devices.find((entry) => entry.id === deviceId);
+  if (!target) return false;
+  await cache.delete(sessionKey(deviceId));
+  await writeDeviceList(cache, session.companyId, session.siteId, devices.filter((entry) => entry.id !== deviceId));
+  return true;
 }
