@@ -15,14 +15,19 @@ import { distanceKm } from "../../lib/route-progress";
 // site. Reported live: the hub scan proof showed only a date, never a
 // place. Originally named from the truck's own live SENDATRACK position
 // alone (only the GPS-tracked hubs -- Casablanca, Tanger Med -- carry real
-// coordinates; see known-sites.ts's finalLegTrackingUnavailable split); the
-// scanning phone's own position (best-effort, see /scan's watchPosition)
-// is tried first now, since it's a more direct proof of where the SCAN
-// itself happened than the truck's separately-tracked device -- falls back
-// to the truck position if the phone didn't grant location or isn't near a
-// known site. Capped to a tight radius either way so a stale or off-grid
-// position never mislabels the scan with a confident-looking but wrong hub
-// name.
+// coordinates; see known-sites.ts's finalLegTrackingUnavailable split).
+//
+// Once the scanning phone's own position became available (best-effort,
+// see /scan's watchPosition), it fully REPLACED the truck position here
+// rather than the phone being tried first with the truck as a fallback --
+// live feedback: "faut pas le scanner dise qu'il a scanné dans une
+// position dont le tel ne confirme pas". The truck's GPS and the scanning
+// phone are two different devices; falling back to the truck's position
+// when the phone stayed silent would print a confident-looking location
+// the phone itself never actually confirmed. No phone position -> no
+// location shown, same as before hub scans ever got one. Capped to a
+// tight radius so a stale or off-grid phone position never mislabels the
+// scan with a wrong hub name either.
 const HUB_MATCH_RADIUS_KM = 5;
 
 async function nearestGeocodedSiteLabel(companyId: string, position: { latitude: number | null; longitude: number | null } | null) {
@@ -72,9 +77,10 @@ export async function POST(request: Request) {
     if (!CHECKPOINTS.includes(checkpoint)) return noStore({ error: "invalid_checkpoint" }, 400);
     // Best-effort: the scanning phone's own position at the moment of the
     // scan, if it granted location permission (see /scan's watchPosition).
-    // Never required -- a scan with no coordinates, or coordinates that
-    // don't land near a known site, just falls through to the existing
-    // truck-GPS-based label below, same as before this existed.
+    // Never required for the scan itself to succeed -- a scan with no
+    // coordinates, or coordinates that don't land near a known site,
+    // simply gets no location label at all (see nearestGeocodedSiteLabel's
+    // own comment for why that's deliberate, not a fallback gap).
     const phoneLatitude = Number(payload.latitude);
     const phoneLongitude = Number(payload.longitude);
     const phonePosition = Number.isFinite(phoneLatitude) && Number.isFinite(phoneLongitude)
@@ -106,8 +112,7 @@ export async function POST(request: Request) {
 
       const locationLabel = session.role === "agency"
         ? knownSite(session.siteId)?.label ?? null
-        : (phonePosition && await nearestGeocodedSiteLabel(session.companyId, phonePosition))
-          ?? await nearestGeocodedSiteLabel(session.companyId, { latitude: delivery.latitude, longitude: delivery.longitude });
+        : await nearestGeocodedSiteLabel(session.companyId, phonePosition);
 
       await store.recordScan({
         companyId: session.companyId,
