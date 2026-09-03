@@ -512,11 +512,12 @@ export const store: DeliveryStore = {
     const summaries = new Map<string, DeliveryScanSummary>();
     for (const row of result.results ?? []) {
       const summary = summaries.get(row.deliveryId) ?? {
-        deliveryId: row.deliveryId, loadedAt: null, loadedTruck: null, hubArrivedAt: null, hubLabel: null,
+        deliveryId: row.deliveryId, loadedAt: null, loadedTruck: null, loadedLabel: null, hubArrivedAt: null, hubLabel: null,
       };
       if (row.checkpoint === "loaded" && !summary.loadedAt) {
         summary.loadedAt = new Date(row.scannedAt);
         summary.loadedTruck = row.truck;
+        summary.loadedLabel = row.locationLabel;
       }
       if (row.checkpoint === "arrived" && !summary.hubArrivedAt) {
         summary.hubArrivedAt = new Date(row.scannedAt);

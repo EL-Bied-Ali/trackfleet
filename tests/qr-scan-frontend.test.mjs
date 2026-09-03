@@ -199,7 +199,7 @@ test("the delivery table shows both handoff proofs without claiming that the hub
 // cut off hard, e.g. "03 sept., 17:59 - 115...". Widened the badge and
 // gave it a `title` carrying the untruncated text either way.
 test("the loaded/hub scan badges carry their full, untruncated text in a title attribute, so nothing is ever fully lost to the badge's own visual truncation", () => {
-  assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.loadedAt\)\}\$\{delivery\.scanSummary\?\.loadedTruck \? ` · \$\{delivery\.scanSummary\.loadedTruck\}` : ""\}`\}>/);
+  assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.loadedAt\)\}\$\{delivery\.scanSummary\?\.loadedTruck \? ` · \$\{delivery\.scanSummary\.loadedTruck\}` : ""\}\$\{delivery\.scanSummary\?\.loadedLabel \? ` · \$\{delivery\.scanSummary\.loadedLabel\}` : ""\}`\}>/);
   assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.hubArrivedAt\)\}\$\{delivery\.scanSummary\?\.hubLabel \? ` · \$\{delivery\.scanSummary\.hubLabel\}` : ""\}`\}>/);
   assert.match(css, /\.scan-proof small \{ font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; \}/);
 });

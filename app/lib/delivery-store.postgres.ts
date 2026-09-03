@@ -977,11 +977,12 @@ export const postgresStore: DeliveryStore = {
     const summaries = new Map<string, DeliveryScanSummary>();
     for (const row of rows) {
       const summary = summaries.get(row.delivery_id) ?? {
-        deliveryId: row.delivery_id, loadedAt: null, loadedTruck: null, hubArrivedAt: null, hubLabel: null,
+        deliveryId: row.delivery_id, loadedAt: null, loadedTruck: null, loadedLabel: null, hubArrivedAt: null, hubLabel: null,
       };
       if (row.checkpoint === "loaded" && !summary.loadedAt) {
         summary.loadedAt = new Date(row.scanned_at);
         summary.loadedTruck = row.truck;
+        summary.loadedLabel = row.location_label;
       }
       if (row.checkpoint === "arrived" && !summary.hubArrivedAt) {
         summary.hubArrivedAt = new Date(row.scanned_at);
