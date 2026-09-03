@@ -105,25 +105,31 @@ const CHECKPOINTS: DeliveryScanCheckpoint[] = ["loaded", "arrived"];
 // backstop for the same intent, scoped to "same delivery, same checkpoint".
 const DUPLICATE_SCAN_WINDOW_MS = 30_000;
 
-function noStore(body: Record<string, unknown>, status = 200) {
-  return Response.json(body, { status, headers: { "cache-control": "no-store" } });
+function noStore(body: Record<string, unknown>, status = 200, extraHeaders?: Record<string, string>) {
+  return Response.json(body, { status, headers: { "cache-control": "no-store", ...extraHeaders } });
 }
 
 export async function POST(request: Request) {
   try {
     if (!requestIsSameOrigin(request)) return originRejectedResponse();
     // A paired phone carries a separate, scan-only cookie. It is accepted
-    // here and nowhere else in the application.
-    const session = await getScannerSession(request) ?? await getCompanySession(request);
-    if (!session) return noStore({ error: "unauthorized" }, 401);
+    // here and nowhere else in the application. A scan is real, regular
+    // use of the device, so a due-for-refresh session's Set-Cookie rides
+    // along on whatever response this request ends up returning (see
+    // getScannerSession's own comment for why the cookie itself, not just
+    // the server-side record, needs reissuing).
+    const scannerResult = await getScannerSession(request);
+    const session = scannerResult?.session ?? await getCompanySession(request);
+    const refreshHeaders = scannerResult?.refreshedCookie ? { "set-cookie": scannerResult.refreshedCookie } : undefined;
+    if (!session) return noStore({ error: "unauthorized" }, 401, refreshHeaders);
 
     const payload = await readJsonObject(request);
     if (!payload) return invalidJsonResponse();
 
     const parcelCode = String(payload.parcelCode ?? "").trim().toUpperCase();
-    if (!isValidParcelCode(parcelCode)) return noStore({ error: "invalid_parcel_code" }, 400);
+    if (!isValidParcelCode(parcelCode)) return noStore({ error: "invalid_parcel_code" }, 400, refreshHeaders);
     const checkpoint = String(payload.checkpoint ?? "") as DeliveryScanCheckpoint;
-    if (!CHECKPOINTS.includes(checkpoint)) return noStore({ error: "invalid_checkpoint" }, 400);
+    if (!CHECKPOINTS.includes(checkpoint)) return noStore({ error: "invalid_checkpoint" }, 400, refreshHeaders);
     // Best-effort: the scanning phone's own position at the moment of the
     // scan, if it granted location permission (see /scan's watchPosition).
     // Never required for the scan itself to succeed -- a scan with no
@@ -138,9 +144,9 @@ export async function POST(request: Request) {
       : null;
 
     const delivery = await store.findByParcelCode(session.companyId, parcelCode);
-    if (!delivery) return noStore({ error: "parcel_not_found" }, 404);
+    if (!delivery) return noStore({ error: "parcel_not_found" }, 404, refreshHeaders);
     if (session.role === "agency" && !agencyDeliveryIsVisible(delivery, session.siteId)) {
-      return noStore({ error: "parcel_not_found" }, 404);
+      return noStore({ error: "parcel_not_found" }, 404, refreshHeaders);
     }
 
     const recentScans = await store.listScansForDelivery(delivery.id, 5);
@@ -181,7 +187,7 @@ export async function POST(request: Request) {
       delivery: updated ? {
         id: updated.id, customer: updated.customer, destination: updated.destination, status: updated.status,
       } : null,
-    });
+    }, 200, refreshHeaders);
   } catch (error) {
     console.error("[trackfleet:scan] request failed", {
       message: error instanceof Error ? error.message : "unknown_error",
