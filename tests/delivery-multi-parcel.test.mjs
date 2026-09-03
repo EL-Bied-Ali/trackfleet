@@ -66,7 +66,7 @@ test("the Postgres schema-safety contract knows about shipment_id, so CI catches
 
 test("the create-delivery form lets a dispatcher add several parcel rows for one client, each with its own weight/price", () => {
   const page = files["app/page.tsx"];
-  assert.match(page, /const \[parcelDrafts, setParcelDrafts\] = useState<Array<\{ key: string; weightKg: string; manualPriceAmount: string; itemDescription: string; paymentStatus: "unpaid" \| "partial" \| "paid"; amountPaid: string \}>>\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "", paymentStatus: "unpaid", amountPaid: "" \}\]\);/);
+  assert.match(page, /const \[parcelDrafts, setParcelDrafts\] = useState<DeliveryCreationDraftParcel\[\]>\(\[emptyParcelDraft\("0"\)\]\);/);
   assert.match(page, /\{parcelDrafts\.map\(\(parcel, index\) => \{/);
   assert.match(page, /className="add-parcel-row"/);
   assert.match(page, /className="remove-parcel-row"/);
@@ -78,7 +78,8 @@ test("the create-delivery form lets a dispatcher add several parcel rows for one
 test("submitting the form issues one create request per parcel row, all sharing one generated shipmentId, and reports partial failure honestly instead of pretending the whole batch succeeded", () => {
   const page = files["app/page.tsx"];
   assert.match(page, /const shipmentId = crypto\.randomUUID\(\);/);
-  assert.match(page, /for \(const parcel of parcelDrafts\) \{/);
+  assert.match(page, /for \(let parcelIndex = 0; parcelIndex < parcelDrafts\.length; parcelIndex\+\+\) \{/);
+  assert.match(page, /const weightRaw = weightGroups\[parcelIndex\]\.effectiveWeightKg\.trim\(\);/);
   assert.match(page, /shipmentId,\s*\n\s*weightKg: weightRaw \? Number\(weightRaw\) : null,/);
   // Each parcel is an independent request/resource (own tracking, own
   // consent, own price) -- a failure partway through must not be silently
@@ -96,29 +97,44 @@ test("the delivery table shows a small 'N linked parcels' hint when a delivery h
 });
 
 // The depot scale weighs several parcels for the same client at once (a
-// real workflow the client won't change) -- rather than force the employee
-// to weigh each one separately, this splits one combined weight evenly
-// across the parcel rows already added via "+ Ajouter un colis". Only
-// touches weightKg on each row; price/payment/description are computed or
-// entered per row exactly as before.
-test("the create-delivery form offers a 'weigh together' tool for 2-5 parcel rows that splits one total weight evenly, leaving 0 or 1 row (nothing to split) and 6+ rows (past the client's stated max) alone", () => {
+// real workflow the client won't change). A first version added a separate
+// "poids total + Répartir" tool block, but that made the form taller and
+// felt disconnected from the rows it affected -- replaced with a compact
+// per-row checkbox instead: checking "compté avec le colis précédent" folds
+// a row into the nearest preceding un-grouped row (the anchor), whose own
+// weightKg input is then read as a TOTAL for the whole run and split evenly
+// (see parcelWeightGroups). A standalone row (no followers) is unaffected.
+test("parcelWeightGroups splits an anchor's weight evenly across a run of consecutive grouped rows, and leaves an ungrouped row's own weight untouched", () => {
   const page = files["app/page.tsx"];
-  assert.match(page, /const \[sharedWeightTotal, setSharedWeightTotal\] = useState\(""\);/);
-  assert.match(page, /\{!editingDeliveryId && parcelDrafts\.length >= 2 && parcelDrafts\.length <= 5 && <div className="shared-weight-tool">/);
+  const fnStart = page.indexOf("function parcelWeightGroups(drafts: DeliveryCreationDraftParcel[])");
+  assert.ok(fnStart > -1, "expected parcelWeightGroups to be defined");
+  const fnBody = page.slice(fnStart, page.indexOf("\n}", fnStart));
+  assert.match(fnBody, /while \(j \+ 1 < drafts\.length && drafts\[j \+ 1\]\.groupedWithPrevious\) j\+\+;/);
+  assert.match(fnBody, /const each = groupSize > 1 && total !== null && Number\.isFinite\(total\) && total > 0\s*\n\s*\? String\(Math\.round\(\(total \/ groupSize\) \* 1000\) \/ 1000\)\s*\n\s*: drafts\[i\]\.weightKg;/);
+  assert.match(fnBody, /groups\.push\(\{ effectiveWeightKg: groupSize > 1 \? each : drafts\[k\]\.weightKg, groupSize, isAnchor: k === i \}\);/);
 });
 
-test("the 'weigh together' split divides the entered total by the current parcel row count, rounds to 3 decimals (matching the weight input's own step), and applies the same value to every row", () => {
+test("every row after the first offers a 'counted with the previous parcel' checkbox, and toggling it is the only way to set groupedWithPrevious", () => {
   const page = files["app/page.tsx"];
-  const toolStart = page.indexOf('<div className="shared-weight-tool">');
-  const toolBody = page.slice(toolStart, page.indexOf("</div>", toolStart) + "</div>".length);
-  assert.match(toolBody, /const total = Number\(sharedWeightTotal\); if \(!Number\.isFinite\(total\) \|\| total <= 0\) return;/);
-  assert.match(toolBody, /const each = Math\.round\(\(total \/ parcelDrafts\.length\) \* 1000\) \/ 1000;/);
-  assert.match(toolBody, /setParcelDrafts\(\(rows\) => rows\.map\(\(row\) => \(\{ \.\.\.row, weightKg: String\(each\) \}\)\)\);/);
-  assert.match(toolBody, /setSharedWeightTotal\(""\);/);
+  assert.match(page, /\{index > 0 && <label className="grouped-weight-checkbox"><input type="checkbox" checked=\{parcel\.groupedWithPrevious\}/);
 });
 
-test("sharedWeightTotal is cleared on every close/submit path, same as parcelDrafts, so a stale total never survives into the next delivery", () => {
+test("a grouped (non-anchor) row hides its own weight input behind a read-only note, and never independently prompts for an item description -- only the anchor can, and only when the group's total is still missing", () => {
   const page = files["app/page.tsx"];
-  const resetSites = [...page.matchAll(/setParcelDrafts\(\[\{ key: "0", weightKg: "", manualPriceAmount: "", itemDescription: "", paymentStatus: "unpaid", amountPaid: "" \}\]\);\n\s*setSharedWeightTotal\(""\);/g)];
-  assert.equal(resetSites.length, 3, "expected all 3 parcelDrafts reset sites (close, edit-save, create-success) to also clear sharedWeightTotal");
+  assert.match(page, /isAnchor \? <label><span className="field-label">\{groupSize > 1 \?/);
+  assert.match(page, /<div className="grouped-weight-note">\{locale === "fr" \? `Poids : \$\{effectiveWeightKg \|\| "…"\} kg \(inclus avec le colis précédent\)`/);
+  assert.match(page, /\{isAnchor && !effectiveWeightKg && <label>/);
+});
+
+test("removing any parcel row clears every row's groupedWithPrevious flag, so a dangling group can never point at a row that no longer exists", () => {
+  const page = files["app/page.tsx"];
+  assert.match(page, /onClick=\{\(\) => setParcelDrafts\(\(rows\) => rows\.filter\(\(row\) => row\.key !== parcel\.key\)\.map\(\(row\) => \(\{ \.\.\.row, groupedWithPrevious: false \}\)\)\)\}/);
+});
+
+test("submitting is blocked with a clear toast (not a confusing per-parcel API failure) if a group's total weight is still blank or invalid", () => {
+  const page = files["app/page.tsx"];
+  const fnStart = page.indexOf("async function createDelivery(event: React.FormEvent<HTMLFormElement>) {");
+  const guardBody = page.slice(fnStart, fnStart + 700);
+  assert.match(guardBody, /if \(weightGroups\.some\(\(group\) => group\.groupSize > 1 && !group\.effectiveWeightKg\)\) \{/);
+  assert.match(guardBody, /return;\s*\n\s*\}/);
 });

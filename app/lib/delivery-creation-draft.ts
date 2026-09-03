@@ -5,6 +5,13 @@ export type DeliveryCreationDraftParcel = {
   itemDescription: string;
   paymentStatus: "unpaid" | "partial" | "paid";
   amountPaid: string;
+  // The depot scale weighs several parcels for one client at once -- rather
+  // than typing the same weight into every row, checking this on a row folds
+  // it into the nearest preceding un-grouped row's own weight, which is then
+  // read as a TOTAL for the whole run and split evenly (see
+  // parcelWeightGroups in page.tsx). False for a row that carries its own
+  // weight, whether standalone or as the first (anchor) row of a group.
+  groupedWithPrevious: boolean;
 };
 
 export type DeliveryCreationDraft = {
