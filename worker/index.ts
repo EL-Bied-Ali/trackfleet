@@ -76,7 +76,19 @@ const securityHeaders = {
   "Referrer-Policy": "strict-origin-when-cross-origin",
 } as const;
 
-const defaultPermissionsPolicy = "camera=(), microphone=(), geolocation=()";
+// geolocation was blocked here from 2026-08-19 until an audit caught it --
+// this default applies to "/", the single SPA route AgencyLocationSetup.tsx
+// (the agency's "confirm truck entrance GPS" flow, added the very next day,
+// 2026-08-20) also renders under. Same failure shape as the /scan bug
+// below: the browser fails the geolocation request before its own
+// permission prompt ever appears, and AgencyLocationSetup's own catch block
+// shows "location denied" either way, indistinguishable from a real user
+// decline. Confirmed via a read-only prod query: no site's coordinates
+// have ever come from a browser-confirmed position (coordinateSource:
+// "browser" never once written) -- every one traces to the SENDATRACK
+// fleet-GPS-clustering script instead. geolocation=(self) still keeps it
+// same-origin-only, no third party gains anything.
+const defaultPermissionsPolicy = "camera=(), microphone=(), geolocation=(self)";
 // geolocation=() here silently blocked /scan's own watchPosition (see
 // app/scan/page.tsx) from ever getting a real position -- the browser fails
 // the request before its own permission prompt, and the error callback
