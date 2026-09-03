@@ -25,7 +25,22 @@ test("the scanner exposes only the two warehouse handoffs: loading and hub unloa
   assert.match(scanPage, /Déchargé au hub/);
   assert.match(scanPage, /ne confirme jamais une arrivée finale/);
   assert.match(scanPage, /fetch\("\/api\/scan", \{/);
-  assert.match(scanPage, /body: JSON\.stringify\(\{ parcelCode: code, checkpoint: modeRef\.current \}\)/);
+  assert.match(scanPage, /body: JSON\.stringify\(\{\s*\n\s*parcelCode: code,\s*\n\s*checkpoint: modeRef\.current,\s*\n\s*latitude: positionRef\.current\?\.latitude \?\? null,\s*\n\s*longitude: positionRef\.current\?\.longitude \?\? null,\s*\n\s*\}\)/);
+});
+
+// Follow-up request: "le scan au chargé et au hub [devrait] donne[r] aussi
+// la localisation... le scanner devra demander la loca aussi sur le tel".
+// Kept deliberately lightweight compared to AgencyLocationSetup's one-time
+// precise pin capture: low accuracy, never blocks a scan, silent on
+// denial/timeout -- see hub-scan-location.test.mjs for how the server uses
+// (or falls back from) whatever position this produces.
+test("watches the phone's position in the background for the whole scanning session, low accuracy and non-blocking, silently doing nothing on denial", () => {
+  assert.match(scanPage, /const positionRef = useRef<\{ latitude: number; longitude: number \} \| null>\(null\);/);
+  assert.match(scanPage, /if \(auth !== "ready" \|\| !navigator\.geolocation\) return;/);
+  assert.match(scanPage, /const watchId = navigator\.geolocation\.watchPosition\(/);
+  assert.match(scanPage, /positionRef\.current = \{ latitude: position\.coords\.latitude, longitude: position\.coords\.longitude \};/);
+  assert.match(scanPage, /\{ enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 \}/);
+  assert.match(scanPage, /return \(\) => navigator\.geolocation\.clearWatch\(watchId\);/);
 });
 
 test("a detected code is deduplicated client-side against the same code within the resubmit cooldown, independent of the server's own 30s duplicate window", () => {

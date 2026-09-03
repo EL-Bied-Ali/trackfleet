@@ -97,6 +97,15 @@ export default function ScanPage() {
   const lastSubmissionRef = useRef<{ code: string; at: number } | null>(null);
   const modeRef = useRef(mode);
   const busyRef = useRef(busy);
+  // Best-effort, roughly-where-this-phone-is-right-now position, kept fresh
+  // in the background for the whole scanning session -- never blocks a
+  // scan waiting on a fix, and never required (a scan with no known
+  // position just falls back to the existing truck-GPS-based label
+  // server-side, see /api/scan/route.ts). Low accuracy on purpose: this is
+  // routine per-scan proof, not the one-time precise agency pin capture in
+  // AgencyLocationSetup.tsx, which needs a much tighter fix and can afford
+  // to take its time getting one.
+  const positionRef = useRef<{ latitude: number; longitude: number } | null>(null);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { busyRef.current = busy; }, [busy]);
 
@@ -145,7 +154,12 @@ export default function ScanPage() {
       const response = await fetch("/api/scan", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ parcelCode: code, checkpoint: modeRef.current }),
+        body: JSON.stringify({
+          parcelCode: code,
+          checkpoint: modeRef.current,
+          latitude: positionRef.current?.latitude ?? null,
+          longitude: positionRef.current?.longitude ?? null,
+        }),
       });
       const data = await response.json() as {
         ok?: boolean; duplicate?: boolean; error?: string;
@@ -207,6 +221,16 @@ export default function ScanPage() {
       detectingRef.current = false;
     }
   }, [submitScan]);
+
+  useEffect(() => {
+    if (auth !== "ready" || !navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => { positionRef.current = { latitude: position.coords.latitude, longitude: position.coords.longitude }; },
+      () => { /* denied, unavailable, or timed out -- scans keep working without a position */ },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [auth]);
 
   useEffect(() => {
     if (auth !== "ready") return;
