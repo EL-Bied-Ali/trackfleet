@@ -13,7 +13,7 @@ import { truckPreferenceKey, resolvePreferredTruck } from "./lib/truck-preferenc
 import { rankVehicleSuggestions } from "./lib/vehicle-linking";
 import { customerEtaNote, etaExplanation } from "./lib/eta-display";
 import { computeDeliveryPrice } from "./lib/delivery-pricing";
-import { knownSite as staticKnownSite } from "./lib/known-sites";
+import { knownSite as staticKnownSite, suggestShortCodePrefix } from "./lib/known-sites";
 import { estimateRelayArrival } from "./lib/relay-eta-estimate";
 import { clearRememberedLogin, readRememberedLogin, saveRememberedLogin } from "./lib/remembered-login";
 import { isUnassignedVehicle, resolveCreationVehicle } from "./lib/delivery-vehicle-choice";
@@ -173,7 +173,7 @@ type MessageEvent = {
 };
 
 type CompanyIdentity = { account: string; user: string; role: "dispatcher" | "agency"; siteId: string | null };
-type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; whatsapp: string | null; color: string; geofenceReady: boolean };
+type KnownSite = { id: string; label: string; city: string; address: string; country: "BE" | "MA"; roles: Array<"origin" | "dropoff" | "replenishment" | "destination">; latitude: number | null; longitude: number | null; arrivalRadiusKm: number; whatsapp: string | null; color: string; shortCodePrefix: string | null; geofenceReady: boolean };
 
 const emptyDelivery: Delivery = {
   id: "",
@@ -1753,6 +1753,7 @@ export default function Home() {
       const newAgencyWhatsapp = String(form.get("newAgencyWhatsapp") ?? "").trim();
       setCreating(true);
       try {
+        const shortCodePrefix = suggestShortCodePrefix(newAgencyCity, knownSites.map((site) => site.shortCodePrefix));
         const response = await fetch("/api/sites", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1763,6 +1764,7 @@ export default function Home() {
             country: "MA",
             whatsapp: newAgencyWhatsapp || null,
             roles: ["destination"],
+            shortCodePrefix,
           }),
         });
         const data = await response.json() as { site?: KnownSite; error?: string };

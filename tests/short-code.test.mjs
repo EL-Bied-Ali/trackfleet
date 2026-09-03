@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { knownSites } from "../app/lib/known-sites.ts";
+import { knownSites, suggestShortCodePrefix } from "../app/lib/known-sites.ts";
 import { memoryStore } from "../app/lib/delivery-store.memory.ts";
 
 // Task 6 of the depot-shelf-photo batch: a short, human-friendly parcel
@@ -22,6 +22,7 @@ const [
   knownSitesSource, siteStorePostgres, siteStoreCloudflare, sitesRoute, siteManager,
   deliveriesRoute, labelsPage, prepareD1Schema, schemaContract,
   deliveryOperationalPostgres, deliveryOperationalCloudflare, d1StandbyReadStore, d1Reconciliation, d1HistoryBackfill,
+  page,
 ] = await Promise.all([
   readFile(new URL("../app/lib/delivery-store.types.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8"),
@@ -41,6 +42,7 @@ const [
   readFile(new URL("../app/lib/d1-standby-read-store.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/d1-reconciliation.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/d1-history-backfill.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
 ]);
 
 test("the 3 confirmed sites carry their real shortCodePrefix, and Tanger Med's is kept distinct from Tanger Ville's despite sharing a bin color", () => {
@@ -178,4 +180,35 @@ test("every parallel delivery read/mirror path (not just the main store files) a
   assert.match(d1HistoryBackfill, /short_code: string \| null;/);
   assert.match(d1HistoryBackfill, /shortCode: row\.short_code \?\? null,/);
   assert.match(d1HistoryBackfill, /short_code = excluded\.short_code,/);
+});
+
+// Follow-up: a dispatcher creating a brand-new agency inline ("Autre" at
+// delivery creation) used to get shortCodePrefix: null, same as any other
+// unconfigured site -- meaning every delivery to it printed with the plain
+// TF id instead of a short code, forever, until someone opened SiteManager
+// and typed one in by hand. suggestShortCodePrefix derives a best-effort
+// candidate from the city name itself (never arbitrary), checked against
+// every prefix already in use so it can't silently collide with one the
+// client sets later -- falling back to null (no suggestion) rather than
+// looping forever if every candidate is taken.
+test("suggestShortCodePrefix derives initials for multi-word cities, else an increasingly long prefix of the first word, skipping accents/casing", () => {
+  assert.equal(suggestShortCodePrefix("Fquih Ben Salah", []), "FBS");
+  assert.equal(suggestShortCodePrefix("Kénitra", []), "KEN");
+  assert.equal(suggestShortCodePrefix("Rabat", ["RAB".toLowerCase()]), "RABA");
+});
+
+test("suggestShortCodePrefix never returns a prefix already in use, and gives up (null) once every candidate for that city is taken", () => {
+  assert.equal(suggestShortCodePrefix("Tanger", ["TAN"]), "TANG");
+  assert.equal(suggestShortCodePrefix("Fes", ["FES"]), null);
+});
+
+test("suggestShortCodePrefix returns null for a blank/non-letter city rather than an empty-string prefix", () => {
+  assert.equal(suggestShortCodePrefix("", []), null);
+  assert.equal(suggestShortCodePrefix("   ", []), null);
+});
+
+test("the inline 'Autre' new-agency flow suggests a shortCodePrefix from the city and every prefix already known, rather than always leaving it null", () => {
+  assert.match(page, /import \{ knownSite as staticKnownSite, suggestShortCodePrefix \} from "\.\/lib\/known-sites";/);
+  assert.match(page, /const shortCodePrefix = suggestShortCodePrefix\(newAgencyCity, knownSites\.map\(\(site\) => site\.shortCodePrefix\)\);/);
+  assert.match(page, /roles: \["destination"\],\s*\n\s*shortCodePrefix,\s*\n\s*\}\),/);
 });

@@ -20,7 +20,7 @@ test("both customer and dispatcher ETA displays resolve the untracked-final-leg 
   // business fact about the static catalog in known-sites.ts, not editable
   // per-company data, so it must be resolved via staticKnownSite(id), not
   // the dynamic `destinationSite` lookup.
-  assert.match(files["app/page.tsx"], /import \{ knownSite as staticKnownSite \} from "\.\/lib\/known-sites";/);
+  assert.match(files["app/page.tsx"], /import \{ knownSite as staticKnownSite, suggestShortCodePrefix \} from "\.\/lib\/known-sites";/);
   // The customer page resolves the destination's flag into `relayDestination`
   // (from the static catalog), then combines it with live GPS freshness into
   // `relayInEffect` -- a relay-destined delivery still gets real live GPS for
