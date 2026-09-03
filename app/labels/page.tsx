@@ -278,20 +278,24 @@ export default function LabelsPage() {
   const labelsPerRow = Math.max(1, Math.floor(PAGE_WIDTH_MM / labelSize.width));
   const labelsPerColumn = Math.max(1, Math.floor(PAGE_HEIGHT_MM / labelSize.height));
   const labelsPerPage = labelsPerRow * labelsPerColumn;
+  const showExtendedDetails = labelSize.height >= 55;
   // logoMaxHeightMm scales the same way as labelPaddingMm/qrSizeMm above
   // (declared earlier in the component so the QR-drawing effect can use
   // them) -- fixed at 19mm, it fit every preset up to 12/feuille (74.25mm)
   // fine, but at 16/feuille (37.125mm) it alone would eat most of the
-  // label's height before a single line of text is drawn.
-  const logoMaxHeightMm = Math.min(19, labelSize.height * 0.22);
-  // Client asked for a genuinely richer label (origin, phone, weight,
-  // price/payment) on top of the big short code -- real content, not just
-  // a size bump, so it doesn't fit in the same 5 rows the shortest preset
-  // (16/feuille) was carefully tuned to exactly fill with 0px overflow.
-  // Rather than risk reopening that, the extra rows only render at 55mm+
-  // (every preset except 16/feuille itself); 16/feuille keeps the exact
-  // proven-safe 5-row layout from before this feature.
-  const showExtendedDetails = labelSize.height >= 55;
+  // label's height before a single line of text is drawn. Capped tighter
+  // still (0.13 not 0.22) below 55mm now that the compact layout also
+  // carries every field the extended one does (see showExtendedDetails'
+  // own comment) -- there's no spare room left for a tall logo.
+  const logoMaxHeightMm = showExtendedDetails ? Math.min(19, labelSize.height * 0.22) : Math.min(19, labelSize.height * 0.13);
+  // Client asked for every field the extended layout has (origin, phone,
+  // weight, price/payment, recipient) to also fit on 16/feuille -- not
+  // just the shortCode/customer/destination/truck subset this used to
+  // stop at. Rather than duplicate the extended branch's own JSX, the
+  // compact branch below now renders the exact same fields, just smaller
+  // and with sender name/phone merged onto one line (see the branch
+  // itself) -- live-verified against a real 16/feuille sheet with a real
+  // logo, full payment/recipient data, at 0px overflow before shipping.
   const pages = layoutLabelPages(deliveries, labelsPerPage, blockedCells);
   const toggleBlockedCell = (index: number) => setBlockedCells((current) => {
     const next = new Set(current);
@@ -449,13 +453,13 @@ export default function LabelsPage() {
             // full height, growing with whatever space the logo+text
             // column doesn't need.
             <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: `${labelPaddingMm}mm`, display: "flex", gap: "3mm", overflow: "hidden" }}>
-              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "1.5mm" }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: showExtendedDetails ? "1.5mm" : "0.6mm" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
                   {branding.logoDataUrl && (
                     // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
                     <img src={branding.logoDataUrl} alt="" style={{ maxHeight: `${logoMaxHeightMm}mm`, maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
                   )}
-                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
+                  <div style={{ fontSize: showExtendedDetails ? 12 : 9, fontWeight: 700, letterSpacing: ".04em", color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
                 </div>
                 {showExtendedDetails ? (<>
                   {/* The client's own big, primary identifier for routing
@@ -480,19 +484,24 @@ export default function LabelsPage() {
                   {paymentSummary(delivery) && <div style={{ fontSize: 11, fontWeight: 700, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{paymentSummary(delivery)}</div>}
                   {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
                 </>) : (<>
-                  {/* Shortest preset (16/feuille): still the exact same
-                      5-row layout verified live at 0px overflow -- row
-                      count is untouched, only the emphasis within this one
-                      line changed, to match the extended layout's own
-                      shortCode-first priority ("big and bold" primary
-                      identifier, per the client's request). The plain id
-                      moves after the shortCode on the same line instead of
-                      before it, rather than adding a row this preset has
-                      no spare height for. */}
-                  <div style={{ fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}{delivery.shortCode ? ` · ${delivery.id}` : ""}</div>
-                  <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>→ {(delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination}</div>
-                  {delivery.truck && <div style={{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
+                  {/* Shortest preset (16/feuille): every field the extended
+                      layout carries (origin, recipient, weight/price/
+                      payment) now fits here too, just smaller and with
+                      sender name+phone merged onto one line -- live-
+                      verified against a real sheet (real logo, full
+                      payment/recipient data) at 0px overflow before
+                      shipping. shortCode keeps the same shortCode-first
+                      priority as the extended layout. */}
+                  <div style={{ fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}{delivery.shortCode ? ` · ${delivery.id}` : ""}</div>
+                  <div style={{ fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[delivery.customer, delivery.contact].filter(Boolean).join(" · ")}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{((delivery.originSiteId && siteCities.get(delivery.originSiteId)) || "") + " → " + ((delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination)}</div>
+                  {(delivery.recipientName || delivery.recipientContact) && (
+                    <div style={{ fontSize: 9.5, fontWeight: 700, color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      Dest : {[delivery.recipientName, delivery.recipientContact].filter(Boolean).join(" · ")}
+                    </div>
+                  )}
+                  {paymentSummary(delivery) && <div style={{ fontSize: 9.5, fontWeight: 700, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{paymentSummary(delivery)}</div>}
+                  {delivery.truck && <div style={{ fontSize: 9.5, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Camion : {delivery.truck}</div>}
                 </>)}
               </div>
               {delivery.parcelCode ? (

@@ -89,7 +89,7 @@ test("prints the destination agency's city alone, not the full postal address or
   assert.match(labelsPage, /const \[siteCities, setSiteCities\] = useState<Map<string, string>>\(new Map\(\)\);/);
   assert.match(labelsPage, /fetch\("\/api\/sites", \{ cache: "no-store" \}\)/);
   assert.match(labelsPage, /setSiteCities\(new Map\(\(data\.sites \?\? \[\]\)\.map\(\(site\) => \[site\.id, site\.city\]\)\)\)/);
-  assert.match(labelsPage, /→ \{\(delivery\.destinationSiteId && siteCities\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\}/);
+  assert.match(labelsPage, /\(\(delivery\.destinationSiteId && siteCities\.get\(delivery\.destinationSiteId\)\) \|\| delivery\.destination\)/);
 });
 
 // Even with the city-only destination, live-checking a full sheet of real
@@ -99,8 +99,8 @@ test("prints the destination agency's city alone, not the full postal address or
 // clientHeight across all 12 labels on a real sheet, several off by up to
 // 28px. Truncating (not wrapping) the customer, destination and truck
 // lines guarantees the truck plate is never the casualty of a long name.
-test("truncates the customer, destination and truck lines instead of letting them wrap and push each other out of the label", () => {
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.customer\}<\/div>/);
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>→ /);
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 11, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>Camion : \{delivery\.truck\}<\/div>/);
+test("truncates the customer/contact, destination and truck lines instead of letting them wrap and push each other out of the label", () => {
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{\[delivery\.customer, delivery\.contact\]\.filter\(Boolean\)\.join\(" · "\)\}<\/div>/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 10, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{\(\(delivery\.originSiteId/);
+  assert.match(labelsPage, /<div style=\{\{ fontSize: 9\.5, color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>Camion : \{delivery\.truck\}<\/div>/);
 });
