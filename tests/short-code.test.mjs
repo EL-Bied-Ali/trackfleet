@@ -135,9 +135,13 @@ test("delivery creation assigns a short code only when the resolved destination 
   assert.match(deliveriesRoute, /shortCode,\s*\n\s*paymentStatus: paymentStatusInput as "unpaid" \| "partial" \| "paid",\s*\n\s*amountPaid,\s*\n\s*driver: "To be assigned"/);
 });
 
-test("the printed label shows the short code inline on the same line as the id (not a new row), so it can never reopen the 16/feuille overflow that every other row was carefully sized to avoid", () => {
+// The plain TF-id used to trail the shortCode on the same line ("SALE 01 ·
+// TF-...") -- dropped later per live feedback (nobody reads it by hand at
+// the depot; freed room for the rest of the 16/feuille field set), still
+// falling back to it alone when a destination has no shortCode configured.
+test("the printed label shows the short code alone once configured, falling back to the plain id only when this destination has none", () => {
   assert.match(labelsPage, /shortCode: string \| null;/);
-  assert.match(labelsPage, /\{delivery\.shortCode \?\? delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.id\}` : ""\}/);
+  assert.match(labelsPage, /\{delivery\.shortCode \?\? delivery\.id\}<\/span>/);
 });
 
 test("the D1 schema script creates delivery_code_counters, sites.short_code_prefix and deliveries.short_code for both fresh and pre-existing databases", () => {

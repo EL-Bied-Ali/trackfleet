@@ -105,7 +105,13 @@ test("editing a delivery pre-fills the current paymentStatus/amountPaid (default
 test("both the extended (55mm+) and compact (16/feuille) label layouts render the same set of fields -- shortCode/id, sender, origin->destination, recipient, payment, truck -- just at different sizes", () => {
   assert.match(labelsPage, /const showExtendedDetails = labelSize\.height >= 55;/);
   assert.match(labelsPage, /\{showExtendedDetails \? \(<>/);
-  assert.match(labelsPage, /<div style=\{\{ fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.shortCode \?\? delivery\.id\}\{delivery\.shortCode \? ` · \$\{delivery\.id\}` : ""\}<\/div>/);
+  // The plain TF-id no longer trails the shortCode on 16/feuille -- freed
+  // room per live feedback, nobody reads that id by hand at the depot.
+  // Still falls back to it alone when a destination has no shortCode yet.
+  // "fond gras" (solid badge background, not just bold text) per the
+  // client's original wording -- only for a real shortCode, not the
+  // plain-id fallback.
+  assert.match(labelsPage, /<span style=\{\{ display: "inline-block", maxWidth: "100%", fontSize: 13, fontWeight: 800, lineHeight: 1\.15, color: delivery\.shortCode \? "#fff" : "#000", background: delivery\.shortCode \? "#000" : "transparent", padding: delivery\.shortCode \? "0\.5px 6px" : 0, borderRadius: delivery\.shortCode \? 3 : 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" \}\}>\{delivery\.shortCode \?\? delivery\.id\}<\/span>/);
   assert.match(labelsPage, /Dest : \{\[delivery\.recipientName, delivery\.recipientContact\]\.filter\(Boolean\)\.join\(" · "\)\}/);
   assert.match(labelsPage, /paymentSummary\(delivery\) && <div style=\{\{ fontSize: 9\.5, fontWeight: 700, color: "#333"/);
 });

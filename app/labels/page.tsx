@@ -466,7 +466,16 @@ export default function LabelsPage() {
                       by hand -- "en très gros". Falls back to the plain id
                       at a smaller (but still bold) size when this
                       destination has no shortCodePrefix configured yet. */}
-                  <div style={{ fontSize: delivery.shortCode ? 20 : 15, fontWeight: 800, lineHeight: 1.05, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}</div>
+                  <div style={{ overflow: "hidden" }}>
+                    {/* "fond gras" -- a solid dark badge behind the short
+                        code, not just bold text, per the client's own
+                        original wording. Only the real shortCode gets it;
+                        the plain-id fallback (no shortCodePrefix
+                        configured yet for this destination) stays plain
+                        text, since it's not the "big and clear" primary
+                        identifier being called out here. */}
+                    <span style={{ display: "inline-block", maxWidth: "100%", fontSize: delivery.shortCode ? 20 : 15, fontWeight: 800, lineHeight: 1.15, color: delivery.shortCode ? "#fff" : "#000", background: delivery.shortCode ? "#000" : "transparent", padding: delivery.shortCode ? "1px 7px" : 0, borderRadius: delivery.shortCode ? 3 : 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}</span>
+                  </div>
                   {delivery.shortCode && <div style={{ fontSize: 8, fontFamily: "monospace", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.id}</div>}
                   <div style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.customer}</div>
                   <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{((delivery.originSiteId && siteCities.get(delivery.originSiteId)) || "") + " → " + ((delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination)}</div>
@@ -490,9 +499,14 @@ export default function LabelsPage() {
                       sender name+phone merged onto one line -- live-
                       verified against a real sheet (real logo, full
                       payment/recipient data) at 0px overflow before
-                      shipping. shortCode keeps the same shortCode-first
-                      priority as the extended layout. */}
-                  <div style={{ fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}{delivery.shortCode ? ` · ${delivery.id}` : ""}</div>
+                      shipping. The plain TF-id is dropped once a
+                      shortCode exists (nobody reads it by hand here,
+                      unlike the QR/parcelCode below) -- falls back to it
+                      only when this destination has no shortCodePrefix
+                      configured, so the label always has one identifier. */}
+                  <div style={{ overflow: "hidden" }}>
+                    <span style={{ display: "inline-block", maxWidth: "100%", fontSize: 13, fontWeight: 800, lineHeight: 1.15, color: delivery.shortCode ? "#fff" : "#000", background: delivery.shortCode ? "#000" : "transparent", padding: delivery.shortCode ? "0.5px 6px" : 0, borderRadius: delivery.shortCode ? 3 : 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{delivery.shortCode ?? delivery.id}</span>
+                  </div>
                   <div style={{ fontSize: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[delivery.customer, delivery.contact].filter(Boolean).join(" · ")}</div>
                   <div style={{ fontSize: 10, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{((delivery.originSiteId && siteCities.get(delivery.originSiteId)) || "") + " → " + ((delivery.destinationSiteId && siteCities.get(delivery.destinationSiteId)) || delivery.destination)}</div>
                   {(delivery.recipientName || delivery.recipientContact) && (
