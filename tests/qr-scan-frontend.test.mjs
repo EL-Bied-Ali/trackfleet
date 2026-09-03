@@ -5,6 +5,7 @@ import test from "node:test";
 const scanPage = await readFile(new URL("../app/scan/page.tsx", import.meta.url), "utf8");
 const labelsPage = await readFile(new URL("../app/labels/page.tsx", import.meta.url), "utf8");
 const dashboard = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 const appSidebar = await readFile(new URL("../app/AppSidebar.tsx", import.meta.url), "utf8");
 const i18n = await readFile(new URL("../app/i18n.ts", import.meta.url), "utf8");
 const packageJson = await readFile(new URL("../package.json", import.meta.url), "utf8");
@@ -191,6 +192,16 @@ test("the delivery table shows both handoff proofs without claiming that the hub
   assert.match(dashboard, /scanSummary\?\.hubLabel/);
   assert.match(dashboard, /scan-control-cell/);
   assert.match(dashboard, /delivery-identification/);
+});
+
+// Live feedback: "l'adresse es trunquer" -- a hub scan's location label (a
+// full site name) crammed alongside the date into the same 76px badge got
+// cut off hard, e.g. "03 sept., 17:59 - 115...". Widened the badge and
+// gave it a `title` carrying the untruncated text either way.
+test("the loaded/hub scan badges carry their full, untruncated text in a title attribute, so nothing is ever fully lost to the badge's own visual truncation", () => {
+  assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.loadedAt\)\}\$\{delivery\.scanSummary\?\.loadedTruck \? ` · \$\{delivery\.scanSummary\.loadedTruck\}` : ""\}`\}>/);
+  assert.match(dashboard, /<small title=\{`\$\{scanAtLabel\(delivery\.scanSummary\?\.hubArrivedAt\)\}\$\{delivery\.scanSummary\?\.hubLabel \? ` · \$\{delivery\.scanSummary\.hubLabel\}` : ""\}`\}>/);
+  assert.match(css, /\.scan-proof small \{ font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; \}/);
 });
 
 test("the parcel-control column distinguishes labels awaiting print from a print dialog that was actually launched", () => {

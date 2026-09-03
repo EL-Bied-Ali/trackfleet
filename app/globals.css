@@ -519,7 +519,15 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .scan-control-inner { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .scan-proof { display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 3px 6px; border-radius: 999px; color: #8a7d83; background: #f1f3f2; font-size: 8px; line-height: 1; }
 .scan-proof b { font-size: 8px; color: #72666d; }
-.scan-proof small { font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 76px; }
+/* Live feedback: "l'adresse es trunquer" -- 76px fit a bare date fine, but
+   now a hub scan's location label (a full site name, e.g. "Bruxelles ·
+   Boulevard de l'Abattoir") gets crammed into the same badge alongside the
+   date. Widened (the column itself is min-width, not fixed, so there's
+   room -- see .scan-control-cell) rather than removed outright, since an
+   unbounded label could still wrap the whole table row; the badge's own
+   `title` attribute now also carries the untruncated text for whatever
+   still gets cut off. */
+.scan-proof small { font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
 .scan-proof.is-confirmed b { color: #18744f; }
 .scan-proof.is-confirmed { color: #176747; background: #e3f5eb; }
 .scan-proof.is-confirmed b::before { content: "✓"; display: inline-grid; place-items: center; width: 11px; height: 11px; margin-right: 1px; border-radius: 50%; color: white; background: #1d9a69; font-size: 7px; }
