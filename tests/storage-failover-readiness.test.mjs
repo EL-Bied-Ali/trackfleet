@@ -26,7 +26,13 @@ test("Postgres health reports D1 standby separately from the active backend", ()
 // for observability, just no longer part of the gate itself -- see
 // tests/d1-standby-readiness-behavior.test.mjs for the behavioral proof.
 test("D1 readiness requires fresh operational reconciliation plus complete history; telemetry freshness is tracked but does not gate readiness", () => {
-  assert.match(readiness, /D1_STANDBY_MAX_SYNC_AGE_MS = 30 \* 60_000/);
+  // 120 (not the original 30) minutes -- updated 2026-09-03 to match the
+  // operational reconciliation cron's cadence after it was slowed from
+  // 15-minute to hourly on 2026-09-01; the threshold was left stale,
+  // making readiness flap to "replication_stale" for roughly half of
+  // every hour under completely normal operation. See
+  // tests/d1-standby-readiness-behavior.test.mjs for the freshness proof.
+  assert.match(readiness, /D1_STANDBY_MAX_SYNC_AGE_MS = 120 \* 60_000/);
   assert.match(readiness, /id = 'd1_reconciliation'/);
   assert.match(readiness, /id = 'd1_telemetry_reconciliation'/);
   assert.match(readiness, /d1_history_backfill_state/);

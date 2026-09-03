@@ -1,4 +1,20 @@
-export const D1_STANDBY_MAX_SYNC_AGE_MS = 30 * 60_000;
+// Live audit, 2026-09-03: this was still 30 minutes -- 2x the operational
+// reconciliation cron's cadence *when it ran every 15 minutes*. That cron
+// was slowed to hourly on 2026-09-01 (see worker/index.ts's
+// operationalReconciliationCron comment) to cut D1 write volume, but this
+// threshold was never updated to match. Effect: for roughly half of every
+// hour (from ~30 minutes after each successful run until the next one
+// lands), operationalFresh reads false and d1ReadFailoverReady() refuses
+// to activate -- so an actual Postgres outage starting in that window
+// would leave the app hard-down instead of degrading to the D1 standby
+// read failover it was built for. Reproduced live via /api/health showing
+// reason: "replication_stale" at 35 minutes stale, 27 minutes before the
+// next scheduled run. Kept the same 2x-cadence ratio the original value
+// used, applied to the cron's current (hourly) interval instead of its old
+// (15-minute) one -- comfortably covers one full cycle plus a delayed run,
+// and matches the business's own stated tolerance for staleness on this
+// multi-day Belgium-Morocco corridor.
+export const D1_STANDBY_MAX_SYNC_AGE_MS = 120 * 60_000;
 
 type D1ReadinessStatement = {
   bind(...values: unknown[]): D1ReadinessStatement;
