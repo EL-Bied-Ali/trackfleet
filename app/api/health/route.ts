@@ -20,7 +20,39 @@ import {
 import { getStorageHealth } from "../../lib/storage-health";
 import { telemetryRetentionPolicy } from "../../lib/telemetry-retention";
 
+// /api/health is polled far more often than any other route (uptime
+// monitors, and this session's own live-verification work) and, unlike
+// the automation/maintenance crons that also read storage/heartbeat
+// state every ~15 minutes, has no reason to recompute it fresh on every
+// single hit. Each call previously did 5 separate DB round trips (a
+// multi-CTE Postgres schema-compatibility probe, a 5-subquery D1
+// readiness check, and 3 more D1 heartbeat reads) -- real per-request
+// CPU work that, on the account's Workers Free plan (fixed 10ms CPU
+// limit, cannot be raised -- see wrangler.jsonc git history around
+// 2026-09-04), was enough on its own to intermittently trip "Worker
+// exceeded CPU time limit" (Cloudflare error 1102) on a plain health
+// check. Cached here, not inside storage-health.ts/automation-heartbeat
+// itself, so the cron-driven callers (automation tick, notification
+// tick, retention, whatsapp preflight) keep reading fully fresh state --
+// only this frequently-polled diagnostic endpoint trades a few seconds
+// of staleness for far less per-request work.
+const healthCacheTtlMs = 20_000;
+let cachedBody: Record<string, unknown> | null = null;
+let cachedStatus = 200;
+let cachedAt = 0;
+
 export async function GET() {
+  const now = Date.now();
+  if (cachedBody && now - cachedAt < healthCacheTtlMs) {
+    return Response.json({ ...cachedBody, timestamp: new Date(now).toISOString() }, {
+      status: cachedStatus,
+      headers: {
+        "cache-control": "no-store",
+        "x-robots-tag": "noindex, nofollow, noarchive",
+      },
+    });
+  }
+
   const storage = await getStorageHealth();
   const sendatrackConfigured = isSendatrackConfigured();
   const sendatrackTransportSecure = sendatrackTransportIsSecure();
@@ -81,7 +113,7 @@ export async function GET() {
     };
   }
 
-  return Response.json({
+  const body = {
     ok: storage.connected,
     service: "trackfleet",
     sendatrackConfigured,
@@ -113,9 +145,13 @@ export async function GET() {
       lastFailureCode,
       heartbeat,
     },
-    timestamp: new Date().toISOString(),
-  }, {
-    status: storage.connected ? 200 : 503,
+  };
+  cachedBody = body;
+  cachedStatus = storage.connected ? 200 : 503;
+  cachedAt = now;
+
+  return Response.json({ ...body, timestamp: new Date(now).toISOString() }, {
+    status: cachedStatus,
     headers: {
       "cache-control": "no-store",
       "x-robots-tag": "noindex, nofollow, noarchive",
