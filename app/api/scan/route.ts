@@ -2,6 +2,7 @@ import { store } from "trackfleet-delivery-store";
 import { siteStore } from "trackfleet-site-store";
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { getCompanySession } from "../../lib/company-auth";
+import { confirmArrivalManually } from "../../lib/confirm-arrival-manually";
 import { getScannerSession } from "../../lib/scanner-pairing";
 import type { DeliveryScanCheckpoint } from "../../lib/delivery-store.types";
 import { knownSite } from "../../lib/known-sites";
@@ -91,13 +92,14 @@ async function reverseGeocodedLabel(position: { latitude: number; longitude: num
   }
 }
 
-// Just the two checkpoints that a per-parcel scan can actually add
-// information the GPS automation can't already infer on its own: whether
-// THIS parcel is on THIS truck, and whether it has physically been unloaded
-// at a hub. "Départ" is a truck-level event the automation tick already
-// detects from GPS movement. A hub scan is audit-only: it never confirms a
-// final delivery or notifies the customer.
-const CHECKPOINTS: DeliveryScanCheckpoint[] = ["loaded", "arrived"];
+// Three checkpoints a per-parcel scan can add information the GPS
+// automation can't already infer on its own: whether THIS parcel is on
+// THIS truck, whether it's been physically unloaded at a hub (audit-only --
+// never confirms final delivery or notifies the customer), and now whether
+// it's actually reached the destination agency. "Départ" is a truck-level
+// event the automation tick already detects from GPS movement, so no scan
+// checkpoint exists for it.
+const CHECKPOINTS: DeliveryScanCheckpoint[] = ["loaded", "arrived", "delivered"];
 
 // A shaky hand or a camera that keeps re-detecting the same code in frame
 // shouldn't spam the audit trail with a dozen rows for one real scan --
@@ -149,6 +151,34 @@ export async function POST(request: Request) {
       return noStore({ error: "parcel_not_found" }, 404, refreshHeaders);
     }
 
+    if (checkpoint === "delivered") {
+      // Same permission rule as the dashboard's "Confirmer l'arrivée"
+      // button (manual-completion/route.ts): a dispatcher can confirm any
+      // delivery, an agency only its own destination site's -- an agency
+      // that merely originated this parcel (agencyDeliveryIsVisible above
+      // also allows that, for return shipments) must not be able to scan it
+      // as delivered.
+      if (session.role === "agency" && delivery.destinationSiteId !== session.siteId) {
+        return noStore({ error: "agency_destination_mismatch" }, 403, refreshHeaders);
+      }
+      if (delivery.status === "Delivered") {
+        return noStore({ error: "already_delivered" }, 409, refreshHeaders);
+      }
+      // Same paper-trail rule as the button flow, client request (from a
+      // photo of the depot's own paper process): a parcel can only be
+      // confirmed arrived once it was physically scanned at both the depot
+      // (loaded) and the hub -- otherwise a scan here would let the exact
+      // gap this rule exists to catch back in through a second door.
+      const [scanSummary] = await store.listScanSummaries(session.companyId, [delivery.id]);
+      if (!scanSummary?.loadedAt || !scanSummary?.hubArrivedAt) {
+        return noStore({
+          error: "arrival_blocked_missing_scans",
+          missingLoadedScan: !scanSummary?.loadedAt,
+          missingHubScan: !scanSummary?.hubArrivedAt,
+        }, 409, refreshHeaders);
+      }
+    }
+
     const recentScans = await store.listScansForDelivery(delivery.id, 5);
     const now = Date.now();
     const duplicate = recentScans.some((scan) => scan.checkpoint === checkpoint && now - scan.scannedAt.getTime() < DUPLICATE_SCAN_WINDOW_MS);
@@ -159,11 +189,20 @@ export async function POST(request: Request) {
       // having the audit row make that retry look like a successful duplicate.
       // Both completion and timeline events are idempotent, so a later audit
       // failure is also safe to retry.
-      await store.recordEvent(
-        delivery.id,
-        checkpoint === "loaded" ? "SCAN_LOADED" : "SCAN_HUB_ARRIVED",
-        delivery.progress,
-      );
+      if (checkpoint === "delivered") {
+        // The exact same effect the "Confirmer l'arrivée" button triggers
+        // (MANUAL_ARRIVAL_CONFIRMED + ARRIVED_AT_SITE, the unload-grace
+        // timer, the customer WhatsApp/email arrival notification) -- a scan
+        // here is just a second, more rigorous path into it, not a
+        // different outcome.
+        await confirmArrivalManually(session.companyId, delivery.id, delivery.progress, new URL(request.url).origin);
+      } else {
+        await store.recordEvent(
+          delivery.id,
+          checkpoint === "loaded" ? "SCAN_LOADED" : "SCAN_HUB_ARRIVED",
+          delivery.progress,
+        );
+      }
 
       const locationLabel = session.role === "agency"
         ? knownSite(session.siteId)?.label ?? null

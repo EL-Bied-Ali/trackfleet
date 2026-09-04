@@ -21,9 +21,17 @@ test("both scan milestones are timeline events but are excluded from automatic W
   assert.doesNotMatch(policy, /"SCAN_HUB_ARRIVED"/);
 });
 
-test("the scanner records a customer milestone before its audit proof, without changing the final delivery status", () => {
+test("the scanner records a customer milestone before its audit proof, without the loaded/hub checkpoints ever changing the final delivery status", () => {
   const milestone = scanRoute.indexOf('checkpoint === "loaded" ? "SCAN_LOADED" : "SCAN_HUB_ARRIVED"');
   const audit = scanRoute.indexOf("await store.recordScan({");
   assert.ok(milestone >= 0 && milestone < audit);
-  assert.doesNotMatch(scanRoute, /confirmArrivalManually|completeDeliveryManually/);
+  // Neither loaded nor hub ever reaches completeDeliveryManually -- only the
+  // separate "delivered" checkpoint (a live follow-up request: a QR scan at
+  // the destination agency can confirm final delivery too, reusing the
+  // exact same confirmArrivalManually effect the dashboard's own
+  // "Confirmer l'arrivée" button already triggers) calls confirmArrivalManually,
+  // and only inside its own `if (checkpoint === "delivered")` branch.
+  assert.doesNotMatch(scanRoute, /completeDeliveryManually/);
+  const deliveredBranch = scanRoute.slice(scanRoute.indexOf('if (checkpoint === "delivered") {\n        //'));
+  assert.match(deliveredBranch, /await confirmArrivalManually\(/);
 });

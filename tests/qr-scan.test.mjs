@@ -137,8 +137,8 @@ test("the dashboard obtains all parcel scan proofs through one bulk store call, 
   assert.match(creationRoute, /scanSummary: scanSummaryByDeliveryId\.get\(delivery\.id\) \?\? null/);
 });
 
-test("the scan route offers only loaded/arrived, is authenticated, same-origin protected, validates the parcel code and scopes an agency to visible deliveries", () => {
-  assert.match(route, /const CHECKPOINTS: DeliveryScanCheckpoint\[\] = \["loaded", "arrived"\];/);
+test("the scan route offers loaded/arrived/delivered, is authenticated, same-origin protected, validates the parcel code and scopes an agency to visible deliveries", () => {
+  assert.match(route, /const CHECKPOINTS: DeliveryScanCheckpoint\[\] = \["loaded", "arrived", "delivered"\];/);
   assert.match(route, /const scannerResult = await getScannerSession\(request\);\s*\n\s*const session = scannerResult\?\.session \?\? await getCompanySession\(request\);/);
   assert.match(route, /requestIsSameOrigin\(request\)/);
   assert.match(route, /if \(!isValidParcelCode\(parcelCode\)\) return noStore\(\{ error: "invalid_parcel_code" \}, 400, refreshHeaders\);/);
@@ -147,9 +147,27 @@ test("the scan route offers only loaded/arrived, is authenticated, same-origin p
 });
 
 test("the hub-unload checkpoint is audit-only: it does not confirm final arrival, change delivery state, or notify the customer", () => {
-  assert.doesNotMatch(route, /confirmArrivalManually/);
   assert.doesNotMatch(route, /completeDeliveryManually/);
   assert.match(route, /checkpoint === "loaded" \? "SCAN_LOADED" : "SCAN_HUB_ARRIVED"/);
+});
+
+// Live request: a QR scan at the destination agency should be able to
+// confirm final delivery too, not just the dashboard's "Confirmer
+// l'arrivée" button -- a scan is stronger, tamper-evident proof of
+// physical receipt. Reuses the exact same confirmArrivalManually effect
+// the button already triggers, rather than growing a second, different
+// path to the same real-world outcome.
+test("the delivered checkpoint reuses confirmArrivalManually -- the same effect the dashboard's arrival-confirmation button already triggers", () => {
+  assert.match(route, /import \{ confirmArrivalManually \} from "\.\.\/\.\.\/lib\/confirm-arrival-manually";/);
+  assert.match(route, /await confirmArrivalManually\(session\.companyId, delivery\.id, delivery\.progress, new URL\(request\.url\)\.origin\);/);
+});
+
+test("a delivered scan enforces the same rules as the button: agency scoped to its own destination site, refuses an already-delivered parcel, and requires both loaded and hub scans on file first", () => {
+  assert.match(route, /if \(session\.role === "agency" && delivery\.destinationSiteId !== session\.siteId\) \{\s*\n\s*return noStore\(\{ error: "agency_destination_mismatch" \}, 403, refreshHeaders\);/);
+  assert.match(route, /if \(delivery\.status === "Delivered"\) \{\s*\n\s*return noStore\(\{ error: "already_delivered" \}, 409, refreshHeaders\);/);
+  assert.match(route, /const \[scanSummary\] = await store\.listScanSummaries\(session\.companyId, \[delivery\.id\]\);/);
+  assert.match(route, /if \(!scanSummary\?\.loadedAt \|\| !scanSummary\?\.hubArrivedAt\) \{/);
+  assert.match(route, /error: "arrival_blocked_missing_scans",/);
 });
 
 test("a checkpoint effect is applied before its audit row, so an effect failure cannot turn the retry into a no-op duplicate", () => {

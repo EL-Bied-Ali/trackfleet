@@ -17,16 +17,27 @@ test("the scan page accepts either a normal session or a one-time QR pairing, th
   assert.match(scanPage, /if \(auth === "denied"\) return \(/);
 });
 
-test("the scanner exposes only the two warehouse handoffs: loading and hub unload", () => {
-  for (const checkpoint of ["loaded", "arrived"]) {
+test("the scanner exposes the three real handoffs: loading, hub unload, and final delivery -- but not departure, which is GPS-detected", () => {
+  for (const checkpoint of ["loaded", "arrived", "delivered"]) {
     assert.match(scanPage, new RegExp(`value: "${checkpoint}"`));
   }
   assert.doesNotMatch(scanPage, /value: "departed"/);
-  assert.doesNotMatch(scanPage, /value: "delivered"/);
   assert.match(scanPage, /Déchargé au hub/);
   assert.match(scanPage, /ne confirme jamais une arrivée finale/);
   assert.match(scanPage, /fetch\("\/api\/scan", \{/);
   assert.match(scanPage, /body: JSON\.stringify\(\{\s*\n\s*parcelCode: code,\s*\n\s*checkpoint: modeRef\.current,\s*\n\s*latitude: positionRef\.current\?\.latitude \?\? null,\s*\n\s*longitude: positionRef\.current\?\.longitude \?\? null,\s*\n\s*\}\)/);
+});
+
+// Live request: a QR scan at the destination agency should be able to
+// confirm final delivery too, same effect as the dashboard's "Confirmer
+// l'arrivée" button, reached via a scan instead of a click.
+test("the delivered checkpoint's own label explains it needs the earlier two scans first, and the client surfaces the server's specific errors for it", () => {
+  assert.match(scanPage, /Livré à l'agence/);
+  assert.match(scanPage, /Nécessite d'avoir déjà scanné/);
+  assert.match(scanPage, /missingLoadedScan\?: boolean; missingHubScan\?: boolean;/);
+  assert.match(scanPage, /data\.error === "agency_destination_mismatch"/);
+  assert.match(scanPage, /data\.error === "already_delivered"/);
+  assert.match(scanPage, /data\.error === "arrival_blocked_missing_scans"/);
 });
 
 // Follow-up request: "le scan au chargé et au hub [devrait] donne[r] aussi
