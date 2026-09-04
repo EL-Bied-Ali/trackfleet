@@ -1,7 +1,10 @@
 import { getCompanySession } from "../../../lib/company-auth";
 import { createScannerPairing, listScannerDevices, revokeScannerDevice } from "../../../lib/scanner-pairing";
+import type { DeliveryScanCheckpoint } from "../../../lib/delivery-store.types";
 import { invalidJsonResponse, readJsonObject } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
+
+const validCheckpoints: DeliveryScanCheckpoint[] = ["loaded", "arrived", "delivered"];
 
 function json(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -26,8 +29,13 @@ export async function POST(request: Request) {
   if (!payload) return invalidJsonResponse();
   const deviceLabel = String(payload.deviceLabel ?? "").trim();
   if (!deviceLabel) return json({ error: "device_label_required" }, 400);
+  const rawCheckpoint = payload.checkpoint;
+  if (rawCheckpoint != null && !validCheckpoints.includes(rawCheckpoint as DeliveryScanCheckpoint)) {
+    return json({ error: "invalid_checkpoint" }, 400);
+  }
+  const checkpoint = (rawCheckpoint as DeliveryScanCheckpoint | null | undefined) ?? null;
   try {
-    const pairing = await createScannerPairing(session, deviceLabel);
+    const pairing = await createScannerPairing(session, deviceLabel, checkpoint);
     return json({ ...pairing, scope: session.siteId ?? "Compte central" });
   } catch {
     return json({ error: "scanner_pairing_unavailable" }, 503);

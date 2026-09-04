@@ -8,6 +8,7 @@ const consumeRoute = await readFile(new URL("../app/api/scan/pair/consume/route.
 const scannerSessionRoute = await readFile(new URL("../app/api/scan/session/route.ts", import.meta.url), "utf8");
 const scanRoute = await readFile(new URL("../app/api/scan/route.ts", import.meta.url), "utf8");
 const connectPage = await readFile(new URL("../app/scan/connect/page.tsx", import.meta.url), "utf8");
+const scanPage = await readFile(new URL("../app/scan/page.tsx", import.meta.url), "utf8");
 
 test("scanner pairing is a separate, HttpOnly scanner-only session with a short one-time link and a 30-day device lifetime", () => {
   assert.match(pairing, /const scannerCookieName = "__Host-trackfleet_scanner";/);
@@ -40,11 +41,11 @@ test("only the scan endpoints accept the paired phone, while the issuer must hol
 test("multiple devices can be paired at once under the same scope, each named and independently listed/revocable, instead of one silently kicking another out", () => {
   assert.match(pairing, /function deviceListKey\(companyId: string, siteId: string \| null\) \{/);
   assert.match(pairing, /return `scanner-devices:\$\{companyId\}:\$\{siteId \?\? "dispatcher"\}`;/);
-  assert.match(pairing, /export async function createScannerPairing\(session: CompanySession, deviceLabel: string\)/);
+  assert.match(pairing, /export async function createScannerPairing\(session: CompanySession, deviceLabel: string, checkpoint: DeliveryScanCheckpoint \| null = null\)/);
   assert.match(pairing, /export async function listScannerDevices\(session: CompanySession\)/);
   assert.match(pairing, /export async function revokeScannerDevice\(session: CompanySession, deviceId: string\)/);
   assert.doesNotMatch(pairing, /export async function revokeScannerFor/);
-  assert.match(pairing, /devices\.push\(\{ id: record\.id, deviceLabel: record\.deviceLabel, pairedAt: sessionRecord\.pairedAt, expiresAt: sessionRecord\.expiresAt \}\);/);
+  assert.match(pairing, /devices\.push\(\{ id: record\.id, deviceLabel: record\.deviceLabel, pairedAt: sessionRecord\.pairedAt, expiresAt: sessionRecord\.expiresAt, checkpoint: record\.checkpoint \?\? null \}\);/);
 });
 
 test("a pairing requires a device label, and the connect page collects one before generating a QR", () => {
@@ -89,4 +90,48 @@ test("a refreshed cookie rides along on whatever response the scan/session endpo
   assert.match(scanRoute, /const refreshHeaders = scannerResult\?\.refreshedCookie \? \{ "set-cookie": scannerResult\.refreshedCookie \} : undefined;/);
   assert.match(scanRoute, /function noStore\(body: Record<string, unknown>, status = 200, extraHeaders\?: Record<string, string>\) \{/);
   assert.match(scannerSessionRoute, /if \(scannerResult\?\.refreshedCookie\) headers\["set-cookie"\] = scannerResult\.refreshedCookie;/);
+});
+
+// Live request: "l'employé qui reçoit le lien doit choisir où c'est, hub
+// agence ou chargement, ça peut porter à confusion" -- a device paired for
+// one fixed post should never make its user pick a checkpoint at all.
+test("a pairing's checkpoint is optional and additive to the existing record shape, so an already-paired device with no checkpoint keeps today's free-choice behavior", () => {
+  assert.match(pairing, /checkpoint\?: DeliveryScanCheckpoint \| null;/);
+  assert.match(pairing, /const checkpoint = record\.checkpoint;/);
+  assert.match(pairing, /if \(checkpoint != null && !validCheckpoints\.includes\(checkpoint\)\) return null;/);
+  assert.match(pairing, /return \{ \.\.\.record, checkpoint: checkpoint \?\? null \} as ScannerRecord;/);
+  // Bumping `version` would reject every already-stored record on next
+  // read (see the version check just above in parseRecord), forcing every
+  // currently-paired device to re-pair -- the field was added without
+  // touching version 2 specifically to avoid that.
+  assert.match(pairing, /record\.version !== 2/);
+});
+
+test("createScannerPairing validates the checkpoint and rejects a value outside the three known ones", () => {
+  assert.match(pairing, /if \(checkpoint != null && !validCheckpoints\.includes\(checkpoint\)\) throw new Error\("invalid_checkpoint"\);/);
+  assert.match(pairRoute, /if \(rawCheckpoint != null && !validCheckpoints\.includes\(rawCheckpoint as DeliveryScanCheckpoint\)\) \{\s*\n\s*return json\(\{ error: "invalid_checkpoint" \}, 400\);/);
+});
+
+test("the paired phone's own screen can read which checkpoint it's locked to, alongside its device label", () => {
+  assert.match(scannerSessionRoute, /checkpoint: scannerResult\?\.session\.checkpoint \?\? null,/);
+});
+
+test("the scan endpoint enforces a device's checkpoint lock server-side, not just by hiding the picker client-side", () => {
+  assert.match(scanRoute, /const lockedCheckpoint = scannerResult\?\.session\.checkpoint;/);
+  assert.match(scanRoute, /if \(lockedCheckpoint && checkpoint !== lockedCheckpoint\) \{\s*\n\s*return noStore\(\{ error: "checkpoint_locked", lockedCheckpoint \}, 403, refreshHeaders\);/);
+});
+
+test("the scan page hides the checkpoint picker entirely for a locked device, pre-selects its mode, and surfaces a clear locked error if the server ever rejects a mismatch", () => {
+  assert.match(scanPage, /const \[lockedCheckpoint, setLockedCheckpoint\] = useState<Checkpoint \| null>\(null\);/);
+  assert.match(scanPage, /if \(data\.checkpoint\) \{\s*\n\s*setLockedCheckpoint\(data\.checkpoint\);\s*\n\s*setMode\(data\.checkpoint\);/);
+  assert.match(scanPage, /\{lockedCheckpoint \? \(/);
+  assert.match(scanPage, /data\.error === "checkpoint_locked" \? "Cet appareil est réservé à un autre poste\."/);
+});
+
+test("the connect page requires a checkpoint choice before generating a link, sends it to the pairing endpoint, and offers a one-click copy button for the resulting link", () => {
+  assert.match(connectPage, /if \(!checkpointDraft\) \{\s*\n\s*setMessage\("Choisissez le poste de cet appareil \(chargement, hub ou agence\)\."\);/);
+  assert.match(connectPage, /body: JSON\.stringify\(\{ deviceLabel, checkpoint: checkpointDraft \}\),/);
+  assert.match(connectPage, /async function copyLink\(url: string\) \{/);
+  assert.match(connectPage, /await navigator\.clipboard\.writeText\(url\);/);
+  assert.match(connectPage, /\{copied \? "Copié ✓" : "Copier"\}/);
 });

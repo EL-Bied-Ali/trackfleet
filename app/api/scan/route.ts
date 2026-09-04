@@ -133,6 +133,14 @@ export async function POST(request: Request) {
     if (!isValidParcelCode(parcelCode)) return noStore({ error: "invalid_parcel_code" }, 400, refreshHeaders);
     const checkpoint = String(payload.checkpoint ?? "") as DeliveryScanCheckpoint;
     if (!CHECKPOINTS.includes(checkpoint)) return noStore({ error: "invalid_checkpoint" }, 400, refreshHeaders);
+    // A device paired for one fixed post (see /scan/connect and
+    // scanner-pairing.ts) hides the checkpoint picker client-side, but the
+    // server enforces it too -- defense in depth against a stale page
+    // still holding an old mode in memory, not just the UI removing the choice.
+    const lockedCheckpoint = scannerResult?.session.checkpoint;
+    if (lockedCheckpoint && checkpoint !== lockedCheckpoint) {
+      return noStore({ error: "checkpoint_locked", lockedCheckpoint }, 403, refreshHeaders);
+    }
     // Best-effort: the scanning phone's own position at the moment of the
     // scan, if it granted location permission (see /scan's watchPosition).
     // Never required for the scan itself to succeed -- a scan with no

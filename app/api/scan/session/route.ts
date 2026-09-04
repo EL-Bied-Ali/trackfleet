@@ -19,6 +19,11 @@ export async function GET(request: Request) {
     // as (e.g. "Ahmed - Camion 3"), so a driver can confirm at a glance
     // it's really their own persistent pairing, not someone else's.
     deviceLabel: scannerResult?.session.deviceLabel ?? null,
+    // A device paired for one fixed post (see /scan/connect) locks the
+    // scan page to that checkpoint instead of making its user choose --
+    // null for a dispatcher's own direct login, or a device paired before
+    // this existed, which both keep the free-choice picker.
+    checkpoint: scannerResult?.session.checkpoint ?? null,
     company: { account: session.accountLabel, role: session.role, siteId: session.siteId },
   }, { headers });
 }
