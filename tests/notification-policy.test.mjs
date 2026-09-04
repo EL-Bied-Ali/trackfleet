@@ -40,7 +40,7 @@ test("keeps only the newest pending event per delivery", () => {
 // sharing one shipmentId, each carrying its own copy of the same event --
 // without grouping, a customer with 3 parcels on one truck got 3
 // near-identical WhatsApp/email pushes for the same real-world event.
-test("groupActionableByShipment sends one representative per (shipmentId, event type) group and reports the group's true size", () => {
+test("groupActionableByShipment yields one group per (shipmentId, event type), with a representative item, the group's true size, and its siblings attached -- not resolved to any outcome yet", () => {
   const items = [
     { delivery: { id: "TF-1", shipmentId: "ship-A" }, event: { type: "REGISTERED", createdAt: new Date("2026-09-01T10:00:00Z") } },
     { delivery: { id: "TF-2", shipmentId: "ship-A" }, event: { type: "REGISTERED", createdAt: new Date("2026-09-01T10:00:01Z") } },
@@ -48,34 +48,35 @@ test("groupActionableByShipment sends one representative per (shipmentId, event 
     { delivery: { id: "TF-9", shipmentId: null }, event: { type: "REGISTERED", createdAt: new Date("2026-09-01T10:00:00Z") } },
   ];
 
-  const { representative, redundant } = groupActionableByShipment(items);
-  assert.equal(representative.length, 2);
-  const shipmentGroup = representative.find((entry) => entry.item.delivery.id === "TF-1");
+  const groups = groupActionableByShipment(items);
+  assert.equal(groups.length, 2);
+  const shipmentGroup = groups.find((entry) => entry.item.delivery.id === "TF-1");
   assert.equal(shipmentGroup.parcelCount, 3);
-  const soloGroup = representative.find((entry) => entry.item.delivery.id === "TF-9");
+  assert.deepEqual(shipmentGroup.siblings.map((sibling) => sibling.delivery.id), ["TF-2", "TF-3"]);
+  const soloGroup = groups.find((entry) => entry.item.delivery.id === "TF-9");
   assert.equal(soloGroup.parcelCount, 1);
-  assert.deepEqual(redundant.map((item) => item.delivery.id), ["TF-2", "TF-3"]);
+  assert.deepEqual(soloGroup.siblings, []);
 });
 
-test("groupActionableByShipment groups by (shipmentId, event type), not shipmentId alone -- a shipment with both a pending REGISTERED and a pending ARRIVED_AT_SITE sends one of each, not one total", () => {
+test("groupActionableByShipment groups by (shipmentId, event type), not shipmentId alone -- a shipment with both a pending REGISTERED and a pending ARRIVED_AT_SITE yields two separate groups, not one", () => {
   const items = [
     { delivery: { id: "TF-1", shipmentId: "ship-B" }, event: { type: "REGISTERED", createdAt: new Date("2026-09-01T10:00:00Z") } },
     { delivery: { id: "TF-2", shipmentId: "ship-B" }, event: { type: "ARRIVED_AT_SITE", createdAt: new Date("2026-09-02T10:00:00Z") } },
   ];
 
-  const { representative, redundant } = groupActionableByShipment(items);
-  assert.equal(representative.length, 2);
-  assert.equal(redundant.length, 0);
+  const groups = groupActionableByShipment(items);
+  assert.equal(groups.length, 2);
+  assert.ok(groups.every((entry) => entry.siblings.length === 0));
 });
 
-test("a delivery with no shipmentId falls back to grouping by its own id -- unaffected, one representative per delivery as before", () => {
+test("a delivery with no shipmentId falls back to grouping by its own id -- unaffected, one group per delivery as before", () => {
   const items = [
     { delivery: { id: "TF-1", shipmentId: null }, event: { type: "REGISTERED", createdAt: new Date() } },
     { delivery: { id: "TF-2", shipmentId: undefined }, event: { type: "REGISTERED", createdAt: new Date() } },
   ];
 
-  const { representative, redundant } = groupActionableByShipment(items);
-  assert.equal(representative.length, 2);
-  assert.equal(redundant.length, 0);
-  assert.deepEqual(representative.map((entry) => entry.parcelCount), [1, 1]);
+  const groups = groupActionableByShipment(items);
+  assert.equal(groups.length, 2);
+  assert.ok(groups.every((entry) => entry.siblings.length === 0));
+  assert.deepEqual(groups.map((entry) => entry.parcelCount), [1, 1]);
 });

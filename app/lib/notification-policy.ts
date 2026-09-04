@@ -57,11 +57,16 @@ type ShipmentPendingLike = PendingLike & {
 // carrying its own copy of REGISTERED/ARRIVED_AT_SITE. Left ungrouped, a
 // customer with 3 parcels on one truck would get 3 near-identical WhatsApp
 // pushes for the same real-world event. One representative per
-// (shipmentId, event type) group is sent (the rest ride along as
-// "redundant", to be marked sent without actually messaging again -- same
-// treatment as the superseded bucket above), and the group's size travels
-// back so the sent message can say "3 colis liés à cet envoi" instead of
-// silently dropping the other parcels from the customer's view.
+// (shipmentId, event type) group is actually sent, and its siblings ride
+// along on WHATEVER the representative's real outcome turns out to be
+// (see resolveShipmentSiblings in notification-runner.ts) -- deliberately
+// NOT pre-resolved here, since the caller doesn't yet know whether the
+// representative will send, get permanently suppressed (no consent, no
+// tracking token), or fail and need a retry. Marking siblings "sent" before
+// that's known would silently lose their notification forever the moment
+// the representative's send didn't actually go out. The group's size
+// travels back so a successful send can say "3 colis liés à cet envoi"
+// instead of silently dropping the other parcels from the customer's view.
 export function groupActionableByShipment<T extends ShipmentPendingLike>(actionable: T[]) {
   const groups = new Map<string, T[]>();
   for (const item of actionable) {
@@ -71,12 +76,8 @@ export function groupActionableByShipment<T extends ShipmentPendingLike>(actiona
     else groups.set(key, [item]);
   }
 
-  const representative: Array<{ item: T; parcelCount: number }> = [];
-  const redundant: T[] = [];
-  for (const group of groups.values()) {
-    const [first, ...rest] = group;
-    representative.push({ item: first, parcelCount: group.length });
-    redundant.push(...rest);
-  }
-  return { representative, redundant };
+  return Array.from(groups.values()).map((group) => {
+    const [item, ...siblings] = group;
+    return { item, parcelCount: group.length, siblings };
+  });
 }

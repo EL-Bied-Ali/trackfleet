@@ -28,7 +28,7 @@ test("processPendingNotifications computes whatsappEligible from whatsappInclude
   // loop). Confirmed by checking there's no `if (!whatsappEligible)` early
   // return anywhere, and that the send loop is still reached afterward.
   const declarationIndex = runnerSource.indexOf("const whatsappEligible = whatsappIncludedInPlan(subscription);");
-  const nextLoop = runnerSource.indexOf("for (const { item, parcelCount } of representative", declarationIndex);
+  const nextLoop = runnerSource.indexOf("for (const { item, parcelCount, siblings } of groups", declarationIndex);
   assert.ok(declarationIndex >= 0 && nextLoop > declarationIndex);
   assert.doesNotMatch(runnerSource, /if \(!whatsappEligible\)/);
 });
