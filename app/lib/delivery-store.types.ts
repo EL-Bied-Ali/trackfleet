@@ -302,6 +302,14 @@ export interface DeliveryStore {
   // is a legitimate lookup, per explicit product decision.
   findMostRecentActiveDeliveryByContact(phone: string): Promise<DeliveryRow | null>;
   findMostRecentActiveDeliveryByCustomerNameQuery(query: string): Promise<DeliveryRow | null>;
+  // Same unscoped-by-company reasoning as findMostRecentActiveDeliveryByContact,
+  // but returns EVERY active match rather than just the most recent one --
+  // a customer texting "STOP" needs every one of their currently-active
+  // deliveries' own consent withdrawn, not just the single most recent one
+  // (whatsappConsentWithdrawn is checked per-delivery, from that delivery's
+  // own event log, so a second active delivery from the same phone would
+  // otherwise keep messaging after the customer opted out).
+  listActiveDeliveriesByContact(phone: string): Promise<DeliveryRow[]>;
   claimNotification(deliveryId: string, type: DeliveryEventType): Promise<boolean>;
   markNotificationSent(deliveryId: string, type: DeliveryEventType): Promise<void>;
   releaseNotification(deliveryId: string, type: DeliveryEventType): Promise<void>;

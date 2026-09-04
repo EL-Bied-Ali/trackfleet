@@ -399,6 +399,13 @@ export const postgresStore: DeliveryStore = {
     return rows[0] ? hydrate(rows[0]) : null;
   },
 
+  async listActiveDeliveriesByContact(phone) {
+    await ensureSchema();
+    const sql = getSql();
+    const rows = await sql`SELECT * FROM deliveries WHERE (contact = ${phone} OR recipient_contact = ${phone}) AND status != 'Delivered'` as RawDelivery[];
+    return rows.map(hydrate);
+  },
+
   async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
     await ensureSchema();
     const sql = getSql();

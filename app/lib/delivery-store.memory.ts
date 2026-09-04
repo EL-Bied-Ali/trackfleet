@@ -55,6 +55,9 @@ export const memoryStore: DeliveryStore = {
     matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return matches[0] ?? null;
   },
+  async listActiveDeliveriesByContact(phone) {
+    return deliveryStore.filter((delivery) => (delivery.contact === phone || delivery.recipientContact === phone) && delivery.status !== "Delivered");
+  },
   async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
     const trimmed = query.trim().toLowerCase();
     if (!trimmed) return null;

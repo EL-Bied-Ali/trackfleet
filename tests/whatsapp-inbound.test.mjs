@@ -5,6 +5,8 @@ import { memoryStore } from "../app/lib/delivery-store.memory.ts";
 import {
   buildFoundReply,
   buildNoMatchAskNameReply,
+  buildOptOutConfirmationReply,
+  isOptOutMessage,
   parseInboundWhatsAppMessage,
   verifyWhatsAppWebhookSignature,
 } from "../app/lib/whatsapp-inbound-message.ts";
@@ -177,6 +179,30 @@ test("the no-match reply asks for a name, and is the same message whether it's a
   assert.match(reply, /nom/i);
 });
 
+// Live audit finding: Meta requires honoring a customer's own opt-out
+// request sent directly via WhatsApp -- the only way to withdraw consent
+// used to be a dispatcher clicking a button in the internal dashboard, with
+// no customer-facing self-service mechanism at all.
+test("isOptOutMessage recognizes an exact STOP/ARRET-family word (case-insensitive, trailing punctuation ignored), in French or English", () => {
+  for (const text of ["stop", "STOP", "Stop", "stop.", "stop!", "arret", "arrêt", "Arrêt !", "desabonner", "désabonner", "unsubscribe"]) {
+    assert.equal(isOptOutMessage(text), true, `"${text}" should be recognized as an opt-out`);
+  }
+});
+
+test("isOptOutMessage does NOT match on a mere substring -- an ordinary message that happens to contain one of these words as part of a longer sentence is not misread as an opt-out", () => {
+  assert.equal(isOptOutMessage("Où est mon colis, j'ai peur qu'il s'arrête en route"), false);
+  assert.equal(isOptOutMessage("stop spamming me is not what I meant"), false);
+  assert.equal(isOptOutMessage("Jean Dupont"), false);
+  assert.equal(isOptOutMessage(""), false);
+  assert.equal(isOptOutMessage("   "), false);
+});
+
+test("buildOptOutConfirmationReply confirms the opt-out without asking a question or offering to resend", () => {
+  const reply = buildOptOutConfirmationReply();
+  assert.match(reply, /WhatsApp/);
+  assert.doesNotMatch(reply, /\?/);
+});
+
 // whatsapp-inbound.ts and the webhook route import trackfleet-runtime-env,
 // whose bare specifier only resolves under Vite/vinext's aliasing --
 // unresolvable from plain Node (matching this repo's established pattern),
@@ -228,9 +254,10 @@ test("a reply is sent as a freeform text message (type: text), never a template,
   assert.doesNotMatch(inboundLib, /type: "template"/);
 });
 
-test("consent withdrawal deliberately does not suppress this reply -- the customer is the one initiating contact, a different context from the automatic push side", () => {
+test("consent withdrawal deliberately does not suppress the found/no-match reply -- the customer is the one initiating contact, a different context from the automatic push side. whatsappConsentWithdrawn IS used elsewhere in this route now (the opt-out branch, to avoid double-recording), just not to gate this reply", () => {
   assert.match(webhookRoute, /Consent withdrawal deliberately does NOT suppress this reply/);
-  assert.doesNotMatch(webhookRoute, /whatsappConsentWithdrawn/);
+  const foundNoMatchSection = webhookRoute.slice(webhookRoute.indexOf("Consent withdrawal deliberately does NOT"), webhookRoute.indexOf("await sendWhatsAppTextReply(inbound.from, reply);"));
+  assert.doesNotMatch(foundNoMatchSection, /whatsappConsentWithdrawn/);
 });
 
 test("a delivery match tries the phone number first (either the sender or the recipient), then falls back to a name search using the message text -- both scoped globally (unscoped by company), matching getPublic's existing pattern, since the webhook has no company context", () => {
@@ -238,6 +265,23 @@ test("a delivery match tries the phone number first (either the sender or the re
   assert.match(webhookRoute, /store\.findMostRecentActiveDeliveryByCustomerNameQuery\(inbound\.text\)/);
   assert.match(deliveryStoreTypes, /findMostRecentActiveDeliveryByContact\(phone: string\): Promise<DeliveryRow \| null>;/);
   assert.match(deliveryStoreTypes, /findMostRecentActiveDeliveryByCustomerNameQuery\(query: string\): Promise<DeliveryRow \| null>;/);
+});
+
+// Live audit finding: a customer had no self-service way to opt out via
+// WhatsApp itself. Checked before the found/no-match lookup, and covers
+// EVERY active delivery for the phone (not just the most recent one),
+// since whatsappConsentWithdrawn is checked per-delivery from that
+// delivery's own event log.
+test("the webhook checks for an opt-out message first, records WHATSAPP_OPT_OUT on every currently-active delivery for that phone, and replies with a confirmation instead of the normal found/no-match reply", () => {
+  assert.match(webhookRoute, /if \(isOptOutMessage\(inbound\.text\)\) \{/);
+  assert.match(webhookRoute, /const activeDeliveries = await store\.listActiveDeliveriesByContact\(phone\);/);
+  assert.match(webhookRoute, /if \(!whatsappConsentWithdrawn\(activeEvents\)\) \{\s*\n\s*await store\.recordEvent\(activeDelivery\.id, "WHATSAPP_OPT_OUT", activeDelivery\.progress\);/);
+  assert.match(webhookRoute, /await sendWhatsAppTextReply\(inbound\.from, buildOptOutConfirmationReply\(\)\);/);
+  // Must be checked before the found/no-match lookup, not after.
+  const optOutIndex = webhookRoute.indexOf("isOptOutMessage(inbound.text)");
+  const lookupIndex = webhookRoute.indexOf("store.findMostRecentActiveDeliveryByContact(phone)");
+  assert.ok(optOutIndex >= 0 && lookupIndex > optOutIndex);
+  assert.match(deliveryStoreTypes, /listActiveDeliveriesByContact\(phone: string\): Promise<DeliveryRow\[\]>;/);
 });
 
 test("the recipient texting in is greeted by their own name, not the sender's -- explicit product decision: either party can look up the same delivery", () => {
@@ -298,6 +342,27 @@ test("findMostRecentActiveDeliveryByContact also matches the recipient's phone, 
 
   const match = await memoryStore.findMostRecentActiveDeliveryByContact(recipientPhone);
   assert.equal(match?.id, delivery.id);
+});
+
+// Regression coverage for the opt-out feature: unlike
+// findMostRecentActiveDeliveryByContact (single most-recent match, used for
+// the normal found/no-match reply), listActiveDeliveriesByContact returns
+// EVERY active delivery for a phone, so an opt-out can cover all of them.
+test("listActiveDeliveriesByContact returns every active delivery for a phone (not just the most recent), matching either the sender or the recipient, and excludes Delivered ones", async () => {
+  const phone = `21264${Date.now()}`.slice(0, 12);
+  const delivered = await memoryStore.create(baseDeliveryInput({ contact: phone, status: "Delivered" }));
+  const older = await memoryStore.create(baseDeliveryInput({ contact: phone, status: "In transit" }));
+  const asRecipient = await memoryStore.create(baseDeliveryInput({ contact: "212699999999", recipientContact: phone, status: "Loading" }));
+
+  const matches = await memoryStore.listActiveDeliveriesByContact(phone);
+  const matchedIds = matches.map((delivery) => delivery.id).sort();
+  assert.deepEqual(matchedIds, [asRecipient.id, older.id].sort());
+  assert.ok(!matchedIds.includes(delivered.id));
+});
+
+test("listActiveDeliveriesByContact returns an empty array, not null, for an unknown number", async () => {
+  const matches = await memoryStore.listActiveDeliveriesByContact("999999999999998");
+  assert.deepEqual(matches, []);
 });
 
 test("findMostRecentActiveDeliveryByCustomerNameQuery does a case-insensitive EXACT match on the customer name, among active deliveries only", async () => {
