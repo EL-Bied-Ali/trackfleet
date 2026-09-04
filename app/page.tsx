@@ -478,6 +478,7 @@ export default function Home() {
   const [integration, setIntegration] = useState<IntegrationState>({ configured: false, connected: false, vehicleCount: 0, error: null, vehicles: [] });
   const [features, setFeatures] = useState<FeatureState>({ whatsappDemoEnabled: false, whatsappAvailable: false });
   const [companyBranding, setCompanyBranding] = useState<CompanyBranding>(emptyCompanyBranding);
+  const [whatsappContactNumber, setWhatsappContactNumber] = useState<string | null>(null);
   const [trips, setTrips] = useState<TripHistoryItem[]>([]);
   // Keyed by destinationSiteId -- the same learned per-agency transit
   // duration estimateRelayArrival uses server-side (see relay-eta-estimate.ts),
@@ -762,7 +763,7 @@ export default function Home() {
           return;
         }
         if (!response.ok) throw new Error("Delivery service unavailable");
-        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; trips?: TripHistoryItem[]; companyBranding?: CompanyBranding; departureArrivalEstimates?: Record<string, { medianHours: number; sampleCount: number }> };
+        const data = await response.json() as { deliveries: Delivery[]; integration?: IntegrationState; features?: FeatureState; events?: DeliveryEventRow[]; trips?: TripHistoryItem[]; companyBranding?: CompanyBranding; departureArrivalEstimates?: Record<string, { medianHours: number; sampleCount: number }>; whatsappContactNumber?: string | null };
         if (!active) return;
         if (tracking && data.deliveries.length) {
           setDeliveries(data.deliveries);
@@ -770,6 +771,7 @@ export default function Home() {
           setSelectedId(data.deliveries[0].id);
           setPublicTrackingState("ready");
           if (data.companyBranding) setCompanyBranding(data.companyBranding);
+          setWhatsappContactNumber(data.whatsappContactNumber ?? null);
         } else if (!tracking) {
           setDeliveries(data.deliveries);
           setDispatchDataState("ready");
@@ -1273,6 +1275,24 @@ export default function Home() {
   // dispatcher for any group, an agency only for its own destination site's
   // (the dashboard already scopes an agency's own deliveries list to their
   // site, so no extra filtering is needed here).
+  function missingScansDetail(result: { missingLoadedScan?: boolean; missingHubScan?: boolean }) {
+    return result.missingLoadedScan && result.missingHubScan
+      ? (locale === "fr" ? "dépôt + hub" : "depot + hub")
+      : result.missingLoadedScan
+        ? (locale === "fr" ? "dépôt" : "depot")
+        : "hub";
+  }
+
+  async function postArrivalConfirmation(deliveryId: string, bypassMissingScans = false) {
+    const response = await fetch("/api/deliveries/manual-completion", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deliveryId, confirmArrival: true, ...(bypassMissingScans ? { bypassMissingScans: true } : {}) }),
+    });
+    const data = await response.json().catch(() => ({})) as { delivery?: Delivery; error?: string; missingLoadedScan?: boolean; missingHubScan?: boolean };
+    return { deliveryId, ...data };
+  }
+
   async function confirmGroupArrival(label: string, deliveryIds: string[]) {
     if (!company || !deliveryIds.length) return;
     const confirmation = locale === "fr"
@@ -1283,30 +1303,30 @@ export default function Home() {
     if (!window.confirm(confirmation)) return;
     setGroupArrivalPending(label);
     try {
-      const responses = await Promise.all(deliveryIds.map((deliveryId) => fetch("/api/deliveries/manual-completion", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deliveryId, confirmArrival: true }),
-      }).then(async (response) => ({
-        deliveryId,
-        ...(await response.json().catch(() => ({})) as { delivery?: Delivery; error?: string; missingLoadedScan?: boolean; missingHubScan?: boolean }),
-      }))));
-      const updated = responses.map((result) => result.delivery).filter((delivery): delivery is Delivery => Boolean(delivery));
+      const responses = await Promise.all(deliveryIds.map((deliveryId) => postArrivalConfirmation(deliveryId)));
+      let updated = responses.map((result) => result.delivery).filter((delivery): delivery is Delivery => Boolean(delivery));
       // Client asked: arrival must only go through once a parcel was
-      // scanned at both the depot and the hub -- see the same gate server-side
-      // in manual-completion/route.ts. Surface exactly which parcel(s) and
-      // which checkpoint(s) blocked it, instead of a generic failure.
-      const blocked = responses.filter((result) => result.error === "arrival_blocked_missing_scans");
+      // scanned at both the depot and the hub -- see the same gate
+      // server-side in manual-completion/route.ts. Surfaced as a warning
+      // the dispatcher can explicitly choose to bypass (a distinct second
+      // confirm, never folded into the first click) rather than silently
+      // excluding blocked parcels.
+      let blocked = responses.filter((result) => result.error === "arrival_blocked_missing_scans");
       if (blocked.length) {
-        const detail = blocked.map((result) => {
-          const missing = result.missingLoadedScan && result.missingHubScan
-            ? (locale === "fr" ? "dépôt + hub" : "depot + hub")
-            : result.missingLoadedScan
-              ? (locale === "fr" ? "dépôt" : "depot")
-              : "hub";
-          return `${result.deliveryId} (${missing})`;
-        }).join(", ");
-        setToast(locale === "fr" ? `Arrivée bloquée : ${blocked.length > 1 ? "colis non scannés" : "colis non scanné"} : ${detail}` : locale === "nl" ? `Aankomst geblokkeerd: ${blocked.length > 1 ? "niet-gescande pakketten" : "niet-gescand pakket"}: ${detail}` : `Arrival blocked: unscanned ${blocked.length > 1 ? "parcels" : "parcel"}: ${detail}`);
+        const detail = blocked.map((result) => `${result.deliveryId} (${missingScansDetail(result)})`).join(", ");
+        const bypassPrompt = locale === "fr"
+          ? `${blocked.length > 1 ? "Colis non scannés" : "Colis non scanné"} : ${detail}. Confirmer leur arrivée quand même ?`
+          : locale === "nl"
+            ? `${blocked.length > 1 ? "Niet-gescande pakketten" : "Niet-gescand pakket"}: ${detail}. Toch de aankomst bevestigen?`
+            : `Unscanned ${blocked.length > 1 ? "parcels" : "parcel"}: ${detail}. Confirm their arrival anyway?`;
+        if (window.confirm(bypassPrompt)) {
+          const bypassResponses = await Promise.all(blocked.map((result) => postArrivalConfirmation(result.deliveryId, true)));
+          updated = [...updated, ...bypassResponses.map((result) => result.delivery).filter((delivery): delivery is Delivery => Boolean(delivery))];
+          blocked = bypassResponses.filter((result) => result.error === "arrival_blocked_missing_scans");
+        }
+        if (blocked.length) {
+          setToast(locale === "fr" ? `Arrivée non confirmée pour : ${blocked.map((result) => result.deliveryId).join(", ")}` : locale === "nl" ? `Aankomst niet bevestigd voor: ${blocked.map((result) => result.deliveryId).join(", ")}` : `Arrival not confirmed for: ${blocked.map((result) => result.deliveryId).join(", ")}`);
+        }
         if (!updated.length) return;
       }
       if (!updated.length) {
@@ -1325,6 +1345,54 @@ export default function Home() {
           ? (locale === "fr" ? "Arrivée confirmée, client(s) notifié(s) par WhatsApp" : locale === "nl" ? "Aankomst bevestigd, klant(en) via WhatsApp op de hoogte gebracht" : "Arrival confirmed, customer(s) notified via WhatsApp")
           : (locale === "fr" ? "Arrivée confirmée (WhatsApp non envoyé : fenêtre 24h fermée ou consentement retiré)" : locale === "nl" ? "Aankomst bevestigd (WhatsApp niet verzonden: 24u-venster gesloten of toestemming ingetrokken)" : "Arrival confirmed (WhatsApp not sent: 24h window closed or consent withdrawn)"));
       }
+    } catch {
+      setToast(locale === "fr" ? "Impossible de confirmer l'arrivée" : locale === "nl" ? "Aankomst kon niet worden bevestigd" : "Couldn't confirm arrival");
+    } finally {
+      setGroupArrivalPending(null);
+    }
+  }
+
+  // Live request: a standalone way to confirm just one parcel's arrival,
+  // for when a dispatcher/agency wants to act on a single delivery without
+  // going through the group's own batch flow above -- same warning/bypass
+  // and notify behavior, just for one id instead of an array.
+  async function confirmSingleArrival(deliveryId: string) {
+    if (!company) return;
+    const confirmation = locale === "fr"
+      ? "Confirmer l'arrivée de ce colis, et notifier le client par WhatsApp ?"
+      : locale === "nl"
+        ? "Aankomst van dit pakket bevestigen, en de klant via WhatsApp op de hoogte brengen?"
+        : "Confirm arrival for this parcel, and notify the customer via WhatsApp?";
+    if (!window.confirm(confirmation)) return;
+    setGroupArrivalPending(deliveryId);
+    try {
+      let result = await postArrivalConfirmation(deliveryId);
+      if (result.error === "arrival_blocked_missing_scans") {
+        const bypassPrompt = locale === "fr"
+          ? `Colis non scanné : ${missingScansDetail(result)}. Confirmer son arrivée quand même ?`
+          : locale === "nl"
+            ? `Niet-gescand pakket: ${missingScansDetail(result)}. Toch de aankomst bevestigen?`
+            : `Unscanned parcel: ${missingScansDetail(result)}. Confirm its arrival anyway?`;
+        if (!window.confirm(bypassPrompt)) {
+          setToast(locale === "fr" ? "Arrivée non confirmée" : locale === "nl" ? "Aankomst niet bevestigd" : "Arrival not confirmed");
+          return;
+        }
+        result = await postArrivalConfirmation(deliveryId, true);
+      }
+      if (!result.delivery) {
+        setToast(locale === "fr" ? "Impossible de confirmer l'arrivée" : locale === "nl" ? "Aankomst kon niet worden bevestigd" : "Couldn't confirm arrival");
+        return;
+      }
+      const delivery = result.delivery;
+      setDeliveries((items) => items.map((item) => item.id === delivery.id ? delivery : item));
+      const notifyResult = await fetch("/api/deliveries/notify-arrival", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId }),
+      }).then((response) => response.json() as Promise<{ ok?: boolean }>).catch(() => ({ ok: false }));
+      setToast(notifyResult.ok
+        ? (locale === "fr" ? "Arrivée confirmée, client notifié par WhatsApp" : locale === "nl" ? "Aankomst bevestigd, klant via WhatsApp op de hoogte gebracht" : "Arrival confirmed, customer notified via WhatsApp")
+        : (locale === "fr" ? "Arrivée confirmée (WhatsApp non envoyé : fenêtre 24h fermée ou consentement retiré)" : locale === "nl" ? "Aankomst bevestigd (WhatsApp niet verzonden: 24u-venster gesloten of toestemming ingetrokken)" : "Arrival confirmed (WhatsApp not sent: 24h window closed or consent withdrawn)"));
     } catch {
       setToast(locale === "fr" ? "Impossible de confirmer l'arrivée" : locale === "nl" ? "Aankomst kon niet worden bevestigd" : "Couldn't confirm arrival");
     } finally {
@@ -1952,32 +2020,12 @@ export default function Home() {
     setCreating(false);
   }
 
-  async function confirmArrivalForDelivery(deliveryId: string, destinationSiteId?: string | null) {
-    if (company?.role !== "agency" || destinationSiteId !== company.siteId) return;
-    try {
-      const response = await fetch("/api/deliveries/manual-completion", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deliveryId, confirmArrival: true }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null) as { error?: string; missingLoadedScan?: boolean; missingHubScan?: boolean } | null;
-        if (response.status === 409 && data?.error === "arrival_blocked_missing_scans") {
-          const missing = data.missingLoadedScan && data.missingHubScan
-            ? (locale === "fr" ? "au dépôt et au hub" : locale === "nl" ? "bij het depot en de hub" : "at the depot and the hub")
-            : data.missingLoadedScan
-              ? (locale === "fr" ? "au dépôt" : locale === "nl" ? "bij het depot" : "at the depot")
-              : (locale === "fr" ? "au hub" : locale === "nl" ? "bij de hub" : "at the hub");
-          setToast(locale === "fr" ? `Arrivée bloquée : colis non scanné ${missing}.` : locale === "nl" ? `Aankomst geblokkeerd: pakket niet gescand ${missing}.` : `Arrival blocked: parcel not scanned ${missing}.`);
-          return;
-        }
-        throw new Error("arrival_confirmation_failed");
-      }
-      setToast(locale === "fr" ? "Arrivée confirmée. La clôture suivra après le déchargement." : locale === "nl" ? "Aankomst bevestigd. Afsluiting volgt na het lossen." : "Arrival confirmed. Completion will follow after unloading.");
-    } catch {
-      setToast(locale === "fr" ? "Impossible de confirmer cette arrivée." : locale === "nl" ? "Aankomst kon niet worden bevestigd." : "Could not confirm this arrival.");
-    }
-  }
+  // Was its own bespoke implementation (agency-only, no WhatsApp notify, no
+  // missing-scan bypass) -- unified onto confirmSingleArrival below (a
+  // strict superset: same missing-scan warning, now with an explicit
+  // bypass, and it notifies the customer the same way the group button
+  // already did) rather than maintaining two different single-parcel
+  // confirm-arrival behaviors in two different panels.
 
   // Only actually deliverable while the customer's own WhatsApp message
   // opened Meta's free 24h reply window -- this endpoint just attempts it
@@ -2452,6 +2500,10 @@ export default function Home() {
                 <Icon>◔</Icon>
                 <div><strong>{locale === "fr" ? "Contacter l'agence" : locale === "nl" ? "Contact opnemen met het agentschap" : "Contact the agency"}</strong><span>{selected.destinationWhatsapp}</span></div>
               </a>}
+              {selected.status !== "Delivered" && whatsappContactNumber && <a className="agency-contact-card" href={`https://wa.me/${whatsappContactNumber.replace(/[^\d]/g, "")}`} target="_blank" rel="noopener noreferrer">
+                <Icon>◔</Icon>
+                <div><strong>{locale === "fr" ? "Recevoir les mises à jour par WhatsApp" : locale === "nl" ? "Updates via WhatsApp ontvangen" : "Get updates via WhatsApp"}</strong><span>{locale === "fr" ? `Envoyez-nous d'abord un message : ${whatsappContactNumber}` : locale === "nl" ? `Stuur ons eerst een bericht: ${whatsappContactNumber}` : `Message us first: ${whatsappContactNumber}`}</span></div>
+              </a>}
               <div className="privacy-note"><Icon>⌁</Icon><p><strong>{t.privacyTitle}</strong><span>{t.privacyBody}</span></p></div>
             </aside>
           </div>
@@ -2558,7 +2610,7 @@ export default function Home() {
                           <span>{note}</span>
                         </div>
                         <div className="expected-parcel-actions">
-                          <button type="button" onClick={() => void confirmArrivalForDelivery(delivery.id, delivery.destinationSiteId)}>{locale === "fr" ? "Confirmer l’arrivée" : locale === "nl" ? "Aankomst bevestigen" : "Confirm arrival"}</button>
+                          <button type="button" disabled={groupArrivalPending === delivery.id} onClick={() => void confirmSingleArrival(delivery.id)}>{groupArrivalPending === delivery.id ? (locale === "fr" ? "Confirmation…" : locale === "nl" ? "Bevestigen…" : "Confirming…") : (locale === "fr" ? "Confirmer l’arrivée" : locale === "nl" ? "Aankomst bevestigen" : "Confirm arrival")}</button>
                           <button type="button" onClick={() => void notifyArrivalForDelivery(delivery.id, delivery.destinationSiteId)}>{locale === "fr" ? "Notifier par WhatsApp" : locale === "nl" ? "Melden via WhatsApp" : "Notify via WhatsApp"}</button>
                         </div>
                       </article>
@@ -2603,6 +2655,7 @@ export default function Home() {
                   </> : <small>{locale === "fr" ? "GPS en attente · SENDATRACK indisponible" : locale === "nl" ? "GPS in afwachting · SENDATRACK niet beschikbaar" : "Waiting for GPS · SENDATRACK unavailable"}</small>}
                 </div>}
                 <div className="popover-actions"><button onClick={openCustomerView}>{t.openTracking} <span>↗</span></button><button className="copy-link" onClick={copyTrackingLink}>{t.copyLink}</button></div>
+                {selected.status !== "Delivered" && (company?.role === "dispatcher" || (company?.role === "agency" && selected.destinationSiteId === company.siteId)) && <div className="popover-actions"><button type="button" disabled={groupArrivalPending === selected.id} onClick={() => void confirmSingleArrival(selected.id)}>{groupArrivalPending === selected.id ? (locale === "fr" ? "Confirmation…" : locale === "nl" ? "Bevestigen…" : "Confirming…") : (locale === "fr" ? "Confirmer l'arrivée" : locale === "nl" ? "Aankomst bevestigen" : "Confirm arrival")}</button></div>}
                 {company?.role === "agency" && selected.destinationSiteId === company.siteId && <div className="popover-actions"><button type="button" onClick={() => void notifyArrivalForDelivery(selected.id, selected.destinationSiteId)}>{locale === "fr" ? "Notifier par WhatsApp" : locale === "nl" ? "Melden via WhatsApp" : "Notify via WhatsApp"}</button></div>}
                 {company?.role === "dispatcher" && selected.status === "Loading" && <div className="popover-actions"><button type="button" onClick={() => void notifyDepartureForDelivery(selected.id)}>{locale === "fr" ? "Notifier par WhatsApp" : locale === "nl" ? "Melden via WhatsApp" : "Notify via WhatsApp"}</button></div>}
               </>}

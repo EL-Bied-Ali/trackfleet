@@ -182,16 +182,18 @@ test("an agency scoped to an untracked-final-leg site sees an expected-parcels l
 test("each expected-parcel card reuses the same estimate note and arrival-confirmation action as everywhere else, keyed to that specific delivery", () => {
   const page = files["app/page.tsx"];
   assert.match(page, /const note = customerEtaNote\(\{ finalLegTrackingUnavailable: true, manualArrivalEstimateHours: delivery\.manualArrivalEstimateHours, manualArrivalEstimateSampleCount: delivery\.manualArrivalEstimateSampleCount \}, locale\);/);
-  assert.match(page, /confirmArrivalForDelivery\(delivery\.id, delivery\.destinationSiteId\)/);
-  // The confirm action was generalized from the old selected-only
-  // confirmAgencyArrival to work per-row; the popover call site must have
-  // moved to the same generalized function, not kept a second copy.
+  // confirmArrivalForDelivery (this card's own bespoke, agency-only, no
+  // notify, no bypass implementation) was unified onto confirmSingleArrival
+  // -- the same standalone single-parcel function the main dashboard
+  // popover uses (see arrival-scan-gate.test.mjs).
   assert.doesNotMatch(page, /function confirmAgencyArrival/);
-  assert.match(page, /async function confirmArrivalForDelivery\(deliveryId: string, destinationSiteId\?: string \| null\)/);
-  // The delivery-detail popover's own "Confirmer l'arrivée du camion"
-  // button was later removed as redundant -- the delivery table's group
-  // header now offers the same confirmation (plus WhatsApp notify) at the
-  // truck-group level, so confirmArrivalForDelivery's only remaining
-  // caller is this expected-parcel-card list.
-  assert.doesNotMatch(page, /confirmArrivalForDelivery\(selected\.id, selected\.destinationSiteId\)/);
+  assert.doesNotMatch(page, /async function confirmArrivalForDelivery/);
+  assert.match(page, /confirmSingleArrival\(delivery\.id\)/);
+  // Live follow-up request: "il faudrai ajouter un mecanism d'arriver par
+  // colis en plus de celui par agence" -- a standalone single-parcel
+  // confirm was explicitly re-requested (in addition to, not instead of,
+  // the group/truck-level one), reversing the earlier "redundant, removed"
+  // call for this exact popover button. It's back on purpose this time,
+  // and now notifies + supports an explicit bypass the old one never had.
+  assert.match(page, /confirmSingleArrival\(selected\.id\)/);
 });

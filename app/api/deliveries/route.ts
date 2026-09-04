@@ -301,6 +301,12 @@ export async function GET(request: Request) {
         // name/logo instead of "TrackFleet", falling back to the generic
         // brand when a company hasn't configured one.
         companyBranding: companyBranding ?? { name: null, logoDataUrl: null, color: null },
+        // Same reasoning: a platform-wide number, not a per-delivery field.
+        // Only meaningful before Delivered (see the tracking page's own
+        // gating) -- manual WhatsApp sends are freeform, not template, so
+        // they need this 24h window the customer opens by texting first,
+        // while WHATSAPP_AUTOMATION_ENABLED stays off.
+        whatsappContactNumber: runtimeEnv.WHATSAPP_DISPLAY_NUMBER?.trim() || null,
       }, { headers: { "cache-control": "no-store" } });
     }
 

@@ -48,9 +48,10 @@ test("trackingLinkExpiryAnchorFromEvents picks the earliest of a real delivery a
   ])?.toISOString(), notifiedAt.toISOString());
 });
 
-const [notifyRoute, deliveryEventsLib] = await Promise.all([
+const [notifyRoute, deliveryEventsLib, notifyLib] = await Promise.all([
   readFile(new URL("../app/api/deliveries/notify-arrival/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-events.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/notify-arrival-manually.ts", import.meta.url), "utf8"),
 ]);
 
 test("the notify-arrival route rejects cross-origin requests and requires an authenticated session", () => {
@@ -68,19 +69,23 @@ test("the notify-arrival route scopes an agency session to its own destination s
   assert.match(notifyRoute, /if \(session\.role === "agency" && delivery\.destinationSiteId !== session\.siteId\) \{/);
 });
 
-test("the notify-arrival route only records WHATSAPP_ARRIVAL_NOTIFIED after at least one send actually succeeds", () => {
-  assert.match(notifyRoute, /const anySent = results\.some\(\(result\) => result\.sent\);/);
-  assert.match(notifyRoute, /if \(anySent\) await store\.recordEvent\(deliveryId, "WHATSAPP_ARRIVAL_NOTIFIED", delivery\.progress\);/);
+// The actual send (consent check, idempotency, message build, freeform
+// send, WHATSAPP_ARRIVAL_NOTIFIED marker) was extracted into
+// notify-arrival-manually.ts, shared with the "Livré à l'agence" scan
+// checkpoint -- the route itself is now just the HTTP/permission wrapper.
+test("the shared notify function only records WHATSAPP_ARRIVAL_NOTIFIED after at least one send actually succeeds", () => {
+  assert.match(notifyLib, /const anySent = results\.some\(\(result\) => result\.sent\);/);
+  assert.match(notifyLib, /if \(anySent\) await store\.recordEvent\(delivery\.id, "WHATSAPP_ARRIVAL_NOTIFIED", delivery\.progress\);/);
 });
 
 test("WHATSAPP_ARRIVAL_NOTIFIED is excluded from the customer-facing event timeline -- it's an internal marker, not a route milestone", () => {
   assert.match(deliveryEventsLib, /&& event !== "WHATSAPP_ARRIVAL_NOTIFIED"/);
 });
 
-test("the notify-arrival route signs the message with the agency's own company branding, looked up once for the whole batch of recipients", () => {
-  assert.match(notifyRoute, /import \{ getCompanyBranding \} from "trackfleet-auth-session-store";/);
-  assert.match(notifyRoute, /const branding = await getCompanyBranding\(session\.companyId\);/);
-  assert.match(notifyRoute, /buildArrivalNotificationMessage\(delivery, trackingUrl\.toString\(\), recipient\.name, branding\?\.name \?\? null\);/);
+test("the shared notify function signs the message with the agency's own company branding, looked up once for the whole batch of recipients", () => {
+  assert.match(notifyLib, /import \{ getCompanyBranding \} from "trackfleet-auth-session-store";/);
+  assert.match(notifyLib, /const branding = await getCompanyBranding\(companyId\);/);
+  assert.match(notifyLib, /buildArrivalNotificationMessage\(delivery, trackingUrl\.toString\(\), recipient\.name, branding\?\.name \?\? null\);/);
 });
 
 // Found live during a business-logic audit: the automatic push pipeline
@@ -89,10 +94,10 @@ test("the notify-arrival route signs the message with the agency's own company b
 // agency-triggered send skipped that check entirely -- a dispatcher could
 // click "Notifier par WhatsApp" and message a customer who'd explicitly
 // opted out, as long as Meta's unrelated 24h window happened to be open.
-test("the notify-arrival route refuses to send when the customer withdrew WhatsApp consent, same rule the automatic pipeline already enforces", () => {
-  assert.match(notifyRoute, /import \{ whatsappConsentWithdrawn \} from "\.\.\/\.\.\/\.\.\/lib\/delivery-events";/);
-  assert.match(notifyRoute, /const events = await store\.listEvents\(deliveryId\);/);
-  assert.match(notifyRoute, /if \(whatsappConsentWithdrawn\(events\)\) return noStore\(\{ error: "consent_withdrawn" \}, 403\);/);
+test("the shared notify function refuses to send when the customer withdrew WhatsApp consent, same rule the automatic pipeline already enforces", () => {
+  assert.match(notifyLib, /import \{ whatsappConsentWithdrawn \} from "\.\/delivery-events";/);
+  assert.match(notifyLib, /const events = await store\.listEvents\(delivery\.id\);/);
+  assert.match(notifyLib, /if \(whatsappConsentWithdrawn\(events\)\) return \{ ok: false, reason: "consent_withdrawn" as const, results: \[\] \};/);
 });
 
 // Live audit finding: two independent UI paths reach this same endpoint for
@@ -100,13 +105,21 @@ test("the notify-arrival route refuses to send when the customer withdrew WhatsA
 // automatically, and a standalone popover button stays clickable
 // afterward. Neither used to check whether WHATSAPP_ARRIVAL_NOTIFIED was
 // already recorded, so a dispatcher clicking both sent the customer two
-// separate messages for the same milestone.
-test("the notify-arrival route is idempotent -- a delivery that already has WHATSAPP_ARRIVAL_NOTIFIED recorded is not messaged again", () => {
-  assert.match(notifyRoute, /if \(events\.some\(\(event\) => event\.type === "WHATSAPP_ARRIVAL_NOTIFIED"\)\) \{\s*\n\s*return noStore\(\{ ok: true, alreadyNotified: true, results: \[\] \}\);\s*\n\s*\}/);
+// separate messages for the same milestone. Now also shared with the
+// "Livré à l'agence" scan checkpoint, which reaches the exact same
+// function -- a scan after the button already notified is a safe no-op.
+test("the shared notify function is idempotent -- a delivery that already has WHATSAPP_ARRIVAL_NOTIFIED recorded is not messaged again", () => {
+  assert.match(notifyLib, /if \(events\.some\(\(event\) => event\.type === "WHATSAPP_ARRIVAL_NOTIFIED"\)\) \{\s*\n\s*return \{ ok: true, alreadyNotified: true as const, results: \[\] \};\s*\n\s*\}/);
   // Must come after the consent check (both read the same already-fetched
   // events array) but before any recipient/branding lookup or send attempt.
-  const consentIndex = notifyRoute.indexOf('if (whatsappConsentWithdrawn(events))');
-  const idempotencyIndex = notifyRoute.indexOf('event.type === "WHATSAPP_ARRIVAL_NOTIFIED"');
-  const sendIndex = notifyRoute.indexOf("sendWhatsAppTextReply(recipient.phone");
+  const consentIndex = notifyLib.indexOf('if (whatsappConsentWithdrawn(events))');
+  const idempotencyIndex = notifyLib.indexOf('event.type === "WHATSAPP_ARRIVAL_NOTIFIED"');
+  const sendIndex = notifyLib.indexOf("sendWhatsAppTextReply(recipient.phone");
   assert.ok(consentIndex >= 0 && idempotencyIndex > consentIndex && sendIndex > idempotencyIndex);
+});
+
+test("the route itself is now a thin permission wrapper around the shared function", () => {
+  assert.match(notifyRoute, /import \{ notifyArrivalManually \} from "\.\.\/\.\.\/\.\.\/lib\/notify-arrival-manually";/);
+  assert.match(notifyRoute, /const result = await notifyArrivalManually\(session\.companyId, delivery, new URL\(request\.url\)\.origin\);/);
+  assert.doesNotMatch(notifyRoute, /sendWhatsAppTextReply/);
 });

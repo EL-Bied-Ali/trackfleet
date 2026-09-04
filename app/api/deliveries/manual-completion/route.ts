@@ -87,13 +87,24 @@ export async function POST(request: Request) {
       // both the depot (loaded) and the hub. Without this, a dispatcher
       // could click arrival on a parcel that was never actually scanned
       // through either real checkpoint, silently losing the paper trail.
+      //
+      // Live follow-up: this should be a warning the dispatcher/agency can
+      // choose to bypass (a real edge case exists -- a scan that failed to
+      // register for some technical reason on a parcel that IS actually
+      // there), not an unconditional block. bypassMissingScans is a
+      // separate, explicit flag the client only sends after the dispatcher
+      // has already seen this exact warning once and chosen to proceed
+      // anyway -- never the same click as the original confirm attempt.
       const [scanSummary] = await store.listScanSummaries(session.companyId, [deliveryId]);
-      if (!scanSummary?.loadedAt || !scanSummary?.hubArrivedAt) {
-        return noStore({
-          error: "arrival_blocked_missing_scans",
-          missingLoadedScan: !scanSummary?.loadedAt,
-          missingHubScan: !scanSummary?.hubArrivedAt,
-        }, 409);
+      const missingLoadedScan = !scanSummary?.loadedAt;
+      const missingHubScan = !scanSummary?.hubArrivedAt;
+      if ((missingLoadedScan || missingHubScan) && payload.bypassMissingScans !== true) {
+        return noStore({ error: "arrival_blocked_missing_scans", missingLoadedScan, missingHubScan }, 409);
+      }
+      if (missingLoadedScan || missingHubScan) {
+        console.warn("[trackfleet:deliveries] arrival confirmed despite missing scans (explicit bypass)", {
+          deliveryId, companyId: session.companyId, missingLoadedScan, missingHubScan,
+        });
       }
 
       const { unloadGraceMinutes } = await confirmArrivalManually(session.companyId, deliveryId, delivery.progress, new URL(request.url).origin);

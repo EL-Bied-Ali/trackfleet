@@ -29,6 +29,14 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_AUTOMATION_START_AT?: string;
   WHATSAPP_APP_SECRET?: string;
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
+  // Human-facing E.164 number for the shared WhatsApp Business number
+  // (distinct from WHATSAPP_PHONE_NUMBER_ID, which is Meta's opaque API
+  // id, not a displayable number) -- shown to customers on the public
+  // tracking page so they know what to text to open the 24h free
+  // customer-service window (see notify-arrival-manually.ts's own comment:
+  // manual sends are freeform, not template, so they need that window open
+  // while WHATSAPP_AUTOMATION_ENABLED stays off).
+  WHATSAPP_DISPLAY_NUMBER?: string;
   EMAIL_API_KEY?: string;
   EMAIL_DOMAIN?: string;
   EMAIL_FROM_ADDRESS?: string;

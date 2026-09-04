@@ -40,3 +40,20 @@ test("the customer tracking page shows a clickable wa.me link to the agency, onl
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /\{selected\.status === "Delivered" && selected\.destinationWhatsapp && <a className="agency-contact-card" href=\{`https:\/\/wa\.me\/\$\{selected\.destinationWhatsapp\.replace\(\/\[\^\\d\]\/g, ""\)\}`\}/);
 });
+
+// Live follow-up: manual WhatsApp sends (notify-arrival/departure, and now
+// the "delivered" scan checkpoint) are freeform, not template -- they only
+// reach the customer if the customer already opened Meta's 24h free
+// customer-service window by texting first, which stays true as long as
+// WHATSAPP_AUTOMATION_ENABLED (the template-based automatic pipeline) is
+// off. Surfaced on the tracking page itself, not just as an aside in the
+// departure message, so the customer sees it proactively while still
+// in-transit -- the one time it's actually actionable.
+test("the customer tracking page tells the customer to message first to receive WhatsApp updates, only while not yet Delivered and only when the shared number is configured", async () => {
+  const route = await readFile(new URL("../app/api/deliveries/route.ts", import.meta.url), "utf8");
+  assert.match(route, /whatsappContactNumber: runtimeEnv\.WHATSAPP_DISPLAY_NUMBER\?\.trim\(\) \|\| null,/);
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /const \[whatsappContactNumber, setWhatsappContactNumber\] = useState<string \| null>\(null\);/);
+  assert.match(page, /setWhatsappContactNumber\(data\.whatsappContactNumber \?\? null\);/);
+  assert.match(page, /\{selected\.status !== "Delivered" && whatsappContactNumber && <a className="agency-contact-card" href=\{`https:\/\/wa\.me\/\$\{whatsappContactNumber\.replace\(\/\[\^\\d\]\/g, ""\)\}`\}/);
+});

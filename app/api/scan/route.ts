@@ -3,6 +3,7 @@ import { siteStore } from "trackfleet-site-store";
 import { agencyDeliveryIsVisible } from "../../lib/agency-access";
 import { getCompanySession } from "../../lib/company-auth";
 import { confirmArrivalManually } from "../../lib/confirm-arrival-manually";
+import { notifyArrivalManually } from "../../lib/notify-arrival-manually";
 import { getScannerSession } from "../../lib/scanner-pairing";
 import type { DeliveryScanCheckpoint } from "../../lib/delivery-store.types";
 import { knownSite } from "../../lib/known-sites";
@@ -192,10 +193,16 @@ export async function POST(request: Request) {
       if (checkpoint === "delivered") {
         // The exact same effect the "Confirmer l'arrivée" button triggers
         // (MANUAL_ARRIVAL_CONFIRMED + ARRIVED_AT_SITE, the unload-grace
-        // timer, the customer WhatsApp/email arrival notification) -- a scan
-        // here is just a second, more rigorous path into it, not a
-        // different outcome.
-        await confirmArrivalManually(session.companyId, delivery.id, delivery.progress, new URL(request.url).origin);
+        // timer) -- a scan here is just a second, more rigorous path into
+        // it, not a different outcome. Also fires the same freeform
+        // WhatsApp arrival message the button's own click handler fires
+        // (see notifyArrivalManually's own comment for why this is a
+        // separate call: processPendingNotifications above is a no-op
+        // while WHATSAPP_AUTOMATION_ENABLED stays off, so without this the
+        // scan would confirm arrival but never actually tell the customer).
+        const origin = new URL(request.url).origin;
+        await confirmArrivalManually(session.companyId, delivery.id, delivery.progress, origin);
+        await notifyArrivalManually(session.companyId, delivery, origin);
       } else {
         await store.recordEvent(
           delivery.id,
