@@ -15,9 +15,13 @@ declare global {
   }
 }
 
-// Just these two: "départ" is detected from truck GPS, while arrival is a
-// proof that this parcel was unloaded at a hub, never a final delivery.
-type Checkpoint = "loaded" | "arrived";
+// "Départ" is detected from truck GPS, so no scan checkpoint exists for
+// it. "Arrivée hub" is audit-only proof of an intermediate unload, never a
+// final delivery. "Livré" is the real final-delivery confirmation -- the
+// same effect the dashboard's "Confirmer l'arrivée" button triggers
+// (see confirm-arrival-manually.ts), just reached via a QR scan at the
+// destination agency instead of a dispatcher clicking a button.
+type Checkpoint = "loaded" | "arrived" | "delivered";
 type CompanyInfo = { account: string; role: "dispatcher" | "agency"; siteId: string | null };
 type ScanOutcome = "success" | "duplicate" | "error";
 type ScanLogEntry = { at: Date; checkpoint: Checkpoint; outcome: ScanOutcome; label: string };
@@ -25,6 +29,7 @@ type ScanLogEntry = { at: Date; checkpoint: Checkpoint; outcome: ScanOutcome; la
 const CHECKPOINTS: Array<{ value: Checkpoint; label: string; help: string }> = [
   { value: "loaded", label: "Chargé", help: "Preuve que ce colis est monté dans le camion." },
   { value: "arrived", label: "Déchargé au hub", help: "Preuve que ce colis a été déchargé au hub. Cela ne confirme jamais une arrivée finale." },
+  { value: "delivered", label: "Livré à l'agence", help: "Confirme l'arrivée finale à l'agence de destination. Nécessite d'avoir déjà scanné « Chargé » et « Déchargé au hub »." },
 ];
 
 const RESUBMIT_COOLDOWN_MS = 2500;
@@ -165,11 +170,18 @@ export default function ScanPage() {
       });
       const data = await response.json() as {
         ok?: boolean; duplicate?: boolean; error?: string;
+        missingLoadedScan?: boolean; missingHubScan?: boolean;
         delivery?: { id: string; customer: string; destination: string; status: string } | null;
       };
       if (!response.ok || !data.ok) {
         setFlash("error");
-        setMessage(data.error === "parcel_not_found" ? "Colis introuvable." : "Échec du scan, réessayez.");
+        setMessage(
+          data.error === "parcel_not_found" ? "Colis introuvable."
+          : data.error === "agency_destination_mismatch" ? "Ce colis n'est pas destiné à cette agence."
+          : data.error === "already_delivered" ? "Ce colis est déjà marqué livré."
+          : data.error === "arrival_blocked_missing_scans" ? `Scans manquants avant la livraison : ${[data.missingLoadedScan ? "Chargé" : null, data.missingHubScan ? "Déchargé au hub" : null].filter(Boolean).join(", ")}.`
+          : "Échec du scan, réessayez.",
+        );
         playBeep(false);
         const errorEntry: ScanLogEntry = { at: new Date(), checkpoint: modeRef.current, outcome: "error", label: code };
         setLog((entries) => [errorEntry, ...entries].slice(0, 20));

@@ -152,12 +152,15 @@ export type DeliveryTransition = {
   events: DeliveryEventType[];
 };
 
-// "Départ" and "Livraison" were dropped as scan checkpoints: départ is a
-// truck-level event the GPS automation already detects on its own (no
-// per-parcel scan can add anything there), and arrival confirmation now
-// starts the same unload-grace completion timer "Livraison" would have --
-// see confirm-arrival-manually.ts.
-export type DeliveryScanCheckpoint = "loaded" | "arrived";
+// "Départ" was dropped as a scan checkpoint: it's a truck-level event the
+// GPS automation already detects on its own, and no per-parcel scan can add
+// anything there. "Livraison" was dropped too, then brought back as
+// "delivered" -- live request: a QR scan at the destination agency is
+// stronger, tamper-evident proof of physical receipt than a dispatcher just
+// clicking a button, so it's worth having both paths into the exact same
+// confirmArrivalManually effect (see scan/route.ts and
+// confirm-arrival-manually.ts) rather than only the button.
+export type DeliveryScanCheckpoint = "loaded" | "arrived" | "delivered";
 
 // A full, unconstrained audit trail (see app/api/scan/route.ts) -- unlike
 // DeliveryEventRow, the same (deliveryId, checkpoint) pair can appear more
