@@ -16,7 +16,7 @@ test("processPendingNotifications caps how many sends it attempts per call", () 
   // resource limits" 503 after test deliveries accumulated in the pending
   // queue while WHATSAPP_ACCESS_TOKEN was invalid.
   assert.match(runnerSource, /export async function processPendingNotifications\(companyId: string, origin: string, maxPerCall = defaultMaxNotificationsPerCall\)/);
-  assert.match(runnerSource, /for \(const item of actionable\.slice\(0, maxPerCall\)\)/);
+  assert.match(runnerSource, /for \(const \{ item, parcelCount \} of representative\.slice\(0, maxPerCall\)\)/);
 });
 
 test("the ignored (non-WhatsApp) and superseded (older duplicate) housekeeping loops are also capped per call", () => {
@@ -30,6 +30,11 @@ test("the ignored (non-WhatsApp) and superseded (older duplicate) housekeeping l
   assert.match(runnerSource, /const maxHousekeepingItemsPerCall = \d+;/);
   assert.match(runnerSource, /for \(const item of ignored\.slice\(0, maxHousekeepingItemsPerCall\)\)/);
   assert.match(runnerSource, /for \(const item of superseded\.slice\(0, maxHousekeepingItemsPerCall\)\)/);
+  // Same reasoning applies to the redundant-parcel bucket a multi-parcel
+  // shipment produces (see groupActionableByShipment in
+  // notification-policy.ts) -- it's the same shape of "process the same
+  // underlying pending queue" work as ignored/superseded.
+  assert.match(runnerSource, /for \(const item of redundant\.slice\(0, maxHousekeepingItemsPerCall\)\)/);
 });
 
 test("uncapped items stay pending for the next call instead of being dropped", () => {

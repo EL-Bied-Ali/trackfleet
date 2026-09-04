@@ -46,3 +46,37 @@ export function splitLatestPendingNotifications<T extends PendingLike>(items: T[
     superseded: items.filter((item) => !latest.has(item)),
   };
 }
+
+type ShipmentPendingLike = PendingLike & {
+  delivery: { id: string; shipmentId?: string | null };
+  event: { type: string };
+};
+
+// A "weigh together" shipment (see the parcel-grouping checkbox in the
+// creation form) is N separate delivery rows sharing one shipmentId, each
+// carrying its own copy of REGISTERED/ARRIVED_AT_SITE. Left ungrouped, a
+// customer with 3 parcels on one truck would get 3 near-identical WhatsApp
+// pushes for the same real-world event. One representative per
+// (shipmentId, event type) group is sent (the rest ride along as
+// "redundant", to be marked sent without actually messaging again -- same
+// treatment as the superseded bucket above), and the group's size travels
+// back so the sent message can say "3 colis liés à cet envoi" instead of
+// silently dropping the other parcels from the customer's view.
+export function groupActionableByShipment<T extends ShipmentPendingLike>(actionable: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const item of actionable) {
+    const key = `${item.delivery.shipmentId ?? item.delivery.id}:${item.event.type}`;
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+
+  const representative: Array<{ item: T; parcelCount: number }> = [];
+  const redundant: T[] = [];
+  for (const group of groups.values()) {
+    const [first, ...rest] = group;
+    representative.push({ item: first, parcelCount: group.length });
+    redundant.push(...rest);
+  }
+  return { representative, redundant };
+}

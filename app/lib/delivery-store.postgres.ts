@@ -404,7 +404,16 @@ export const postgresStore: DeliveryStore = {
     const sql = getSql();
     const trimmed = query.trim();
     if (!trimmed) return null;
-    const rows = await sql`SELECT * FROM deliveries WHERE status != 'Delivered' AND customer ILIKE ${`%${trimmed}%`} ORDER BY created_at DESC LIMIT 1` as RawDelivery[];
+    // Exact (case-insensitive) match only -- this runs across EVERY company
+    // sharing the WhatsApp Business number, with no phone verification at
+    // all (see the webhook route's own comment for why: an inbound text has
+    // no company identity attached). A substring match here let a stranger
+    // pull another company's private delivery details (destination, weight,
+    // price, ETA) just by texting a name that happened to appear anywhere
+    // inside someone else's customer field. An exact match still lets a
+    // legitimate customer texting in their own real name find their own
+    // delivery, without turning "Ahmed" into a skeleton key.
+    const rows = await sql`SELECT * FROM deliveries WHERE status != 'Delivered' AND lower(customer) = lower(${trimmed}) ORDER BY created_at DESC LIMIT 1` as RawDelivery[];
     return rows[0] ? hydrate(rows[0]) : null;
   },
 

@@ -58,7 +58,10 @@ export const memoryStore: DeliveryStore = {
   async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
     const trimmed = query.trim().toLowerCase();
     if (!trimmed) return null;
-    const matches = deliveryStore.filter((delivery) => delivery.status !== "Delivered" && delivery.customer.toLowerCase().includes(trimmed));
+    // Exact (case-insensitive) match only -- see the Postgres store's own
+    // comment on this same method for why a substring match here was a
+    // real cross-company data leak.
+    const matches = deliveryStore.filter((delivery) => delivery.status !== "Delivered" && delivery.customer.toLowerCase() === trimmed);
     matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return matches[0] ?? null;
   },

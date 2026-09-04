@@ -50,7 +50,7 @@ test("a missing/invalid email is a distinct, permanent reason (no_email) from mi
 
 test("reuses automaticWhatsAppMessage as the email body instead of maintaining separate per-event copy", () => {
   assert.match(emailAutomation, /import \{ automaticWhatsAppMessage \} from "\.\/whatsapp-message";/);
-  assert.match(emailAutomation, /const message = automaticWhatsAppMessage\(event, delivery, trackingUrl\);/);
+  assert.match(emailAutomation, /const message = automaticWhatsAppMessage\(event, delivery, trackingUrl, parcelCount\);/);
 });
 
 test("sendAutomaticEmailNotification respects the same master automation switch as WhatsApp, and requires an API key, sending domain, and from-address before attempting a send", () => {

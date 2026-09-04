@@ -92,3 +92,15 @@ test("the notify-departure route refuses to send when the customer withdrew What
   assert.match(notifyRoute, /const events = await store\.listEvents\(deliveryId\);/);
   assert.match(notifyRoute, /if \(whatsappConsentWithdrawn\(events\)\) return noStore\(\{ error: "consent_withdrawn" \}, 403\);/);
 });
+
+// Same fix and reasoning as notify-arrival/route.ts: the group "confirm
+// departure" action fires this automatically, and a standalone trigger can
+// also reach it afterward -- without a pre-send check, both firing sent the
+// customer two separate messages for the same milestone.
+test("the notify-departure route is idempotent -- a delivery that already has WHATSAPP_DEPARTURE_NOTIFIED recorded is not messaged again", () => {
+  assert.match(notifyRoute, /if \(events\.some\(\(event\) => event\.type === "WHATSAPP_DEPARTURE_NOTIFIED"\)\) \{\s*\n\s*return noStore\(\{ ok: true, alreadyNotified: true, results: \[\] \}\);\s*\n\s*\}/);
+  const consentIndex = notifyRoute.indexOf('if (whatsappConsentWithdrawn(events))');
+  const idempotencyIndex = notifyRoute.indexOf('event.type === "WHATSAPP_DEPARTURE_NOTIFIED"');
+  const sendIndex = notifyRoute.indexOf("sendWhatsAppTextReply(recipient.phone");
+  assert.ok(consentIndex >= 0 && idempotencyIndex > consentIndex && sendIndex > idempotencyIndex);
+});

@@ -7,22 +7,33 @@ export type WhatsAppMessageDelivery = {
   priceCurrency?: string | null;
 };
 
+// parcelCount (how many parcels share this delivery's shipmentId, deduped
+// down to one representative send by groupActionableByShipment in
+// notification-policy.ts -- the other parcels never call this at all) is
+// only mentioned when the customer's parcel isn't traveling alone, same
+// wording convention as buildFoundReply's inbound-reply flow.
+function linkedParcelsNote(parcelCount: number) {
+  return parcelCount > 1 ? ` (${parcelCount} colis liés à cet envoi)` : "";
+}
+
 export function automaticWhatsAppMessage(
   event: DeliveryEventType,
   delivery: WhatsAppMessageDelivery,
   trackingUrl: string,
+  parcelCount = 1,
 ) {
+  const linked = linkedParcelsNote(parcelCount);
   switch (event) {
     case "REGISTERED":
-      return `Enregistré pour ${delivery.destination}. Suivi et estimation d'arrivée : ${trackingUrl}`;
+      return `Enregistré pour ${delivery.destination}${linked}. Suivi et estimation d'arrivée : ${trackingUrl}`;
     case "DEPARTED":
-      return `Parti vers ${delivery.destination}. Estimation d'arrivée mise à jour : ${trackingUrl}`;
+      return `Parti vers ${delivery.destination}${linked}. Estimation d'arrivée mise à jour : ${trackingUrl}`;
     case "PROGRESS_25":
     case "PROGRESS_50":
     case "PROGRESS_75":
-      return `En route vers ${delivery.destination}. Suivi : ${trackingUrl}`;
+      return `En route vers ${delivery.destination}${linked}. Suivi : ${trackingUrl}`;
     case "NEAR_DESTINATION":
-      return `Proche de ${delivery.destination}. Dernières informations : ${trackingUrl}`;
+      return `Proche de ${delivery.destination}${linked}. Dernières informations : ${trackingUrl}`;
     case "DELAY_DETECTED":
       return `Le trajet prend plus de temps que prévu. Nouvelle estimation : ${trackingUrl}`;
     case "ARRIVED_AT_SITE":
@@ -34,8 +45,8 @@ export function automaticWhatsAppMessage(
       // reads like a payment demand, and avoids drifting out of sync with
       // whatever the tracking page actually displays.
       return delivery.priceAmount != null && delivery.priceCurrency
-        ? `Arrivé à ${delivery.destination}. Facture disponible : ${delivery.priceAmount.toFixed(2)} ${delivery.priceCurrency}. Détails : ${trackingUrl}`
-        : `Arrivé à ${delivery.destination}.`;
+        ? `Arrivé à ${delivery.destination}${linked}. Facture disponible : ${delivery.priceAmount.toFixed(2)} ${delivery.priceCurrency}. Détails : ${trackingUrl}`
+        : `Arrivé à ${delivery.destination}${linked}.`;
     default:
       return "";
   }
@@ -52,25 +63,27 @@ export function automaticWhatsAppMessage(
 export function automaticWhatsAppBodyMessage(
   event: DeliveryEventType,
   delivery: WhatsAppMessageDelivery,
+  parcelCount = 1,
 ) {
+  const linked = linkedParcelsNote(parcelCount);
   switch (event) {
     case "REGISTERED":
-      return `Enregistré pour ${delivery.destination}. Suivi ci-dessous.`;
+      return `Enregistré pour ${delivery.destination}${linked}. Suivi ci-dessous.`;
     case "DEPARTED":
-      return `Parti vers ${delivery.destination}. Suivi ci-dessous.`;
+      return `Parti vers ${delivery.destination}${linked}. Suivi ci-dessous.`;
     case "PROGRESS_25":
     case "PROGRESS_50":
     case "PROGRESS_75":
-      return `En route vers ${delivery.destination}. Suivi ci-dessous.`;
+      return `En route vers ${delivery.destination}${linked}. Suivi ci-dessous.`;
     case "NEAR_DESTINATION":
-      return `Proche de ${delivery.destination}. Suivi ci-dessous.`;
+      return `Proche de ${delivery.destination}${linked}. Suivi ci-dessous.`;
     case "DELAY_DETECTED":
       return `Le trajet prend plus de temps que prévu. Nouvelle estimation ci-dessous.`;
     case "ARRIVED_AT_SITE":
     case "ARRIVED":
       return delivery.priceAmount != null && delivery.priceCurrency
-        ? `Arrivé à ${delivery.destination}. Facture disponible : ${delivery.priceAmount.toFixed(2)} ${delivery.priceCurrency}. Détails ci-dessous.`
-        : `Arrivé à ${delivery.destination}.`;
+        ? `Arrivé à ${delivery.destination}${linked}. Facture disponible : ${delivery.priceAmount.toFixed(2)} ${delivery.priceCurrency}. Détails ci-dessous.`
+        : `Arrivé à ${delivery.destination}${linked}.`;
     default:
       return "";
   }

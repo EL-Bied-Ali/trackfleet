@@ -46,6 +46,15 @@ export async function POST(request: Request) {
   // rule, not just the automatic one.
   const events = await store.listEvents(deliveryId);
   if (whatsappConsentWithdrawn(events)) return noStore({ error: "consent_withdrawn" }, 403);
+  // Two independent UI paths can reach this same endpoint for the same
+  // delivery -- the group "confirm arrival" action fires it automatically,
+  // and the standalone popover button stays clickable afterward. Neither
+  // used to check whether the marker below was already recorded, so a
+  // dispatcher clicking both sent the customer two separate messages for
+  // the same milestone.
+  if (events.some((event) => event.type === "WHATSAPP_ARRIVAL_NOTIFIED")) {
+    return noStore({ ok: true, alreadyNotified: true, results: [] });
+  }
 
   const origin = new URL(request.url).origin;
   const trackingUrl = new URL(origin);

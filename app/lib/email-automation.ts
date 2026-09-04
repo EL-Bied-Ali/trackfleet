@@ -35,6 +35,7 @@ export function buildAutomaticEmailPayload(
   event: DeliveryEventType,
   delivery: DeliveryRow,
   trackingUrl: string,
+  parcelCount = 1,
 ): { payload: { to: string; subject: string; text: string } | null; reason: AutomaticEmailBuildReason } {
   if (!isAutomaticWhatsAppEvent(event)) return { payload: null, reason: "internal_event" };
 
@@ -42,7 +43,7 @@ export function buildAutomaticEmailPayload(
   if (!to) return { payload: null, reason: "no_email" };
 
   const from = runtimeEnv.EMAIL_FROM_ADDRESS?.trim();
-  const message = automaticWhatsAppMessage(event, delivery, trackingUrl);
+  const message = automaticWhatsAppMessage(event, delivery, trackingUrl, parcelCount);
   if (!from || !message) return { payload: null, reason: "not_configured" };
 
   return {
@@ -55,6 +56,7 @@ export async function sendAutomaticEmailNotification(
   event: DeliveryEventType,
   delivery: DeliveryRow,
   trackingUrl: string,
+  parcelCount = 1,
 ) {
   if (runtimeEnv.WHATSAPP_AUTOMATION_ENABLED !== "true") return { sent: false, reason: "disabled" as const };
 
@@ -63,7 +65,7 @@ export async function sendAutomaticEmailNotification(
   const from = runtimeEnv.EMAIL_FROM_ADDRESS?.trim();
   if (!apiKey || !domain || !from) return { sent: false, reason: "not_configured" as const };
 
-  const built = buildAutomaticEmailPayload(event, delivery, trackingUrl);
+  const built = buildAutomaticEmailPayload(event, delivery, trackingUrl, parcelCount);
   if (!built.payload) return { sent: false, reason: built.reason };
 
   const form = new URLSearchParams();
