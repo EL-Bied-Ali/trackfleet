@@ -148,6 +148,40 @@ test("heartbeat persistence exists on both Neon and D1 without storing error det
   }
 });
 
+// Root-caused live 2026-09-04: /api/health is polled far more often than
+// any other route, and unlike the automation/maintenance crons that also
+// read storage/heartbeat state, previously recomputed it -- 5 separate DB
+// round trips -- on every single hit. On the account's Workers Free plan
+// (fixed 10ms CPU limit, not configurable -- see wrangler.jsonc git
+// history), that alone was enough to intermittently trip Cloudflare error
+// 1102 ("Worker exceeded CPU time limit") on a plain health check.
+test("the health route caches its expensive storage/heartbeat computation instead of recomputing it on every poll", () => {
+  assert.match(healthRoute, /const healthCacheTtlMs = \d+_?\d*;/);
+  assert.match(healthRoute, /let cachedBody: Record<string, unknown> \| null = null;/);
+  // The cache check must come first, before any of the DB-touching calls
+  // (getStorageHealth, getAutomationHeartbeat, getRuntimeHeartbeat) --
+  // otherwise a cache hit still pays the full cost it's meant to avoid.
+  const cacheCheckIndex = healthRoute.indexOf("if (cachedBody && now - cachedAt < healthCacheTtlMs)");
+  const storageCallIndex = healthRoute.indexOf("await getStorageHealth()");
+  assert.ok(cacheCheckIndex >= 0 && storageCallIndex > cacheCheckIndex);
+});
+
+test("a health cache hit still returns a freshly generated timestamp, not a stale cached one", () => {
+  // The cache-hit branch must build its own timestamp from `now`, not
+  // spread a cached timestamp field -- otherwise every response within the
+  // TTL window would report the exact same instant.
+  const cacheHitBranch = healthRoute.slice(
+    healthRoute.indexOf("if (cachedBody && now - cachedAt < healthCacheTtlMs)"),
+    healthRoute.indexOf("const storage = await getStorageHealth();"),
+  );
+  assert.match(cacheHitBranch, /timestamp: new Date\(now\)\.toISOString\(\)/);
+  assert.doesNotMatch(cacheHitBranch, /\.\.\.cachedBody,[\s\S]*timestamp,/);
+});
+
+test("only this frequently-polled diagnostic route caches storage health -- the cron-driven callers (automation tick, notification tick, retention, whatsapp preflight) still read it fresh every call", () => {
+  assert.doesNotMatch(tickRoute, /cachedBody|healthCacheTtlMs/);
+});
+
 test("health provider readiness includes explicit security, Meta, scheduler and retention diagnostics", () => {
   assert.match(healthRoute, /sessionEncryptionKeyConfigured/);
   assert.match(healthRoute, /TRACKFLEET_ENCRYPTION_KEY/);
