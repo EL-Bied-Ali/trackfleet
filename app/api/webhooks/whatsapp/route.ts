@@ -2,8 +2,9 @@ import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { getCompanyBranding } from "trackfleet-auth-session-store";
 import { normalizeCustomerPhone } from "../../../lib/customer-contact";
+import { whatsappConsentWithdrawn } from "../../../lib/delivery-events";
 import { sendWhatsAppTextReply, verifyWhatsAppWebhookSignature, verifyWhatsAppWebhookSubscription } from "../../../lib/whatsapp-inbound";
-import { buildFoundReply, buildNoMatchAskNameReply, parseInboundWhatsAppMessage } from "../../../lib/whatsapp-inbound-message";
+import { buildFoundReply, buildNoMatchAskNameReply, buildOptOutConfirmationReply, isOptOutMessage, parseInboundWhatsAppMessage } from "../../../lib/whatsapp-inbound-message";
 
 const maxBodyBytes = 64 * 1024;
 
@@ -60,6 +61,26 @@ export async function POST(request: Request) {
   const origin = new URL(request.url).origin;
 
   try {
+    // Meta requires honoring a customer's own opt-out request sent directly
+    // via WhatsApp -- checked before the found/no-match lookup below, since
+    // it applies regardless of whether a delivery match is found. Every
+    // currently-active delivery for this phone (as either party) gets its
+    // own WHATSAPP_OPT_OUT recorded -- whatsappConsentWithdrawn is checked
+    // per-delivery from that delivery's own event log, so a customer with
+    // more than one active parcel needs every one of them covered, not just
+    // whichever single delivery a "most recent" lookup would have picked.
+    if (isOptOutMessage(inbound.text)) {
+      const activeDeliveries = await store.listActiveDeliveriesByContact(phone);
+      await Promise.all(activeDeliveries.map(async (activeDelivery) => {
+        const activeEvents = await store.listEvents(activeDelivery.id);
+        if (!whatsappConsentWithdrawn(activeEvents)) {
+          await store.recordEvent(activeDelivery.id, "WHATSAPP_OPT_OUT", activeDelivery.progress);
+        }
+      }));
+      await sendWhatsAppTextReply(inbound.from, buildOptOutConfirmationReply());
+      return Response.json({ received: true }, { status: 200 });
+    }
+
     // Consent withdrawal deliberately does NOT suppress this reply -- unlike
     // the automatic push side, the customer is the one initiating contact
     // here, which is a different, always-permitted context under WhatsApp's

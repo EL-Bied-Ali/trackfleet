@@ -75,6 +75,26 @@ export function parseInboundWhatsAppMessage(payload: unknown): InboundWhatsAppMe
   return null;
 }
 
+// Meta's WhatsApp Business Platform policy requires honoring a customer's
+// own opt-out request sent directly via WhatsApp -- previously the only way
+// to withdraw consent was a dispatcher clicking a button in the internal
+// dashboard, with no customer-facing self-service mechanism at all, even
+// though manual "Notifier par WhatsApp" sends (independent of the
+// automation-enabled flag) already reach real customers today. Deliberately
+// a short, exact-word allowlist (not a substring match) so an ordinary
+// message that happens to contain one of these words as part of a longer
+// sentence isn't misread as an opt-out.
+const optOutWords = new Set(["stop", "arret", "arrêt", "desabonner", "désabonner", "unsubscribe"]);
+
+export function isOptOutMessage(text: string): boolean {
+  const normalized = text.trim().toLowerCase().replace(/[\s.!?]+$/, "");
+  return optOutWords.has(normalized);
+}
+
+export function buildOptOutConfirmationReply(): string {
+  return "C'est noté : vous ne recevrez plus de messages WhatsApp de notre part pour vos livraisons en cours. Vous pouvez toujours suivre vos colis via le lien de suivi déjà reçu.";
+}
+
 function formatEstimatedDate(date: Date) {
   return date.toLocaleDateString("fr-BE", { day: "2-digit", month: "short", year: "numeric" });
 }

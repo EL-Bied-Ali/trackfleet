@@ -100,6 +100,10 @@ export const store: DeliveryStore = {
     const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE (contact = ? OR recipient_contact = ?) AND status != 'Delivered' ORDER BY created_at DESC LIMIT 1`).bind(phone, phone).first<RawDelivery>();
     return row ? hydrate(row) : null;
   },
+  async listActiveDeliveriesByContact(phone) {
+    const result = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE (contact = ? OR recipient_contact = ?) AND status != 'Delivered'`).bind(phone, phone).all<RawDelivery>();
+    return (result.results ?? []).map(hydrate);
+  },
   async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
     const trimmed = query.trim();
     if (!trimmed) return null;
