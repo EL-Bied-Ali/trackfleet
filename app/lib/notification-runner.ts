@@ -1,5 +1,6 @@
 import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
+import type { DeliveryEventType } from "./delivery-events";
 import { whatsappConsentWithdrawn } from "./delivery-events";
 import { sendAutomaticEmailNotification } from "./email-automation";
 import { groupActionableByShipment, isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
@@ -32,6 +33,26 @@ const defaultMaxNotificationsPerCall = 5;
 // disabled for a while) from processing unbounded in one call; anything
 // past the cap is picked up next call, same as actionable.
 const maxHousekeepingItemsPerCall = 50;
+
+// A shipment sibling's own notification is only ever resolved to whatever
+// the group's representative actually did -- never pre-marked before that's
+// known (see groupActionableByShipment's own comment for the bug this
+// fixes: siblings marked "sent" before the representative's send even
+// happened silently lost their notification forever if that send later
+// failed permanently or had to be retried). Best-effort per sibling: one
+// whose own claim fails (e.g. picked up concurrently elsewhere) is simply
+// left for the next call to reprocess as its own group.
+async function resolveShipmentSiblings(
+  siblings: Array<{ delivery: { id: string }; event: { type: DeliveryEventType } }>,
+  outcome: "handled" | "retry",
+) {
+  for (const sibling of siblings.slice(0, maxHousekeepingItemsPerCall)) {
+    const claimed = await store.claimNotification(sibling.delivery.id, sibling.event.type);
+    if (!claimed) continue;
+    if (outcome === "retry") await store.releaseNotification(sibling.delivery.id, sibling.event.type);
+    else await store.markNotificationSent(sibling.delivery.id, sibling.event.type);
+  }
+}
 
 export async function processPendingNotifications(companyId: string, origin: string, maxPerCall = defaultMaxNotificationsPerCall) {
   const pending = await store.listPendingNotifications(companyId);
@@ -94,17 +115,15 @@ export async function processPendingNotifications(companyId: string, origin: str
   // this, a customer with 3 parcels on one truck got 3 near-identical
   // pushes for the same real-world event. One representative per shipment
   // is actually sent (with the group's size folded into its message text);
-  // the rest are marked sent the same way the superseded bucket above is,
-  // never messaged on their own.
-  const { representative, redundant } = groupActionableByShipment(actionable);
-  for (const item of redundant.slice(0, maxHousekeepingItemsPerCall)) {
-    const claimed = await store.claimNotification(item.delivery.id, item.event.type);
-    if (!claimed) continue;
-    await store.markNotificationSent(item.delivery.id, item.event.type);
-    suppressed += 1;
-  }
+  // each sibling's own notification is resolved to whatever the
+  // representative's real outcome turns out to be, at every exit point
+  // below -- never pre-marked, since that previously lost a sibling's
+  // notification forever the moment the representative's send didn't
+  // actually go out (permanently suppressed, or released for a retry that
+  // only the representative itself would ever get picked up for again).
+  const groups = groupActionableByShipment(actionable);
 
-  for (const { item, parcelCount } of representative.slice(0, maxPerCall)) {
+  for (const { item, parcelCount, siblings } of groups.slice(0, maxPerCall)) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
 
@@ -115,12 +134,14 @@ export async function processPendingNotifications(companyId: string, origin: str
     if (whatsappConsentWithdrawn(deliveryEvents)) {
       await store.markNotificationSent(item.delivery.id, item.event.type);
       suppressed += 1;
+      await resolveShipmentSiblings(siblings, "handled");
       continue;
     }
 
     if (isHistoricalNotification(item.event.createdAt, automationStartAt)) {
       await store.markNotificationSent(item.delivery.id, item.event.type);
       suppressed += 1;
+      await resolveShipmentSiblings(siblings, "handled");
       continue;
     }
 
@@ -133,6 +154,7 @@ export async function processPendingNotifications(companyId: string, origin: str
         deliveryId: item.delivery.id,
         event: item.event.type,
       });
+      await resolveShipmentSiblings(siblings, "handled");
       continue;
     }
 
@@ -153,6 +175,7 @@ export async function processPendingNotifications(companyId: string, origin: str
       if (results.some((result) => result.sent)) {
         await store.markNotificationSent(item.delivery.id, item.event.type);
         sent += 1;
+        await resolveShipmentSiblings(siblings, "handled");
       } else if (results.every((result) => permanentChannelReasons.has(result.reason ?? ""))) {
         // Every attempted (or applicable) channel failed for a permanent
         // reason -- e.g. no WhatsApp consent AND no customer email on file.
@@ -160,16 +183,21 @@ export async function processPendingNotifications(companyId: string, origin: str
         // would change the outcome.
         await store.markNotificationSent(item.delivery.id, item.event.type);
         suppressed += 1;
+        await resolveShipmentSiblings(siblings, "handled");
       } else {
         // At least one channel failed for a retryable reason (provider
         // error, or not yet configured). Release the claim so a later
-        // scheduler tick can try again once the problem is corrected.
+        // scheduler tick can try again once the problem is corrected --
+        // siblings are released too, so the whole group is retried
+        // together instead of the siblings being lost.
         await store.releaseNotification(item.delivery.id, item.event.type);
         failed += 1;
+        await resolveShipmentSiblings(siblings, "retry");
       }
     } catch (error) {
       await store.releaseNotification(item.delivery.id, item.event.type);
       failed += 1;
+      await resolveShipmentSiblings(siblings, "retry");
       console.error("[trackfleet:notifications] unexpected send failure", {
         deliveryId: item.delivery.id,
         event: item.event.type,
