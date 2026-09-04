@@ -157,9 +157,11 @@ test("the hub-unload checkpoint is audit-only: it does not confirm final arrival
 // physical receipt. Reuses the exact same confirmArrivalManually effect
 // the button already triggers, rather than growing a second, different
 // path to the same real-world outcome.
-test("the delivered checkpoint reuses confirmArrivalManually -- the same effect the dashboard's arrival-confirmation button already triggers", () => {
+test("the delivered checkpoint reuses confirmArrivalManually AND notifyArrivalManually -- the same effects the dashboard's arrival-confirmation button already triggers (status/timer, and the customer WhatsApp message)", () => {
   assert.match(route, /import \{ confirmArrivalManually \} from "\.\.\/\.\.\/lib\/confirm-arrival-manually";/);
-  assert.match(route, /await confirmArrivalManually\(session\.companyId, delivery\.id, delivery\.progress, new URL\(request\.url\)\.origin\);/);
+  assert.match(route, /import \{ notifyArrivalManually \} from "\.\.\/\.\.\/lib\/notify-arrival-manually";/);
+  assert.match(route, /await confirmArrivalManually\(session\.companyId, delivery\.id, delivery\.progress, origin\);/);
+  assert.match(route, /await notifyArrivalManually\(session\.companyId, delivery, origin\);/);
 });
 
 test("a delivered scan enforces the same rules as the button: agency scoped to its own destination site, refuses an already-delivered parcel, and requires both loaded and hub scans on file first", () => {

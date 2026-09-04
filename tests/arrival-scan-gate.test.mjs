@@ -14,10 +14,15 @@ const [manualCompletionRoute, page, siteManager] = await Promise.all([
 // worked regardless of scan history, silently losing the paper trail for a
 // parcel that skipped a real checkpoint.
 
-test("POST /api/deliveries/manual-completion checks both scan checkpoints before accepting confirmArrival, and refuses with a structured 409 naming which one is missing", () => {
+test("POST /api/deliveries/manual-completion checks both scan checkpoints before accepting confirmArrival, and refuses with a structured 409 naming which one is missing -- unless the dispatcher explicitly bypasses it", () => {
   assert.match(manualCompletionRoute, /const \[scanSummary\] = await store\.listScanSummaries\(session\.companyId, \[deliveryId\]\);/);
-  assert.match(manualCompletionRoute, /if \(!scanSummary\?\.loadedAt \|\| !scanSummary\?\.hubArrivedAt\) \{/);
-  assert.match(manualCompletionRoute, /error: "arrival_blocked_missing_scans",\s*\n\s*missingLoadedScan: !scanSummary\?\.loadedAt,\s*\n\s*missingHubScan: !scanSummary\?\.hubArrivedAt,\s*\n\s*\}, 409\);/);
+  assert.match(manualCompletionRoute, /const missingLoadedScan = !scanSummary\?\.loadedAt;/);
+  assert.match(manualCompletionRoute, /const missingHubScan = !scanSummary\?\.hubArrivedAt;/);
+  assert.match(manualCompletionRoute, /if \(\(missingLoadedScan \|\| missingHubScan\) && payload\.bypassMissingScans !== true\) \{\s*\n\s*return noStore\(\{ error: "arrival_blocked_missing_scans", missingLoadedScan, missingHubScan \}, 409\);/);
+  // An explicit bypass still proceeds, but leaves a server-side trail --
+  // the whole point of the original rule was an honest paper trail, so an
+  // override shouldn't be silent.
+  assert.match(manualCompletionRoute, /console\.warn\("\[trackfleet:deliveries\] arrival confirmed despite missing scans \(explicit bypass\)", \{/);
   // The gate must run after the existing not-found/role checks but before
   // the actual status-changing call, so a bad deliveryId or a mismatched
   // agency still gets its own specific error rather than being masked by
@@ -28,21 +33,38 @@ test("POST /api/deliveries/manual-completion checks both scan checkpoints before
   assert.ok(notFoundIndex < gateIndex && gateIndex < confirmIndex, "expected: not-found check, then the scan gate, then the actual completion call");
 });
 
-test("the dispatcher's per-destination group arrival button surfaces exactly which delivery and which checkpoint(s) blocked it, not a generic failure", () => {
-  assert.match(page, /const blocked = responses\.filter\(\(result\) => result\.error === "arrival_blocked_missing_scans"\);/);
+test("the dispatcher's per-destination group arrival button surfaces exactly which delivery and which checkpoint(s) blocked it, and offers an explicit, separate bypass confirm rather than silently excluding them", () => {
+  assert.match(page, /let blocked = responses\.filter\(\(result\) => result\.error === "arrival_blocked_missing_scans"\);/);
   assert.match(page, /if \(blocked\.length\) \{/);
-  assert.match(page, /result\.missingLoadedScan && result\.missingHubScan/);
-  assert.match(page, /Arrivée bloquée : \$\{blocked\.length > 1 \? "colis non scannés" : "colis non scanné"\} : \$\{detail\}/);
+  assert.match(page, /missingScansDetail\(result\)/);
+  // The bypass prompt is a SEPARATE window.confirm from the original
+  // "confirm arrival + notify?" one, never folded into the same click.
+  assert.match(page, /if \(window\.confirm\(bypassPrompt\)\) \{/);
+  assert.match(page, /postArrivalConfirmation\(result\.deliveryId, true\)/);
 });
 
 test("a partial success (some parcels blocked, others confirmed) still merges the confirmed ones and notifies for them, rather than discarding everything", () => {
-  assert.match(page, /const updated = responses\.map\(\(result\) => result\.delivery\)\.filter\(\(delivery\): delivery is Delivery => Boolean\(delivery\)\);/);
+  assert.match(page, /let updated = responses\.map\(\(result\) => result\.delivery\)\.filter\(\(delivery\): delivery is Delivery => Boolean\(delivery\)\);/);
   assert.match(page, /if \(!updated\.length\) return;\s*\n\s*\}\s*\n\s*if \(!updated\.length\) \{/);
 });
 
-test("the agency's own 'Confirmer l'arrivée' button (expected-parcel popover) surfaces the same specific missing-checkpoint message", () => {
-  assert.match(page, /if \(response\.status === 409 && data\?\.error === "arrival_blocked_missing_scans"\) \{/);
-  assert.match(page, /Arrivée bloquée : colis non scanné \$\{missing\}\./);
+// Live follow-up: the agency's expected-parcel panel used to have its own
+// bespoke confirm-arrival implementation (agency-only, no WhatsApp notify,
+// no bypass) -- unified onto confirmSingleArrival, the same standalone
+// single-parcel function the main dashboard popover uses, rather than
+// maintaining two different single-parcel confirm-arrival behaviors.
+test("the agency's expected-parcel panel now uses the same standalone single-parcel confirm as the main dashboard popover, not its own separate implementation", () => {
+  assert.doesNotMatch(page, /async function confirmArrivalForDelivery/);
+  assert.match(page, /onClick=\{\(\) => void confirmSingleArrival\(delivery\.id\)\}/);
+});
+
+test("confirmSingleArrival offers the same explicit, separate bypass confirm as the group flow, then notifies the customer once actually confirmed", () => {
+  assert.match(page, /async function confirmSingleArrival\(deliveryId: string\) \{/);
+  const fn = page.slice(page.indexOf("async function confirmSingleArrival"), page.indexOf("async function confirmSingleArrival") + 2000);
+  assert.match(fn, /if \(result\.error === "arrival_blocked_missing_scans"\) \{/);
+  assert.match(fn, /if \(!window\.confirm\(bypassPrompt\)\) \{/);
+  assert.match(fn, /result = await postArrivalConfirmation\(deliveryId, true\);/);
+  assert.match(fn, /fetch\("\/api\/deliveries\/notify-arrival", \{/);
 });
 
 test("SiteManager's dispatcher-facing 'Arrivées' ops panel also surfaces the specific missing-checkpoint message, localized in all 3 languages", () => {

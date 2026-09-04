@@ -27,6 +27,9 @@ export type TrackFleetRuntimeEnv = {
   WHATSAPP_AUTOMATION_START_AT?: string;
   WHATSAPP_APP_SECRET?: string;
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
+  // Human-facing E.164 number for the shared WhatsApp Business number --
+  // see runtime-env.cloudflare.ts's own comment on this same field.
+  WHATSAPP_DISPLAY_NUMBER?: string;
   EMAIL_API_KEY?: string;
   EMAIL_DOMAIN?: string;
   EMAIL_FROM_ADDRESS?: string;

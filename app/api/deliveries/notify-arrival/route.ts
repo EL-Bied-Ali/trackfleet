@@ -1,9 +1,6 @@
 import { store } from "trackfleet-delivery-store";
-import { getCompanyBranding } from "trackfleet-auth-session-store";
 import { getCompanySession } from "../../../lib/company-auth";
-import { whatsappConsentWithdrawn } from "../../../lib/delivery-events";
-import { buildArrivalNotificationMessage } from "../../../lib/whatsapp-inbound-message";
-import { sendWhatsAppTextReply } from "../../../lib/whatsapp-inbound";
+import { notifyArrivalManually } from "../../../lib/notify-arrival-manually";
 import { readJsonObject, invalidJsonResponse } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
 
@@ -16,14 +13,10 @@ function noStore(body: Record<string, unknown>, status = 200) {
 // delivery, an agency only for its own destination site's. Widened from
 // agency-only so the table's inline "confirm arrival" action (which any
 // dispatcher can use) can also fire this notify, not just the agency-side
-// popover. Attempts a freeform WhatsApp reply to both contact numbers on
-// file (whichever actually has an open 24h window, per Meta's own free
-// customer-service-window rules, is the one that succeeds; this endpoint
-// doesn't try to track that state itself -- see whatsapp-inbound.ts's
-// sendWhatsAppTextReply). On any success, records WHATSAPP_ARRIVAL_NOTIFIED
-// once, which tightens the public tracking link's expiry (see
-// trackingLinkExpiryAnchorFromEvents in delivery-events.ts) -- the explicit
-// product intent behind this whole action.
+// popover. The actual send (consent check, idempotency, message build,
+// freeform send, WHATSAPP_ARRIVAL_NOTIFIED marker) lives in
+// notify-arrival-manually.ts, shared with the "Livré à l'agence" scan
+// checkpoint -- this route is just the HTTP/permission wrapper around it.
 export async function POST(request: Request) {
   if (!requestIsSameOrigin(request)) return originRejectedResponse();
   const session = await getCompanySession(request);
@@ -40,42 +33,7 @@ export async function POST(request: Request) {
     return noStore({ error: "agency_destination_mismatch" }, 403);
   }
 
-  // The automatic push pipeline already refuses to notify a customer who
-  // withdrew consent (see whatsappConsentWithdrawn in notification-runner.ts)
-  // -- this manual, dispatcher/agency-triggered send must respect the same
-  // rule, not just the automatic one.
-  const events = await store.listEvents(deliveryId);
-  if (whatsappConsentWithdrawn(events)) return noStore({ error: "consent_withdrawn" }, 403);
-  // Two independent UI paths can reach this same endpoint for the same
-  // delivery -- the group "confirm arrival" action fires it automatically,
-  // and the standalone popover button stays clickable afterward. Neither
-  // used to check whether the marker below was already recorded, so a
-  // dispatcher clicking both sent the customer two separate messages for
-  // the same milestone.
-  if (events.some((event) => event.type === "WHATSAPP_ARRIVAL_NOTIFIED")) {
-    return noStore({ ok: true, alreadyNotified: true, results: [] });
-  }
-
-  const origin = new URL(request.url).origin;
-  const trackingUrl = new URL(origin);
-  if (delivery.trackingToken) trackingUrl.searchParams.set("tracking", delivery.trackingToken);
-
-  const recipients = [
-    delivery.recipientContact ? { phone: delivery.recipientContact, name: delivery.recipientName || delivery.customer } : null,
-    delivery.contact && delivery.contact !== delivery.recipientContact ? { phone: delivery.contact, name: delivery.customer } : null,
-  ].filter((entry): entry is { phone: string; name: string } => entry !== null);
-
-  if (!recipients.length) return noStore({ error: "no_contact_on_file" }, 400);
-
-  const branding = await getCompanyBranding(session.companyId);
-  const results = await Promise.all(recipients.map(async (recipient) => {
-    const message = buildArrivalNotificationMessage(delivery, trackingUrl.toString(), recipient.name, branding?.name ?? null);
-    const { sent } = await sendWhatsAppTextReply(recipient.phone, message);
-    return { phone: recipient.phone, sent };
-  }));
-
-  const anySent = results.some((result) => result.sent);
-  if (anySent) await store.recordEvent(deliveryId, "WHATSAPP_ARRIVAL_NOTIFIED", delivery.progress);
-
-  return noStore({ ok: anySent, results });
+  const result = await notifyArrivalManually(session.companyId, delivery, new URL(request.url).origin);
+  if (!result.ok && result.reason) return noStore({ error: result.reason }, result.reason === "consent_withdrawn" ? 403 : 400);
+  return noStore(result);
 }
