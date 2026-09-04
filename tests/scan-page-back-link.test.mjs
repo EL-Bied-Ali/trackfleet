@@ -14,7 +14,7 @@ const scanPage = await readFile(new URL("../app/scan/page.tsx", import.meta.url)
 
 test("captures scannerOnly from /api/scan/session's response", () => {
   assert.match(scanPage, /const \[scannerOnly, setScannerOnly\] = useState\(false\);/);
-  assert.match(scanPage, /scannerOnly\?: boolean; deviceLabel\?: string \| null; company\?: CompanyInfo/);
+  assert.match(scanPage, /scannerOnly\?: boolean; deviceLabel\?: string \| null; checkpoint\?: Checkpoint \| null; company\?: CompanyInfo/);
   assert.match(scanPage, /setScannerOnly\(data\.scannerOnly === true\);/);
 });
 

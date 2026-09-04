@@ -3,18 +3,30 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type Pairing = { code: string; expiresAt: number; scope: string; deviceLabel: string };
-type Device = { id: string; deviceLabel: string; pairedAt: number; expiresAt: number };
+type Checkpoint = "loaded" | "arrived" | "delivered";
+type Pairing = { code: string; expiresAt: number; scope: string; deviceLabel: string; checkpoint: Checkpoint | null };
+type Device = { id: string; deviceLabel: string; pairedAt: number; expiresAt: number; checkpoint?: Checkpoint | null };
+
+const CHECKPOINTS: Array<{ value: Checkpoint; label: string }> = [
+  { value: "loaded", label: "Chargement" },
+  { value: "arrived", label: "Hub" },
+  { value: "delivered", label: "Agence" },
+];
 
 export default function ScannerConnectPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceLabelDraft, setDeviceLabelDraft] = useState("");
+  // Required before generating a link -- an unset checkpoint would fall
+  // back to today's free-choice picker on the receiving phone, exactly
+  // the confusion this feature exists to remove.
+  const [checkpointDraft, setCheckpointDraft] = useState<Checkpoint | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "denied" | "error">("loading");
   const [creating, setCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -32,24 +44,29 @@ export default function ScannerConnectPage() {
       setMessage("Indiquez un nom pour cet appareil (ex. : chauffeur ou camion).");
       return;
     }
+    if (!checkpointDraft) {
+      setMessage("Choisissez le poste de cet appareil (chargement, hub ou agence).");
+      return;
+    }
     setCreating(true);
     setMessage("");
     try {
       const response = await fetch("/api/scan/pair", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deviceLabel }),
+        body: JSON.stringify({ deviceLabel, checkpoint: checkpointDraft }),
       });
       const data = await response.json() as Pairing & { error?: string };
       if (!response.ok || !data.code) throw new Error(data.error ?? "pairing_failed");
       setPairing(data);
       setDeviceLabelDraft("");
+      setCheckpointDraft(null);
     } catch {
       setMessage("Impossible de préparer le QR pour le moment. Réessayez dans un instant.");
     } finally {
       setCreating(false);
     }
-  }, [deviceLabelDraft]);
+  }, [deviceLabelDraft, checkpointDraft]);
 
   useEffect(() => {
     let active = true;
@@ -72,6 +89,16 @@ export default function ScannerConnectPage() {
       width: 220, margin: 1, color: { dark: "#111827", light: "#ffffff" },
     }));
   }, [pairing]);
+
+  async function copyLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setMessage("Copie impossible -- sélectionnez le lien manuellement.");
+    }
+  }
 
   async function disconnect(deviceId: string) {
     setRevokingId(deviceId);
@@ -113,15 +140,42 @@ export default function ScannerConnectPage() {
             maxLength={60}
             style={{ borderRadius: 10, border: "1px solid #374151", background: "#0b0f14", color: "#f9fafb", padding: "10px 12px", fontSize: 14 }}
           />
-          <button onClick={() => void createPairing()} disabled={creating} style={buttonStyle}>{creating ? "Préparation…" : "Générer le QR"}</button>
+          <p style={{ color: "#9ca3af", fontSize: 13, margin: "4px 0 0", textAlign: "left" }}>Poste de cet appareil -- le lien ouvrira directement ce poste, sans que la personne ait à choisir :</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            {CHECKPOINTS.map((checkpoint) => (
+              <button
+                key={checkpoint.value}
+                type="button"
+                onClick={() => setCheckpointDraft(checkpoint.value)}
+                style={{
+                  padding: "10px 4px",
+                  borderRadius: 10,
+                  border: checkpointDraft === checkpoint.value ? "2px solid #22c55e" : "1px solid #374151",
+                  background: checkpointDraft === checkpoint.value ? "#14532d" : "#0b0f14",
+                  color: "#f9fafb",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                {checkpoint.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => void createPairing()} disabled={creating} style={buttonStyle}>{creating ? "Préparation…" : "Générer le lien"}</button>
         </div>}
 
         {state === "ready" && pairing && <>
-          <p style={{ color: "#d1d5db", margin: "0 0 4px", fontWeight: 700 }}>{pairing.deviceLabel}</p>
-          <p style={{ color: "#d1d5db", margin: "0 0 16px" }}>Avec ce téléphone, scannez ce QR (ou ouvrez le lien). Il ouvrira uniquement le scanner de colis, connecté pour 30 jours.</p>
+          <p style={{ color: "#d1d5db", margin: "0 0 4px", fontWeight: 700 }}>{pairing.deviceLabel} · {CHECKPOINTS.find((checkpoint) => checkpoint.value === pairing.checkpoint)?.label ?? "Libre"}</p>
+          <p style={{ color: "#d1d5db", margin: "0 0 16px" }}>Avec ce téléphone, scannez ce QR (ou ouvrez le lien). Il ouvrira directement ce poste, connecté pour 30 jours.</p>
           <div style={{ background: "#fff", borderRadius: 16, display: "inline-flex", padding: 14 }}><canvas ref={canvasRef} aria-label="QR de connexion au scanner" /></div>
           <p style={{ color: "#9ca3af", fontSize: 13 }}>Le lien est valable 10 minutes · accès limité à {pairing.scope}</p>
-          <a href={link} style={{ color: "#86efac", display: "block", overflowWrap: "anywhere", fontSize: 12 }}>{link}</a>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+            <a href={link} style={{ color: "#86efac", flex: 1, overflowWrap: "anywhere", fontSize: 12, textAlign: "left" }}>{link}</a>
+            <button onClick={() => void copyLink(link)} style={{ border: "1px solid #374151", borderRadius: 8, padding: "6px 10px", background: copied ? "#14532d" : "#1f2937", color: "#f9fafb", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+              {copied ? "Copié ✓" : "Copier"}
+            </button>
+          </div>
           <p style={{ color: "#9ca3af", fontSize: 12, margin: "8px 0 0" }}>Envoyez ce lien par WhatsApp au chauffeur -- il n’a besoin de l’ouvrir qu’une seule fois.</p>
           <button onClick={() => { setPairing(null); void loadDevices(); }} style={{ ...buttonStyle, marginTop: 16, background: "#374151", color: "#f9fafb" }}>Terminé</button>
         </>}
@@ -133,7 +187,10 @@ export default function ScannerConnectPage() {
           <div style={{ display: "grid", gap: 8 }}>
             {devices.map((device) => (
               <div key={device.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#0b0f14", border: "1px solid #374151", borderRadius: 10, padding: "10px 12px" }}>
-                <span style={{ fontSize: 14 }}>{device.deviceLabel}</span>
+                <span style={{ fontSize: 14 }}>
+                  {device.deviceLabel}
+                  {device.checkpoint && <span style={{ color: "#86efac", fontWeight: 700 }}> · {CHECKPOINTS.find((checkpoint) => checkpoint.value === device.checkpoint)?.label}</span>}
+                </span>
                 <button onClick={() => void disconnect(device.id)} disabled={revokingId === device.id} style={{ border: 0, background: "transparent", color: "#fca5a5", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                   {revokingId === device.id ? "…" : "Déconnecter"}
                 </button>

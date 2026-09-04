@@ -1,5 +1,6 @@
 import { runtimeEnv } from "trackfleet-runtime-env";
 import type { CompanySession } from "./company-auth";
+import type { DeliveryScanCheckpoint } from "./delivery-store.types";
 
 const scannerCookieName = "__Host-trackfleet_scanner";
 const pairingLifetimeSeconds = 10 * 60;
@@ -32,7 +33,19 @@ type ScannerRecord = {
   deviceLabel: string;
   pairedAt: number;
   expiresAt: number;
+  // Optional and additive to the existing version 2 shape on purpose --
+  // bumping the version would reject every already-paired device's stored
+  // record on next read (see parseRecord below), forcing everyone to
+  // re-pair. A record with no checkpoint (every one created before this)
+  // keeps today's behavior: the scanning phone picks freely each time.
+  // Live feedback: "l'employé qui reçoit le lien doit choisir où c'est,
+  // hub agence ou chargement, ça peut porter à confusion" -- a device
+  // meant for one fixed post (a hub's own tablet, an agency's own phone)
+  // shouldn't make its user choose at all.
+  checkpoint?: DeliveryScanCheckpoint | null;
 };
+
+const validCheckpoints: DeliveryScanCheckpoint[] = ["loaded", "arrived", "delivered"];
 
 function kv() {
   return (runtimeEnv as unknown as { SENDATRACK_TOKEN_CACHE?: ScannerKv }).SENDATRACK_TOKEN_CACHE ?? null;
@@ -81,13 +94,15 @@ function parseRecord(value: string | null): ScannerRecord | null {
       || (record.siteId !== null && typeof record.siteId !== "string")
       || typeof record.deviceLabel !== "string" || typeof record.pairedAt !== "number"
       || typeof record.expiresAt !== "number" || record.expiresAt <= Date.now()) return null;
-    return record as ScannerRecord;
+    const checkpoint = record.checkpoint;
+    if (checkpoint != null && !validCheckpoints.includes(checkpoint)) return null;
+    return { ...record, checkpoint: checkpoint ?? null } as ScannerRecord;
   } catch {
     return null;
   }
 }
 
-type DeviceListEntry = { id: string; deviceLabel: string; pairedAt: number; expiresAt: number };
+type DeviceListEntry = { id: string; deviceLabel: string; pairedAt: number; expiresAt: number; checkpoint: DeliveryScanCheckpoint | null };
 
 async function readDeviceList(cache: ScannerKv, companyId: string, siteId: string | null): Promise<DeviceListEntry[]> {
   try {
@@ -98,9 +113,13 @@ async function readDeviceList(cache: ScannerKv, companyId: string, siteId: strin
     // device never reconnected to trigger an explicit revoke) is simply
     // dropped from the list next time anyone reads it, rather than
     // needing a separate cleanup job.
-    return parsed.filter((entry): entry is DeviceListEntry =>
-      entry && typeof entry.id === "string" && typeof entry.deviceLabel === "string"
-      && typeof entry.pairedAt === "number" && typeof entry.expiresAt === "number" && entry.expiresAt > Date.now());
+    return parsed
+      .filter((entry): entry is Omit<DeviceListEntry, "checkpoint"> & { checkpoint?: DeliveryScanCheckpoint | null } =>
+        entry && typeof entry.id === "string" && typeof entry.deviceLabel === "string"
+        && typeof entry.pairedAt === "number" && typeof entry.expiresAt === "number" && entry.expiresAt > Date.now())
+      // Entries written before this field existed have no `checkpoint` key
+      // at all -- normalize to null rather than leaving it undefined.
+      .map((entry) => ({ ...entry, checkpoint: entry.checkpoint ?? null }));
   } catch {
     return [];
   }
@@ -120,11 +139,12 @@ export type ScannerSession = Pick<ScannerRecord, "companyId" | "accountLabel" | 
 } | {
   role: "agency";
   siteId: string;
-}) & { scannerOnly: true };
+}) & { scannerOnly: true; checkpoint: DeliveryScanCheckpoint | null };
 
-export async function createScannerPairing(session: CompanySession, deviceLabel: string) {
+export async function createScannerPairing(session: CompanySession, deviceLabel: string, checkpoint: DeliveryScanCheckpoint | null = null) {
   const trimmedLabel = deviceLabel.trim().slice(0, maxDeviceLabelLength);
   if (!trimmedLabel) throw new Error("device_label_required");
+  if (checkpoint != null && !validCheckpoints.includes(checkpoint)) throw new Error("invalid_checkpoint");
   const cache = kv();
   if (!cache) throw new Error("scanner_pairing_unavailable");
   const code = token();
@@ -138,9 +158,10 @@ export async function createScannerPairing(session: CompanySession, deviceLabel:
     deviceLabel: trimmedLabel,
     pairedAt: Date.now(),
     expiresAt: Date.now() + pairingLifetimeSeconds * 1000,
+    checkpoint,
   };
   await cache.put(pairingKey(code), JSON.stringify(record), { expirationTtl: pairingLifetimeSeconds });
-  return { code, expiresAt: record.expiresAt, deviceLabel: trimmedLabel };
+  return { code, expiresAt: record.expiresAt, deviceLabel: trimmedLabel, checkpoint };
 }
 
 export async function consumeScannerPairing(code: string) {
@@ -155,7 +176,7 @@ export async function consumeScannerPairing(code: string) {
   const sessionRecord: ScannerRecord = { ...record, expiresAt: Date.now() + scannerLifetimeSeconds * 1000 };
   await cache.put(sessionKey(record.id), JSON.stringify(sessionRecord), { expirationTtl: scannerLifetimeSeconds });
   const devices = await readDeviceList(cache, record.companyId, record.siteId);
-  devices.push({ id: record.id, deviceLabel: record.deviceLabel, pairedAt: sessionRecord.pairedAt, expiresAt: sessionRecord.expiresAt });
+  devices.push({ id: record.id, deviceLabel: record.deviceLabel, pairedAt: sessionRecord.pairedAt, expiresAt: sessionRecord.expiresAt, checkpoint: record.checkpoint ?? null });
   await writeDeviceList(cache, record.companyId, record.siteId, devices);
   return {
     cookie: scannerCookie(record.id),
@@ -164,7 +185,7 @@ export async function consumeScannerPairing(code: string) {
 }
 
 function toScannerSession(record: ScannerRecord): ScannerSession {
-  const shared = { companyId: record.companyId, accountLabel: record.accountLabel, userLabel: record.userLabel, deviceLabel: record.deviceLabel, scannerOnly: true as const };
+  const shared = { companyId: record.companyId, accountLabel: record.accountLabel, userLabel: record.userLabel, deviceLabel: record.deviceLabel, scannerOnly: true as const, checkpoint: record.checkpoint ?? null };
   return record.siteId ? { ...shared, role: "agency", siteId: record.siteId } : { ...shared, role: "dispatcher", siteId: null };
 }
 

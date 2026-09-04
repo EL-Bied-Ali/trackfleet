@@ -81,6 +81,12 @@ export default function ScanPage() {
   // doesn't accept a scanner session. Reported live as the link "not working".
   const [scannerOnly, setScannerOnly] = useState(false);
   const [deviceLabel, setDeviceLabel] = useState<string | null>(null);
+  // Set when this device was paired for one fixed post (see
+  // /scan/connect) -- the checkpoint picker below is hidden entirely
+  // instead of just pre-selected, since the whole point is removing the
+  // choice, not just defaulting it (live feedback: "l'employé qui reçoit
+  // le lien doit choisir où c'est... ça peut porter à confusion").
+  const [lockedCheckpoint, setLockedCheckpoint] = useState<Checkpoint | null>(null);
   const [mode, setMode] = useState<Checkpoint>("loaded");
   const [cameraState, setCameraState] = useState<"idle" | "starting" | "active" | "error">("idle");
   const [cameraError, setCameraError] = useState("");
@@ -126,13 +132,17 @@ export default function ScanPage() {
       }).then(() => window.history.replaceState({}, "", "/scan"))
       : Promise.resolve();
     void activate.then(() => fetch("/api/scan/session", { cache: "no-store" }))
-      .then((response) => response.json() as Promise<{ authenticated: boolean; scannerOnly?: boolean; deviceLabel?: string | null; company?: CompanyInfo }>)
+      .then((response) => response.json() as Promise<{ authenticated: boolean; scannerOnly?: boolean; deviceLabel?: string | null; checkpoint?: Checkpoint | null; company?: CompanyInfo }>)
       .then((data) => {
         if (!active) return;
         if (data.authenticated && data.company) {
           setCompany(data.company);
           setScannerOnly(data.scannerOnly === true);
           setDeviceLabel(data.deviceLabel ?? null);
+          if (data.checkpoint) {
+            setLockedCheckpoint(data.checkpoint);
+            setMode(data.checkpoint);
+          }
           setAuth("ready");
         } else {
           setAuth("denied");
@@ -180,6 +190,7 @@ export default function ScanPage() {
           : data.error === "agency_destination_mismatch" ? "Ce colis n'est pas destiné à cette agence."
           : data.error === "already_delivered" ? "Ce colis est déjà marqué livré."
           : data.error === "arrival_blocked_missing_scans" ? `Scans manquants avant la livraison : ${[data.missingLoadedScan ? "Chargé" : null, data.missingHubScan ? "Déchargé au hub" : null].filter(Boolean).join(", ")}.`
+          : data.error === "checkpoint_locked" ? "Cet appareil est réservé à un autre poste."
           : "Échec du scan, réessayez.",
         );
         playBeep(false);
@@ -316,27 +327,33 @@ export default function ScanPage() {
         {!scannerOnly && <Link href="/?lang=fr" style={{ color: "#f9fafb", fontWeight: 700, fontSize: 13 }}>← Tableau</Link>}
       </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 14 }}>
-        {CHECKPOINTS.map((checkpoint) => (
-          <button
-            key={checkpoint.value}
-            type="button"
-            onClick={() => setMode(checkpoint.value)}
-            style={{
-              padding: "10px 4px",
-              borderRadius: 10,
-              border: mode === checkpoint.value ? "2px solid #22c55e" : "1px solid #374151",
-              background: mode === checkpoint.value ? "#14532d" : "#1f2937",
-              color: "#f9fafb",
-              fontWeight: 700,
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            {checkpoint.label}
-          </button>
-        ))}
-      </div>
+      {lockedCheckpoint ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: 10, border: "2px solid #22c55e", background: "#14532d", color: "#f9fafb", fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+          Poste : {CHECKPOINTS.find((checkpoint) => checkpoint.value === lockedCheckpoint)?.label}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6, marginBottom: 14 }}>
+          {CHECKPOINTS.map((checkpoint) => (
+            <button
+              key={checkpoint.value}
+              type="button"
+              onClick={() => setMode(checkpoint.value)}
+              style={{
+                padding: "10px 4px",
+                borderRadius: 10,
+                border: mode === checkpoint.value ? "2px solid #22c55e" : "1px solid #374151",
+                background: mode === checkpoint.value ? "#14532d" : "#1f2937",
+                color: "#f9fafb",
+                fontWeight: 700,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              {checkpoint.label}
+            </button>
+          ))}
+        </div>
+      )}
       <p style={{ margin: "0 0 14px", color: "#9ca3af", fontSize: 13 }}>
         {CHECKPOINTS.find((checkpoint) => checkpoint.value === mode)?.help}
       </p>
