@@ -23,7 +23,7 @@ test("only the scan endpoints accept the paired phone, while the issuer must hol
   assert.match(pairRoute, /await getCompanySession\(request\)/);
   assert.match(consumeRoute, /requestIsSameOrigin\(request\)/);
   assert.match(scannerSessionRoute, /await getScannerSession\(request\)/);
-  assert.match(scanRoute, /await getScannerSession\(request\) \?\? await getCompanySession\(request\)/);
+  assert.match(scanRoute, /const scannerResult = await getScannerSession\(request\);\s*\n\s*const session = scannerResult\?\.session \?\? await getCompanySession\(request\);/);
   assert.doesNotMatch(pairing, /credentialsCiphertext|password|SENDATRACK_PASSWORD/);
 });
 
@@ -66,5 +66,27 @@ test("the connect page lists every currently paired device with its own disconne
 });
 
 test("the paired phone's own screen can show which named device it's connected as", () => {
-  assert.match(scannerSessionRoute, /deviceLabel: scanner\?\.deviceLabel \?\? null,/);
+  assert.match(scannerSessionRoute, /deviceLabel: scannerResult\?\.session\.deviceLabel \?\? null,/);
+});
+
+// Live follow-up: "if he use it before 30 days does it reset ?" -> "go for
+// it". A device actually in regular use should never need a fresh link --
+// the fixed one-time 30-day countdown from pairing is replaced with a
+// sliding window that extends back out to a full 30 days once more than a
+// day has already elapsed, on every authenticated check. Throttled (not
+// on every single request) to keep KV writes bounded, matching this
+// codebase's own past write-volume incidents.
+test("a session due for refresh (more than a day into its 30-day window) gets both its KV record and its device-list entry extended, plus a fresh Set-Cookie for the browser's own copy of the expiry", () => {
+  assert.match(pairing, /const refreshThresholdSeconds = 24 \* 60 \* 60;/);
+  assert.match(pairing, /async function refreshScannerSession\(cache: ScannerKv, record: ScannerRecord\): Promise<string> \{/);
+  assert.match(pairing, /const expiresAt = Date\.now\(\) \+ scannerLifetimeSeconds \* 1000;/);
+  assert.match(pairing, /const dueForRefresh = record\.expiresAt - Date\.now\(\) < \(scannerLifetimeSeconds - refreshThresholdSeconds\) \* 1000;/);
+  assert.match(pairing, /const refreshedCookie = dueForRefresh \? await refreshScannerSession\(cache, record\) : null;/);
+  assert.match(pairing, /return \{ session: toScannerSession\(record\), refreshedCookie \};/);
+});
+
+test("a refreshed cookie rides along on whatever response the scan/session endpoints end up returning, so the browser actually keeps the extended session", () => {
+  assert.match(scanRoute, /const refreshHeaders = scannerResult\?\.refreshedCookie \? \{ "set-cookie": scannerResult\.refreshedCookie \} : undefined;/);
+  assert.match(scanRoute, /function noStore\(body: Record<string, unknown>, status = 200, extraHeaders\?: Record<string, string>\) \{/);
+  assert.match(scannerSessionRoute, /if \(scannerResult\?\.refreshedCookie\) headers\["set-cookie"\] = scannerResult\.refreshedCookie;/);
 });

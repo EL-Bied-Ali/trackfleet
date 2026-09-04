@@ -4,6 +4,16 @@ import type { CompanySession } from "./company-auth";
 const scannerCookieName = "__Host-trackfleet_scanner";
 const pairingLifetimeSeconds = 10 * 60;
 const scannerLifetimeSeconds = 30 * 24 * 60 * 60;
+// A device that's actually in regular use should never need a fresh link,
+// per live feedback ("if he use it before 30 days does it reset?" -> "go
+// for it"): every check now extends the window back out to a full 30 days
+// once more than a day of it has already elapsed, instead of counting down
+// once from the original pairing regardless of use. Throttled to roughly
+// once per day of activity (not on every single request) to avoid a KV
+// write -- and a browser Set-Cookie -- on every scan; this codebase has
+// hit real KV/D1 write-volume ceilings before (see
+// project_d1_write_volume_fix in memory).
+const refreshThresholdSeconds = 24 * 60 * 60;
 const maxDeviceLabelLength = 60;
 
 type ScannerKv = {
@@ -58,6 +68,9 @@ function deviceListKey(companyId: string, siteId: string | null) {
 
 function pairingKey(code: string) { return `scanner-pair:${code}`; }
 function sessionKey(id: string) { return `scanner-session:${id}`; }
+function scannerCookie(id: string) {
+  return `${scannerCookieName}=${id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${scannerLifetimeSeconds}`;
+}
 
 function parseRecord(value: string | null): ScannerRecord | null {
   if (!value) return null;
@@ -145,7 +158,7 @@ export async function consumeScannerPairing(code: string) {
   devices.push({ id: record.id, deviceLabel: record.deviceLabel, pairedAt: sessionRecord.pairedAt, expiresAt: sessionRecord.expiresAt });
   await writeDeviceList(cache, record.companyId, record.siteId, devices);
   return {
-    cookie: `${scannerCookieName}=${record.id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${scannerLifetimeSeconds}`,
+    cookie: scannerCookie(record.id),
     session: toScannerSession(sessionRecord),
   };
 }
@@ -155,14 +168,34 @@ function toScannerSession(record: ScannerRecord): ScannerSession {
   return record.siteId ? { ...shared, role: "agency", siteId: record.siteId } : { ...shared, role: "dispatcher", siteId: null };
 }
 
-export async function getScannerSession(request: Request): Promise<ScannerSession | null> {
+// Rewrites the session (and its device-list entry) back out to a full
+// scannerLifetimeSeconds from now, and returns a fresh Set-Cookie for the
+// browser to extend its own copy of the expiry too -- refreshing only the
+// server-side KV record wouldn't be enough, since the cookie's Max-Age was
+// fixed at the moment it was first issued and the browser will drop it on
+// schedule regardless of what the server thinks is still valid.
+async function refreshScannerSession(cache: ScannerKv, record: ScannerRecord): Promise<string> {
+  const expiresAt = Date.now() + scannerLifetimeSeconds * 1000;
+  const refreshed: ScannerRecord = { ...record, expiresAt };
+  await cache.put(sessionKey(record.id), JSON.stringify(refreshed), { expirationTtl: scannerLifetimeSeconds });
+  const devices = await readDeviceList(cache, record.companyId, record.siteId);
+  const updatedDevices = devices.map((entry) => entry.id === record.id ? { ...entry, expiresAt } : entry);
+  await writeDeviceList(cache, record.companyId, record.siteId, updatedDevices);
+  return scannerCookie(record.id);
+}
+
+export type ScannerSessionResult = { session: ScannerSession; refreshedCookie: string | null };
+
+export async function getScannerSession(request: Request): Promise<ScannerSessionResult | null> {
   if (request.headers.get("sec-fetch-site")?.toLowerCase() === "cross-site") return null;
   const cache = kv();
   const id = cookieValue(request);
   if (!cache || !id || id.length > 128) return null;
   const record = parseRecord(await cache.get(sessionKey(id)));
   if (!record || record.id !== id) return null;
-  return toScannerSession(record);
+  const dueForRefresh = record.expiresAt - Date.now() < (scannerLifetimeSeconds - refreshThresholdSeconds) * 1000;
+  const refreshedCookie = dueForRefresh ? await refreshScannerSession(cache, record) : null;
+  return { session: toScannerSession(record), refreshedCookie };
 }
 
 // Lists every phone currently paired under this session's own scope
