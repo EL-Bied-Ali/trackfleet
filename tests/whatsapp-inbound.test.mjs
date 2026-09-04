@@ -181,11 +181,26 @@ test("the no-match reply asks for a name, and is the same message whether it's a
 // whose bare specifier only resolves under Vite/vinext's aliasing --
 // unresolvable from plain Node (matching this repo's established pattern),
 // so their wiring is exercised via source-text assertions.
-const [inboundLib, webhookRoute, deliveryStoreTypes] = await Promise.all([
+const [inboundLib, webhookRoute, deliveryStoreTypes, postgresStore, cloudflareStore] = await Promise.all([
   readFile(new URL("../app/lib/whatsapp-inbound.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/api/webhooks/whatsapp/route.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/lib/delivery-store.types.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/delivery-store.postgres.ts", import.meta.url), "utf8"),
+  readFile(new URL("../app/lib/delivery-store.cloudflare.ts", import.meta.url), "utf8"),
 ]);
+
+test("the Postgres and D1 backends both require an exact (case-insensitive) customer-name match, not a % wildcard substring", () => {
+  // Scoped to the name-query function itself, not the whole file -- both
+  // backends separately use a legitimate, already company-scoped "customer
+  // LIKE" for demo-delivery cleanup (matching DEMO_DELIVERY_CUSTOMER_PREFIX%),
+  // unrelated to this inbound-webhook lookup.
+  const postgresFn = postgresStore.slice(postgresStore.indexOf("async findMostRecentActiveDeliveryByCustomerNameQuery"), postgresStore.indexOf("async applySendatrackSnapshot"));
+  assert.match(postgresFn, /lower\(customer\) = lower\(\$\{trimmed\}\)/);
+  assert.doesNotMatch(postgresFn, /ILIKE/);
+  const cloudflareFn = cloudflareStore.slice(cloudflareStore.indexOf("async findMostRecentActiveDeliveryByCustomerNameQuery"), cloudflareStore.indexOf("async applySendatrackSnapshot"));
+  assert.match(cloudflareFn, /lower\(customer\) = lower\(\?\)/);
+  assert.doesNotMatch(cloudflareFn, / LIKE /);
+});
 
 test("the webhook route verifies the raw-body signature before ever parsing JSON, same discipline as the Paddle webhook", () => {
   assert.match(webhookRoute, /const rawBody = await request\.text\(\);/);
@@ -285,7 +300,7 @@ test("findMostRecentActiveDeliveryByContact also matches the recipient's phone, 
   assert.equal(match?.id, delivery.id);
 });
 
-test("findMostRecentActiveDeliveryByCustomerNameQuery does a case-insensitive substring match on the customer name, among active deliveries only", async () => {
+test("findMostRecentActiveDeliveryByCustomerNameQuery does a case-insensitive EXACT match on the customer name, among active deliveries only", async () => {
   const uniqueName = `Amina Testcustomer ${Date.now()}`;
   const delivered = await memoryStore.create(baseDeliveryInput({ customer: uniqueName, status: "Delivered" }));
   const active = await memoryStore.create(baseDeliveryInput({ customer: uniqueName, status: "In transit" }));
@@ -293,6 +308,21 @@ test("findMostRecentActiveDeliveryByCustomerNameQuery does a case-insensitive su
   const match = await memoryStore.findMostRecentActiveDeliveryByCustomerNameQuery(uniqueName.toLowerCase());
   assert.equal(match?.id, active.id);
   assert.notEqual(match?.id, delivered.id);
+});
+
+// Security fix, live audit finding: this runs against EVERY company sharing
+// the WhatsApp Business number, with no phone check at all -- a substring
+// match let a stranger pull another company's private delivery details
+// (destination, weight, price, ETA) just by texting a name that happened to
+// appear anywhere inside someone else's customer field. Only an exact
+// (still case-insensitive) match is accepted now.
+test("findMostRecentActiveDeliveryByCustomerNameQuery no longer matches on a mere substring -- a partial or superstring of the real name must not find it", async () => {
+  const uniqueName = `Karim Substringtest ${Date.now()}`;
+  await memoryStore.create(baseDeliveryInput({ customer: uniqueName, status: "In transit" }));
+
+  assert.equal(await memoryStore.findMostRecentActiveDeliveryByCustomerNameQuery("Karim"), null);
+  assert.equal(await memoryStore.findMostRecentActiveDeliveryByCustomerNameQuery("Substringtest"), null);
+  assert.equal(await memoryStore.findMostRecentActiveDeliveryByCustomerNameQuery(`${uniqueName} extra`), null);
 });
 
 test("findMostRecentActiveDeliveryByCustomerNameQuery returns null for a blank or non-matching query instead of matching everything", async () => {

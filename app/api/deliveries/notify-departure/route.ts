@@ -41,6 +41,13 @@ export async function POST(request: Request) {
   // not just the automatic one.
   const events = await store.listEvents(deliveryId);
   if (whatsappConsentWithdrawn(events)) return noStore({ error: "consent_withdrawn" }, 403);
+  // Same reasoning as notify-arrival/route.ts: the group "confirm
+  // departure" action fires this automatically, and a standalone trigger
+  // can also reach it afterward -- without this check, both firing sent
+  // the customer two separate messages for the same milestone.
+  if (events.some((event) => event.type === "WHATSAPP_DEPARTURE_NOTIFIED")) {
+    return noStore({ ok: true, alreadyNotified: true, results: [] });
+  }
 
   const origin = new URL(request.url).origin;
   const trackingUrl = new URL(origin);

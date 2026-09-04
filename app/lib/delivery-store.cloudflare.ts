@@ -103,7 +103,11 @@ export const store: DeliveryStore = {
   async findMostRecentActiveDeliveryByCustomerNameQuery(query) {
     const trimmed = query.trim();
     if (!trimmed) return null;
-    const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE status != 'Delivered' AND customer LIKE ? ORDER BY created_at DESC LIMIT 1`).bind(`%${trimmed}%`).first<RawDelivery>();
+    // Exact (case-insensitive) match only -- see the Postgres store's own
+    // comment on this same method for why a substring match here was a
+    // real cross-company data leak (no phone check, no company scoping
+    // possible at this point in the shared-WABA inbound webhook flow).
+    const row = await db().prepare(`SELECT ${selectColumns} FROM deliveries WHERE status != 'Delivered' AND lower(customer) = lower(?) ORDER BY created_at DESC LIMIT 1`).bind(trimmed).first<RawDelivery>();
     return row ? hydrate(row) : null;
   },
   async applySendatrackSnapshot(snapshot: SendatrackSnapshot, companyId: string) {

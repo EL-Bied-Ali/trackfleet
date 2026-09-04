@@ -35,6 +35,18 @@ test("a priced arrival still states the amount in the URL-free body text, withou
   assert.doesNotMatch(priced, /https?:\/\//);
 });
 
+// Live audit finding: a shipment's representative send now carries the
+// group's true size (see groupActionableByShipment in notification-policy.ts)
+// so the other parcels aren't silently dropped from what the customer sees.
+test("automaticWhatsAppBodyMessage mentions the linked-parcel count only when the parcel isn't traveling alone, same wording as the inbound-reply flow", () => {
+  const solo = automaticWhatsAppBodyMessage("REGISTERED", sampleDelivery);
+  assert.doesNotMatch(solo, /colis liés/);
+  const soloExplicit = automaticWhatsAppBodyMessage("REGISTERED", sampleDelivery, 1);
+  assert.doesNotMatch(soloExplicit, /colis liés/);
+  const grouped = automaticWhatsAppBodyMessage("REGISTERED", sampleDelivery, 3);
+  assert.match(grouped, /\(3 colis liés à cet envoi\)/);
+});
+
 // whatsapp-automation.ts imports trackfleet-runtime-env, whose bare
 // specifier only resolves under Vite/vinext's aliasing -- unresolvable from
 // plain Node (matching this repo's established pattern), so its wiring is
@@ -43,20 +55,36 @@ const whatsappAutomation = await readFile(new URL("../app/lib/whatsapp-automatio
 
 test("the tracking link travels as the template's dynamic URL button parameter, not as body text -- and only the token (not the full URL) is sent, since the button's base URL is configured once in the approved Meta template", () => {
   assert.match(whatsappAutomation, /import \{ automaticWhatsAppBodyMessage \} from "\.\/whatsapp-message";/);
-  assert.match(whatsappAutomation, /const message = automaticWhatsAppBodyMessage\(event, delivery\);/);
+  assert.match(whatsappAutomation, /const message = automaticWhatsAppBodyMessage\(event, delivery, parcelCount\);/);
   assert.match(whatsappAutomation, /type: "button";\s*\n\s*sub_type: "url";\s*\n\s*index: "0";/);
   assert.match(whatsappAutomation, /parameters: \[\{ type: "text", text: delivery\.trackingToken \}\],/);
   assert.doesNotMatch(whatsappAutomation, /automaticWhatsAppMessage\(event, delivery/);
 });
 
 test("buildAutomaticWhatsAppPayload and sendAutomaticWhatsAppNotification no longer take a trackingUrl parameter -- the token comes straight from delivery.trackingToken, and a missing token is refused up front", () => {
-  assert.match(whatsappAutomation, /export function buildAutomaticWhatsAppPayload\(\s*\n\s*event: DeliveryEventType,\s*\n\s*delivery: DeliveryRow,\s*\n\)/);
-  assert.match(whatsappAutomation, /export async function sendAutomaticWhatsAppNotification\(\s*\n\s*event: DeliveryEventType,\s*\n\s*delivery: DeliveryRow,\s*\n\)/);
+  assert.match(whatsappAutomation, /export function buildAutomaticWhatsAppPayload\(\s*\n\s*event: DeliveryEventType,\s*\n\s*delivery: DeliveryRow,\s*\n\s*parcelCount = 1,\s*\n\)/);
+  assert.match(whatsappAutomation, /export async function sendAutomaticWhatsAppNotification\(\s*\n\s*event: DeliveryEventType,\s*\n\s*delivery: DeliveryRow,\s*\n\s*parcelCount = 1,\s*\n\)/);
   assert.match(whatsappAutomation, /if \(!delivery\.trackingToken\) return \{ payload: null, reason: "recipient_missing" \};/);
 });
 
 test("email keeps the tracking link inline in its own body text -- email has no anti-phishing URL restriction, so automaticWhatsAppMessage (URL included) is still exactly what it uses", async () => {
   const emailAutomation = await readFile(new URL("../app/lib/email-automation.ts", import.meta.url), "utf8");
   assert.match(emailAutomation, /import \{ automaticWhatsAppMessage \} from "\.\/whatsapp-message";/);
-  assert.match(emailAutomation, /const message = automaticWhatsAppMessage\(event, delivery, trackingUrl\);/);
+  assert.match(emailAutomation, /const message = automaticWhatsAppMessage\(event, delivery, trackingUrl, parcelCount\);/);
+});
+
+// Live audit finding: Meta's Cloud API rejects template body parameters
+// containing newlines/tabs/repeated spaces. customer/destination are only
+// length-validated at intake, never character-filtered, so a name with one
+// of these characters would make every send attempt for that delivery fail
+// identically forever (classified as the deliberately-retryable
+// "provider_error", so nothing would ever stop retrying it) with no
+// operator-visible signal that this specific delivery can never succeed.
+test("every text parameter sent to Meta's template API is run through sanitizeTemplateParam first, stripping newlines/tabs/repeated spaces without touching the stored data itself", () => {
+  assert.match(whatsappAutomation, /function sanitizeTemplateParam\(text: string\) \{/);
+  assert.match(whatsappAutomation, /return text\.replace\(\/\[\\r\\n\\t\]\+\/g, " "\)\.replace\(\/ \{2,\}\/g, " "\)\.trim\(\);/);
+  assert.match(whatsappAutomation, /\{ type: "text", text: sanitizeTemplateParam\(recipient\.name\) \}/);
+  assert.match(whatsappAutomation, /\{ type: "text", text: sanitizeTemplateParam\(delivery\.id\) \}/);
+  assert.match(whatsappAutomation, /\{ type: "text", text: sanitizeTemplateParam\(message\) \}/);
+  assert.match(whatsappAutomation, /\{ type: "text" as const, text: sanitizeTemplateParam\(recipient\.name\) \}/);
 });

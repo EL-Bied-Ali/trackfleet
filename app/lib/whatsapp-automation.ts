@@ -10,6 +10,20 @@ export { automaticWhatsAppMessage } from "./whatsapp-message";
 
 const metaRequestTimeoutMs = 10_000;
 
+// Meta's Cloud API rejects template body parameters containing newlines,
+// tabs, or more than 4 consecutive spaces. customer/destination are only
+// length-validated at intake (app/api/deliveries/route.ts), not character-
+// filtered, so a name containing one of these would make every automatic
+// send attempt fail identically -- and since that failure is classified as
+// "provider_error" (deliberately retryable, so a real transient Meta outage
+// still gets picked up later), it would retry forever on every tick with no
+// operator-visible signal that THIS delivery can never succeed. Sanitizing
+// right here, at the point text enters a template parameter, fixes that
+// without touching the stored data or its display anywhere else in the app.
+function sanitizeTemplateParam(text: string) {
+  return text.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+}
+
 function recipientsFrom(delivery: DeliveryRow) {
   // Only the sender (the party who registered/dropped off the parcel) gets
   // messaged -- the recipient's own opt-in is still recorded (and still
@@ -60,6 +74,7 @@ type AutomaticPayloadBuildReason = "ok" | "internal_event" | "consent_missing" |
 export function buildAutomaticWhatsAppPayload(
   event: DeliveryEventType,
   delivery: DeliveryRow,
+  parcelCount = 1,
 ): { payload: AutomaticWhatsAppPayload | null; reason: AutomaticPayloadBuildReason } {
   if (!isAutomaticWhatsAppEvent(event)) return { payload: null, reason: "internal_event" };
   if (delivery.whatsappOptIn !== true) return { payload: null, reason: "consent_missing" };
@@ -70,7 +85,7 @@ export function buildAutomaticWhatsAppPayload(
 
   const templateName = runtimeEnv.WHATSAPP_TEMPLATE_NAME?.trim();
   const templateLanguage = runtimeEnv.WHATSAPP_TEMPLATE_LANGUAGE?.trim();
-  const message = automaticWhatsAppBodyMessage(event, delivery);
+  const message = automaticWhatsAppBodyMessage(event, delivery, parcelCount);
   if (!templateName || !templateLanguage || !message) return { payload: null, reason: "not_configured" };
 
   return {
@@ -86,9 +101,9 @@ export function buildAutomaticWhatsAppPayload(
           {
             type: "body",
             parameters: [
-              { type: "text", text: recipient.name },
-              { type: "text", text: delivery.id },
-              { type: "text", text: message },
+              { type: "text", text: sanitizeTemplateParam(recipient.name) },
+              { type: "text", text: sanitizeTemplateParam(delivery.id) },
+              { type: "text", text: sanitizeTemplateParam(message) },
             ],
           },
           {
@@ -106,6 +121,7 @@ export function buildAutomaticWhatsAppPayload(
 export async function sendAutomaticWhatsAppNotification(
   event: DeliveryEventType,
   delivery: DeliveryRow,
+  parcelCount = 1,
 ) {
   if (runtimeEnv.WHATSAPP_AUTOMATION_ENABLED !== "true") return { sent: false, reason: "disabled" as const };
 
@@ -113,7 +129,7 @@ export async function sendAutomaticWhatsAppNotification(
   const phoneNumberId = runtimeEnv.WHATSAPP_PHONE_NUMBER_ID?.trim();
   if (!token || !phoneNumberId) return { sent: false, reason: "not_configured" as const };
 
-  const built = buildAutomaticWhatsAppPayload(event, delivery);
+  const built = buildAutomaticWhatsAppPayload(event, delivery, parcelCount);
   if (!built.payload) return { sent: false, reason: built.reason };
   const recipients = recipientsFrom(delivery);
   const responses = await Promise.all(recipients.map((recipient) => fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
@@ -128,7 +144,7 @@ export async function sendAutomaticWhatsAppNotification(
           {
             ...built.payload!.template.components[0],
             parameters: [
-              { type: "text" as const, text: recipient.name },
+              { type: "text" as const, text: sanitizeTemplateParam(recipient.name) },
               ...built.payload!.template.components[0].parameters.slice(1),
             ],
           },

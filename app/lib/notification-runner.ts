@@ -2,7 +2,7 @@ import { store } from "trackfleet-delivery-store";
 import { runtimeEnv } from "trackfleet-runtime-env";
 import { whatsappConsentWithdrawn } from "./delivery-events";
 import { sendAutomaticEmailNotification } from "./email-automation";
-import { isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
+import { groupActionableByShipment, isAutomaticWhatsAppEvent, isHistoricalNotification, parseAutomationStartAt, splitLatestPendingNotifications } from "./notification-policy";
 import { getSubscription, whatsappIncludedInPlan } from "./subscription-store";
 import { sendAutomaticWhatsAppNotification } from "./whatsapp-automation";
 
@@ -89,7 +89,22 @@ export async function processPendingNotifications(companyId: string, origin: str
     suppressed += 1;
   }
 
-  for (const item of actionable.slice(0, maxPerCall)) {
+  // A "weigh together" shipment is several delivery rows sharing one
+  // shipmentId, each carrying its own copy of the same event -- without
+  // this, a customer with 3 parcels on one truck got 3 near-identical
+  // pushes for the same real-world event. One representative per shipment
+  // is actually sent (with the group's size folded into its message text);
+  // the rest are marked sent the same way the superseded bucket above is,
+  // never messaged on their own.
+  const { representative, redundant } = groupActionableByShipment(actionable);
+  for (const item of redundant.slice(0, maxHousekeepingItemsPerCall)) {
+    const claimed = await store.claimNotification(item.delivery.id, item.event.type);
+    if (!claimed) continue;
+    await store.markNotificationSent(item.delivery.id, item.event.type);
+    suppressed += 1;
+  }
+
+  for (const { item, parcelCount } of representative.slice(0, maxPerCall)) {
     const claimed = await store.claimNotification(item.delivery.id, item.event.type);
     if (!claimed) continue;
 
@@ -130,8 +145,8 @@ export async function processPendingNotifications(companyId: string, origin: str
       // the channel is skipped entirely rather than attempted and counted
       // as a failure, since "not on this plan" isn't a provider error.
       const attempts = await Promise.all([
-        whatsappEligible ? sendAutomaticWhatsAppNotification(item.event.type, item.delivery) : null,
-        sendAutomaticEmailNotification(item.event.type, item.delivery, trackingUrl.toString()),
+        whatsappEligible ? sendAutomaticWhatsAppNotification(item.event.type, item.delivery, parcelCount) : null,
+        sendAutomaticEmailNotification(item.event.type, item.delivery, trackingUrl.toString(), parcelCount),
       ]);
       const results = attempts.filter((result): result is NonNullable<typeof result> => result !== null);
 

@@ -94,3 +94,19 @@ test("the notify-arrival route refuses to send when the customer withdrew WhatsA
   assert.match(notifyRoute, /const events = await store\.listEvents\(deliveryId\);/);
   assert.match(notifyRoute, /if \(whatsappConsentWithdrawn\(events\)\) return noStore\(\{ error: "consent_withdrawn" \}, 403\);/);
 });
+
+// Live audit finding: two independent UI paths reach this same endpoint for
+// the same delivery -- the group "confirm arrival" action fires it
+// automatically, and a standalone popover button stays clickable
+// afterward. Neither used to check whether WHATSAPP_ARRIVAL_NOTIFIED was
+// already recorded, so a dispatcher clicking both sent the customer two
+// separate messages for the same milestone.
+test("the notify-arrival route is idempotent -- a delivery that already has WHATSAPP_ARRIVAL_NOTIFIED recorded is not messaged again", () => {
+  assert.match(notifyRoute, /if \(events\.some\(\(event\) => event\.type === "WHATSAPP_ARRIVAL_NOTIFIED"\)\) \{\s*\n\s*return noStore\(\{ ok: true, alreadyNotified: true, results: \[\] \}\);\s*\n\s*\}/);
+  // Must come after the consent check (both read the same already-fetched
+  // events array) but before any recipient/branding lookup or send attempt.
+  const consentIndex = notifyRoute.indexOf('if (whatsappConsentWithdrawn(events))');
+  const idempotencyIndex = notifyRoute.indexOf('event.type === "WHATSAPP_ARRIVAL_NOTIFIED"');
+  const sendIndex = notifyRoute.indexOf("sendWhatsAppTextReply(recipient.phone");
+  assert.ok(consentIndex >= 0 && idempotencyIndex > consentIndex && sendIndex > idempotencyIndex);
+});
