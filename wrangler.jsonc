@@ -4,16 +4,6 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-08-19",
   "compatibility_flags": ["nodejs_compat"],
-  // Never explicitly set before -- the Workers default CPU-time limit is
-  // low enough (observed via `wrangler tail`: real production requests,
-  // including plain GET /api/health, killed with "Worker exceeded CPU time
-  // limit" at a consistently tiny cpuTime) that ordinary request handling
-  // was intermittently failing with Cloudflare error 1102 in production.
-  // Root-caused live 2026-09-04 by tailing prod logs while re-hitting
-  // /api/health and catching the exact "exceededCpu" outcome. Raised to a
-  // realistic ceiling for a Postgres/Hyperdrive-backed API rather than
-  // trimming work to fit a limit that was never intentionally chosen.
-  "limits": { "cpu_ms": 50 },
   // SENDATRACK does not currently expose the TrackFleet API over HTTPS.
   // This explicit MVP override is monitored by /api/health and can be removed if TLS becomes available.
   "vars": {
