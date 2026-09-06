@@ -119,7 +119,19 @@ export async function ensureAuthTables() {
   // Session tables are created lazily by the platform-specific server store.
 }
 
-export async function createCompanySession(credentials: SendatrackCredentials) {
+// Live request: "can't we attribute actions to the google accounts" -- a
+// company's dispatcher session is always backed by ONE shared SendaTrack
+// credential set (normalized.user, e.g. "Admin"), identical for every
+// person at that company -- password login has no way to tell staff
+// apart. Google login already resolves a real per-person identity
+// (google_links maps each individual's own google_sub/email to the
+// company) before ever reaching here, but it used to be thrown away the
+// moment this function ran: only the shared credentials mattered. Passing
+// the caller's own resolved Google email through now makes THIS session's
+// userLabel personal (see the two Google-login callers) while password
+// login keeps behaving exactly as before -- nobody's forced onto Google
+// login just for this.
+export async function createCompanySession(credentials: SendatrackCredentials, googleEmail?: string) {
   const normalized: StoredCredentials = {
     accountID: credentials.accountID.trim(),
     user: credentials.user.trim(),
@@ -151,7 +163,7 @@ export async function createCompanySession(credentials: SendatrackCredentials) {
       tokenHash,
       companyId,
       accountLabel: normalized.accountID,
-      userLabel: normalized.user,
+      userLabel: googleEmail?.trim() || normalized.user,
       credentialsCiphertext,
       expiresAt,
     });

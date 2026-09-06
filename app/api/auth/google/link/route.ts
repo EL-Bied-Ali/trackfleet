@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       accountID: String(payload.accountID ?? "").trim().slice(0, 120),
       user: String(payload.user ?? "").trim().slice(0, 120),
       password: String(payload.password ?? "").slice(0, 512),
-    });
+    }, identity.email);
     await createGoogleLink({ googleSub: identity.sub, email: identity.email, companyId: result.companyId });
     recentLoginAttempts.delete(clientAddress(request));
     await clearLoginAttempts(request).catch(() => undefined);

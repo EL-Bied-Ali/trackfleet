@@ -3,6 +3,7 @@ import { store } from "trackfleet-delivery-store";
 import { arrivalConfirmationRecommendation } from "../../../lib/arrival-confirmation";
 import { getCompanySession } from "../../../lib/company-auth";
 import { confirmArrivalManually } from "../../../lib/confirm-arrival-manually";
+import { logCompanyAction } from "../../../lib/company-audit-log";
 import { knownSite } from "../../../lib/known-sites";
 import { readJsonObject, invalidJsonResponse } from "../../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../../lib/request-origin";
@@ -104,6 +105,11 @@ export async function POST(request: Request) {
       if (missingLoadedScan || missingHubScan) {
         console.warn("[trackfleet:deliveries] arrival confirmed despite missing scans (explicit bypass)", {
           deliveryId, companyId: session.companyId, missingLoadedScan, missingHubScan,
+        });
+        await logCompanyAction({
+          companyId: session.companyId, actor: session.userLabel, action: "arrival_confirmed_missing_scans_bypassed",
+          deliveryId, deliveryCustomer: delivery.customer, deliveryDestination: delivery.destination,
+          detail: [missingLoadedScan ? "loaded" : null, missingHubScan ? "hub" : null].filter(Boolean).join(","),
         });
       }
 

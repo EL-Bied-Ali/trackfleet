@@ -5,6 +5,7 @@ import type { DeliveryRow } from "../../lib/delivery-store.types";
 import { deliveryIdempotencyPayloadMatches, deliveryIdempotencyTrackingToken, validDeliveryIdempotencyKey } from "../../lib/delivery-idempotency";
 import { shouldDetectDelay } from "../../lib/delay-detection";
 import { customerFacingEvent, trackingLinkExpiryAnchorFromEvents } from "../../lib/delivery-events";
+import { logCompanyAction } from "../../lib/company-audit-log";
 import { estimateArrival } from "../../lib/eta-estimator";
 import { computeDeliveryPrice, deliveryPriceCurrencyForOriginCountry } from "../../lib/delivery-pricing";
 import { estimateRelayArrival } from "../../lib/relay-eta-estimate";
@@ -828,8 +829,17 @@ export async function DELETE(request: Request) {
     const deliveryId = String(payload.deliveryId ?? "").trim();
     if (!deliveryId || deliveryId.length > 100) return Response.json({ error: "invalid_delivery_id" }, { status: 400, headers: { "cache-control": "no-store" } });
 
+    // Fetched before the delete, purely for the audit-log snapshot below --
+    // the row (and its own events) are gone once deleteDelivery succeeds,
+    // so this is the only chance to capture what it was.
+    const target = (await store.listForCompany(session.companyId)).find((candidate) => candidate.id === deliveryId);
+
     const deleted = await store.deleteDelivery(deliveryId, session.companyId);
     if (!deleted) return Response.json({ error: "delivery_not_found" }, { status: 404, headers: { "cache-control": "no-store" } });
+    await logCompanyAction({
+      companyId: session.companyId, actor: session.userLabel, action: "delivery_deleted",
+      deliveryId, deliveryCustomer: target?.customer ?? null, deliveryDestination: target?.destination ?? null,
+    });
     return Response.json({ ok: true, deliveryId }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     return errorResponse(error);
