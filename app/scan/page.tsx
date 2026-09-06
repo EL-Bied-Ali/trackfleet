@@ -142,7 +142,7 @@ export default function ScanPage() {
 
   useEffect(() => {
     if (auth !== "ready") return;
-    void refreshPending(mode);
+    queueMicrotask(() => { void refreshPending(mode); });
   }, [auth, mode, refreshPending]);
 
   useEffect(() => {
