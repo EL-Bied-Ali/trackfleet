@@ -123,9 +123,20 @@ test("both the extended (55mm+) and compact (16/feuille) label layouts render th
 });
 
 test("the compact layout's outer row gap and header logo cap are tighter than the extended layout's, to make room for the extra fields", () => {
-  assert.match(labelsPage, /gap: showExtendedDetails \? "1\.5mm" : "0\.65mm"/);
+  assert.match(labelsPage, /gap: showExtendedDetails \? "1\.5mm" : "0\.9mm"/);
   assert.match(labelsPage, /const logoMaxHeightMm = showExtendedDetails \? Math\.min\(19, labelSize\.height \* 0\.22\) : Math\.min\(19, labelSize\.height \* 0\.13\);/);
   assert.match(labelsPage, /fontSize: showExtendedDetails \? 14 : 9\.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: "\.06em"/);
+});
+
+// Live request: "make the most of the available space for the x16" -- the
+// compact layout's line gap was widened from 0.65mm to 0.9mm after
+// measuring real slack in the worst-case fully-populated ticket (all 7
+// possible lines) live against the 105x37.125mm preset, with a real
+// margin kept below the point that same measurement found things start
+// getting flex-shrunk (~1.05mm) -- not pushed to the exact edge, given
+// this preset's history of exact-edge overflow bugs.
+test("the compact layout's line gap uses more of the measured slack without going all the way to the point where the worst-case content starts getting flex-shrunk", () => {
+  assert.doesNotMatch(labelsPage, /gap: showExtendedDetails \? "1\.5mm" : "0\.65mm"/);
 });
 
 test("the extended label shows the short code in large type (falling back to the plain id when this destination has no shortCodePrefix), origin -> destination, phone, and a compact weight/price/payment line", () => {
