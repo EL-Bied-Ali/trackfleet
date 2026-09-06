@@ -125,7 +125,7 @@ test("both the extended (55mm+) and compact (16/feuille) label layouts render th
 test("the compact layout's outer row gap and header logo cap are tighter than the extended layout's, to make room for the extra fields", () => {
   assert.match(labelsPage, /gap: showExtendedDetails \? "1\.5mm" : "0\.65mm"/);
   assert.match(labelsPage, /const logoMaxHeightMm = showExtendedDetails \? Math\.min\(19, labelSize\.height \* 0\.22\) : Math\.min\(19, labelSize\.height \* 0\.13\);/);
-  assert.match(labelsPage, /fontSize: showExtendedDetails \? 12 : 9\.5, fontWeight: 700, letterSpacing: "\.04em"/);
+  assert.match(labelsPage, /fontSize: showExtendedDetails \? 14 : 9\.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: "\.06em"/);
 });
 
 test("the extended label shows the short code in large type (falling back to the plain id when this destination has no shortCodePrefix), origin -> destination, phone, and a compact weight/price/payment line", () => {

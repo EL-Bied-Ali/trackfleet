@@ -454,12 +454,28 @@ export default function LabelsPage() {
             // column doesn't need.
             <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: `${labelPaddingMm}mm`, display: "flex", gap: "3mm", overflow: "hidden" }}>
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: showExtendedDetails ? "1.5mm" : "0.65mm" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "3mm" }}>
+                {/* Client feedback: labels print without color, so a brand
+                    color accent is a non-starter here -- weight/rule instead.
+                    The extended layout has proven headroom for a border
+                    (verified against real sheets already), so it gets a
+                    letterhead-style rule under the name; the 16/feuille
+                    compact layout stays right at 0px overflow (see its own
+                    comment below) so it only gets the zero-height-cost
+                    changes: heavier weight + uppercase, no added border. */}
+                <div style={{ display: "flex", alignItems: "center", gap: "3mm", paddingBottom: showExtendedDetails ? "1mm" : 0, borderBottom: showExtendedDetails ? "0.6px solid #000" : "none" }}>
                   {branding.logoDataUrl && (
                     // eslint-disable-next-line @next/next/no-img-element -- a client-generated data: URI, not a static/remote asset Next's image pipeline could optimize
                     <img src={branding.logoDataUrl} alt="" style={{ maxHeight: `${logoMaxHeightMm}mm`, maxWidth: "46mm", objectFit: "contain", flex: "0 0 auto" }} />
                   )}
-                  <div style={{ fontSize: showExtendedDetails ? 12 : 9.5, fontWeight: 700, letterSpacing: ".04em", lineHeight: showExtendedDetails ? "normal" : 1.1, color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name || "TRACKFLEET"}</div>
+                  {/* Unlike the sidebar/dashboard header's own "|| TrackFleet"
+                      fallback (a harmless internal-UI default), this label is
+                      handed to an actual customer/agency as proof of whose
+                      parcel it is -- printing the platform's own name here
+                      when a company simply hasn't configured branding yet
+                      would misattribute the parcel, not just look plain. */}
+                  {branding.name && (
+                    <div style={{ fontSize: showExtendedDetails ? 14 : 9.5, fontWeight: 900, textTransform: "uppercase", letterSpacing: ".06em", lineHeight: showExtendedDetails ? "normal" : 1.1, color: "#000", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{branding.name}</div>
+                  )}
                 </div>
                 {showExtendedDetails ? (<>
                   {/* The client's own big, primary identifier for routing
