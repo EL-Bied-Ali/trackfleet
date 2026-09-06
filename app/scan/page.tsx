@@ -25,6 +25,7 @@ type Checkpoint = "loaded" | "arrived" | "delivered";
 type CompanyInfo = { account: string; role: "dispatcher" | "agency"; siteId: string | null };
 type ScanOutcome = "success" | "duplicate" | "error";
 type ScanLogEntry = { at: Date; checkpoint: Checkpoint; outcome: ScanOutcome; label: string };
+type PendingItem = { id: string; shortCode: string | null; customer: string; destination: string; truck: string };
 
 const CHECKPOINTS: Array<{ value: Checkpoint; label: string; help: string }> = [
   { value: "loaded", label: "Chargé", help: "Preuve que ce colis est monté dans le camion." },
@@ -99,6 +100,12 @@ export default function ScanPage() {
   const [flash, setFlash] = useState<ScanOutcome | null>(null);
   const [message, setMessage] = useState("");
   const [log, setLog] = useState<ScanLogEntry[]>([]);
+  // Live request: "I wanna have at least a list of the parcels they are
+  // supposed to still scan" -- scoped server-side per checkpoint (see
+  // /api/scan/pending), refetched after every real scan so it shrinks live
+  // instead of the person having to keep their own mental count.
+  const [pending, setPending] = useState<{ checkpoint: Checkpoint; groupByTruck: boolean; items: PendingItem[] } | null>(null);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -120,6 +127,23 @@ export default function ScanPage() {
   const positionRef = useRef<{ latitude: number; longitude: number } | null>(null);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { busyRef.current = busy; }, [busy]);
+
+  const refreshPending = useCallback(async (checkpoint: Checkpoint) => {
+    try {
+      const response = await fetch(`/api/scan/pending?checkpoint=${checkpoint}`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json() as { checkpoint: Checkpoint; groupByTruck: boolean; items: PendingItem[] };
+      setPending(data);
+    } catch {
+      // Best-effort -- a failed refresh just leaves the previous list
+      // showing rather than blocking scanning itself.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (auth !== "ready") return;
+    void refreshPending(mode);
+  }, [auth, mode, refreshPending]);
 
   useEffect(() => {
     let active = true;
@@ -204,6 +228,15 @@ export default function ScanPage() {
         playBeep(true);
         if (navigator.vibrate) navigator.vibrate(outcome === "duplicate" ? [80, 60, 80] : 150);
         setLog((entries) => [{ at: new Date(), checkpoint: modeRef.current, outcome, label }, ...entries].slice(0, 20));
+        // A real (non-duplicate) scan removes this parcel from the pending
+        // list immediately -- instant feedback that it's been accounted
+        // for -- then a background refresh catches anything another device
+        // scanned in the meantime.
+        if (!data.duplicate && data.delivery) {
+          const scannedId = data.delivery.id;
+          setPending((current) => current && { ...current, items: current.items.filter((item) => item.id !== scannedId) });
+          void refreshPending(modeRef.current);
+        }
       }
     } catch {
       setFlash("error");
@@ -213,7 +246,7 @@ export default function ScanPage() {
       setBusy(false);
       window.setTimeout(() => setFlash(null), 1100);
     }
-  }, []);
+  }, [refreshPending]);
 
   const detectFrame = useCallback(async () => {
     if (detectingRef.current || busyRef.current) return;
@@ -354,9 +387,40 @@ export default function ScanPage() {
           ))}
         </div>
       )}
-      <p style={{ margin: "0 0 14px", color: "#9ca3af", fontSize: 13 }}>
+      <p style={{ margin: "0 0 10px", color: "#9ca3af", fontSize: 13 }}>
         {CHECKPOINTS.find((checkpoint) => checkpoint.value === mode)?.help}
       </p>
+
+      {pending && (
+        <div style={{ marginBottom: 14, borderRadius: 10, border: "1px solid #374151", background: "#1f2937", overflow: "hidden" }}>
+          <button
+            type="button"
+            onClick={() => setPendingOpen((open) => !open)}
+            style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "transparent", border: 0, color: "#f9fafb", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+          >
+            <span>{pending.items.length === 0 ? "Aucun colis restant" : `${pending.items.length} colis restant${pending.items.length > 1 ? "s" : ""}`}</span>
+            {pending.items.length > 0 && <span aria-hidden="true">{pendingOpen ? "▾" : "▸"}</span>}
+          </button>
+          {pendingOpen && pending.items.length > 0 && (
+            <ul style={{ listStyle: "none", margin: 0, padding: "0 12px 12px", display: "grid", gap: 4, maxHeight: 220, overflowY: "auto" }}>
+              {pending.items.map((item, index) => {
+                const previous = pending.items[index - 1];
+                const showTruckHeader = pending.groupByTruck && (!previous || previous.truck !== item.truck);
+                return (
+                  <li key={item.id}>
+                    {showTruckHeader && <p style={{ margin: "8px 0 4px", color: "#9ca3af", fontSize: 11, fontWeight: 700, letterSpacing: ".06em" }}>{item.truck || "Camion à affecter"}</p>}
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 8px", borderRadius: 6, background: "#111827", fontSize: 13 }}>
+                      <span style={{ fontWeight: 700, color: "#f9fafb" }}>{item.shortCode ?? item.id}</span>
+                      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#d1d5db" }}>{item.customer}</span>
+                      <span style={{ color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.destination}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", background: "#000", aspectRatio: "3 / 4", border: `3px solid ${flash ? flashColor : "#1f2937"}`, transition: "border-color 120ms ease" }}>
         <video ref={videoRef} playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover", display: cameraState === "active" ? "block" : "none" }} />
