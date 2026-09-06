@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
     if (linked) {
       const credentials = await decryptCredentials(linked.credentialsCiphertext);
-      const result = await createCompanySession(credentials);
+      const result = await createCompanySession(credentials, identity.email);
       const headers = new Headers();
       headers.append("set-cookie", clearStateCookie);
       headers.append("set-cookie", result.cookie);

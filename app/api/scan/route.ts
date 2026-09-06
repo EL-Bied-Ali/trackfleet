@@ -7,6 +7,7 @@ import { notifyArrivalManually } from "../../lib/notify-arrival-manually";
 import { getScannerSession } from "../../lib/scanner-pairing";
 import type { DeliveryScanCheckpoint } from "../../lib/delivery-store.types";
 import { knownSite } from "../../lib/known-sites";
+import { logCompanyAction } from "../../lib/company-audit-log";
 import { isValidParcelCode } from "../../lib/parcel-code";
 import { invalidJsonResponse, readJsonObject } from "../../lib/request-json";
 import { originRejectedResponse, requestIsSameOrigin } from "../../lib/request-origin";
@@ -229,6 +230,11 @@ export async function POST(request: Request) {
             distanceKm: Math.round(distanceToAgencyKm * 10) / 10, agencyLabel: destinationSite.label,
           });
           await store.recordEvent(delivery.id, "ARRIVAL_LOCATION_MISMATCH_BYPASSED", delivery.progress);
+          await logCompanyAction({
+            companyId: session.companyId, actor: session.userLabel, action: "arrival_confirmed_location_mismatch_bypassed",
+            deliveryId: delivery.id, deliveryCustomer: delivery.customer, deliveryDestination: delivery.destination,
+            detail: `${Math.round(distanceToAgencyKm * 10) / 10}km from ${destinationSite.label}`,
+          });
         }
       }
     }

@@ -82,7 +82,7 @@ test("/api/auth/google/callback deliberately skips the same-origin check, becaus
 
 test("an already-linked Google identity reuses createCompanySession (re-verifying against SENDATRACK, exactly like a normal login) instead of minting a session through a separate, unverified path", () => {
   assert.match(callbackRoute, /const credentials = await decryptCredentials\(linked\.credentialsCiphertext\)/);
-  assert.match(callbackRoute, /const result = await createCompanySession\(credentials\)/);
+  assert.match(callbackRoute, /const result = await createCompanySession\(credentials, identity\.email\)/);
 });
 
 test("a first-time Google identity is redirected to complete linking with a pending token in the URL, never with raw SENDATRACK credentials or an already-authenticated session", () => {
