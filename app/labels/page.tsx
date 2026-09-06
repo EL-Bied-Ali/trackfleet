@@ -453,7 +453,18 @@ export default function LabelsPage() {
             // full height, growing with whatever space the logo+text
             // column doesn't need.
             <div key={delivery.id} className="label" style={{ boxSizing: "border-box", border: "1px solid #000", padding: `${labelPaddingMm}mm`, display: "flex", gap: "3mm", overflow: "hidden" }}>
-              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: showExtendedDetails ? "1.5mm" : "0.65mm" }}>
+              {/* Live request: "make the most of the available space for
+                  the x16" -- measured live against a fully-populated worst
+                  case (all 7 possible lines: branding, shortCode, customer,
+                  route, recipient, payment, truck) at 105x37.125mm: the text
+                  column's content needs ~125px against a 125px box at the
+                  old 0.65mm gap, meaning real slack existed. 0.9mm uses
+                  meaningfully more of it while keeping a real margin under
+                  the ~1.05mm point where that same worst case starts getting
+                  flex-shrunk (verified live via DOM measurement, not just
+                  eyeballed) -- not pushed to the exact edge again, on
+                  purpose, given this preset's history of exact-edge bugs. */}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: showExtendedDetails ? "1.5mm" : "0.9mm" }}>
                 {/* Client feedback: labels print without color, so a brand
                     color accent is a non-starter here -- weight/rule instead.
                     The extended layout has proven headroom for a border
