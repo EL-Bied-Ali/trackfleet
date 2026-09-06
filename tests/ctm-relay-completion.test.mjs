@@ -156,7 +156,7 @@ test("a company that disabled CTM relay auto-completion can still complete a rel
     ctmRelayAutoCompletionEnabled: false,
   });
 
-  assert.equal(observedGraceMinutes, 120, "the manual-confirmation loop is unaffected by the relay toggle and still uses the normal unload grace period");
+  assert.equal(observedGraceMinutes, 0, "the manual-confirmation loop is unaffected by the relay toggle and still completes with no grace period -- a human confirmation needs no GPS-uncertainty buffer");
 });
 
 test("a normal (non-relay) delivery, even with stale GPS, always uses the normal unloading grace period -- never the 24h CTM one", async () => {
@@ -184,5 +184,5 @@ test("a normal (non-relay) delivery, even with stale GPS, always uses the normal
     observeArrivalCompletion, observedAt: new Date(), automationStartAt: null,
   });
 
-  assert.equal(observedGraceMinutes, 120, "a direct (non-relay) destination must use the normal unloading grace period, not the 24h relay one");
+  assert.equal(observedGraceMinutes, 0, "a manually-confirmed arrival -- relay destination or not -- completes with no grace period, never the 24h relay one or the general GPS-uncertainty buffer");
 });

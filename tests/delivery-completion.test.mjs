@@ -82,6 +82,27 @@ test("GPS alone can no longer finalize an active delivery", () => {
   assert.doesNotMatch(routeProgress, /distanceToDestinationKm <= safeArrivalRadiusKm && speed <= 5/);
 });
 
+// Live feedback: "GPS inferred arrival was a bad idea... it doesn't go to
+// the agencies directly, except belgium casa and tanger port... the
+// localisation of closeness become a waste of computation". Confirmed by
+// the CTM-relay loop already existing purely because there's no GPS
+// signal to check for a relay-only destination at all -- the distance/
+// speed/position-age computation in the main per-transition loop could
+// never succeed for one of those, so it's real, avoidable per-tick work
+// for every relay delivery. Skipped entirely for those now; GPS-tracked
+// destinations (the hubs themselves, as real endpoints) are unaffected.
+test("the per-transition tick loop skips the GPS-distance computation entirely for a relay-only destination -- it can never succeed there, so it's not attempted", () => {
+  const loopBody = businessTick.slice(businessTick.indexOf("for (const transition of transitions) {"), businessTick.indexOf("const completion = await observeArrivalCompletion({"));
+  assert.match(loopBody, /const destinationIsGpsTracked = knownSite\(delivery\.destinationSiteId\)\?\.finalLegTrackingUnavailable !== true;/);
+  assert.match(loopBody, /const hasPosition = destinationIsGpsTracked\s*\n\s*&& typeof delivery\.latitude === "number"/);
+  // The gate must come before any distance/speed work, not after -- a
+  // relay destination must never reach distanceKm/destinationPointFor at
+  // all, not just have its result discarded.
+  const gateIndex = loopBody.indexOf("const destinationIsGpsTracked");
+  const distanceIndex = loopBody.indexOf("distanceKm(");
+  assert.ok(gateIndex >= 0 && distanceIndex > gateIndex);
+});
+
 test("automation applies arrival dwell before reloading deliveries", () => {
   assert.match(serverAutomation, /runFleetBusinessTick/);
   assert.match(serverAutomation, /TRACKFLEET_UNLOAD_GRACE_MINUTES/);
@@ -97,10 +118,19 @@ test("the scheduled tick fetches the company's own automation overrides and only
   assert.match(serverAutomation, /ctmRelayAutoCompletionEnabled,/);
 });
 
-test("manual arrival confirmation also honors the company's own unload grace override instead of always using the env-var default -- shared with the QR scan route's 'arrivée' checkpoint via confirmArrivalManually", () => {
-  assert.match(manualRoute, /const \{ unloadGraceMinutes \} = await confirmArrivalManually\(session\.companyId, deliveryId, delivery\.progress, new URL\(request\.url\)\.origin\);/);
-  assert.match(confirmArrivalHelper, /const automationSettings = await getCompanyAutomationSettings\(companyId\);/);
-  assert.match(confirmArrivalHelper, /clampUnloadGraceMinutes\(automationSettings\.unloadGraceMinutes\)\s*:\s*parseUnloadGraceMinutes\(runtimeEnv\.TRACKFLEET_UNLOAD_GRACE_MINUTES\)/s);
+// Live feedback: "GPS inferred arrival was a bad idea... it doesn't go to
+// the agencies directly" -- the unload-grace period exists to filter an
+// uncertain GPS signal, but a human confirming arrival (button or QR
+// scan) has no such uncertainty to wait out. Reversed from an earlier
+// version of this test, which asserted the opposite (that manual
+// confirmation honored the company's configurable grace period, same as
+// the GPS-automatic path) -- that was the exact behavior this change
+// deliberately removes.
+test("manual arrival confirmation completes instantly, with no grace period, regardless of the company's own unload-grace setting -- shared with the QR scan route's 'arrivée' checkpoint via confirmArrivalManually", () => {
+  assert.doesNotMatch(manualRoute, /unloadGraceMinutes/);
+  assert.doesNotMatch(confirmArrivalHelper, /getCompanyAutomationSettings/);
+  assert.match(confirmArrivalHelper, /unloadGraceMinutes: noGracePeriod/);
+  assert.match(confirmArrivalHelper, /const noGracePeriod = 0;/);
 });
 
 test("both persistent runtimes reset continuity after a GPS observation gap", () => {

@@ -107,9 +107,13 @@ export async function POST(request: Request) {
         });
       }
 
-      const { unloadGraceMinutes } = await confirmArrivalManually(session.companyId, deliveryId, delivery.progress, new URL(request.url).origin);
+      // Completes immediately -- a human confirming arrival (button or
+      // scan) is already definitive evidence, no grace period to wait out
+      // (see confirm-arrival-manually.ts). `updated` reflects that: its
+      // status is already "Delivered" by the time this response is built.
+      await confirmArrivalManually(session.companyId, deliveryId, delivery.progress, new URL(request.url).origin);
       const updated = (await store.listForCompany(session.companyId)).find((candidate) => candidate.id === deliveryId);
-      return noStore({ ok: true, deliveryId, arrivalConfirmed: true, automaticCompletionAfterMinutes: unloadGraceMinutes, delivery: updated });
+      return noStore({ ok: true, deliveryId, arrivalConfirmed: true, delivery: updated });
     }
 
     const completed = await completeDeliveryManually(session.companyId, deliveryId);
