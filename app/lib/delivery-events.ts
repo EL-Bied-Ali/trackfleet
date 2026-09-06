@@ -38,7 +38,14 @@ export type DeliveryEventType =
   // The browser cannot attest that paper physically left a printer. This is
   // therefore deliberately named for the action we can prove: a dispatcher
   // opened the print dialog for this parcel's label.
-  | "LABEL_PRINT_REQUESTED";
+  | "LABEL_PRINT_REQUESTED"
+  // The "delivered" scan checkpoint's phone position didn't match the
+  // destination agency's own known location, and the person scanning
+  // confirmed anyway (see scan/route.ts's locationMismatchKm check).
+  // Recorded so a dispatcher reviewing the delivery table or Historique
+  // can see, at a glance, that this specific "arrived" confirmation wasn't
+  // backed by a location match -- worth a second look, not a silent gap.
+  | "ARRIVAL_LOCATION_MISMATCH_BYPASSED";
 
 export type DeliveryEventInput = {
   previousStatus: "In transit" | "Delayed" | "Loading" | "Delivered";
@@ -98,7 +105,8 @@ export function customerFacingEvent(event: DeliveryEventType) {
     && event !== "WHATSAPP_ARRIVAL_NOTIFIED"
     && event !== "MANUAL_DEPARTURE_CONFIRMED"
     && event !== "WHATSAPP_DEPARTURE_NOTIFIED"
-    && event !== "LABEL_PRINT_REQUESTED";
+    && event !== "LABEL_PRINT_REQUESTED"
+    && event !== "ARRIVAL_LOCATION_MISMATCH_BYPASSED";
 }
 
 export function whatsappConsentWithdrawn(events: Array<{ type: DeliveryEventType }>) {

@@ -965,6 +965,25 @@ export const postgresStore: DeliveryStore = {
     return scan;
   },
 
+  async undoRecentScan(companyId, deliveryId, scanId, maxAgeMs) {
+    await ensureSchema();
+    const sql = getSql();
+    const deleted = await sql`DELETE FROM delivery_scans
+      WHERE id = ${scanId} AND company_id = ${companyId} AND delivery_id = ${deliveryId}
+        AND scanned_at >= ${new Date(Date.now() - maxAgeMs).toISOString()}
+      RETURNING checkpoint` as Array<{ checkpoint: DeliveryScanCheckpoint }>;
+    if (!deleted.length) return false;
+    const checkpoint = deleted[0].checkpoint;
+    const eventType = checkpoint === "loaded" ? "SCAN_LOADED" : checkpoint === "arrived" ? "SCAN_HUB_ARRIVED" : null;
+    if (eventType) {
+      const remaining = await sql`SELECT 1 FROM delivery_scans WHERE delivery_id = ${deliveryId} AND checkpoint = ${checkpoint} LIMIT 1`;
+      if (!remaining.length) {
+        await sql`DELETE FROM delivery_events WHERE delivery_id = ${deliveryId} AND type = ${eventType}`;
+      }
+    }
+    return true;
+  },
+
   async listScansForDelivery(deliveryId, limit = 50) {
     await ensureSchema();
     const sql = getSql();

@@ -36,6 +36,14 @@ import { distanceKm } from "../../lib/route-progress";
 // mismatch, never the reverse-geocoded fallback itself.
 const HUB_MATCH_RADIUS_KM = 5;
 
+// Deliberately more generous than a truck's own arrivalRadiusKm (tuned for
+// GPS-truck-arrival detection, often 0.5km) -- a person's phone inside an
+// agency building or its parking lot, with ordinary phone-GPS imprecision,
+// can easily read a bit further than that. The goal here is only to catch
+// a gross mismatch (wrong city, wrong agency entirely), not to demand
+// truck-grade precision from a handheld device.
+const AGENCY_LOCATION_MISMATCH_RADIUS_KM = 2;
+
 async function nearestGeocodedSiteLabel(companyId: string, position: { latitude: number | null; longitude: number | null } | null) {
   if (!position || position.latitude === null || position.longitude === null) return null;
   const sites = await siteStore.listForCompany(companyId);
@@ -186,11 +194,52 @@ export async function POST(request: Request) {
           missingHubScan: !scanSummary?.hubArrivedAt,
         }, 409, refreshHeaders);
       }
+
+      // Live request: only interrupt the person scanning when the phone's
+      // own position genuinely contradicts the destination it's about to
+      // confirm -- never when we simply have no way to check (most sites
+      // still have no GPS pin on file yet, and requiring one would turn
+      // this into a block on nearly every scan rather than a targeted
+      // catch). Skipped entirely unless both a phone position and the
+      // site's own known coordinates exist.
+      const destinationSite = delivery.destinationSiteId
+        ? (await siteStore.listForCompany(session.companyId)).find((site) => site.id === delivery.destinationSiteId)
+        : null;
+      if (phonePosition && destinationSite
+        && typeof destinationSite.latitude === "number" && typeof destinationSite.longitude === "number") {
+        const distanceToAgencyKm = distanceKm(
+          [phonePosition.longitude, phonePosition.latitude],
+          [destinationSite.longitude, destinationSite.latitude],
+        );
+        if (distanceToAgencyKm > AGENCY_LOCATION_MISMATCH_RADIUS_KM && payload.bypassLocationMismatch !== true) {
+          return noStore({
+            error: "location_mismatch",
+            distanceKm: Math.round(distanceToAgencyKm * 10) / 10,
+            agencyLabel: destinationSite.label,
+          }, 409, refreshHeaders);
+        }
+        if (distanceToAgencyKm > AGENCY_LOCATION_MISMATCH_RADIUS_KM) {
+          // Recorded so a dispatcher reviewing the delivery table or
+          // Historique can see, at a glance, that this specific arrival
+          // wasn't backed by a location match -- worth a second look, not
+          // a silent gap. Same audit-trail principle as the missing-scans
+          // bypass above (manual-completion/route.ts).
+          console.warn("[trackfleet:scan] delivered checkpoint confirmed despite location mismatch (explicit bypass)", {
+            deliveryId: delivery.id, companyId: session.companyId,
+            distanceKm: Math.round(distanceToAgencyKm * 10) / 10, agencyLabel: destinationSite.label,
+          });
+          await store.recordEvent(delivery.id, "ARRIVAL_LOCATION_MISMATCH_BYPASSED", delivery.progress);
+        }
+      }
     }
 
     const recentScans = await store.listScansForDelivery(delivery.id, 5);
     const now = Date.now();
     const duplicate = recentScans.some((scan) => scan.checkpoint === checkpoint && now - scan.scannedAt.getTime() < DUPLICATE_SCAN_WINDOW_MS);
+    // Only meaningful for a real, new scan -- returned so the client can
+    // offer a short "undo" window for this exact scan (see /api/scan/undo),
+    // never for a duplicate (nothing new was recorded to undo).
+    let recordedScanId: string | null = null;
 
     if (!duplicate) {
       // Apply the checkpoint effect before writing its audit row. If the
@@ -223,7 +272,7 @@ export async function POST(request: Request) {
         ? knownSite(session.siteId)?.label ?? null
         : (await nearestGeocodedSiteLabel(session.companyId, phonePosition)) ?? (await reverseGeocodedLabel(phonePosition));
 
-      await store.recordScan({
+      const recordedScan = await store.recordScan({
         companyId: session.companyId,
         deliveryId: delivery.id,
         checkpoint,
@@ -231,6 +280,7 @@ export async function POST(request: Request) {
         truck: delivery.truck || null,
         locationLabel,
       });
+      recordedScanId = recordedScan.id;
     }
 
     const updated = await store.findByParcelCode(session.companyId, parcelCode);
@@ -238,8 +288,10 @@ export async function POST(request: Request) {
       ok: true,
       checkpoint,
       duplicate,
+      scanId: recordedScanId,
       delivery: updated ? {
         id: updated.id, customer: updated.customer, destination: updated.destination, status: updated.status,
+        shortCode: updated.shortCode ?? null,
       } : null,
     }, 200, refreshHeaders);
   } catch (error) {

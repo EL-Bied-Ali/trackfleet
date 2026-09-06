@@ -267,6 +267,16 @@ export interface DeliveryStore {
   // adding one database request per delivery merely to show the latest load
   // and hub-unload proof.
   listScanSummaries(companyId: string, deliveryIds: string[]): Promise<DeliveryScanSummary[]>;
+  // Live request: let someone who scanned the wrong parcel while loading
+  // fix it themselves within a short window, instead of needing a
+  // dispatcher to intervene. Removes exactly the one scan row identified
+  // by scanId (company/delivery-scoped, and only within maxAgeMs of when
+  // it was recorded -- never a general "delete scan history" tool). Also
+  // removes the checkpoint's own delivery_events marker (SCAN_LOADED etc.),
+  // but only when no other scan of that same checkpoint remains for this
+  // delivery -- a genuine earlier scan must never be silently erased by
+  // undoing an unrelated later one.
+  undoRecentScan(companyId: string, deliveryId: string, scanId: string, maxAgeMs: number): Promise<boolean>;
   recordEvent(deliveryId: string, type: DeliveryEventType, progress: number): Promise<boolean>;
   listEvents(deliveryId: string): Promise<DeliveryEventRow[]>;
   // One bounded, company-scoped query for every delivery id given, instead

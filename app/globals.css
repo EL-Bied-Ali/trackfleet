@@ -543,6 +543,7 @@ td > span.shipment-badge { display: inline-block; margin-top: 4px; padding: 2px 
 .scan-proof.is-confirmed b::before { content: "✓"; display: inline-grid; place-items: center; width: 11px; height: 11px; margin-right: 1px; border-radius: 50%; color: white; background: #1d9a69; font-size: 7px; }
 .label-print-status { display: inline-flex; align-items: center; margin: 0; padding: 3px 6px; border-radius: 999px; color: #8a7d83; background: #f1f3f2; font-size: 8px; font-weight: 750; }
 .label-print-status.is-requested { color: #176747; background: #e3f5eb; }
+.location-mismatch-badge { display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 3px 6px; border-radius: 999px; color: #92400e; background: #fef3c7; font-size: 8px; font-weight: 750; }
 
 /* Theme is a user preference (stored in the browser), not company branding. */
 :root[data-theme="dark"] { --ink: #e7edf2; --muted: #9aabb9; --line: #2b3a47; --cream: #111a22; --mint: #253745; --white: #17212b; color-scheme: dark; }

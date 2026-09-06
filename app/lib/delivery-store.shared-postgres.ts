@@ -315,6 +315,24 @@ export const store: DeliveryStore = {
     }
     return scan;
   },
+  async undoRecentScan(companyId, deliveryId, scanId, maxAgeMs) {
+    const undone = await baseStore.undoRecentScan(companyId, deliveryId, scanId, maxAgeMs);
+    if (undone) {
+      const db = d1();
+      if (db) {
+        try {
+          // Best-effort, same as every other mirror write here -- D1 is a
+          // read-only failover copy, not the source of truth, so a missed
+          // mirror just means the failover briefly shows a scan that was
+          // already undone on the primary, not a real data-loss risk.
+          queueD1Mirror(db.prepare(`DELETE FROM delivery_scans WHERE id = ?`).bind(scanId));
+        } catch (error) {
+          replicationError("undo scan", error, { deliveryId, companyId });
+        }
+      }
+    }
+    return undone;
+  },
   async recordEvent(deliveryId, type, progress) {
     const inserted = await baseStore.recordEvent(deliveryId, type, progress);
     if (inserted) await mirrorEvent(deliveryId, type, progress);

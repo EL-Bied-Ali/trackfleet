@@ -19,6 +19,12 @@ export type DeliveryHistoryItem = {
   customerEmail: string | null;
   plannedArrivalAt: string | null;
   createdAt: string;
+  // See app/api/scan/route.ts's own comment -- set once, the moment the
+  // "delivered" scan checkpoint's phone position didn't match the
+  // destination agency and the person scanning confirmed anyway. Live
+  // request: keep this visible in Historique, not just in the raw event
+  // stream.
+  locationMismatchBypassedAt: string | null;
 };
 
 export type DeliveryHistoryCursor = {
@@ -41,6 +47,7 @@ type RawHistoryRow = {
   customer_email: string | null;
   planned_arrival_at: string | Date | null;
   created_at: string | Date;
+  location_mismatch_bypassed_at: string | Date | null;
 };
 
 function toIso(value: string | Date | null) {
@@ -71,6 +78,7 @@ function hydrate(row: RawHistoryRow): DeliveryHistoryItem {
     customerEmail: row.customer_email ?? null,
     plannedArrivalAt: toIso(row.planned_arrival_at),
     createdAt: toIso(row.created_at)!,
+    locationMismatchBypassedAt: toIso(row.location_mismatch_bypassed_at),
   };
 }
 
@@ -85,7 +93,8 @@ export async function listDeliveredHistory(
   const siteId = options.siteId ?? null;
   const rows = cursor
     ? await sql`
-        SELECT id, customer, destination, truck, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, planned_arrival_at, created_at
+        SELECT id, customer, destination, truck, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, planned_arrival_at, created_at,
+          (SELECT created_at FROM delivery_events WHERE delivery_id = deliveries.id AND type = 'ARRIVAL_LOCATION_MISMATCH_BYPASSED') AS location_mismatch_bypassed_at
         FROM deliveries
         WHERE company_id = ${companyId}
           AND status = 'Delivered'
@@ -98,7 +107,8 @@ export async function listDeliveredHistory(
         LIMIT ${queryLimit}
       ` as RawHistoryRow[]
     : await sql`
-        SELECT id, customer, destination, truck, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, planned_arrival_at, created_at
+        SELECT id, customer, destination, truck, contact, recipient_name, recipient_contact, weight_kg, price_amount, price_currency, item_description, customer_email, planned_arrival_at, created_at,
+          (SELECT created_at FROM delivery_events WHERE delivery_id = deliveries.id AND type = 'ARRIVAL_LOCATION_MISMATCH_BYPASSED') AS location_mismatch_bypassed_at
         FROM deliveries
         WHERE company_id = ${companyId}
           AND status = 'Delivered'
