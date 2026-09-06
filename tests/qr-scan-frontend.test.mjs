@@ -25,7 +25,7 @@ test("the scanner exposes the three real handoffs: loading, hub unload, and fina
   assert.match(scanPage, /Déchargé au hub/);
   assert.match(scanPage, /ne confirme jamais une arrivée finale/);
   assert.match(scanPage, /fetch\("\/api\/scan", \{/);
-  assert.match(scanPage, /body: JSON\.stringify\(\{\s*\n\s*parcelCode: code,\s*\n\s*checkpoint: modeRef\.current,\s*\n\s*latitude: positionRef\.current\?\.latitude \?\? null,\s*\n\s*longitude: positionRef\.current\?\.longitude \?\? null,\s*\n\s*\}\)/);
+  assert.match(scanPage, /body: JSON\.stringify\(\{\s*\n\s*parcelCode: code,\s*\n\s*checkpoint: modeRef\.current,\s*\n\s*latitude: positionRef\.current\?\.latitude \?\? null,\s*\n\s*longitude: positionRef\.current\?\.longitude \?\? null,\s*\n\s*bypassLocationMismatch: options\?\.bypassLocationMismatch === true,\s*\n\s*\}\)/);
 });
 
 // Live request: a QR scan at the destination agency should be able to

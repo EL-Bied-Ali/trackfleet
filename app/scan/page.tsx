@@ -36,6 +36,12 @@ const CHECKPOINTS: Array<{ value: Checkpoint; label: string; help: string }> = [
 const RESUBMIT_COOLDOWN_MS = 2500;
 const SCAN_INTERVAL_MS = 350;
 
+// Errors worth an explicit dismiss instead of auto-clearing after ~1s -- a
+// real, actionable mismatch someone could otherwise scan straight past in a
+// fast rhythm. Routine outcomes (code not found, network hiccup) keep the
+// old auto-clear behavior.
+const severeScanErrors = new Set(["agency_destination_mismatch", "already_delivered", "arrival_blocked_missing_scans", "checkpoint_locked"]);
+
 // Accepts either the bare code or the full deep-link URL the printed QR
 // encodes (see parcel-code.ts's parcelScanUrl) -- a handheld Code128
 // scanner typing the bare code in like a keyboard, or the phone's own
@@ -99,6 +105,10 @@ export default function ScanPage() {
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<ScanOutcome | null>(null);
   const [message, setMessage] = useState("");
+  // The scanned parcel's own short code (e.g. "CAS 05"), shown large and
+  // separately from `message`'s customer/destination detail -- see
+  // submitScan's own comment.
+  const [flashShortCode, setFlashShortCode] = useState<string | null>(null);
   const [log, setLog] = useState<ScanLogEntry[]>([]);
   // Live request: "I wanna have at least a list of the parcels they are
   // supposed to still scan" -- scoped server-side per checkpoint (see
@@ -106,6 +116,28 @@ export default function ScanPage() {
   // instead of the person having to keep their own mental count.
   const [pending, setPending] = useState<{ checkpoint: Checkpoint; groupByTruck: boolean; items: PendingItem[] } | null>(null);
   const [pendingOpen, setPendingOpen] = useState(false);
+  // A genuine mismatch (wrong agency, wrong post, blocked arrival) stays on
+  // screen until explicitly dismissed instead of auto-clearing after ~1s
+  // like a routine error -- live request: keep employees from scanning
+  // straight past a real mistake in a fast rhythm. Routine errors (code not
+  // found, network hiccup) keep the old auto-clear behavior.
+  const [errorDismissible, setErrorDismissible] = useState(false);
+  // The "delivered" checkpoint's phone position didn't match the
+  // destination agency's own known location (see scan/route.ts's
+  // AGENCY_LOCATION_MISMATCH_RADIUS_KM check) -- a two-step confirm, same
+  // shape as the missing-scans bypass, rather than a silent pass or a hard
+  // block: the person scanning explicitly asserts this really is the right
+  // agency before it's recorded (and recorded as an explicit bypass either
+  // way, visible later on the delivery).
+  const [locationMismatch, setLocationMismatch] = useState<{ code: string; distanceKm: number; agencyLabel: string } | null>(null);
+  // A real (non-duplicate) "Chargé" scan can be undone within a short
+  // window -- live request: let someone who scanned the wrong parcel while
+  // loading fix it themselves. Scoped to "loaded" only (see
+  // /api/scan/undo's own comment for why "arrived"/"delivered" don't get
+  // the same treatment).
+  const [undo, setUndo] = useState<{ scanId: string; deliveryId: string; label: string } | null>(null);
+  const [undoing, setUndoing] = useState(false);
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -116,6 +148,11 @@ export default function ScanPage() {
   const lastSubmissionRef = useRef<{ code: string; at: number } | null>(null);
   const modeRef = useRef(mode);
   const busyRef = useRef(busy);
+  // While a dismissible error or a location-mismatch confirm is on screen,
+  // the camera loop pauses instead of silently scanning past it in the
+  // background -- the whole point of making these "harder to miss" is
+  // requiring an explicit acknowledgment, not just a louder banner.
+  const blockedRef = useRef(false);
   // Best-effort, roughly-where-this-phone-is-right-now position, kept fresh
   // in the background for the whole scanning session -- never blocks a
   // scan waiting on a fix, and never required (a scan with no known
@@ -127,6 +164,7 @@ export default function ScanPage() {
   const positionRef = useRef<{ latitude: number; longitude: number } | null>(null);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { busyRef.current = busy; }, [busy]);
+  useEffect(() => { blockedRef.current = errorDismissible || locationMismatch !== null; }, [errorDismissible, locationMismatch]);
 
   const refreshPending = useCallback(async (checkpoint: Checkpoint) => {
     try {
@@ -177,18 +215,22 @@ export default function ScanPage() {
   }, []);
 
 
-  const submitScan = useCallback(async (code: string) => {
+  const submitScan = useCallback(async (code: string, options?: { bypassLocationMismatch?: boolean }) => {
     if (!isValidParcelCode(code)) {
       setFlash("error");
+      setErrorDismissible(false);
       setMessage("Code invalide.");
       playBeep(false);
       window.setTimeout(() => setFlash(null), 900);
       return;
     }
-    const now = Date.now();
-    const last = lastSubmissionRef.current;
-    if (last && last.code === code && now - last.at < RESUBMIT_COOLDOWN_MS) return;
-    lastSubmissionRef.current = { code, at: now };
+    if (!options?.bypassLocationMismatch) {
+      const now = Date.now();
+      const last = lastSubmissionRef.current;
+      if (last && last.code === code && now - last.at < RESUBMIT_COOLDOWN_MS) return;
+      lastSubmissionRef.current = { code, at: now };
+    }
+    setLocationMismatch(null);
 
     setBusy(true);
     try {
@@ -200,15 +242,29 @@ export default function ScanPage() {
           checkpoint: modeRef.current,
           latitude: positionRef.current?.latitude ?? null,
           longitude: positionRef.current?.longitude ?? null,
+          bypassLocationMismatch: options?.bypassLocationMismatch === true,
         }),
       });
       const data = await response.json() as {
         ok?: boolean; duplicate?: boolean; error?: string;
-        missingLoadedScan?: boolean; missingHubScan?: boolean;
-        delivery?: { id: string; customer: string; destination: string; status: string } | null;
+        missingLoadedScan?: boolean; missingHubScan?: boolean; distanceKm?: number; agencyLabel?: string;
+        scanId?: string | null;
+        delivery?: { id: string; customer: string; destination: string; status: string; shortCode: string | null } | null;
       };
+      if (data.error === "location_mismatch") {
+        // Not a terminal error -- a two-step confirm, same shape as the
+        // missing-scans bypass on the dashboard button: the person scanning
+        // sees exactly why this looks wrong and explicitly asserts it's
+        // right before it's recorded (and recorded as a bypass either way).
+        setLocationMismatch({ code, distanceKm: data.distanceKm ?? 0, agencyLabel: data.agencyLabel ?? "" });
+        playBeep(false);
+        if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+        return;
+      }
       if (!response.ok || !data.ok) {
+        const dismissible = Boolean(data.error && severeScanErrors.has(data.error));
         setFlash("error");
+        setErrorDismissible(dismissible);
         setMessage(
           data.error === "parcel_not_found" ? "Colis introuvable."
           : data.error === "agency_destination_mismatch" ? "Ce colis n'est pas destiné à cette agence."
@@ -220,14 +276,23 @@ export default function ScanPage() {
         playBeep(false);
         const errorEntry: ScanLogEntry = { at: new Date(), checkpoint: modeRef.current, outcome: "error", label: code };
         setLog((entries) => [errorEntry, ...entries].slice(0, 20));
+        if (!dismissible) window.setTimeout(() => setFlash(null), 1100);
       } else {
         const outcome: ScanOutcome = data.duplicate ? "duplicate" : "success";
-        const label = data.delivery ? `${data.delivery.customer} → ${data.delivery.destination}` : code;
+        // Ultra-clear ticket id, live request: what the physical parcel's
+        // own printed short code should read as, front and center -- the
+        // customer name/destination stays as supporting detail underneath,
+        // not the headline, so a mismatch against the parcel in hand is
+        // obvious at a glance rather than something to read carefully for.
+        const shortCode = data.delivery?.shortCode ?? null;
+        const detail = data.delivery ? `${data.delivery.customer} → ${data.delivery.destination}` : code;
         setFlash(outcome);
-        setMessage(data.duplicate ? `Déjà scanné : ${label}` : label);
+        setErrorDismissible(false);
+        setFlashShortCode(shortCode);
+        setMessage(data.duplicate ? `Déjà scanné : ${detail}` : detail);
         playBeep(true);
         if (navigator.vibrate) navigator.vibrate(outcome === "duplicate" ? [80, 60, 80] : 150);
-        setLog((entries) => [{ at: new Date(), checkpoint: modeRef.current, outcome, label }, ...entries].slice(0, 20));
+        setLog((entries) => [{ at: new Date(), checkpoint: modeRef.current, outcome, label: shortCode ? `${shortCode} · ${detail}` : detail }, ...entries].slice(0, 20));
         // A real (non-duplicate) scan removes this parcel from the pending
         // list immediately -- instant feedback that it's been accounted
         // for -- then a background refresh catches anything another device
@@ -237,19 +302,62 @@ export default function ScanPage() {
           setPending((current) => current && { ...current, items: current.items.filter((item) => item.id !== scannedId) });
           void refreshPending(modeRef.current);
         }
+        // Live request: let someone who scanned the wrong parcel while
+        // loading undo it themselves. Scoped to "loaded" only -- see
+        // /api/scan/undo's own comment for why hub/delivered don't offer
+        // the same button.
+        if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+        if (!data.duplicate && data.delivery && data.scanId && modeRef.current === "loaded") {
+          setUndo({ scanId: data.scanId, deliveryId: data.delivery.id, label: shortCode ?? detail });
+          undoTimeoutRef.current = setTimeout(() => setUndo(null), 20_000);
+        } else {
+          setUndo(null);
+        }
+        window.setTimeout(() => setFlash(null), 1100);
       }
     } catch {
       setFlash("error");
+      setErrorDismissible(false);
       setMessage("Connexion impossible, réessayez.");
       playBeep(false);
+      window.setTimeout(() => setFlash(null), 1100);
     } finally {
       setBusy(false);
-      window.setTimeout(() => setFlash(null), 1100);
     }
   }, [refreshPending]);
 
+  const dismissError = useCallback(() => {
+    setFlash(null);
+    setErrorDismissible(false);
+  }, []);
+
+  const undoScan = useCallback(async () => {
+    if (!undo) return;
+    setUndoing(true);
+    try {
+      const response = await fetch("/api/scan/undo", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveryId: undo.deliveryId, scanId: undo.scanId, checkpoint: "loaded" }),
+      });
+      if (response.ok) {
+        const undoEntry: ScanLogEntry = { at: new Date(), checkpoint: "loaded", outcome: "error", label: `Annulé : ${undo.label}` };
+        setLog((entries) => [undoEntry, ...entries].slice(0, 20));
+        void refreshPending("loaded");
+        if (navigator.vibrate) navigator.vibrate(80);
+      }
+    } catch {
+      // Best-effort -- the undo window simply expires if this fails, no
+      // different from not having tapped it in time.
+    } finally {
+      setUndoing(false);
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      setUndo(null);
+    }
+  }, [undo, refreshPending]);
+
   const detectFrame = useCallback(async () => {
-    if (detectingRef.current || busyRef.current) return;
+    if (detectingRef.current || busyRef.current || blockedRef.current) return;
     const video = videoRef.current;
     if (!video || video.readyState < 2) return;
     detectingRef.current = true;
@@ -431,14 +539,48 @@ export default function ScanPage() {
           </div>
         )}
         {flash && (
-          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 16px", background: "rgba(0,0,0,0.75)", color: "#fff", fontWeight: 700, fontSize: 15 }}>
-            {message}
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 16px", background: "rgba(0,0,0,0.85)", color: "#fff" }}>
+            {flashShortCode && (
+              <p style={{ margin: "0 0 2px", fontSize: 28, fontWeight: 800, letterSpacing: ".02em", fontFamily: "monospace" }}>{flashShortCode}</p>
+            )}
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: flashShortCode ? "#d1d5db" : "#fff" }}>{message}</p>
+            {errorDismissible && (
+              <button type="button" onClick={dismissError} style={{ marginTop: 10, width: "100%", padding: "10px 0", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                J’ai compris
+              </button>
+            )}
           </div>
         )}
         {busy && !flash && (
           <div style={{ position: "absolute", top: 12, right: 12, width: 10, height: 10, borderRadius: "50%", background: "#22c55e" }} />
         )}
       </div>
+
+      {locationMismatch && (
+        <div style={{ marginTop: 10, padding: "12px 14px", borderRadius: 10, border: "2px solid #d97706", background: "#451a03", color: "#fef3c7" }}>
+          <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 14 }}>Position inattendue</p>
+          <p style={{ margin: "0 0 10px", fontSize: 13 }}>
+            Ce téléphone est à environ {locationMismatch.distanceKm} km de {locationMismatch.agencyLabel}. Confirmez-vous que c’est bien la bonne agence ?
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={() => setLocationMismatch(null)} disabled={busy} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px solid #78350f", background: "transparent", color: "#fef3c7", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              Annuler
+            </button>
+            <button type="button" onClick={() => void submitScan(locationMismatch.code, { bypassLocationMismatch: true })} disabled={busy} style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: 0, background: "#d97706", color: "#451a03", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              Confirmer quand même
+            </button>
+          </div>
+        </div>
+      )}
+
+      {undo && (
+        <div style={{ marginTop: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 12px", borderRadius: 8, background: "#1f2937", border: "1px solid #374151" }}>
+          <span style={{ fontSize: 13, color: "#d1d5db" }}>Scanné : {undo.label}</span>
+          <button type="button" onClick={() => void undoScan()} disabled={undoing} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #f87171", background: "transparent", color: "#f87171", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+            {undoing ? "Annulation…" : "Annuler ce scan"}
+          </button>
+        </div>
+      )}
 
       <form onSubmit={submitManualCode} style={{ display: "flex", gap: 8, marginTop: 14 }}>
         <input

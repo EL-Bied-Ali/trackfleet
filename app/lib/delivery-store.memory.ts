@@ -347,6 +347,20 @@ export const memoryStore: DeliveryStore = {
       .sort((a, b) => b.scannedAt.getTime() - a.scannedAt.getTime())
       .slice(0, Math.max(1, Math.min(500, limit)));
   },
+  async undoRecentScan(companyId, deliveryId, scanId, maxAgeMs) {
+    const cutoff = Date.now() - maxAgeMs;
+    const index = deliveryScans.findIndex((scan) =>
+      scan.id === scanId && scan.companyId === companyId && scan.deliveryId === deliveryId
+      && scan.scannedAt.getTime() >= cutoff);
+    if (index === -1) return false;
+    const [removed] = deliveryScans.splice(index, 1);
+    const eventType = removed.checkpoint === "loaded" ? "SCAN_LOADED" : removed.checkpoint === "arrived" ? "SCAN_HUB_ARRIVED" : null;
+    if (eventType && !deliveryScans.some((scan) => scan.deliveryId === deliveryId && scan.checkpoint === removed.checkpoint)) {
+      const eventIndex = deliveryEvents.findIndex((event) => event.deliveryId === deliveryId && event.type === eventType);
+      if (eventIndex !== -1) deliveryEvents.splice(eventIndex, 1);
+    }
+    return true;
+  },
   async listScanSummaries(companyId, deliveryIds) {
     const ids = new Set(deliveryIds);
     const summaries = new Map<string, DeliveryScanSummary>();

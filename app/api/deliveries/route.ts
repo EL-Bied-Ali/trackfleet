@@ -113,6 +113,12 @@ function enrichDelivery<T extends {
     manualArrivalEstimateHours: manualArrivalEstimate?.medianHours ?? null,
     manualArrivalEstimateSampleCount: manualArrivalEstimate?.sampleCount ?? 0,
     labelPrintRequestedAt: events.find((event) => event.type === "LABEL_PRINT_REQUESTED")?.createdAt.toISOString() ?? null,
+    // Live request: "dans le dashboard ou history on devrait clairement voir
+    // que quelqu'un a bypass" -- surfaced as a badge wherever this delivery
+    // is listed (see DeliveryTable/Historique), not just left in the raw
+    // event stream (see scan/route.ts's own comment for why this is
+    // recorded in the first place).
+    locationMismatchBypassedAt: events.find((event) => event.type === "ARRIVAL_LOCATION_MISMATCH_BYPASSED")?.createdAt.toISOString() ?? null,
   };
 }
 

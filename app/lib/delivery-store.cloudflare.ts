@@ -498,6 +498,23 @@ export const store: DeliveryStore = {
     return scan;
   },
 
+  async undoRecentScan(companyId, deliveryId, scanId, maxAgeMs) {
+    const target = await db().prepare(`SELECT checkpoint FROM delivery_scans
+      WHERE id = ? AND company_id = ? AND delivery_id = ? AND scanned_at >= ?`)
+      .bind(scanId, companyId, deliveryId, Date.now() - maxAgeMs).first<{ checkpoint: DeliveryScanCheckpoint }>();
+    if (!target) return false;
+    await db().prepare(`DELETE FROM delivery_scans WHERE id = ?`).bind(scanId).run();
+    const eventType = target.checkpoint === "loaded" ? "SCAN_LOADED" : target.checkpoint === "arrived" ? "SCAN_HUB_ARRIVED" : null;
+    if (eventType) {
+      const remaining = await db().prepare(`SELECT 1 FROM delivery_scans WHERE delivery_id = ? AND checkpoint = ? LIMIT 1`)
+        .bind(deliveryId, target.checkpoint).first();
+      if (!remaining) {
+        await db().prepare(`DELETE FROM delivery_events WHERE delivery_id = ? AND type = ?`).bind(deliveryId, eventType).run();
+      }
+    }
+    return true;
+  },
+
   async listScansForDelivery(deliveryId, limit = 50) {
     const result = await db().prepare(`SELECT id, company_id AS companyId, delivery_id AS deliveryId, checkpoint, scanned_by AS scannedBy, truck, location_label AS locationLabel, scanned_at AS scannedAt
       FROM delivery_scans WHERE delivery_id = ? ORDER BY scanned_at DESC LIMIT ?`).bind(deliveryId, Math.max(1, Math.min(500, limit))).all<{

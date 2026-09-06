@@ -17,6 +17,7 @@ type HistoryItem = {
   priceCurrency: "EUR" | "MAD" | null;
   plannedArrivalAt: string | null;
   createdAt: string;
+  locationMismatchBypassedAt: string | null;
 };
 
 type HistoryCursor = { beforeCreatedAt: string; beforeId: string };
@@ -89,7 +90,7 @@ export default function DeliveryHistoryPage() {
                 {["ID", "Client", "Destinataire", "Destination", "Camion", copy.weight, copy.price, "Arrivée prévue", "Créée le"].map((label) => <th key={label}>{label}</th>)}
               </tr></thead>
               <tbody>{items.map((item) => <tr key={item.id}>
-                <td><span style={{ fontFamily: "monospace" }}>{item.id}</span></td>
+                <td><span style={{ fontFamily: "monospace" }}>{item.id}</span>{item.locationMismatchBypassedAt && <span className="location-mismatch-badge" style={{ marginLeft: 6 }} title={language === "fr" ? `Position du téléphone non confirmée à la livraison (${new Date(item.locationMismatchBypassedAt).toLocaleString(dateLocale)})` : language === "nl" ? `Telefoonpositie niet bevestigd bij levering (${new Date(item.locationMismatchBypassedAt).toLocaleString(dateLocale)})` : `Phone position unconfirmed at delivery (${new Date(item.locationMismatchBypassedAt).toLocaleString(dateLocale)})`}>⚠ {language === "fr" ? "Position non confirmée" : language === "nl" ? "Positie onbevestigd" : "Position unconfirmed"}</span>}</td>
                 <td>{item.customer}</td>
                 <td>{item.recipientName || "—"}{item.recipientContact ? <span>{item.recipientContact}</span> : null}</td>
                 <td>{item.destination}</td>
