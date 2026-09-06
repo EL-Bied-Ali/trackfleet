@@ -115,11 +115,31 @@ test("label width/height are editable on the page (not fixed constants), remembe
   assert.match(labelsPage, /const pages = layoutLabelPages\(deliveries, labelsPerPage, blockedCells\);/);
 });
 
-test("each label shows the company's own logo and name from /api/company/branding, falling back to the TrackFleet wordmark when no logo is set", () => {
+test("each label shows the company's own logo and name from /api/company/branding", () => {
   assert.match(labelsPage, /fetch\("\/api\/company\/branding", \{ cache: "no-store" \}\)/);
   assert.match(labelsPage, /branding\.logoDataUrl && \(/);
   assert.match(labelsPage, /<img src=\{branding\.logoDataUrl\} alt="" /);
-  assert.match(labelsPage, /\{branding\.name \|\| "TRACKFLEET"\}/);
+  assert.match(labelsPage, /\{branding\.name && \(/);
+});
+
+// Live feedback: printing "TRACKFLEET" on a customer-facing ticket when a
+// company simply hasn't configured a name yet would misattribute the
+// parcel to the platform instead of the actual shipper -- unlike the
+// sidebar/dashboard header's own "|| TrackFleet" fallback (harmless
+// internal-UI default), the label omits the name line entirely rather
+// than inventing an identity for it.
+test("the label never falls back to printing the TrackFleet wordmark when no company name is configured -- it omits the name line instead", () => {
+  assert.doesNotMatch(labelsPage, /branding\.name \|\| "TRACKFLEET"/);
+  assert.doesNotMatch(labelsPage, /branding\.name \?\? "TRACKFLEET"/);
+});
+
+// Live feedback: labels print without color, so a brand-color accent is a
+// non-starter -- the letterhead treatment uses weight/case/a rule line
+// instead, and only where there's proven headroom (the 16/feuille compact
+// layout stays at its already-verified 0px-overflow footprint).
+test("the branding row reads as a letterhead (heavier weight, uppercase) without relying on color, and the separating rule only appears where there's proven room", () => {
+  assert.match(labelsPage, /fontWeight: 900, textTransform: "uppercase", letterSpacing: "\.06em"/);
+  assert.match(labelsPage, /borderBottom: showExtendedDetails \? "0\.6px solid #000" : "none"/);
 });
 
 test("each label renders a QR code (deep link) from the parcel code, generated client-side, with the raw code printed as plain text underneath for manual entry on /scan", () => {
