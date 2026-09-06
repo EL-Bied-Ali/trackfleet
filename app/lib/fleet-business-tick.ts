@@ -120,7 +120,16 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
     const delivery = transition.delivery;
     const arrivalEvents = await eventsFor(delivery.id);
     const manuallyConfirmedArrival = arrivalEvents.some((event) => event.type === "MANUAL_ARRIVAL_CONFIRMED");
-    const hasPosition = typeof delivery.latitude === "number"
+    // A relay-only destination (see KnownSite.finalLegTrackingUnavailable)
+    // is one our GPS-tracked trucks never physically visit -- the truck's
+    // real position can never actually land inside its arrival radius, so
+    // this distance/speed computation is dead work for those every single
+    // tick. Confirmed by the CTM-relay loop further down existing purely
+    // because there's no GPS signal to check for these destinations at
+    // all. Skip straight to the manual-confirmation-only signal instead.
+    const destinationIsGpsTracked = knownSite(delivery.destinationSiteId)?.finalLegTrackingUnavailable !== true;
+    const hasPosition = destinationIsGpsTracked
+      && typeof delivery.latitude === "number"
       && typeof delivery.longitude === "number"
       && delivery.lastPositionAt instanceof Date;
     let insideArrivalZone = manuallyConfirmedArrival;
@@ -159,9 +168,15 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
     }
   }
 
-  // A human-confirmed arrival must keep advancing through unloading even when
-  // SENDATRACK has no fresh vehicle in this tick. The explicit confirmation is
-  // the arrival evidence; subsequent ticks only measure the configured grace.
+  // confirmArrivalManually (button or QR scan) already completes a
+  // manually-confirmed delivery instantly, on the same call that records
+  // the confirmation -- no grace period, since the human confirmation is
+  // itself the arrival evidence (see that file's own comment). This loop
+  // is purely a backstop for the rare case that instant call didn't fully
+  // land (e.g. a transient failure between recording the event and the
+  // completion write): anything still not-Delivered with the event on
+  // file gets completed here too, on the very next tick, still with no
+  // grace period -- never the long GPS-uncertainty buffer.
   for (const delivery of manualArrivalCandidates) {
     if (delivery.status === "Delivered" || observedArrivalIds.has(delivery.id)) continue;
     const events = await eventsFor(delivery.id);
@@ -171,7 +186,7 @@ export async function runFleetBusinessTick(input: FleetBusinessTickInput): Promi
       deliveryId: delivery.id,
       insideArrivalZone: true,
       observationAt: tickObservedAt,
-      unloadGraceMinutes,
+      unloadGraceMinutes: 0,
     });
     if (completion.justEntered && await recordEventTracked(delivery.id, "ARRIVED_AT_SITE", Math.min(99, delivery.progress))) {
       newEvents += 1;

@@ -79,7 +79,7 @@ test("each group confirmation notifies via the existing free WhatsApp mechanism 
 
 test("manual-completion's confirmDeparture and confirmArrival branches now return the updated delivery, so the frontend can merge it without a full refetch", () => {
   assert.match(manualCompletionRoute, /const delivery = \(await store\.listForCompany\(session\.companyId\)\)\.find\(\(candidate\) => candidate\.id === deliveryId\);\s*\n\s*return noStore\(\{ ok: true, deliveryId, status: "In transit", departureConfirmed: true, delivery \}\);/);
-  assert.match(manualCompletionRoute, /const updated = \(await store\.listForCompany\(session\.companyId\)\)\.find\(\(candidate\) => candidate\.id === deliveryId\);\s*\n\s*return noStore\(\{ ok: true, deliveryId, arrivalConfirmed: true, automaticCompletionAfterMinutes: unloadGraceMinutes, delivery: updated \}\);/);
+  assert.match(manualCompletionRoute, /const updated = \(await store\.listForCompany\(session\.companyId\)\)\.find\(\(candidate\) => candidate\.id === deliveryId\);\s*\n\s*return noStore\(\{ ok: true, deliveryId, arrivalConfirmed: true, delivery: updated \}\);/);
 });
 
 test("the delivery-detail popover's standalone 'Confirmer l'arrivée du camion' button is gone -- the table's group action replaced it", () => {
